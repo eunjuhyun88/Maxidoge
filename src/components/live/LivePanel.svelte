@@ -154,6 +154,16 @@
         </div>
       {/each}
     </div>
+  {:else}
+    <div class="stream-price-row">
+      {#each prices as p}
+        <div class="spr-item">
+          <span class="spr-symbol">{p.symbol}</span>
+          <span class="spr-price">{p.price}</span>
+          <span class="spr-change" class:up={p.up} class:down={!p.up}>{p.change}</span>
+        </div>
+      {/each}
+    </div>
   {/if}
 
   <div class="live-body" class:stream={isStream}>
@@ -315,6 +325,42 @@
   .pt-change { font-family: var(--fm); font-size: 8px; font-weight: 700; }
   .pt-change.up { color: var(--grn); }
   .pt-change.down { color: var(--red); }
+  .stream-price-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px 10px 2px;
+  }
+  .spr-item {
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+    padding: 5px 7px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px;
+  }
+  .spr-symbol {
+    font-family: var(--fd);
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: .8px;
+    color: var(--yel);
+  }
+  .spr-price {
+    font-family: var(--fm);
+    font-size: 8px;
+    color: #fff;
+    font-weight: 700;
+  }
+  .spr-change {
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 700;
+  }
+  .spr-change.up { color: var(--grn); }
+  .spr-change.down { color: var(--red); }
 
   /* Body */
   .live-body { padding: 12px 16px; }
@@ -381,6 +427,7 @@
   .af-text { font-family: var(--fm); font-size: 9px; font-weight: 700; }
   .af-detail { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.3); }
   .af-time { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.15); flex-shrink: 0; }
+  .live-page.stream .af-time { font-size: 6px; }
 
   /* Empty states handled by EmptyState component */
 
@@ -415,4 +462,11 @@
     z-index: 100;
   }
   @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-100px) scale(1.5); } }
+
+  @media (max-width: 980px) {
+    .stream-price-row {
+      grid-template-columns: 1fr;
+      padding-bottom: 6px;
+    }
+  }
 </style>

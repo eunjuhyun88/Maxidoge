@@ -45,6 +45,15 @@
     { key: 'trade', label: 'Trade' },
     { key: 'tracked', label: 'Tracked' }
   ];
+  const SIGNAL_FILTERS: Array<{ key: string; label: string }> = [
+    { key: 'all', label: 'ALL' },
+    { key: 'active', label: 'ACTIVE' },
+    { key: 'arena', label: '⚔️ ARENA' },
+    { key: 'trade', label: '📊 TRADE' },
+    { key: 'tracked', label: '📌 TRACKED' },
+    { key: 'CRITICAL', label: '🔴 CRITICAL' },
+    { key: 'HIGH', label: '🟠 HIGH' }
+  ];
 
   // Build signals from real data sources
   $: arenaSignals = buildArenaSignals(records);
@@ -58,6 +67,8 @@
     : filter === 'trade' ? tradeSignals
     : filter === 'tracked' ? trackedSignals
     : allSignals.filter(s => s.priority === filter);
+  $: activeSignalCount = allSignals.filter((s) => s.active).length;
+  $: highConvictionCount = allSignals.filter((s) => s.conf >= 78).length;
 
   interface CommunityIdea {
     id: string;
@@ -282,7 +293,7 @@
         <span class="sh-flow-step">🚀 COPY TRADE</span>
       </div>
       <div class="sh-counts">
-        <span class="sh-count">{allSignals.filter(s => s.active).length} ACTIVE</span>
+        <span class="sh-count">{activeSignalCount} ACTIVE</span>
         <span class="sh-count arena">{arenaSignals.length} ARENA</span>
         <span class="sh-count trade">{tradeSignals.length} TRADE</span>
         <span class="sh-count tracked">{trackedSignals.length} TRACKED</span>
@@ -299,6 +310,25 @@
     </button>
   </div>
 
+  <div class="hub-summary">
+    <button class="hs-card" on:click={() => setSignalsView('signals')}>
+      <span class="hs-label">Total Signals</span>
+      <span class="hs-value">{allSignals.length}</span>
+    </button>
+    <button class="hs-card" on:click={() => setSignalsView('signals')}>
+      <span class="hs-label">High Conviction</span>
+      <span class="hs-value">{highConvictionCount}</span>
+    </button>
+    <button class="hs-card" on:click={() => setSignalsView('signals')}>
+      <span class="hs-label">Open Trades</span>
+      <span class="hs-value">{tradeSignals.length}</span>
+    </button>
+    <button class="hs-card terminal" on:click={() => goto('/terminal')}>
+      <span class="hs-label">Quick Action</span>
+      <span class="hs-value">OPEN TERMINAL →</span>
+    </button>
+  </div>
+
   {#if signalsView === 'community'}
     <div class="community-layout">
       <section class="community-ideas">
@@ -307,7 +337,9 @@
             <div class="ci-title">Community Ideas</div>
             <div class="ci-sub">Signals + Live activity in one flow</div>
           </div>
-          <div class="ci-explore">Explore {allSignals.length.toLocaleString()}+ Signals →</div>
+          <button class="ci-explore" on:click={() => setSignalsView('signals')}>
+            Explore {allSignals.length.toLocaleString()}+ Signals →
+          </button>
         </div>
         <div class="ci-filters">
           {#each COMMUNITY_FILTERS as item}
@@ -359,13 +391,17 @@
           <a class="cl-link" href="/terminal">OPEN TERMINAL →</a>
         </div>
         <LivePanel embedded={true} variant="stream" />
+        <div class="cl-actions">
+          <button class="cl-btn signal" on:click={() => setSignalsView('signals')}>📡 Full Signal List</button>
+          <button class="cl-btn arena" on:click={() => goto('/arena')}>⚔️ Jump To Arena</button>
+        </div>
       </aside>
     </div>
 
   {:else}
     <div class="filter-bar">
-      {#each [['all', 'ALL'], ['active', 'ACTIVE'], ['arena', '⚔️ ARENA'], ['trade', '📊 TRADE'], ['tracked', '📌 TRACKED'], ['CRITICAL', '🔴 CRITICAL'], ['HIGH', '🟠 HIGH']] as [key, label]}
-        <button class="filter-btn" class:active={filter === key} on:click={() => filter = key}>{label}</button>
+      {#each SIGNAL_FILTERS as item}
+        <button class="filter-btn" class:active={filter === item.key} on:click={() => filter = item.key}>{item.label}</button>
       {/each}
     </div>
 
@@ -575,6 +611,48 @@
     color: #111;
     border-color: rgba(255,255,255,.65);
   }
+  .hub-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px 16px 12px;
+    background: rgba(0,0,0,.22);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .hs-card {
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.01));
+    padding: 9px 10px;
+    text-align: left;
+    cursor: pointer;
+    transition: transform .12s, border-color .12s, background .12s;
+  }
+  .hs-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255,255,255,.28);
+    background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.02));
+  }
+  .hs-card.terminal {
+    background: linear-gradient(135deg, rgba(0,255,136,.12), rgba(43,179,255,.12));
+  }
+  .hs-label {
+    display: block;
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,.48);
+    margin-bottom: 3px;
+  }
+  .hs-value {
+    display: block;
+    font-family: var(--fd);
+    font-size: 13px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: .5px;
+  }
 
   .community-layout {
     display: grid;
@@ -609,11 +687,21 @@
     letter-spacing: .4px;
   }
   .ci-explore {
+    border: none;
+    background: rgba(255,255,255,.48);
+    border-radius: 999px;
+    padding: 7px 11px;
     font-family: var(--fm);
     font-size: 12px;
     font-weight: 700;
     color: #1b2538;
     white-space: nowrap;
+    cursor: pointer;
+    transition: background .12s, transform .12s;
+  }
+  .ci-explore:hover {
+    background: rgba(255,255,255,.72);
+    transform: translateY(-1px);
   }
   .ci-filters {
     display: flex;
@@ -653,6 +741,11 @@
     flex-direction: column;
     gap: 10px;
     box-shadow: 0 1px 6px rgba(19, 30, 49, .08);
+    transition: transform .13s, box-shadow .13s;
+  }
+  .ci-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(19, 30, 49, .14);
   }
   .ci-top {
     display: flex;
@@ -689,6 +782,7 @@
     background: #fff;
     box-shadow: 0 2px 8px rgba(27, 38, 58, .1);
     max-width: 100%;
+    line-height: 1.2;
   }
   .ci-bottom {
     margin-top: auto;
@@ -735,11 +829,17 @@
     color: #fff;
     background: linear-gradient(135deg, #6778ff, #6b5fe9);
   }
+  .ci-track:hover,
+  .ci-view:hover {
+    filter: brightness(1.04);
+  }
 
   .community-live {
     background: linear-gradient(180deg, #0c1e32 0%, #08111f 100%);
     border-left: 1px solid rgba(255,255,255,.06);
     min-height: 100%;
+    display: flex;
+    flex-direction: column;
   }
   .cl-head {
     display: flex;
@@ -765,6 +865,39 @@
     letter-spacing: 1px;
   }
   .cl-link:hover { text-decoration: underline; }
+  .cl-actions {
+    margin-top: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+    padding: 10px 10px 12px;
+    border-top: 1px solid rgba(255,255,255,.07);
+    background: rgba(0,0,0,.24);
+  }
+  .cl-btn {
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.05);
+    color: #d7e9ff;
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .9px;
+    padding: 8px 9px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .cl-btn.signal {
+    border-color: rgba(59, 158, 255, .4);
+    color: #98d4ff;
+  }
+  .cl-btn.arena {
+    border-color: rgba(255, 45, 155, .35);
+    color: #ff9acf;
+  }
+  .cl-btn:hover {
+    background: rgba(255,255,255,.11);
+  }
 
   .filter-bar {
     display: flex;
@@ -902,6 +1035,9 @@
   .sig-btn.copy-trade:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 #000; }
 
   @media (max-width: 1200px) {
+    .hub-summary {
+      grid-template-columns: 1fr 1fr;
+    }
     .community-layout {
       grid-template-columns: 1fr;
     }
@@ -934,6 +1070,16 @@
       padding-left: 12px;
       padding-right: 12px;
     }
+    .vs-btn {
+      flex: 1;
+      text-align: center;
+      padding: 8px 10px;
+    }
+    .hub-summary {
+      padding-left: 12px;
+      padding-right: 12px;
+      grid-template-columns: 1fr;
+    }
     .ci-head {
       flex-direction: column;
       align-items: flex-start;
@@ -956,6 +1102,16 @@
     .ci-track,
     .ci-view {
       flex: 1;
+    }
+    .cl-actions {
+      grid-template-columns: 1fr;
+    }
+    .sig-levels {
+      gap: 8px;
+      justify-content: space-between;
+    }
+    .sig-actions {
+      flex-wrap: wrap;
     }
   }
 </style>
