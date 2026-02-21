@@ -1,6 +1,6 @@
 <script lang="ts">
   import { HEADLINES, EVENTS, COMMUNITY } from '$lib/data/warroom';
-  import { communityPosts } from '$lib/stores/communityStore';
+  import { communityPosts, hydrateCommunityPosts, likeCommunityPost } from '$lib/stores/communityStore';
   import { openTrades, closeQuickTrade } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
   import { predictMarkets, loadPolymarkets } from '$lib/stores/predictStore';
@@ -87,6 +87,7 @@
 
   onMount(() => {
     loadPolymarkets();
+    hydrateCommunityPosts();
   });
 </script>
 
@@ -178,8 +179,8 @@
                 {#if post.signal}
                   <span class="comm-sig {post.signal}">{post.signal.toUpperCase()}</span>
                 {/if}
-                <button class="comm-react">👍</button>
-                <button class="comm-react">🔥</button>
+                <button class="comm-react" on:click={() => likeCommunityPost(post.id)}>👍</button>
+                <button class="comm-react" on:click={() => likeCommunityPost(post.id)}>🔥</button>
               </div>
             </div>
           {/each}

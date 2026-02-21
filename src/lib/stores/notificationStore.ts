@@ -3,6 +3,13 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
+import {
+  createNotificationApi,
+  deleteNotificationApi,
+  fetchNotificationsApi,
+  markNotificationsReadApi,
+  type ApiNotification,
+} from '$lib/api/notificationsApi';
 
 // ── Notification Types ──
 export type NotificationType = 'alert' | 'critical' | 'info' | 'success';
@@ -41,30 +48,90 @@ export interface P0State {
 
 function createNotificationStore() {
   const { subscribe, update, set } = writable<Notification[]>([]);
+  let hydrated = false;
+
+  function mapApiNotification(n: ApiNotification): Notification {
+    return {
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      body: n.body,
+      time: new Date(n.createdAt),
+      read: Boolean(n.isRead),
+      dismissable: Boolean(n.dismissable),
+    };
+  }
 
   return {
     subscribe,
+    async hydrate(force = false) {
+      if (typeof window === 'undefined') return;
+      if (hydrated && !force) return;
+
+      const rows = await fetchNotificationsApi({ limit: 100, offset: 0 });
+      if (!rows) return;
+      hydrated = true;
+      set(rows.map(mapApiNotification));
+    },
     addNotification(n: Omit<Notification, 'id' | 'time' | 'read'>) {
+      const tempId = crypto.randomUUID ? crypto.randomUUID() : `n-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const notification: Notification = {
         ...n,
-        id: crypto.randomUUID ? crypto.randomUUID() : `n-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: `tmp-${tempId}`,
         time: new Date(),
         read: false,
       };
       update(list => [notification, ...list].slice(0, 50)); // cap at 50
+      void (async () => {
+        const saved = await createNotificationApi({
+          type: n.type,
+          title: n.title,
+          body: n.body,
+          dismissable: n.dismissable,
+        });
+        if (!saved) return;
+
+        update((list) =>
+          list.map((item) =>
+            item.id === notification.id
+              ? {
+                  id: saved.id,
+                  type: saved.type,
+                  title: saved.title,
+                  body: saved.body,
+                  time: new Date(saved.createdAt),
+                  read: Boolean(saved.isRead),
+                  dismissable: Boolean(saved.dismissable),
+                }
+              : item
+          )
+        );
+      })();
       return notification.id;
     },
     markRead(id: string) {
       update(list => list.map(n => n.id === id ? { ...n, read: true } : n));
+      if (!id.startsWith('tmp-')) {
+        void markNotificationsReadApi([id]);
+      }
     },
     markAllRead() {
       update(list => list.map(n => ({ ...n, read: true })));
+      void markNotificationsReadApi();
     },
     clearAll() {
-      set([]);
+      let ids: string[] = [];
+      update((list) => {
+        ids = list.filter((n) => !n.id.startsWith('tmp-')).map((n) => n.id);
+        return [];
+      });
+      void Promise.all(ids.map((id) => deleteNotificationApi(id)));
     },
     remove(id: string) {
       update(list => list.filter(n => n.id !== id));
+      if (!id.startsWith('tmp-')) {
+        void deleteNotificationApi(id);
+      }
     },
   };
 }
@@ -193,6 +260,11 @@ export function notifySignalTracked(pair: string, dir: string) {
 // ═══════════════════════════════════════════════════════════════
 
 export function seedNotifications() {
+  if (typeof window === 'undefined') return;
+  const seedKey = 'maxidoge_notifications_seeded_v1';
+  if (sessionStorage.getItem(seedKey) === '1') return;
+  sessionStorage.setItem(seedKey, '1');
+
   notifications.addNotification({
     type: 'info',
     title: 'SESSION STARTED',

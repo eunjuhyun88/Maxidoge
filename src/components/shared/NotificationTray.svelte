@@ -10,6 +10,7 @@
   $: count = $unreadCount;
 
   onMount(() => {
+    notifications.hydrate();
     seedNotifications();
   });
 

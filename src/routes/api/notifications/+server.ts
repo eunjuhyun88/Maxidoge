@@ -62,3 +62,52 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
     return json({ error: 'Failed to load notifications' }, { status: 500 });
   }
 };
+
+export const POST: RequestHandler = async ({ cookies, request }) => {
+  try {
+    const user = await getAuthUserFromCookies(cookies);
+    if (!user) return json({ error: 'Authentication required' }, { status: 401 });
+
+    const body = await request.json();
+    const type = typeof body?.type === 'string' ? body.type.trim().toLowerCase() : '';
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    const message = typeof body?.body === 'string' ? body.body.trim() : '';
+    const dismissable = typeof body?.dismissable === 'boolean' ? body.dismissable : true;
+    const allowedType = new Set(['alert', 'critical', 'info', 'success']);
+
+    if (!allowedType.has(type)) {
+      return json({ error: 'type must be alert|critical|info|success' }, { status: 400 });
+    }
+    if (title.length < 2) {
+      return json({ error: 'title must be at least 2 chars' }, { status: 400 });
+    }
+    if (message.length < 2) {
+      return json({ error: 'body must be at least 2 chars' }, { status: 400 });
+    }
+
+    const result = await query(
+      `
+        INSERT INTO user_notifications (
+          user_id, type, title, body, is_read, dismissable, created_at, read_at
+        )
+        VALUES ($1, $2, $3, $4, false, $5, now(), null)
+        RETURNING
+          id, user_id, type, title, body,
+          is_read, dismissable, created_at, read_at
+      `,
+      [user.id, type, title, message, dismissable]
+    );
+
+    return json({
+      success: true,
+      notification: mapRow(result.rows[0]),
+    });
+  } catch (error: any) {
+    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+      return json({ error: 'Server database is not configured' }, { status: 500 });
+    }
+    if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });
+    console.error('[notifications/post] unexpected error:', error);
+    return json({ error: 'Failed to create notification' }, { status: 500 });
+  }
+};
