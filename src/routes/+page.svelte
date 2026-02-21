@@ -25,20 +25,18 @@
 <div class="home">
   <!-- ═══ HERO: MEME ARCADE EXPLOSION ═══ -->
   <section class="hero">
-    <!-- Doge stickers: dynamic "explosion" composition -->
-    <img class="hd stk-bull" src="/blockparty/f5-doge-bull.png" alt="" />
-    <img class="hd stk-fire" src="/blockparty/f5-doge-fire.png" alt="" />
-    <img class="hd stk-muscle" src="/blockparty/f5-doge-muscle.png" alt="" />
-    <img class="hd stk-chart" src="/blockparty/f5-doge-chart.png" alt="" />
-    <img class="hd stk-excited" src="/blockparty/f5-doge-excited.png" alt="" />
-    <img class="hd stk-shield" src="/blockparty/f5-doge-shield.png" alt="" />
-    <img class="hd stk-happy" src="/blockparty/f5-doge-happy.png" alt="" />
-    <img class="hd stk-angry" src="/blockparty/f5-doge-angry.png" alt="" />
+    <!-- Doge stickers: corners + sides -->
+    <img class="hd stk-tl" src="/blockparty/f5-doge-bull.png" alt="" />
+    <img class="hd stk-tr" src="/blockparty/f5-doge-fire.png" alt="" />
+    <img class="hd stk-ml" src="/blockparty/f5-doge-muscle.png" alt="" />
+    <img class="hd stk-mr" src="/blockparty/f5-doge-chart.png" alt="" />
+    <img class="hd stk-bl" src="/blockparty/f5-doge-excited.png" alt="" />
+    <img class="hd stk-br" src="/blockparty/f5-doge-shield.png" alt="" />
 
     <!-- Deco accents -->
     <img class="hd dec-stars" src="/blockparty/deco-stars.png" alt="" />
     <img class="hd dec-sparkle" src="/blockparty/deco-sparkles.png" alt="" />
-    <img class="hd dec-pow" src="/blockparty/deco-pow-doge.png" alt="" />
+    <img class="hd dec-burst" src="/blockparty/deco-bursts.png" alt="" />
 
     <!-- Floating meme text -->
     <span class="meme mt-wow">WOW</span>
@@ -264,9 +262,11 @@
     min-height: 580px;
     padding: 60px 20px 50px;
     background: linear-gradient(160deg, #0a1628 0%, #0f1e3a 30%, #162044 60%, #1a2650 100%);
+    background-size: 200% 200%;
+    animation: bg-drift 12s ease-in-out infinite;
   }
 
-  /* Manga speed lines */
+  /* Manga speed lines - slowly rotating */
   .hero::before {
     content: '';
     position: absolute;
@@ -279,9 +279,10 @@
     );
     z-index: 0;
     pointer-events: none;
+    animation: spin-lines 90s linear infinite;
   }
 
-  /* Yellow glow behind title */
+  /* Yellow glow behind title - breathing */
   .hero::after {
     content: '';
     position: absolute;
@@ -291,6 +292,7 @@
     background: radial-gradient(ellipse, rgba(255,225,0,.08) 0%, transparent 65%);
     z-index: 0;
     pointer-events: none;
+    animation: glow-breathe 5s ease-in-out infinite;
   }
 
   /* ═══ HERO DECORATIONS ═══ */
@@ -301,72 +303,54 @@
     filter: drop-shadow(3px 4px 6px rgba(0,0,0,.5));
   }
 
-  /* Sticker positions: explosion composition */
-  .stk-bull {
-    top: 3%; left: 1%;
-    width: 165px; z-index: 2;
-    transform: rotate(-8deg);
-    animation: bounce 3s ease-in-out infinite;
+  /* Sticker positions: around the title, DRIFTING */
+  .stk-tl {
+    top: 2%; left: 8%;
+    width: 200px; z-index: 2;
+    animation: drift-tl 10s ease-in-out infinite;
   }
-  .stk-fire {
-    top: 1%; right: 0;
-    width: 170px; z-index: 2;
-    transform: rotate(6deg);
-    animation: bounce 3.5s ease-in-out infinite .5s;
+  .stk-tr {
+    top: 0; right: 8%;
+    width: 200px; z-index: 2;
+    animation: drift-tr 12s ease-in-out infinite;
   }
-  .stk-muscle {
-    bottom: 12%; left: -2%;
-    width: 185px; z-index: 2;
-    transform: scaleX(-1);
-    animation: bounce 4s ease-in-out infinite 1s;
+  .stk-ml {
+    top: 40%; left: 5%;
+    width: 200px; z-index: 2;
+    animation: drift-ml 11s ease-in-out infinite;
   }
-  .stk-chart {
-    top: 32%; right: -2%;
+  .stk-mr {
+    top: 32%; right: 6%;
+    width: 195px; z-index: 2;
+    animation: drift-mr 13s ease-in-out infinite;
+  }
+  .stk-bl {
+    bottom: 8%; left: 12%;
+    width: 180px; z-index: 2;
+    animation: drift-bl 10.5s ease-in-out infinite;
+  }
+  .stk-br {
+    bottom: 8%; right: 10%;
     width: 175px; z-index: 2;
-    transform: rotate(4deg);
-    animation: bounce 3.8s ease-in-out infinite 1.5s;
-  }
-  .stk-excited {
-    bottom: 10%; left: 50%;
-    transform: translateX(-120%);
-    width: 140px; z-index: 2;
-    animation: bounce 3.2s ease-in-out infinite 2s;
-  }
-  .stk-shield {
-    bottom: 8%; right: 2%;
-    width: 145px; z-index: 2;
-    transform: rotate(6deg);
-    animation: bounce 3.6s ease-in-out infinite .8s;
-  }
-  .stk-happy {
-    top: 55%; left: 3%;
-    width: 130px; z-index: 2;
-    transform: rotate(-6deg);
-    animation: bounce 4.2s ease-in-out infinite 1.2s;
-  }
-  .stk-angry {
-    top: 8%; right: 20%;
-    width: 120px; z-index: 2;
-    transform: rotate(10deg);
-    animation: bounce 3.4s ease-in-out infinite 2.5s;
+    animation: drift-br 11.5s ease-in-out infinite;
   }
 
-  /* Deco accents */
+  /* Deco accents - orbiting */
   .dec-stars {
-    top: 5%; left: 22%;
-    width: 75px; z-index: 3;
-    animation: spin-slow 8s linear infinite;
+    top: 6%; left: 22%;
+    width: 80px; z-index: 3;
+    animation: orbit-a 14s ease-in-out infinite;
   }
   .dec-sparkle {
-    bottom: 25%; right: 18%;
-    width: 65px; z-index: 3;
-    animation: spin-slow 10s linear infinite reverse;
+    top: 10%; right: 20%;
+    width: 70px; z-index: 3;
+    animation: orbit-b 16s ease-in-out infinite;
   }
-  .dec-pow {
-    top: 12%; left: 55%;
-    width: 110px; z-index: 3;
-    transform: translateX(-50%) rotate(-8deg);
-    animation: pow-pulse 2s ease-in-out infinite;
+  .dec-burst {
+    bottom: 18%; left: 18%;
+    width: 90px; z-index: 3;
+    opacity: .7;
+    animation: orbit-c 12s ease-in-out infinite;
   }
 
   /* ═══ FLOATING MEME TEXT ═══ */
@@ -557,22 +541,83 @@
   }
 
   /* ═══ ANIMATIONS ═══ */
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
-    50% { transform: translateY(-8px) rotate(var(--r, 0deg)); }
+
+  /* Background drift */
+  @keyframes bg-drift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
   }
+  @keyframes spin-lines {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+  }
+  @keyframes glow-breathe {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    50% { transform: translate(-50%, -50%) scale(1.15); opacity: .6; }
+  }
+
+  /* Sticker drifts - each unique path */
+  @keyframes drift-tl {
+    0%, 100% { transform: translate(0, 0) rotate(-8deg); }
+    25% { transform: translate(18px, -15px) rotate(-4deg); }
+    50% { transform: translate(-8px, -25px) rotate(-10deg); }
+    75% { transform: translate(12px, 8px) rotate(-6deg); }
+  }
+  @keyframes drift-tr {
+    0%, 100% { transform: translate(0, 0) rotate(6deg); }
+    25% { transform: translate(-15px, -12px) rotate(9deg); }
+    50% { transform: translate(10px, -20px) rotate(3deg); }
+    75% { transform: translate(-8px, 10px) rotate(7deg); }
+  }
+  @keyframes drift-ml {
+    0%, 100% { transform: scaleX(-1) translate(0, 0) rotate(0deg); }
+    25% { transform: scaleX(-1) translate(12px, -18px) rotate(3deg); }
+    50% { transform: scaleX(-1) translate(-6px, 10px) rotate(-2deg); }
+    75% { transform: scaleX(-1) translate(15px, -5px) rotate(4deg); }
+  }
+  @keyframes drift-mr {
+    0%, 100% { transform: translate(0, 0) rotate(5deg); }
+    25% { transform: translate(-12px, 15px) rotate(2deg); }
+    50% { transform: translate(8px, -18px) rotate(8deg); }
+    75% { transform: translate(-15px, -8px) rotate(4deg); }
+  }
+  @keyframes drift-bl {
+    0%, 100% { transform: translate(0, 0) rotate(-5deg); }
+    25% { transform: translate(15px, 10px) rotate(-2deg); }
+    50% { transform: translate(-12px, -15px) rotate(-8deg); }
+    75% { transform: translate(8px, -8px) rotate(-3deg); }
+  }
+  @keyframes drift-br {
+    0%, 100% { transform: translate(0, 0) rotate(4deg); }
+    25% { transform: translate(-10px, -12px) rotate(7deg); }
+    50% { transform: translate(14px, 8px) rotate(1deg); }
+    75% { transform: translate(-6px, 15px) rotate(5deg); }
+  }
+
+  /* Deco orbits */
+  @keyframes orbit-a {
+    0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+    25% { transform: translate(20px, -15px) rotate(90deg) scale(1.1); }
+    50% { transform: translate(-10px, -25px) rotate(180deg) scale(.9); }
+    75% { transform: translate(15px, 10px) rotate(270deg) scale(1.05); }
+  }
+  @keyframes orbit-b {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-18px, 12px) rotate(-90deg); }
+    50% { transform: translate(12px, 20px) rotate(-180deg); }
+    75% { transform: translate(-8px, -15px) rotate(-270deg); }
+  }
+  @keyframes orbit-c {
+    0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+    33% { transform: translate(15px, -20px) rotate(120deg) scale(1.1); }
+    66% { transform: translate(-12px, 10px) rotate(240deg) scale(.95); }
+  }
+
+  /* Text & UI animations */
   @keyframes wiggle {
     0%, 100% { transform: rotate(var(--base-rot, 0deg)) scale(1); }
     25% { transform: rotate(calc(var(--base-rot, 0deg) - 3deg)) scale(1.05); }
     75% { transform: rotate(calc(var(--base-rot, 0deg) + 3deg)) scale(0.95); }
-  }
-  @keyframes spin-slow {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-  @keyframes pow-pulse {
-    0%, 100% { transform: translateX(-50%) rotate(-8deg) scale(1); }
-    50% { transform: translateX(-50%) rotate(-8deg) scale(1.1); }
   }
   @keyframes speech-bob {
     0%, 100% { transform: translateY(0) rotate(var(--sb-rot, -3deg)); }
@@ -869,12 +914,9 @@
     .tick-val { font-size: 12px; }
     .tick-name { font-size: 7px; }
     /* Stickers scale down */
-    .stk-bull, .stk-fire { width: 110px !important; }
-    .stk-muscle, .stk-chart { width: 120px !important; }
-    .stk-excited, .stk-shield { width: 95px !important; }
-    .stk-happy { width: 85px !important; }
-    .stk-angry { width: 80px !important; }
-    .dec-pow { width: 75px !important; }
+    .stk-tl, .stk-tr { width: 130px !important; }
+    .stk-ml, .stk-mr { width: 140px !important; }
+    .stk-bl, .stk-br { width: 120px !important; }
     /* Meme text smaller */
     .mt-wow { font-size: 24px !important; }
     .mt-wagmi { font-size: 16px !important; }
@@ -913,7 +955,7 @@
     .hero-meme-sub { font-size: 9px; letter-spacing: 1px; }
     .squad-grid { grid-template-columns: repeat(2, 1fr); }
     .arena-doge-l, .arena-doge-r { display: none; }
-    .stk-bull, .stk-fire, .stk-happy, .stk-angry { display: none; }
+    .stk-tl, .stk-tr, .stk-ml, .stk-mr { display: none; }
     .mt-wagmi, .mt-gg { display: none; }
     .sb-1 { display: none; }
   }
