@@ -84,6 +84,143 @@
   $: symbol = pairToSymbol(state.pair);
   $: interval = toBinanceInterval(state.timeframe);
 
+  type ChartTheme = {
+    bg: string;
+    text: string;
+    grid: string;
+    border: string;
+    candleUp: string;
+    candleDown: string;
+    volumeUp: string;
+    volumeDown: string;
+    draw: string;
+    drawGhost: string;
+    tp: string;
+    entry: string;
+    sl: string;
+    ma7: string;
+    ma25: string;
+    ma99: string;
+    rsi: string;
+    rsiTop: string;
+    rsiBottom: string;
+    rsiMid: string;
+  };
+
+  const FALLBACK_THEME: ChartTheme = {
+    bg: '#0a0a1a',
+    text: '#888',
+    grid: 'rgba(255,230,0,.03)',
+    border: 'rgba(255,230,0,.15)',
+    candleUp: '#00ff88',
+    candleDown: '#ff2d55',
+    volumeUp: 'rgba(0,255,136,.25)',
+    volumeDown: 'rgba(255,45,85,.25)',
+    draw: '#ffe600',
+    drawGhost: 'rgba(255,230,0,.6)',
+    tp: '#4ade80',
+    entry: '#ffba30',
+    sl: '#ff4060',
+    ma7: '#f7931a',
+    ma25: '#e040fb',
+    ma99: '#26c6da',
+    rsi: '#a855f7',
+    rsiTop: 'rgba(255,45,85,.35)',
+    rsiBottom: 'rgba(0,255,136,.35)',
+    rsiMid: 'rgba(255,255,255,.06)',
+  };
+  let chartTheme: ChartTheme = FALLBACK_THEME;
+
+  function readCssVar(el: HTMLElement, name: string, fallback: string): string {
+    const raw = getComputedStyle(el).getPropertyValue(name).trim();
+    return raw || fallback;
+  }
+
+  function toRgbTuple(color: string): [number, number, number] | null {
+    const value = color.trim();
+    const hex = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hex) {
+      const h = hex[1];
+      if (h.length === 3) {
+        return [
+          parseInt(h[0] + h[0], 16),
+          parseInt(h[1] + h[1], 16),
+          parseInt(h[2] + h[2], 16),
+        ];
+      }
+      return [
+        parseInt(h.slice(0, 2), 16),
+        parseInt(h.slice(2, 4), 16),
+        parseInt(h.slice(4, 6), 16),
+      ];
+    }
+
+    const rgb = value.match(/^rgba?\(([^)]+)\)$/i);
+    if (!rgb) return null;
+    const parts = rgb[1].split(',').map((p) => Number(p.trim()));
+    if (parts.length < 3 || !parts.slice(0, 3).every((n) => Number.isFinite(n))) return null;
+    return [
+      Math.max(0, Math.min(255, Math.round(parts[0]))),
+      Math.max(0, Math.min(255, Math.round(parts[1]))),
+      Math.max(0, Math.min(255, Math.round(parts[2]))),
+    ];
+  }
+
+  function withAlpha(color: string, alpha: number): string {
+    const rgb = toRgbTuple(color);
+    if (!rgb) return color;
+    return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
+  }
+
+  function toTvHex(color: string, fallback = '0a0a1a'): string {
+    const hex = color.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hex) {
+      const h = hex[1].toLowerCase();
+      if (h.length === 3) return `${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
+      return h;
+    }
+    const rgb = toRgbTuple(color);
+    if (!rgb) return fallback;
+    return rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
+  }
+
+  function resolveChartTheme(el: HTMLElement | null): ChartTheme {
+    if (typeof window === 'undefined') return FALLBACK_THEME;
+    const target = el ?? document.documentElement;
+
+    const bg = readCssVar(target, '--blk', FALLBACK_THEME.bg);
+    const up = readCssVar(target, '--grn', FALLBACK_THEME.candleUp);
+    const down = readCssVar(target, '--red', FALLBACK_THEME.candleDown);
+    const accent = readCssVar(target, '--yel', FALLBACK_THEME.draw);
+    const pink = readCssVar(target, '--pk', FALLBACK_THEME.ma25);
+    const cyan = readCssVar(target, '--cyan', FALLBACK_THEME.ma99);
+    const orange = readCssVar(target, '--ora', FALLBACK_THEME.ma7);
+    const fg = readCssVar(target, '--fg', '#ffffff');
+
+    return {
+      bg,
+      text: withAlpha(fg, 0.55),
+      grid: withAlpha(accent, 0.06),
+      border: withAlpha(accent, 0.24),
+      candleUp: up,
+      candleDown: down,
+      volumeUp: withAlpha(up, 0.25),
+      volumeDown: withAlpha(down, 0.25),
+      draw: accent,
+      drawGhost: withAlpha(accent, 0.6),
+      tp: up,
+      entry: accent,
+      sl: down,
+      ma7: orange,
+      ma25: pink,
+      ma99: cyan,
+      rsi: pink,
+      rsiTop: withAlpha(down, 0.35),
+      rsiBottom: withAlpha(up, 0.35),
+      rsiMid: withAlpha(fg, 0.1),
+    };
+  }
+
   // ═══════════════════════════════════════════
   //  INDICATOR COMPUTATION (optimised)
   // ═══════════════════════════════════════════
@@ -135,6 +272,8 @@
     if (!tvContainer) return;
     tvLoading = true;
     try {
+      const activeTheme = resolveChartTheme(tvContainer || chartContainer);
+      chartTheme = activeTheme;
       destroyTradingView();
       const widgetDiv = tvContainer.querySelector('#tradingview_widget');
       if (!widgetDiv) return;
@@ -143,19 +282,19 @@
       const iframe = document.createElement('iframe');
       const params = new URLSearchParams({
         symbol: pairToTVSymbol(state.pair), interval: tfToTVInterval(state.timeframe),
-        hidesidetoolbar: '0', symboledit: '1', saveimage: '1', toolbarbg: '0a0a1a',
+        hidesidetoolbar: '0', symboledit: '1', saveimage: '1', toolbarbg: toTvHex(activeTheme.bg),
         theme: 'dark', style: '1', timezone: 'Etc/UTC', withdateranges: '1', locale: 'en',
         hide_top_toolbar: '0', allow_symbol_change: '1',
         studies: ['Volume@tv-basicstudies', 'MASimple@tv-basicstudies', 'RSI@tv-basicstudies', 'OBV@tv-basicstudies'].join('\x1f'),
         studies_overrides: '{}',
         overrides: JSON.stringify({
-          'mainSeriesProperties.candleStyle.upColor': '#00ff88',
-          'mainSeriesProperties.candleStyle.downColor': '#ff2d55',
-          'mainSeriesProperties.candleStyle.wickUpColor': '#00ff88',
-          'mainSeriesProperties.candleStyle.wickDownColor': '#ff2d55',
-          'paneProperties.background': '#0a0a1a',
-          'paneProperties.vertGridProperties.color': 'rgba(255,230,0,.03)',
-          'paneProperties.horzGridProperties.color': 'rgba(255,230,0,.03)',
+          'mainSeriesProperties.candleStyle.upColor': activeTheme.candleUp,
+          'mainSeriesProperties.candleStyle.downColor': activeTheme.candleDown,
+          'mainSeriesProperties.candleStyle.wickUpColor': activeTheme.candleUp,
+          'mainSeriesProperties.candleStyle.wickDownColor': activeTheme.candleDown,
+          'paneProperties.background': activeTheme.bg,
+          'paneProperties.vertGridProperties.color': activeTheme.grid,
+          'paneProperties.horzGridProperties.color': activeTheme.grid,
         }),
       });
       iframe.src = `https://www.tradingview.com/widgetembed/?${params.toString()}`;
@@ -213,14 +352,14 @@
     const rect = drawingCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     if (drawingMode === 'hline') {
-      drawings = [...drawings, { type: 'hline', points: [{ x: 0, y }, { x: rect.width, y }], color: '#ffe600' }];
+      drawings = [...drawings, { type: 'hline', points: [{ x: 0, y }, { x: rect.width, y }], color: chartTheme.draw }];
       renderDrawings(); drawingMode = 'none'; return;
     }
     if (drawingMode === 'trendline') {
       if (!isDrawing) { currentDrawing = { type: 'trendline', points: [{ x, y }] }; isDrawing = true; }
       else if (currentDrawing) {
         currentDrawing.points.push({ x, y });
-        drawings = [...drawings, { type: 'trendline', points: [...currentDrawing.points], color: '#ffe600' }];
+        drawings = [...drawings, { type: 'trendline', points: [...currentDrawing.points], color: chartTheme.draw }];
         currentDrawing = null; isDrawing = false; drawingMode = 'none'; renderDrawings();
       }
     }
@@ -237,7 +376,7 @@
       renderDrawings();
       const ctx = drawingCanvas.getContext('2d');
       if (!ctx) return;
-      ctx.beginPath(); ctx.strokeStyle = 'rgba(255,230,0,.6)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.strokeStyle = chartTheme.drawGhost; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
       ctx.moveTo(currentDrawing.points[0].x, currentDrawing.points[0].y);
       ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
       ctx.stroke(); ctx.setLineDash([]);
@@ -293,9 +432,9 @@
     if (!series) return;
     clearPositionLines();
     const isLong = dir === 'LONG';
-    tpLine = series.createPriceLine({ price: tp, color: '#4ade80', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: `TP ${isLong ? '▲' : '▼'} $${Math.round(tp).toLocaleString()}` });
-    entryLine = series.createPriceLine({ price: entry, color: '#ffba30', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: `ENTRY $${Math.round(entry).toLocaleString()}` });
-    slLine = series.createPriceLine({ price: sl, color: '#ff4060', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: `SL ${isLong ? '▼' : '▲'} $${Math.round(sl).toLocaleString()}` });
+    tpLine = series.createPriceLine({ price: tp, color: chartTheme.tp, lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: `TP ${isLong ? '▲' : '▼'} $${Math.round(tp).toLocaleString()}` });
+    entryLine = series.createPriceLine({ price: entry, color: chartTheme.entry, lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: `ENTRY $${Math.round(entry).toLocaleString()}` });
+    slLine = series.createPriceLine({ price: sl, color: chartTheme.sl, lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: `SL ${isLong ? '▼' : '▲'} $${Math.round(sl).toLocaleString()}` });
   }
 
   function clearPositionLines() {
@@ -364,23 +503,30 @@
   onMount(async () => {
     try {
       const lwc = await import('lightweight-charts');
+      chartTheme = resolveChartTheme(chartContainer);
 
       chart = lwc.createChart(chartContainer, {
         width: chartContainer.clientWidth, height: chartContainer.clientHeight,
-        layout: { background: { type: lwc.ColorType.Solid, color: '#0a0a1a' }, textColor: '#888', fontFamily: "'JetBrains Mono', monospace", fontSize: 9 },
-        grid: { vertLines: { color: 'rgba(255,230,0,.03)' }, horzLines: { color: 'rgba(255,230,0,.03)' } },
+        layout: { background: { type: lwc.ColorType.Solid, color: chartTheme.bg }, textColor: chartTheme.text, fontFamily: "'JetBrains Mono', monospace", fontSize: 9 },
+        grid: { vertLines: { color: chartTheme.grid }, horzLines: { color: chartTheme.grid } },
         crosshair: { mode: lwc.CrosshairMode.Normal },
-        rightPriceScale: { borderColor: 'rgba(255,230,0,.15)', scaleMargins: { top: 0.05, bottom: 0.15 } },
-        timeScale: { borderColor: 'rgba(255,230,0,.15)', timeVisible: true, secondsVisible: false }
+        rightPriceScale: { borderColor: chartTheme.border, scaleMargins: { top: 0.05, bottom: 0.15 } },
+        timeScale: { borderColor: chartTheme.border, timeVisible: true, secondsVisible: false }
       });
 
-      series = chart.addSeries(lwc.CandlestickSeries, { upColor: '#00ff88', downColor: '#ff2d55', wickUpColor: '#00ff88', wickDownColor: '#ff2d55', borderVisible: false });
+      series = chart.addSeries(lwc.CandlestickSeries, {
+        upColor: chartTheme.candleUp,
+        downColor: chartTheme.candleDown,
+        wickUpColor: chartTheme.candleUp,
+        wickDownColor: chartTheme.candleDown,
+        borderVisible: false
+      });
 
       // MA lines on main pane
       const maOpts = (color: string) => ({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      ma7Series = chart.addSeries(lwc.LineSeries, maOpts('#f7931a'));
-      ma25Series = chart.addSeries(lwc.LineSeries, maOpts('#e040fb'));
-      ma99Series = chart.addSeries(lwc.LineSeries, maOpts('#26c6da'));
+      ma7Series = chart.addSeries(lwc.LineSeries, maOpts(chartTheme.ma7));
+      ma25Series = chart.addSeries(lwc.LineSeries, maOpts(chartTheme.ma25));
+      ma99Series = chart.addSeries(lwc.LineSeries, maOpts(chartTheme.ma99));
 
       // ═══ Volume Pane ═══
       chart.addPane();
@@ -391,10 +537,16 @@
       // ═══ RSI Pane ═══
       chart.addPane();
       const rsiIdx = chart.panes().length - 1;
-      rsiSeries = chart.addSeries(lwc.LineSeries, { color: '#a855f7', lineWidth: 1.5, priceLineVisible: true, lastValueVisible: true, crosshairMarkerVisible: false }, rsiIdx);
-      rsiSeries.createPriceLine({ price: 70, color: 'rgba(255,45,85,.35)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
-      rsiSeries.createPriceLine({ price: 30, color: 'rgba(0,255,136,.35)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
-      rsiSeries.createPriceLine({ price: 50, color: 'rgba(255,255,255,.06)', lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: '' });
+      rsiSeries = chart.addSeries(lwc.LineSeries, {
+        color: chartTheme.rsi,
+        lineWidth: 1.5,
+        priceLineVisible: true,
+        lastValueVisible: true,
+        crosshairMarkerVisible: false
+      }, rsiIdx);
+      rsiSeries.createPriceLine({ price: 70, color: chartTheme.rsiTop, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+      rsiSeries.createPriceLine({ price: 30, color: chartTheme.rsiBottom, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+      rsiSeries.createPriceLine({ price: 50, color: chartTheme.rsiMid, lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: '' });
       chart.panes()[rsiIdx].setStretchFactor(0.18);
 
       await loadKlines();
@@ -437,7 +589,11 @@
 
       // Re-set all series data
       series.setData(klineCache.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close })));
-      if (volumeSeries) volumeSeries.setData(klineCache.map(k => ({ time: k.time, value: k.volume, color: k.close >= k.open ? 'rgba(0,255,136,.25)' : 'rgba(255,45,85,.25)' })));
+      if (volumeSeries) volumeSeries.setData(klineCache.map(k => ({
+        time: k.time,
+        value: k.volume,
+        color: k.close >= k.open ? chartTheme.volumeUp : chartTheme.volumeDown
+      })));
 
       const closes = klineCache.map(k => ({ time: k.time, close: k.close }));
       if (ma7Series) ma7Series.setData(computeSMA(closes, 7));
@@ -469,7 +625,11 @@
       series.setData(klines.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close })));
 
       // Volume
-      volumeSeries.setData(klines.map(k => ({ time: k.time, value: k.volume, color: k.close >= k.open ? 'rgba(0,255,136,.25)' : 'rgba(255,45,85,.25)' })));
+      volumeSeries.setData(klines.map(k => ({
+        time: k.time,
+        value: k.volume,
+        color: k.close >= k.open ? chartTheme.volumeUp : chartTheme.volumeDown
+      })));
 
       // ═══ Indicators ═══
       klineCache = klines;
@@ -500,7 +660,13 @@
         if (!series) return;
 
         series.update({ time: kline.time, open: kline.open, high: kline.high, low: kline.low, close: kline.close });
-        if (volumeSeries) volumeSeries.update({ time: kline.time, value: kline.volume, color: kline.close >= kline.open ? 'rgba(0,255,136,.25)' : 'rgba(255,45,85,.25)' });
+        if (volumeSeries) {
+          volumeSeries.update({
+            time: kline.time,
+            value: kline.volume,
+            color: kline.close >= kline.open ? chartTheme.volumeUp : chartTheme.volumeDown
+          });
+        }
 
         // Update kline cache
         const isUpdate = klineCache.length > 0 && klineCache[klineCache.length - 1].time === kline.time;
@@ -634,9 +800,9 @@
 
     {#if chartMode === 'agent' && klineCache.length > 0}
       <div class="ma-vals">
-        <span class="ma-tag" style="color:#f7931a">MA(7) {ma7Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
-        <span class="ma-tag" style="color:#e040fb">MA(25) {ma25Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
-        <span class="ma-tag" style="color:#26c6da">MA(99) {ma99Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+        <span class="ma-tag" style="color:{chartTheme.ma7}">MA(7) {ma7Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+        <span class="ma-tag" style="color:{chartTheme.ma25}">MA(25) {ma25Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+        <span class="ma-tag" style="color:{chartTheme.ma99}">MA(99) {ma99Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
       </div>
     {/if}
 
