@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { gameState } from '$lib/stores/gameState';
   import { RESETTABLE_STORAGE_KEYS } from '$lib/stores/storageKeys';
   import {
@@ -6,9 +7,12 @@
     formatTimeframeLabel,
     normalizeTimeframe,
   } from '$lib/utils/timeframe';
+  import { fetchPreferencesApi, updatePreferencesApi } from '$lib/api/preferencesApi';
 
   let state = $gameState;
   $: state = $gameState;
+  let saving = false;
+  let loadedRemote = false;
 
   // Settings
   let settings = {
@@ -27,8 +31,32 @@
     }
   }
 
+  async function persistPreferences(currentSettings = settings) {
+    saving = true;
+    await updatePreferencesApi({
+      defaultPair: state.pair,
+      defaultTimeframe: normalizeTimeframe(currentSettings.defaultTF),
+      battleSpeed: Number(currentSettings.speed || 3),
+      signalsEnabled: Boolean(currentSettings.signals),
+      sfxEnabled: Boolean(currentSettings.sfx),
+      chartTheme: currentSettings.chartTheme,
+      dataSource: currentSettings.dataSource,
+      language: currentSettings.language
+    });
+    saving = false;
+  }
+
+  let _persistTimer: ReturnType<typeof setTimeout> | null = null;
+  function queuePersist() {
+    if (_persistTimer) clearTimeout(_persistTimer);
+    _persistTimer = setTimeout(() => {
+      persistPreferences(settings);
+    }, 250);
+  }
+
   function updateSetting(key: string, value: any) {
-    settings = { ...settings, [key]: value };
+    const next = { ...settings, [key]: value };
+    settings = next;
     if (key === 'speed') {
       gameState.update(s => ({ ...s, speed: value }));
     }
@@ -36,6 +64,7 @@
       const timeframe = normalizeTimeframe(value);
       gameState.update(s => ({ ...s, timeframe }));
     }
+    queuePersist();
   }
 
   function resetAllData() {
@@ -46,12 +75,40 @@
       window.location.reload();
     }
   }
+
+  onMount(async () => {
+    const remote = await fetchPreferencesApi();
+    if (!remote) return;
+
+    settings = {
+      ...settings,
+      defaultTF: normalizeTimeframe(remote.defaultTimeframe),
+      signals: Boolean(remote.signalsEnabled),
+      sfx: Boolean(remote.sfxEnabled),
+      dataSource: remote.dataSource || settings.dataSource,
+      chartTheme: remote.chartTheme || settings.chartTheme,
+      speed: Number(remote.battleSpeed || settings.speed),
+      language: remote.language || settings.language
+    };
+
+    gameState.update((s) => ({
+      ...s,
+      pair: remote.defaultPair || s.pair,
+      timeframe: normalizeTimeframe(remote.defaultTimeframe),
+      speed: Number(remote.battleSpeed || s.speed || 3)
+    }));
+
+    loadedRemote = true;
+  });
 </script>
 
 <div class="settings-page">
   <div class="settings-header">
     <h1 class="settings-title">⚙️ SETTINGS</h1>
     <p class="settings-sub">Configure your MAXI⚡DOGE experience</p>
+    <p class="settings-sync">
+      {#if saving}Saving to cloud...{:else if loadedRemote}Synced with account settings{:else}Local mode{/if}
+    </p>
   </div>
 
   <div class="settings-body">
@@ -210,6 +267,13 @@
     color: #555;
     letter-spacing: 2px;
     margin-top: 4px;
+  }
+  .settings-sync {
+    font-family: var(--fm);
+    font-size: 8px;
+    color: #333;
+    margin-top: 4px;
+    letter-spacing: 1px;
   }
 
   .settings-body {
