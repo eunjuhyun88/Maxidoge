@@ -8,7 +8,7 @@ import { AGENT_SIGNALS, getConsensus } from '$lib/data/warroom';
 import { openQuickTrade, replaceQuickTradeId } from './quickTradeStore';
 import { replaceTrackedSignalId, trackSignal } from './trackedSignalStore';
 import { incrementTrackedSignals } from './userProfileStore';
-import { publishCopyTradeApi } from '$lib/api/tradingApi';
+import { openQuickTradeApi, publishCopyTradeApi, trackSignalApi } from '$lib/api/tradingApi';
 
 export interface CopyTradeDraft {
   pair: string;
@@ -201,7 +201,48 @@ function createCopyTradeStore() {
           draft: payloadDraft,
           confidence,
         }).then((result) => {
-          if (!result) return;
+          if (!result) {
+            void openQuickTradeApi({
+              pair: payloadDraft!.pair,
+              dir: payloadDraft!.dir,
+              entry: payloadDraft!.entry,
+              tp: payloadDraft!.tp[0] ?? null,
+              sl: payloadDraft!.sl ?? null,
+              currentPrice: payloadDraft!.entry,
+              source: 'copy-trade',
+              note: payloadDraft!.note || '',
+            }).then((serverTrade) => {
+              if (!serverTrade) return;
+              replaceQuickTradeId(localTradeId as string, serverTrade.id, {
+                currentPrice: serverTrade.currentPrice,
+                pnlPercent: serverTrade.pnlPercent,
+                status: serverTrade.status,
+                openedAt: serverTrade.openedAt,
+              });
+            });
+
+            void trackSignalApi({
+              pair: payloadDraft!.pair,
+              dir: payloadDraft!.dir,
+              confidence,
+              entryPrice: payloadDraft!.entry,
+              currentPrice: payloadDraft!.entry,
+              source: 'COPY TRADE',
+              note: payloadDraft!.note || '',
+              ttlHours: 24,
+            }).then((serverSignal) => {
+              if (!serverSignal) return;
+              replaceTrackedSignalId(localSignalId as string, serverSignal.id, {
+                confidence: serverSignal.confidence,
+                currentPrice: serverSignal.currentPrice,
+                pnlPercent: serverSignal.pnlPercent,
+                status: serverSignal.status,
+                trackedAt: serverSignal.trackedAt,
+                expiresAt: serverSignal.expiresAt,
+              });
+            });
+            return;
+          }
 
           replaceQuickTradeId(localTradeId as string, result.trade.id, {
             currentPrice: result.trade.currentPrice,
