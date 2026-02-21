@@ -22,17 +22,17 @@
   function enterTerminal() { goto('/terminal'); }
 
   const FEATURES = [
-    { label: 'WAR ROOM', sub: 'TERMINAL', brief: '7 AI DOGS SCAN 200+ PAIRS SO YOU DON\'T HAVE TO', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
-      detail: 'YOUR AI COMMAND CENTER. 7 SPECIALIZED AGENTS ANALYZE CHARTS, WHALE FLOWS, DERIVATIVES, AND SENTIMENT IN REAL-TIME. TYPE CONDITIONS IN PLAIN ENGLISH — THE SCANNER HANDLES THE REST.',
+    { label: 'WAR ROOM', sub: 'TERMINAL', brief: 'YOU MISSED THE PUMP BECAUSE YOU WERE SLEEPING. NEVER AGAIN.', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
+      detail: '7 AI AGENTS RUN 24/7 — SCANNING CHARTS, TRACKING WHALES, READING DERIVATIVES, AND MONITORING SOCIAL SENTIMENT ACROSS 200+ PAIRS. YOU OPEN YOUR EYES. THE INTEL IS ALREADY THERE.',
       stats: [{ k: 'AI AGENTS', v: '7' }, { k: 'PAIRS', v: '200+' }, { k: 'SCAN PATTERNS', v: '28' }] },
-    { label: 'BOSS FIGHT', sub: 'ARENA', brief: 'SUBMIT YOUR THESIS — 7 AI DOGS WILL CHALLENGE IT', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
-      detail: 'THINK YOU FOUND THE NEXT 10X? PROVE IT. SUBMIT YOUR LONG/SHORT HYPOTHESIS WITH TP AND SL — THEN WATCH 7 AI AGENTS VOTE, DEBATE, AND JUDGE YOUR CALL ACROSS 11 BATTLE PHASES.',
+    { label: 'BOSS FIGHT', sub: 'ARENA', brief: '"ETH TO $5K" — PROVE IT OR GET REKT BY AI.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
+      detail: 'DROP YOUR CALL. LONG ETH WITH TP AND SL. 7 AI AGENTS VOTE, DEBATE, AND EXPOSE EVERY FLAW IN YOUR THESIS — ACROSS 11 BATTLE PHASES. SURVIVE? YOU EARN RANK. GET DESTROYED? YOU LEARN WHY.',
       stats: [{ k: 'PHASES', v: '11' }, { k: 'AI JUDGES', v: '7' }, { k: 'REWARDS', v: 'XP+RANK' }] },
-    { label: 'AI SCANNER', sub: 'SIGNALS', brief: 'ANOMALY ALERTS: OI SPIKES, WHALE MOVES, VOLUME SURGES', img: '/blockparty/f5-doge-fire.png', path: '/signals',
-      detail: '28 ANOMALY DETECTION PATTERNS MONITOR OI COMPRESSION, WHALE EXCHANGE DEPOSITS, LIQUIDATION CLUSTERS, FUNDING EXTREMES, AND SOCIAL EXPLOSIONS. SCORE 70+ = ALERT. SCORE 85+ = CRITICAL. DRAFT ORDERS AUTO-GENERATE WITH TP/SL.',
+    { label: 'AI SCANNER', sub: 'SIGNALS', brief: 'THE MARKET WHISPERS BEFORE IT SCREAMS. WE HEAR IT FIRST.', img: '/blockparty/f5-doge-fire.png', path: '/signals',
+      detail: '28 ANOMALY PATTERNS CATCH WHAT HUMANS MISS — OI COMPRESSION BEFORE THE SQUEEZE, WHALE DEPOSITS BEFORE THE DUMP, LIQUIDATION CLUSTERS BEFORE THE CASCADE. SCORE 70+ = ALERT. SCORE 85+ = DROP EVERYTHING.',
       stats: [{ k: 'PATTERNS', v: '28' }, { k: 'SCAN CYCLE', v: '15 MIN' }, { k: 'ALERTS', v: 'REAL-TIME' }] },
-    { label: 'COPY TRADE', sub: 'COMMUNITY', brief: 'ONE-CLICK COPY FROM AI AGENTS OR TOP DEGENS', img: '/blockparty/f5-doge-excited.png', path: '/signals',
-      detail: 'SELECT AI SIGNALS YOU TRUST. HIT COPY TRADE. THE WIZARD BUILDS YOUR ORDER WITH ENTRY, TP, SL, AND R:R — ALL PRE-CALCULATED. APPROVE OR REJECT. YOUR MONEY, YOUR CALL.',
+    { label: 'COPY TRADE', sub: 'COMMUNITY', brief: 'STOP WATCHING. START COPYING. ONE CLICK.', img: '/blockparty/f5-doge-excited.png', path: '/signals',
+      detail: 'SEE A SIGNAL YOU LIKE? ONE TAP. THE COPY WIZARD BUILDS YOUR ORDER — ENTRY, TP, SL, R:R — ALL CALCULATED. YOU JUST APPROVE OR SKIP. NO MATH. NO HESITATION. YOUR WALLET, YOUR RULES.',
       stats: [{ k: 'COPY WIZARD', v: '4-STEP' }, { k: 'R:R CALC', v: 'AUTO' }, { k: 'APPROVAL', v: 'YOU' }] },
   ];
 
@@ -48,9 +48,12 @@
 
   let selectedFeature: number | null = null;
   let heroRightEl: HTMLDivElement;
+  let heroLeftEl: HTMLDivElement;
 
   function selectFeature(i: number) {
     selectedFeature = selectedFeature === i ? null : i;
+    // Reset left panel scroll to top when switching views
+    if (heroLeftEl) heroLeftEl.scrollTop = 0;
   }
 
   /** Scroll hijacking: right panel scrolls first, then page.
@@ -154,11 +157,11 @@
        SECTION 1: HERO
        ═══════════════════════════════════════ -->
   <section class="hero" class:hero-go={heroReady}>
-    <div class="hero-left">
+    <div class="hero-left" bind:this={heroLeftEl}>
       {#if selectedFeature !== null}
         <!-- Feature detail view -->
         <div class="feat-detail">
-          <button class="feat-back" on:click={() => selectedFeature = null}>← BACK</button>
+          <button class="feat-back" on:click={() => selectFeature(selectedFeature ?? 0)}>← BACK</button>
           <span class="htag">//{FEATURES[selectedFeature].sub}</span>
           <div class="ht feat-detail-img" style="--ht-img:url({FEATURES[selectedFeature].img})">
             <img src={FEATURES[selectedFeature].img} alt="" />
@@ -181,10 +184,9 @@
         <!-- Default hero content -->
         <div class="hero-stack">
           <span class="htag ha" style="--ha-d:0s">//MAXI⚡DOGE</span>
-          <span class="hl hl-pk ha" style="--ha-d:0.12s">DOGE</span>
-          <span class="hl hl-xl ha" style="--ha-d:0.24s">RUN</span>
-          <div class="hl-row ha" style="--ha-d:0.36s">
-            <span class="hl hl-sm">GAME</span>
+          <span class="hl hl-pk ha" style="--ha-d:0.12s">ALPHA</span>
+          <div class="hl-row ha" style="--ha-d:0.24s">
+            <span class="hl hl-xl">DOGS</span>
             <div class="ht hero-doge-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)">
               <img src="/blockparty/f5-doge-bull.png" alt="doge" class="hero-doge" />
             </div>
@@ -215,12 +217,6 @@
           </div>
         </div>
       {/if}
-    </div>
-
-    <div class="hero-div">
-      <div class="vt-track">
-        {#each Array(12) as _}<span class="vt">FEATURES</span>{/each}
-      </div>
     </div>
 
     <div class="hero-right" bind:this={heroRightEl}>
@@ -311,7 +307,7 @@
         </p>
       </div>
     </div>
-    <div class="about-tag sr su" style="--d:0.3s">YOUR AI PACK. ALWAYS ON. ALWAYS WATCHING.</div>
+    <div class="about-tag sr su" style="--d:0.3s">YOUR AI PACK. NO SLEEP. NO MERCY. NO MISSED TRADES.</div>
   </section>
 
   <!-- ═══════════════════════════════════════
@@ -370,7 +366,7 @@
     </div>
 
     <div class="detect-cta sr su" style="--d:0.5s">
-      <p class="detect-example">"OI가 4봉 연속 올랐는데 가격이 안 움직이는 코인 찾아줘" → SCANNER HANDLES IT</p>
+      <p class="detect-example">"FIND COINS WHERE OI ROSE 4 CANDLES STRAIGHT BUT PRICE DIDN'T MOVE" → SCANNER HANDLES IT</p>
       <button class="hero-btn hero-btn-primary" on:click={enterTerminal}>TRY SCANNER NOW →</button>
     </div>
   </section>
@@ -631,7 +627,7 @@
     color: var(--sp-w); display: block;
     text-shadow: 0 0 10px rgba(240,237,228,0.3);
   }
-  .hl-sm { font-size: clamp(18px, 3vw, 32px); margin-bottom: 8px; }
+  /* .hl-sm removed — no longer used */
   .hl-xl { font-size: clamp(40px, 7vw, 80px); letter-spacing: 6px; }
   .hl-pk {
     font-size: clamp(44px, 8vw, 90px); letter-spacing: 4px;
@@ -673,21 +669,21 @@
 
   /* Hero subtitle + value props + CTAs */
   .hero-sub {
-    font-family: var(--fp); font-size: 9px;
-    color: var(--sp-pk); letter-spacing: 3px; margin-top: 16px;
+    font-family: var(--fp); font-size: 10px;
+    color: var(--sp-pk); letter-spacing: 3px; margin-top: 18px;
     text-shadow: 0 0 12px var(--sp-glow);
   }
   .hero-props { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
   .hp { display: flex; align-items: center; gap: 10px; }
   .hp-icon { font-size: 14px; flex-shrink: 0; }
   .hp-txt {
-    font-family: var(--fp); font-size: 7px;
-    color: var(--sp-w); letter-spacing: 1px; opacity: 0.8; line-height: 1.6;
+    font-family: var(--fp); font-size: 9px;
+    color: var(--sp-w); letter-spacing: 1px; opacity: 0.85; line-height: 1.8;
   }
   .hero-ctas { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
   .hero-btn {
-    font-family: var(--fp); font-size: 8px; letter-spacing: 2px;
-    border: none; border-radius: 6px; padding: 12px 20px;
+    font-family: var(--fp); font-size: 9px; letter-spacing: 2px;
+    border: none; border-radius: 6px; padding: 14px 24px;
     cursor: pointer; transition: all .2s;
   }
   .hero-btn-primary {
@@ -700,34 +696,6 @@
     border: 1px solid rgba(232,150,125,0.3);
   }
   .hero-btn-secondary:hover { background: rgba(232,150,125,0.08); border-color: var(--sp-pk); }
-
-  /* Vertical divider with marquee */
-  .hero-div {
-    width: 40px;
-    border-left: 1px solid rgba(232,150,125,0.15);
-    border-right: 1px solid rgba(232,150,125,0.15);
-    display: flex; flex-direction: column; align-items: center;
-    overflow: hidden; flex-shrink: 0; z-index: 3;
-    position: sticky; top: 36px;
-    height: calc(100vh - 36px);
-  }
-  .vt-track {
-    display: flex; flex-direction: column; align-items: center;
-    animation: vt-scroll 20s linear infinite;
-  }
-  @keyframes vt-scroll {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(-50%); }
-  }
-  .vt {
-    font-family: var(--fp); font-size: 7px;
-    color: rgba(232,150,125,0.2);
-    writing-mode: vertical-rl; text-orientation: mixed;
-    white-space: nowrap; padding: 8px 0;
-    transition: color 0.3s;
-  }
-  .hero-div:hover .vt { color: rgba(232,150,125,0.5); }
-  .hero-div:hover .vt-track { animation-play-state: paused; }
 
   /* Feature cards (right column) — sticky panel with internal scroll */
   .hero-right {
@@ -765,7 +733,7 @@
   .fc:hover .fc-img img { transform: scale(1.1) rotate(-2deg); }
   .fc-txt { padding: 12px 20px 16px; }
   .fc-sub {
-    font-family: var(--fp); font-size: 7px;
+    font-family: var(--fp); font-size: 8px;
     color: var(--sp-dim); letter-spacing: 2px;
   }
   .fc-lbl {
@@ -774,8 +742,9 @@
     text-shadow: 0 0 10px var(--sp-glow);
   }
   .fc-brief {
-    font-family: var(--fp); font-size: 6px;
-    color: var(--sp-dim); letter-spacing: 1px; line-height: 1.6; margin-top: 4px;
+    font-family: var(--fv); font-size: 11px;
+    color: var(--sp-w); letter-spacing: 0.5px; line-height: 1.5; margin-top: 6px;
+    opacity: 0.7;
   }
   .fc-all {
     display: flex; align-items: center; justify-content: space-between;
@@ -817,9 +786,9 @@
     text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
   }
   .feat-detail-desc {
-    font-family: var(--fp); font-size: 9px;
-    color: var(--sp-w); letter-spacing: 1px; line-height: 1.8;
-    max-width: 400px; opacity: 0.8;
+    font-family: var(--fv); font-size: 14px;
+    color: var(--sp-w); letter-spacing: 0.3px; line-height: 1.7;
+    max-width: 440px; opacity: 0.8;
   }
   .feat-detail-stats {
     display: flex; gap: 20px; margin-top: 8px;
@@ -837,7 +806,7 @@
     text-shadow: 0 0 8px var(--sp-glow);
   }
   .fds-k {
-    font-family: var(--fp); font-size: 6px;
+    font-family: var(--fp); font-size: 7px;
     color: var(--sp-dim); letter-spacing: 2px;
   }
   .feat-detail-cta {
@@ -873,7 +842,7 @@
     text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
   }
   .flow-sub {
-    font-family: var(--fp); font-size: 8px;
+    font-family: var(--fp); font-size: 9px;
     color: var(--sp-dim); letter-spacing: 3px; margin-top: 12px;
   }
 
@@ -903,8 +872,9 @@
     text-shadow: 0 0 10px var(--sp-glow);
   }
   .fstep-desc {
-    font-family: var(--fp); font-size: 7px;
-    color: var(--sp-dim); letter-spacing: 1px; margin-top: 8px; line-height: 1.6;
+    font-family: var(--fv); font-size: 13px;
+    color: var(--sp-w); letter-spacing: 0.3px; margin-top: 8px; line-height: 1.6;
+    opacity: 0.7;
   }
   /* Stat bar */
   .fstep-bar {
@@ -965,7 +935,7 @@
   .abx { font-size: 1.4em; color: var(--sp-pk); text-shadow: 0 0 15px var(--sp-glow); }
 
   .about-tag {
-    font-family: var(--fp); font-size: 8px;
+    font-family: var(--fp); font-size: 9px;
     letter-spacing: 4px; color: var(--sp-dim); text-align: center;
     margin-top: 40px; padding-top: 20px;
     border-top: 1px solid rgba(232,150,125,0.08);
@@ -996,7 +966,7 @@
     text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
   }
   .sq-sub {
-    font-family: var(--fp); font-size: 7px;
+    font-family: var(--fp); font-size: 8px;
     color: var(--sp-dim); letter-spacing: 2px; margin-top: 8px;
     text-align: center; margin-bottom: 30px; position: relative; z-index: 2;
   }
@@ -1026,7 +996,7 @@
   .sq-av-wrap::after { -webkit-mask-size: cover; mask-size: cover; }
   .sq-av { width: 100%; height: 100%; object-fit: cover; }
   .sq-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-  .sq-nm { font-family: var(--fp); font-size: 7px; letter-spacing: 1px; }
+  .sq-nm { font-family: var(--fp); font-size: 8px; letter-spacing: 1px; }
   .sq-rl { font-family: var(--fv); font-size: 12px; color: var(--sp-dim); }
   .sq-bar { width: 100%; height: 4px; background: rgba(232,150,125,0.1); border-radius: 2px; margin-top: 3px; overflow: hidden; }
   .sq-fill { height: 100%; border-radius: 2px; box-shadow: 0 0 4px var(--sp-glow); }
@@ -1053,7 +1023,7 @@
     text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
   }
   .detect-sub {
-    font-family: var(--fp); font-size: 8px;
+    font-family: var(--fp); font-size: 9px;
     color: var(--sp-dim); letter-spacing: 3px; margin-top: 12px;
   }
 
@@ -1093,8 +1063,9 @@
     padding: 2px 6px; border-radius: 4px;
   }
   .dcat-desc {
-    font-family: var(--fp); font-size: 6px;
-    color: var(--sp-dim); letter-spacing: 1px; line-height: 1.8;
+    font-family: var(--fv); font-size: 11px;
+    color: var(--sp-w); letter-spacing: 0.3px; line-height: 1.5;
+    opacity: 0.6;
   }
 
   .detect-cta {
@@ -1102,12 +1073,12 @@
     display: flex; flex-direction: column; align-items: center; gap: 16px;
   }
   .detect-example {
-    font-family: var(--fp); font-size: 7px;
-    color: var(--sp-pk); letter-spacing: 1px;
+    font-family: var(--fv); font-size: 13px;
+    color: var(--sp-pk); letter-spacing: 0.3px;
     background: rgba(232,150,125,0.04);
     border: 1px solid rgba(232,150,125,0.12);
-    padding: 12px 20px; border-radius: 8px;
-    max-width: 600px; line-height: 1.8;
+    padding: 14px 24px; border-radius: 8px;
+    max-width: 700px; line-height: 1.6;
     text-shadow: 0 0 8px var(--sp-glow);
   }
 
@@ -1279,7 +1250,6 @@
       max-width: min(760px, 57vw);
       padding: 16px clamp(14px, 2vw, 30px) 24px;
     }
-    .hero-div { width: 30px; }
     .hero-right {
       width: clamp(320px, 30vw, 420px);
       max-width: none;
@@ -1337,8 +1307,6 @@
   @media (max-width: 900px) {
     .hero { flex-direction: column; min-height: auto; }
     .hero-left { padding: 30px 24px 40px; position: relative; height: auto; overflow-y: visible; }
-    .hero-div { width: 100%; height: 30px; flex-direction: row; border-left: none; border-right: none; border-top: 1px solid rgba(232,150,125,0.12); border-bottom: 1px solid rgba(232,150,125,0.12); }
-    .vt { writing-mode: horizontal-tb; text-orientation: initial; padding: 0 8px; }
     .hero-right { width: 100%; max-width: 100%; position: static; height: auto; overflow-y: visible; }
     .feat-detail-stats { flex-wrap: wrap; gap: 10px; }
     .feat-detail-title { font-size: 28px; }
@@ -1358,7 +1326,7 @@
 
   @media (max-width: 640px) {
     .hero-left { padding: 40px 16px 60px; }
-    .hl-sm { font-size: 14px; }
+    /* .hl-sm removed */
     .hl-pk { font-size: 40px; }
     .hl-xl { font-size: 36px; }
     .hero-doge { width: 60px; }
@@ -1386,7 +1354,7 @@
   }
 
   @media (max-width: 400px) {
-    .hl-sm { font-size: 12px; }
+    /* .hl-sm removed */
     .hl-pk { font-size: 32px; }
     .hl-xl { font-size: 28px; }
     .hero-doge { width: 50px; }
