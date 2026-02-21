@@ -245,6 +245,7 @@
     letter-spacing: .5px;
   }
   .st-chg {
+    display: none;
     font-family: var(--fm);
     font-size: 8px;
     font-weight: 700;
@@ -263,6 +264,7 @@
     border-color: rgba(200,0,50,.5);
   }
   .st-tf {
+    display: none;
     font-family: var(--fm);
     font-size: 8px;
     font-weight: 700;
