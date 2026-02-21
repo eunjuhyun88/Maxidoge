@@ -147,17 +147,17 @@
        ═══════════════════════════════════════ -->
   <section class="flow">
     <div class="flow-header">
-      <span class="flow-tag sr sl">//MISSION STAGES</span>
-      <h2 class="flow-title sr sl" style="--d:0.08s" data-px="0.06">
+      <span class="flow-tag sr sr-r">//MISSION STAGES</span>
+      <h2 class="flow-title sr sr-r" style="--d:0.08s" data-px="0.06">
         <span class="ft-w">HOW IT</span>
         <span class="ft-pk">WORKS</span>
       </h2>
-      <p class="flow-sub sr sr-r" style="--d:0.15s">4 STEPS TO DEGEN GLORY</p>
+      <p class="flow-sub sr sr-r" style="--d:0.18s">4 STEPS TO DEGEN GLORY</p>
     </div>
 
     <div class="flow-steps">
       {#each FLOW_STEPS as step, i}
-        <div class="fstep sr {i % 2 === 0 ? 'sl' : 'sr-r'}" style="--d:{i * 0.1}s">
+        <div class="fstep sr sr-r" style="--d:{0.1 + i * 0.12}s">
           <div class="fstep-num">{step.num}</div>
           <div class="fstep-body">
             <h3 class="fstep-title">{step.title}</h3>
@@ -428,13 +428,13 @@
      ════════════════════════════════════════════ */
   .sr {
     opacity: 0;
-    transition: opacity 0.85s cubic-bezier(.16,1,.3,1), transform 0.85s cubic-bezier(.16,1,.3,1);
+    transition: opacity 0.9s cubic-bezier(.16,1,.3,1), transform 0.9s cubic-bezier(.16,1,.3,1);
     transition-delay: var(--d, 0s);
     will-change: opacity, transform;
   }
-  .sl  { transform: translateX(-120px); }
-  .sr-r { transform: translateX(120px); }
-  .su  { transform: translateY(60px); }
+  .sl  { transform: translateX(-140px); }
+  .sr-r { transform: translateX(160px); }
+  .su  { transform: translateY(80px); }
   :global(.vis) {
     opacity: 1 !important;
     transform: translateX(0) translateY(0) scale(1) !important;
@@ -442,12 +442,12 @@
 
   .ha {
     opacity: 0;
-    transform: translateX(-90px);
-    transition: opacity 0.75s cubic-bezier(.16,1,.3,1),
-                transform 0.75s cubic-bezier(.16,1,.3,1);
+    transform: translateX(-100px);
+    transition: opacity 0.9s cubic-bezier(.16,1,.3,1),
+                transform 0.9s cubic-bezier(.16,1,.3,1);
     transition-delay: var(--ha-d, 0s);
   }
-  .ha-r { transform: translateX(100px); }
+  .ha-r { transform: translateX(120px); }
   :global(.hero-go .ha) { opacity: 1 !important; transform: translateX(0) !important; }
 
   /* ═══ HERO ═══ */
@@ -457,13 +457,16 @@
     position: relative;
     min-height: 100vh;
     z-index: 2;
+    align-items: flex-start; /* let sticky children anchor to top */
   }
 
   .hero-left {
     flex: 1.1;
     display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
     padding: 60px 40px 120px;
-    position: relative; z-index: 3;
+    position: sticky; top: 36px; /* stick below header */
+    height: calc(100vh - 36px);
+    z-index: 3;
   }
 
   .hero-stack {
@@ -535,13 +538,17 @@
     white-space: nowrap; padding: 8px 0;
   }
 
-  /* Feature cards (right column) */
+  /* Feature cards (right column) — independent scroll */
   .hero-right {
     width: 400px; max-width: 38%;
     background: var(--sp-bg2);
     border-left: 1px solid rgba(232,150,125,0.1);
-    display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
-    position: relative; z-index: 3;
+    display: flex; flex-direction: column;
+    flex-shrink: 0;
+    position: sticky; top: 36px;
+    z-index: 3;
+    overflow-y: auto;
+    max-height: calc(100vh - 36px);
   }
   .hero-right::-webkit-scrollbar { width: 3px; }
   .hero-right::-webkit-scrollbar-thumb { background: var(--sp-pk); }
@@ -922,10 +929,10 @@
   /* ═══ RESPONSIVE ═══ */
   @media (max-width: 900px) {
     .hero { flex-direction: column; min-height: auto; }
-    .hero-left { padding: 50px 24px 80px; }
+    .hero-left { padding: 50px 24px 80px; position: relative; height: auto; }
     .hero-div { width: 100%; height: 30px; flex-direction: row; border-left: none; border-right: none; border-top: 1px solid rgba(232,150,125,0.12); border-bottom: 1px solid rgba(232,150,125,0.12); }
     .vt { writing-mode: horizontal-tb; text-orientation: initial; padding: 0 8px; }
-    .hero-right { width: 100%; max-width: 100%; }
+    .hero-right { width: 100%; max-width: 100%; position: relative; max-height: none; }
     .about-inner { flex-direction: column; align-items: center; }
     .about { padding: 40px 24px 30px; }
     .flow { padding: 50px 24px; }
