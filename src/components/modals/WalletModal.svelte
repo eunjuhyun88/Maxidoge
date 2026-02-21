@@ -7,6 +7,15 @@
     disconnectWallet
   } from '$lib/stores/walletStore';
   import { registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
+  import {
+    WALLET_PROVIDER_LABEL,
+    hasInjectedEvmProvider,
+    requestInjectedEvmAccount,
+    requestPhantomSolanaAccount,
+    signInjectedEvmMessage,
+    signPhantomSolanaUtf8Message,
+    type WalletProviderKey
+  } from '$lib/wallet/providers';
 
   $: state = $walletStore;
   $: step = state.walletModalStep;
@@ -19,20 +28,17 @@
   let connectingProvider = '';
   let signingMessage = false;
 
-  type EthereumRequestArgs = {
-    method: string;
-    params?: unknown[] | Record<string, unknown>;
-  };
+  const ETH_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
 
-  type EthereumProvider = {
-    request: (args: EthereumRequestArgs) => Promise<unknown>;
-  };
+  function isWalletProviderKey(value: string): value is WalletProviderKey {
+    return value === 'metamask'
+      || value === 'coinbase'
+      || value === 'walletconnect'
+      || value === 'phantom';
+  }
 
-  function getEthereumProvider(): EthereumProvider | null {
-    if (typeof window === 'undefined') return null;
-    const provider = (window as Window & { ethereum?: EthereumProvider }).ethereum;
-    if (!provider || typeof provider.request !== 'function') return null;
-    return provider;
+  function isEvmAddress(address: string): boolean {
+    return address.startsWith('0x');
   }
 
   async function handleSignup() {
@@ -46,7 +52,13 @@
         email: emailInput.trim(),
         nickname: nicknameInput.trim(),
         walletAddress: state.connected ? state.address || undefined : undefined,
-        walletSignature: state.connected ? state.signature || undefined : undefined,
+        walletSignature: state.connected
+          && typeof state.address === 'string'
+          && typeof state.signature === 'string'
+          && isEvmAddress(state.address)
+          && ETH_SIGNATURE_RE.test(state.signature)
+          ? state.signature
+          : undefined,
       });
       registerUser(emailInput.trim(), nicknameInput.trim());
     } catch (error) {
@@ -56,26 +68,27 @@
 
   async function handleConnect(provider: string) {
     actionError = '';
-    connectingProvider = provider;
+    if (!isWalletProviderKey(provider)) {
+      actionError = 'Unsupported wallet provider.';
+      return;
+    }
+
+    connectingProvider = WALLET_PROVIDER_LABEL[provider];
     setWalletModalStep('connecting');
 
     try {
-      if (provider === 'metamask') {
-        const ethereum = getEthereumProvider();
-        if (!ethereum) {
-          throw new Error('MetaMask is not detected. Install the extension and retry.');
+      if (provider === 'phantom') {
+        // Prefer EVM-injected Phantom first. If unavailable, use Phantom Solana provider.
+        if (hasInjectedEvmProvider('phantom')) {
+          const walletAddress = await requestInjectedEvmAccount('phantom');
+          connectWallet(provider, walletAddress, 'ARB');
+        } else {
+          const solAddress = await requestPhantomSolanaAccount();
+          connectWallet(provider, solAddress, 'SOL');
         }
-
-        const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
-        const walletAddress = Array.isArray(accounts) ? accounts[0] : null;
-        if (typeof walletAddress !== 'string' || !walletAddress.startsWith('0x')) {
-          throw new Error('Failed to read wallet address from MetaMask');
-        }
-        connectWallet(provider, walletAddress);
       } else {
-        // Keep demo fallback for non-EVM providers.
-        await new Promise((resolve) => setTimeout(resolve, 700));
-        connectWallet(provider);
+        const walletAddress = await requestInjectedEvmAccount(provider);
+        connectWallet(provider, walletAddress, 'ARB');
       }
     } catch (error) {
       actionError = error instanceof Error ? error.message : 'Failed to connect wallet';
@@ -94,38 +107,46 @@
         throw new Error('Wallet address is missing');
       }
 
-      if (state.provider === 'metamask') {
-        const ethereum = getEthereumProvider();
-        if (!ethereum) {
-          throw new Error('MetaMask provider is unavailable');
-        }
+      if (!state.provider || !isWalletProviderKey(state.provider)) {
+        throw new Error('Wallet provider is missing.');
+      }
 
+      const provider = state.provider;
+
+      if (isEvmAddress(state.address)) {
         const noncePayload = await requestWalletNonce({
           address: state.address,
-          provider: state.provider,
+          provider,
         });
 
-        const signatureRaw = await ethereum.request({
-          method: 'personal_sign',
-          params: [noncePayload.message, state.address],
-        });
-        const signature = typeof signatureRaw === 'string' ? signatureRaw : '';
-        if (!signature) {
-          throw new Error('MetaMask returned an empty signature');
-        }
+        const signature = await signInjectedEvmMessage(provider, noncePayload.message, state.address);
 
         await verifyWalletSignature({
           address: state.address,
           message: noncePayload.message,
           signature,
-          provider: state.provider || 'metamask',
+          provider,
         });
 
         signMessage(signature);
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 700));
-        signMessage();
+        return;
       }
+
+      // Non-EVM wallets (e.g. Phantom Solana) are locally signed and linked at registration.
+      if (provider === 'phantom') {
+        const message = [
+          'MAXI DOGE Wallet Verification',
+          `Address: ${state.address}`,
+          `Issued At: ${new Date().toISOString()}`,
+          'Signing this message proves wallet ownership.',
+        ].join('\n');
+
+        const signature = await signPhantomSolanaUtf8Message(message);
+        signMessage(signature);
+        return;
+      }
+
+      throw new Error(`${WALLET_PROVIDER_LABEL[provider]} does not support this signature flow yet.`);
     } catch (error) {
       actionError = error instanceof Error ? error.message : 'Failed to sign wallet message';
     } finally {

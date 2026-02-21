@@ -128,8 +128,8 @@ export function completeDemoView() {
 }
 
 // Wallet connection (now first step before email)
-export function connectWallet(provider: string = 'MetaMask', addressOverride?: string) {
-  const connection = createSimulatedWalletConnection(provider, addressOverride);
+export function connectWallet(provider: string = 'MetaMask', addressOverride?: string, chain: string = 'ARB') {
+  const connection = createSimulatedWalletConnection(provider, addressOverride, chain);
 
   walletStore.update(w => ({
     ...w,

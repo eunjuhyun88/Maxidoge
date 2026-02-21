@@ -27,14 +27,15 @@ export function createSimulatedSignature(signatureOverride?: string): string {
 
 export function createSimulatedWalletConnection(
   provider: string = 'MetaMask',
-  addressOverride?: string
+  addressOverride?: string,
+  chain: string = 'ARB'
 ): SimulatedWalletConnection {
   const address = createSimulatedAddress(addressOverride);
   return {
     address,
     shortAddr: `${address.slice(0, 6)}...${address.slice(-4)}`,
     balance: +(Math.random() * 10000 + 500).toFixed(2),
-    chain: 'ARB',
+    chain,
     provider,
   };
 }
