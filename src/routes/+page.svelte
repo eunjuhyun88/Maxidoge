@@ -26,7 +26,7 @@
     { label: 'WAR ROOM', sub: 'TERMINAL', img: '/blockparty/f5-doge-chart.png', path: '/terminal' },
     { label: 'BOSS FIGHT', sub: 'ARENA', img: '/blockparty/f5-doge-muscle.png', path: '/arena' },
     { label: 'AI SIGNALS', sub: 'SIGNALS', img: '/blockparty/f5-doge-fire.png', path: '/signals' },
-    { label: 'LIVE FEED', sub: 'LIVE', img: '/blockparty/f5-doge-excited.png', path: '/live' },
+    { label: 'COMMUNITY', sub: 'LIVE', img: '/blockparty/f5-doge-excited.png', path: '/signals' },
   ];
 
   /* ── Scroll-driven animations + parallax ── */
@@ -236,7 +236,7 @@
         <button class="qn" on:click={() => goto('/signals')}>
           🔔 SIGNALS {#if trackedSigs > 0}<span class="qn-badge">{trackedSigs}</span>{/if}
         </button>
-        <button class="qn" on:click={() => goto('/live')}>👀 LIVE</button>
+        <button class="qn" on:click={() => goto('/signals')}>👀 COMMUNITY</button>
       </div>
     </div>
   </section>
@@ -296,7 +296,7 @@
         <button on:click={() => goto('/signals')}>SIGNALS</button>
         <button on:click={() => goto('/passport')}>PASSPORT</button>
         <button on:click={() => goto('/oracle')}>ORACLE</button>
-        <button on:click={() => goto('/live')}>LIVE</button>
+        <button on:click={() => goto('/signals')}>COMMUNITY</button>
       </div>
     </div>
     <div class="footer-bottom">

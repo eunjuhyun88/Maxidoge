@@ -1358,45 +1358,10 @@
       </div>
     </div>
   {/if}
-  {/if}
 </div>
 
 <style>
   .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; }
-  .arena-live-switch {
-    position: absolute;
-    top: 8px;
-    right: 12px;
-    z-index: 40;
-    display: inline-flex;
-    gap: 4px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 2px solid #000;
-    border-radius: 10px;
-    padding: 4px;
-  }
-  .als-btn {
-    border: 2px solid #000;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
-    font-family: var(--fm);
-    font-size: 8px;
-    font-weight: 900;
-    letter-spacing: 1px;
-    padding: 4px 10px;
-    cursor: pointer;
-  }
-  .als-btn.active {
-    background: #ffe600;
-    color: #000;
-  }
-  .merged-live-shell {
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background: #04070f;
-  }
   .battle-layout { display: grid; grid-template-columns: 45% 1fr; height: 100%; overflow: hidden; }
 
   /* Match History Toggle */
