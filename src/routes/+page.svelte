@@ -581,20 +581,15 @@
     white-space: nowrap; padding: 8px 0;
   }
 
-  /* Feature cards (right column) — independent scroll within hero */
+  /* Feature cards (right column) — scrolls with page */
   .hero-right {
     width: 400px; max-width: 38%;
     background: var(--sp-bg2);
     border-left: 1px solid rgba(232,150,125,0.1);
     display: flex; flex-direction: column;
     flex-shrink: 0;
-    position: sticky; top: 36px;
     z-index: 3;
-    overflow-y: auto;
-    max-height: calc(100vh - 36px);
   }
-  .hero-right::-webkit-scrollbar { width: 3px; }
-  .hero-right::-webkit-scrollbar-thumb { background: var(--sp-pk); }
 
   .fc {
     display: flex; flex-direction: column; background: transparent;
