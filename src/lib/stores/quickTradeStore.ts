@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
+import { STORAGE_KEYS } from './storageKeys';
 
 export type TradeDirection = 'LONG' | 'SHORT';
 export type TradeStatus = 'open' | 'closed' | 'stopped';
@@ -31,7 +32,7 @@ interface QuickTradeState {
   showPanel: boolean;      // toggle trade panel visibility
 }
 
-const STORAGE_KEY = 'maxidoge_quicktrades';
+const STORAGE_KEY = STORAGE_KEYS.quickTrades;
 const MAX_TRADES = 200;
 
 function loadState(): QuickTradeState {
@@ -147,21 +148,32 @@ export function updateTradePrice(tradeId: string, currentPrice: number) {
   }));
 }
 
+let _lastPriceSnapshot = '';
 export function updateAllPrices(prices: Record<string, number>) {
-  quickTradeStore.update(s => ({
-    ...s,
-    trades: s.trades.map(t => {
+  // Skip if prices haven't changed
+  const snap = JSON.stringify(prices);
+  if (snap === _lastPriceSnapshot) return;
+  _lastPriceSnapshot = snap;
+
+  quickTradeStore.update(s => {
+    // Skip if no open trades
+    const hasOpen = s.trades.some(t => t.status === 'open');
+    if (!hasOpen) return s;
+
+    let changed = false;
+    const trades = s.trades.map(t => {
       if (t.status !== 'open') return t;
-      // Extract base token from pair (e.g. "BTC/USDT" → "BTC")
       const token = t.pair.split('/')[0];
       const price = prices[token];
-      if (!price) return t;
+      if (!price || price === t.currentPrice) return t;
+      changed = true;
       const pnl = t.dir === 'LONG'
         ? +((price - t.entry) / t.entry * 100).toFixed(2)
         : +((t.entry - price) / t.entry * 100).toFixed(2);
       return { ...t, currentPrice: price, pnlPercent: pnl };
-    })
-  }));
+    });
+    return changed ? { ...s, trades } : s;
+  });
 }
 
 export function toggleTradePanel() {

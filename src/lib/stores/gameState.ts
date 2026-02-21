@@ -3,12 +3,15 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
+import type { CanonicalTimeframe } from '$lib/utils/timeframe';
+import { normalizeTimeframe } from '$lib/utils/timeframe';
+import { STORAGE_KEYS } from './storageKeys';
 
 export type Phase = 'standby' | 'config' | 'deploy' | 'hypothesis' | 'preview' | 'scout' | 'gather' | 'council' | 'verdict' | 'compare' | 'battle' | 'result' | 'cooldown';
 export type ViewMode = 'arena' | 'terminal' | 'passport';
 export type Direction = 'LONG' | 'SHORT' | 'NEUTRAL';
 export type RiskLevel = 'low' | 'mid' | 'aggro';
-export type SquadTimeframe = '5m' | '1h' | '4h' | '1D';
+export type SquadTimeframe = CanonicalTimeframe;
 
 export interface SquadConfig {
   riskLevel: RiskLevel;
@@ -84,7 +87,7 @@ export interface GameState {
   prices: { BTC: number; ETH: number; SOL: number };
   bases: { BTC: number; ETH: number; SOL: number };
   pair: string;
-  timeframe: string;
+  timeframe: CanonicalTimeframe;
 }
 
 const defaultState: GameState = {
@@ -112,17 +115,29 @@ const defaultState: GameState = {
   prices: { BTC: 97420, ETH: 3481, SOL: 198.46 },
   bases: { BTC: 97420, ETH: 3481, SOL: 198.46 },
   pair: 'BTC/USDT',
-  timeframe: '4H'
+  timeframe: '4h'
 };
 
 // Load from localStorage
 function loadState(): GameState {
   if (typeof window === 'undefined') return defaultState;
   try {
-    const saved = localStorage.getItem('maxidoge_state');
+    const saved = localStorage.getItem(STORAGE_KEYS.gameState);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...defaultState, ...parsed, running: false, phase: 'standby', inLobby: true };
+      const squadConfig = parsed?.squadConfig
+        ? { ...defaultState.squadConfig, ...parsed.squadConfig, timeframe: normalizeTimeframe(parsed.squadConfig.timeframe) }
+        : defaultState.squadConfig;
+
+      return {
+        ...defaultState,
+        ...parsed,
+        squadConfig,
+        timeframe: normalizeTimeframe(parsed?.timeframe),
+        running: false,
+        phase: 'standby',
+        inLobby: true
+      };
     }
   } catch {}
   return defaultState;
@@ -130,28 +145,32 @@ function loadState(): GameState {
 
 export const gameState = writable<GameState>(loadState());
 
-// Auto-save persistent fields to localStorage (debounced to avoid thrashing)
+// Auto-save persistent fields to localStorage (debounced — prices excluded intentionally)
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 let _lastPersist = '';
 gameState.subscribe(s => {
   if (typeof window === 'undefined') return;
+  // Build persist object (excludes prices, phase, running, pos — transient fields)
+  const persist = {
+    matchN: s.matchN,
+    wins: s.wins,
+    losses: s.losses,
+    streak: s.streak,
+    lp: s.lp,
+    speed: s.speed,
+    selectedAgents: s.selectedAgents,
+    pair: s.pair,
+    timeframe: s.timeframe,
+    squadConfig: s.squadConfig
+  };
+  const json = JSON.stringify(persist);
+  // Skip if nothing changed
+  if (json === _lastPersist) return;
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
-    const persist = {
-      matchN: s.matchN,
-      wins: s.wins,
-      losses: s.losses,
-      streak: s.streak,
-      lp: s.lp,
-      speed: s.speed,
-      selectedAgents: s.selectedAgents
-    };
-    const json = JSON.stringify(persist);
-    if (json !== _lastPersist) {
-      _lastPersist = json;
-      localStorage.setItem('maxidoge_state', json);
-    }
-  }, 500);
+    _lastPersist = json;
+    localStorage.setItem(STORAGE_KEYS.gameState, json);
+  }, 1000);
 });
 
 // Derived stores for convenience

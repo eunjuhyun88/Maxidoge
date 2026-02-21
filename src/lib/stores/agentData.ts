@@ -4,6 +4,7 @@
 
 import { writable } from 'svelte/store';
 import { AGDEFS } from '$lib/data/agents';
+import { STORAGE_KEYS } from './storageKeys';
 
 export interface AgentStats {
   level: number;
@@ -46,7 +47,7 @@ function createDefaultStats(): Record<string, AgentStats> {
 function loadAgentData(): Record<string, AgentStats> {
   if (typeof window === 'undefined') return createDefaultStats();
   try {
-    const saved = localStorage.getItem('maxidoge_agents');
+    const saved = localStorage.getItem(STORAGE_KEYS.agents);
     if (saved) return { ...createDefaultStats(), ...JSON.parse(saved) };
   } catch {}
   return createDefaultStats();
@@ -60,7 +61,7 @@ agentStats.subscribe(data => {
   if (typeof window === 'undefined') return;
   clearTimeout(_agentSaveTimer);
   _agentSaveTimer = setTimeout(() => {
-    localStorage.setItem('maxidoge_agents', JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEYS.agents, JSON.stringify(data));
   }, 500);
 });
 

@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
+import { STORAGE_KEYS } from './storageKeys';
 
 export type UserTier = 'guest' | 'registered' | 'connected' | 'verified';
 
@@ -58,7 +59,7 @@ const defaultWallet: WalletState = {
 function loadWallet(): WalletState {
   if (typeof window === 'undefined') return defaultWallet;
   try {
-    const saved = localStorage.getItem('maxidoge_wallet');
+    const saved = localStorage.getItem(STORAGE_KEYS.wallet);
     if (saved) return { ...defaultWallet, ...JSON.parse(saved) };
   } catch {}
   return defaultWallet;
@@ -70,7 +71,7 @@ export const walletStore = writable<WalletState>(loadWallet());
 walletStore.subscribe(w => {
   if (typeof window === 'undefined') return;
   const { showWalletModal, walletModalStep, signature, ...persistable } = w;
-  localStorage.setItem('maxidoge_wallet', JSON.stringify(persistable));
+  localStorage.setItem(STORAGE_KEYS.wallet, JSON.stringify(persistable));
 });
 
 // Derived stores

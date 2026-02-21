@@ -4,6 +4,7 @@
 
 import { writable, derived } from 'svelte/store';
 import { fetchPolymarkets, type PolyMarket } from '$lib/api/polymarket';
+import { STORAGE_KEYS } from './storageKeys';
 
 export interface PredictPosition {
   id: string;
@@ -32,7 +33,7 @@ interface PredictState {
 function loadPositions(): PredictPosition[] {
   if (typeof window === 'undefined') return [];
   try {
-    const saved = localStorage.getItem('maxidoge_predict_positions');
+    const saved = localStorage.getItem(STORAGE_KEYS.predictPositions);
     if (saved) return JSON.parse(saved);
   } catch {}
   return [];
@@ -54,7 +55,7 @@ predictStore.subscribe(s => {
   if (typeof window === 'undefined') return;
   if (_posSaveTimer) clearTimeout(_posSaveTimer);
   _posSaveTimer = setTimeout(() => {
-    localStorage.setItem('maxidoge_predict_positions', JSON.stringify(s.positions));
+    localStorage.setItem(STORAGE_KEYS.predictPositions, JSON.stringify(s.positions));
   }, 300);
 });
 

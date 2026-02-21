@@ -49,7 +49,9 @@ erDiagram
 
 ## 4) Schema Files
 
-- Initial migration: `/Users/ej/Downloads/maxi-doge-unified/db/migrations/0001_init_postgres.sql`
+- Canonical migration: `db/migrations/0001_init_postgres.sql`
+- Supabase migration mirror: `supabase/migrations/001_init.sql`
+  - 두 파일은 동일 스키마를 유지해야 하며, 새 변경은 canonical 파일 기준으로 반영
 
 적용 예시:
 

@@ -3,6 +3,8 @@
 // Generic table-based localStorage persistence
 // ═══════════════════════════════════════════════════════════════
 
+import { STORAGE_KEYS } from './storageKeys';
+
 export interface DBRecord {
   id: string;
   createdAt: number;
@@ -24,7 +26,13 @@ export function createTable<T extends DBRecord>(
   tableName: string,
   maxRecords: number = 500
 ): DBTable<T> {
-  const key = `maxidoge_${tableName}`;
+  const keyMap: Record<string, string> = {
+    users: STORAGE_KEYS.dbUsers,
+    matches: STORAGE_KEYS.dbMatches,
+    signals: STORAGE_KEYS.dbSignals,
+    predictions: STORAGE_KEYS.dbPredictions,
+  };
+  const key = keyMap[tableName] || `maxidoge_${tableName}`;
 
   function load(): T[] {
     if (typeof window === 'undefined') return [];

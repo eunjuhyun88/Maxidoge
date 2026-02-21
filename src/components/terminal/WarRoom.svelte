@@ -64,12 +64,28 @@
   let derivLastPair = '';
   let derivRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
+  // ── Cache: avoid redundant API calls (60s TTL per pair) ──
+  const _derivCache = new Map<string, { ts: number; data: any }>();
+  const DERIV_CACHE_TTL = 60_000;
+  let _derivDebounce: ReturnType<typeof setTimeout> | null = null;
+
   $: currentPair = $gameState.pair;
   $: currentTF = $gameState.timeframe;
 
   async function fetchDerivativesData() {
     const pair = currentPair;
     if (!pair) return;
+
+    // Check cache first
+    const cached = _derivCache.get(pair);
+    if (cached && Date.now() - cached.ts < DERIV_CACHE_TTL) {
+      const d = cached.data;
+      derivOI = d.oi; derivFunding = d.funding; derivPredFunding = d.predFunding;
+      derivLSRatio = d.lsRatio; derivLiqLong = d.liqLong; derivLiqShort = d.liqShort;
+      derivLastPair = pair;
+      return;
+    }
+
     derivLoading = true;
 
     try {
@@ -92,15 +108,22 @@
         derivLiqShort = liqs.value.reduce((s, d) => s + d.short, 0);
       }
       derivLastPair = pair;
+
+      // Store in cache
+      _derivCache.set(pair, {
+        ts: Date.now(),
+        data: { oi: derivOI, funding: derivFunding, predFunding: derivPredFunding, lsRatio: derivLSRatio, liqLong: derivLiqLong, liqShort: derivLiqShort }
+      });
     } catch (err) {
       console.error('[WarRoom] Derivatives fetch error:', err);
     }
     derivLoading = false;
   }
 
-  // Refetch when pair changes
+  // Debounced refetch when pair changes (prevents rapid switching spam)
   $: if (currentPair && currentPair !== derivLastPair) {
-    fetchDerivativesData();
+    if (_derivDebounce) clearTimeout(_derivDebounce);
+    _derivDebounce = setTimeout(fetchDerivativesData, 200);
   }
 
   // ── Volatility alert ──
@@ -149,6 +172,7 @@
   onDestroy(() => {
     if (volatilityInterval) clearInterval(volatilityInterval);
     if (derivRefreshTimer) clearInterval(derivRefreshTimer);
+    if (_derivDebounce) clearTimeout(_derivDebounce);
   });
 </script>
 

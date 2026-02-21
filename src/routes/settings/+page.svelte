@@ -1,12 +1,18 @@
 <script lang="ts">
   import { gameState } from '$lib/stores/gameState';
+  import { RESETTABLE_STORAGE_KEYS } from '$lib/stores/storageKeys';
+  import {
+    CORE_TIMEFRAME_OPTIONS,
+    formatTimeframeLabel,
+    normalizeTimeframe,
+  } from '$lib/utils/timeframe';
 
   let state = $gameState;
   $: state = $gameState;
 
   // Settings
   let settings = {
-    defaultTF: '4H',
+    defaultTF: normalizeTimeframe(state.timeframe),
     signals: true,
     sfx: true,
     dataSource: 'binance',
@@ -14,18 +20,29 @@
     speed: state.speed || 3,
     language: 'kr'
   };
+  $: {
+    const normalized = normalizeTimeframe(state.timeframe);
+    if (settings.defaultTF !== normalized) {
+      settings = { ...settings, defaultTF: normalized };
+    }
+  }
 
   function updateSetting(key: string, value: any) {
     settings = { ...settings, [key]: value };
     if (key === 'speed') {
       gameState.update(s => ({ ...s, speed: value }));
     }
+    if (key === 'defaultTF') {
+      const timeframe = normalizeTimeframe(value);
+      gameState.update(s => ({ ...s, timeframe }));
+    }
   }
 
   function resetAllData() {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('maxidoge_state');
-      localStorage.removeItem('agentData');
+      for (const key of RESETTABLE_STORAGE_KEYS) {
+        localStorage.removeItem(key);
+      }
       window.location.reload();
     }
   }
@@ -48,12 +65,9 @@
           <div class="sr-desc">Set default chart timeframe</div>
         </div>
         <select class="sr-select" bind:value={settings.defaultTF} on:change={() => updateSetting('defaultTF', settings.defaultTF)}>
-          <option value="1m">1m</option>
-          <option value="5m">5m</option>
-          <option value="15m">15m</option>
-          <option value="1H">1H</option>
-          <option value="4H">4H</option>
-          <option value="1D">1D</option>
+          {#each CORE_TIMEFRAME_OPTIONS as option}
+            <option value={option.value}>{formatTimeframeLabel(option.value)}</option>
+          {/each}
         </select>
       </div>
 

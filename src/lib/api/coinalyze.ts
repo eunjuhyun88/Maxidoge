@@ -3,6 +3,8 @@
 // Fetches OI, Funding Rate, Liquidations, L/S Ratio via local proxy
 // ═══════════════════════════════════════════════════════════════
 
+import { toCoinalyzeInterval } from '$lib/utils/timeframe';
+
 /** Map our pair format to Coinalyze symbol (Binance perp) */
 export function pairToCoinalyze(pair: string): string {
   // BTC/USDT → BTCUSDT_PERP.A (Binance perpetual)
@@ -11,13 +13,7 @@ export function pairToCoinalyze(pair: string): string {
 
 /** Map our timeframe to Coinalyze interval */
 export function tfToCoinalyzeInterval(tf: string): string {
-  const map: Record<string, string> = {
-    '15m': '15min',
-    '1H': '1hour',
-    '4H': '4hour',
-    '1D': 'daily'
-  };
-  return map[tf] || '4hour';
+  return toCoinalyzeInterval(tf);
 }
 
 /** Generic proxy fetch */
@@ -79,7 +75,14 @@ export async function fetchOIHistory(
     const now = Math.floor(Date.now() / 1000);
     // Calculate 'from' based on interval and limit
     const intervalSecs: Record<string, number> = {
-      '15min': 900, '1hour': 3600, '4hour': 14400, 'daily': 86400
+      '1min': 60,
+      '5min': 300,
+      '15min': 900,
+      '30min': 1800,
+      '1hour': 3600,
+      '4hour': 14400,
+      'daily': 86400,
+      'weekly': 604800,
     };
     const from = now - (intervalSecs[interval] || 14400) * limit;
 
@@ -130,7 +133,14 @@ export async function fetchFundingHistory(
     const interval = tfToCoinalyzeInterval(tf);
     const now = Math.floor(Date.now() / 1000);
     const intervalSecs: Record<string, number> = {
-      '15min': 900, '1hour': 3600, '4hour': 14400, 'daily': 86400
+      '1min': 60,
+      '5min': 300,
+      '15min': 900,
+      '30min': 1800,
+      '1hour': 3600,
+      '4hour': 14400,
+      'daily': 86400,
+      'weekly': 604800,
     };
     const from = now - (intervalSecs[interval] || 14400) * limit;
 
@@ -165,7 +175,14 @@ export async function fetchLiquidationHistory(
     const interval = tfToCoinalyzeInterval(tf);
     const now = Math.floor(Date.now() / 1000);
     const intervalSecs: Record<string, number> = {
-      '15min': 900, '1hour': 3600, '4hour': 14400, 'daily': 86400
+      '1min': 60,
+      '5min': 300,
+      '15min': 900,
+      '30min': 1800,
+      '1hour': 3600,
+      '4hour': 14400,
+      'daily': 86400,
+      'weekly': 604800,
     };
     const from = now - (intervalSecs[interval] || 14400) * limit;
 
@@ -202,7 +219,14 @@ export async function fetchLSRatioHistory(
     const interval = tfToCoinalyzeInterval(tf);
     const now = Math.floor(Date.now() / 1000);
     const intervalSecs: Record<string, number> = {
-      '15min': 900, '1hour': 3600, '4hour': 14400, 'daily': 86400
+      '1min': 60,
+      '5min': 300,
+      '15min': 900,
+      '30min': 1800,
+      '1hour': 3600,
+      '4hour': 14400,
+      'daily': 86400,
+      'weekly': 604800,
     };
     const from = now - (intervalSecs[interval] || 14400) * limit;
 

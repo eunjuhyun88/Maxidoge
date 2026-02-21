@@ -11,6 +11,7 @@
   import { gameState } from '$lib/stores/gameState';
   import { updateAllPrices } from '$lib/stores/quickTradeStore';
   import { updateTrackedPrices } from '$lib/stores/trackedSignalStore';
+  import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { onMount, onDestroy } from 'svelte';
 
   // ── Panel resize state ──
@@ -111,12 +112,13 @@
   onMount(() => {
     windowWidth = window.innerWidth;
     window.addEventListener('resize', handleResize);
+    // Sync prices less aggressively — WS already updates in real-time via ChartPanel
     priceSync = setInterval(() => {
       const s = $gameState;
       const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
       updateAllPrices(prices);
       updateTrackedPrices(prices);
-    }, 10000);
+    }, 30000);
   });
 
   onDestroy(() => {
@@ -204,7 +206,7 @@
       <div class="mob-chart-section">
         <div class="chart-token-bar">
           <TokenDropdown value={pair} compact on:select={onTokenSelect} />
-          <span class="ctb-tf">{$gameState.timeframe}</span>
+          <span class="ctb-tf">{formatTimeframeLabel($gameState.timeframe)}</span>
           <span class="ctb-live"><span class="ctb-dot"></span>LIVE</span>
         </div>
         <div class="mob-chart-area">

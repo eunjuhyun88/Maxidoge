@@ -5,6 +5,7 @@
   import { gameState, type ViewMode } from '$lib/stores/gameState';
   import { walletStore, isWalletConnected, openWalletModal, disconnectWallet } from '$lib/stores/walletStore';
   import { fetchPrices, subscribeMiniTicker } from '$lib/api/binance';
+  import { formatTimeframeLabel } from '$lib/utils/timeframe';
 
   $: state = $gameState;
   $: wallet = $walletStore;
@@ -110,7 +111,7 @@
     <span class="st-pair">{state.pair}</span>
     <span class="st-price">${Math.round(selectedPrice).toLocaleString()}</span>
     <span class="st-chg {pctClass(selectedPrice - selectedBase)}">{pctStr(selectedBase, selectedPrice)}</span>
-    <span class="st-tf">{state.timeframe}</span>
+    <span class="st-tf">{formatTimeframeLabel(state.timeframe)}</span>
   </div>
 
   <div class="nav-divider"></div>

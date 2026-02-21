@@ -6,6 +6,7 @@
 
 import { writable, derived } from 'svelte/store';
 import { openQuickTrade, type TradeDirection } from './quickTradeStore';
+import { STORAGE_KEYS } from './storageKeys';
 
 export type SignalStatus = 'tracking' | 'expired' | 'converted';
 
@@ -28,7 +29,7 @@ interface TrackedSignalState {
   signals: TrackedSignal[];
 }
 
-const STORAGE_KEY = 'maxidoge_tracked';
+const STORAGE_KEY = STORAGE_KEYS.trackedSignals;
 const MAX_SIGNALS = 50;
 const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -144,27 +145,38 @@ export function convertToTrade(signalId: string, currentPrice: number): string |
   return tradeId;
 }
 
+let _lastTrackedPriceSnap = '';
 export function updateTrackedPrices(prices: Record<string, number>) {
+  const snap = JSON.stringify(prices);
+  if (snap === _lastTrackedPriceSnap) return;
+  _lastTrackedPriceSnap = snap;
+
   const now = Date.now();
-  trackedSignalStore.update(s => ({
-    signals: s.signals.map(sig => {
-      // Auto-expire
+  trackedSignalStore.update(s => {
+    const hasTracking = s.signals.some(sig => sig.status === 'tracking');
+    if (!hasTracking) return s;
+
+    let changed = false;
+    const signals = s.signals.map(sig => {
       if (sig.status === 'tracking' && sig.expiresAt < now) {
+        changed = true;
         return { ...sig, status: 'expired' as SignalStatus };
       }
       if (sig.status !== 'tracking') return sig;
 
       const token = sig.pair.split('/')[0];
       const price = prices[token];
-      if (!price) return sig;
+      if (!price || price === sig.currentPrice) return sig;
 
+      changed = true;
       const pnl = sig.dir === 'LONG'
         ? +((price - sig.entryPrice) / sig.entryPrice * 100).toFixed(2)
         : +((sig.entryPrice - price) / sig.entryPrice * 100).toFixed(2);
 
       return { ...sig, currentPrice: price, pnlPercent: pnl };
-    })
-  }));
+    });
+    return changed ? { signals } : s;
+  });
 }
 
 export function clearExpired() {

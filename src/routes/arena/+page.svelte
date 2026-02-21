@@ -20,6 +20,7 @@
   import type { Phase } from '$lib/stores/gameState';
   import { onMount, onDestroy } from 'svelte';
   import { isWalletConnected, connectWallet } from '$lib/stores/walletStore';
+  import { formatTimeframeLabel } from '$lib/utils/timeframe';
 
   $: walletOk = $isWalletConnected;
 
@@ -50,7 +51,8 @@
     clearFeed();
     pushFeedItem({
       agentId: 'system', agentName: 'SYSTEM', agentIcon: '🐕',
-      agentColor: '#ffe600', text: `Squad configured! Risk: ${e.detail.config.riskLevel.toUpperCase()} · TF: ${e.detail.config.timeframe} · Deploying...`,
+      agentColor: '#ffe600',
+      text: `Squad configured! Risk: ${e.detail.config.riskLevel.toUpperCase()} · TF: ${formatTimeframeLabel(e.detail.config.timeframe)} · Deploying...`,
       phase: 'config'
     });
     // Advance from config → deploy
@@ -1023,7 +1025,7 @@
                 R:R <span class="prev-rr-val">1:{state.hypothesis.rr.toFixed(1)}</span>
               </div>
               <div class="preview-config">
-                {state.squadConfig.riskLevel.toUpperCase()} · {state.squadConfig.timeframe} · Lev {state.squadConfig.leverageBias}x
+                {state.squadConfig.riskLevel.toUpperCase()} · {formatTimeframeLabel(state.squadConfig.timeframe)} · Lev {state.squadConfig.leverageBias}x
               </div>
               <button class="preview-confirm" on:click={confirmPreview}>
                 ✅ CONFIRM & SCOUT

@@ -1,7 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { gameState } from '$lib/stores/gameState';
-  import { fetchKlines, subscribeKlines, pairToSymbol, INTERVALS, type BinanceKline } from '$lib/api/binance';
+  import { fetchKlines, subscribeKlines, pairToSymbol, type BinanceKline } from '$lib/api/binance';
+  import {
+    CORE_TIMEFRAME_OPTIONS,
+    formatTimeframeLabel,
+    normalizeTimeframe,
+    toBinanceInterval,
+    toTradingViewInterval,
+  } from '$lib/utils/timeframe';
   import { TOKENS, TOKEN_CATEGORIES } from '$lib/data/tokens';
   import TokenDropdown from '../shared/TokenDropdown.svelte';
 
@@ -19,14 +26,15 @@
   let ma25Series: any;
   let ma99Series: any;
   let rsiSeries: any;
-  let oiSeries: any;
-  let obvSeries: any;
   let klineCache: BinanceKline[] = [];
+  let _isLoadingMore = false;
+  let _noMoreHistory = false; // true when Binance returns 0 older candles
+  let _currentSymbol = '';
+  let _currentInterval = '';
 
   // ═══ Incremental indicator state (avoid full recompute on each WS tick) ═══
   let _rsiAvgGain = 0;
   let _rsiAvgLoss = 0;
-  let _lastObv = 0;
 
   // ═══ Cached MA values for template display ═══
   let ma7Val = 0;
@@ -74,7 +82,7 @@
   let state = $gameState;
   $: state = $gameState;
   $: symbol = pairToSymbol(state.pair);
-  $: interval = INTERVALS[state.timeframe] || '4h';
+  $: interval = toBinanceInterval(state.timeframe);
 
   // ═══════════════════════════════════════════
   //  INDICATOR COMPUTATION (optimised)
@@ -114,50 +122,14 @@
     return result;
   }
 
-  function computeOBV(klines: BinanceKline[]) {
-    if (klines.length === 0) return [];
-    const result: { time: any; value: number }[] = [{ time: klines[0].time, value: 0 }];
-    let obv = 0;
-    for (let i = 1; i < klines.length; i++) {
-      if (klines[i].close > klines[i - 1].close) obv += klines[i].volume;
-      else if (klines[i].close < klines[i - 1].close) obv -= klines[i].volume;
-      result.push({ time: klines[i].time, value: obv });
-    }
-    _lastObv = obv;
-    return result;
-  }
-
-  /** Fetch OI history from Coinalyze */
-  async function fetchOIData(): Promise<{ time: any; value: number }[]> {
-    try {
-      const coinalyzeSym = state.pair.replace('/', '') + '_PERP.A';
-      const tfMap: Record<string, string> = { '15m': '15min', '1H': '1hour', '4H': '4hour', '1D': 'daily' };
-      const intv = tfMap[state.timeframe] || '4hour';
-      const secMap: Record<string, number> = { '15min': 900, '1hour': 3600, '4hour': 14400, 'daily': 86400 };
-      const now = Math.floor(Date.now() / 1000);
-      const from = now - (secMap[intv] || 14400) * 300;
-      const qs = new URLSearchParams({
-        endpoint: 'open-interest-history', symbols: coinalyzeSym,
-        interval: intv, from: String(from), to: String(now), convert_to_usd: 'true'
-      });
-      const res = await fetch(`/api/coinalyze?${qs}`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      if (Array.isArray(data) && data[0]?.history) {
-        return data[0].history.map((h: any) => ({ time: h.t, value: h.c }));
-      }
-      return [];
-    } catch { return []; }
-  }
+  // OI/OBV removed — 3-pane layout (candles, volume, RSI) for stability
 
   // ═══════════════════════════════════════════
   //  TRADINGVIEW WIDGET
   // ═══════════════════════════════════════════
 
   function pairToTVSymbol(pair: string) { return 'BINANCE:' + pair.replace('/', ''); }
-  function tfToTVInterval(tf: string) {
-    return ({ '15m': '15', '1H': '60', '4H': '240', '1D': 'D' } as Record<string, string>)[tf] || '240';
-  }
+  function tfToTVInterval(tf: string) { return toTradingViewInterval(tf); }
 
   function initTradingView() {
     if (!tvContainer) return;
@@ -222,8 +194,11 @@
     }
   }
 
+  // Debounced TradingView re-init (prevents rapid pair/TF switching from thrashing)
+  let _tvInitTimer: ReturnType<typeof setTimeout> | null = null;
   $: if (chartMode === 'trading' && tvWidget && state.pair && state.timeframe) {
-    (async () => { await tick(); initTradingView(); })();
+    if (_tvInitTimer) clearTimeout(_tvInitTimer);
+    _tvInitTimer = setTimeout(() => { initTradingView(); }, 300);
   }
 
   // ═══════════════════════════════════════════
@@ -251,16 +226,22 @@
     }
   }
 
+  let _drawRAF: number | null = null;
   function handleDrawingMouseMove(e: MouseEvent) {
     if (!isDrawing || !currentDrawing || !drawingCanvas) return;
-    const rect = drawingCanvas.getBoundingClientRect();
-    renderDrawings();
-    const ctx = drawingCanvas.getContext('2d');
-    if (!ctx) return;
-    ctx.beginPath(); ctx.strokeStyle = 'rgba(255,230,0,.6)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-    ctx.moveTo(currentDrawing.points[0].x, currentDrawing.points[0].y);
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-    ctx.stroke(); ctx.setLineDash([]);
+    if (_drawRAF) return; // throttle to animation frame
+    _drawRAF = requestAnimationFrame(() => {
+      _drawRAF = null;
+      if (!currentDrawing || !drawingCanvas) return;
+      const rect = drawingCanvas.getBoundingClientRect();
+      renderDrawings();
+      const ctx = drawingCanvas.getContext('2d');
+      if (!ctx) return;
+      ctx.beginPath(); ctx.strokeStyle = 'rgba(255,230,0,.6)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      ctx.moveTo(currentDrawing.points[0].x, currentDrawing.points[0].y);
+      ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+      ctx.stroke(); ctx.setLineDash([]);
+    });
   }
 
   function renderDrawings() {
@@ -380,14 +361,6 @@
   //  CHART INIT & DATA LOADING
   // ═══════════════════════════════════════════
 
-  const bigFmt = (v: number) => {
-    const a = Math.abs(v);
-    if (a >= 1e9) return (v / 1e9).toFixed(1) + 'B';
-    if (a >= 1e6) return (v / 1e6).toFixed(0) + 'M';
-    if (a >= 1e3) return (v / 1e3).toFixed(0) + 'K';
-    return v.toFixed(0);
-  };
-
   onMount(async () => {
     try {
       const lwc = await import('lightweight-charts');
@@ -413,7 +386,7 @@
       chart.addPane();
       const volIdx = chart.panes().length - 1;
       volumeSeries = chart.addSeries(lwc.HistogramSeries, { priceFormat: { type: 'volume' }, lastValueVisible: true, priceLineVisible: false }, volIdx);
-      chart.panes()[volIdx].setStretchFactor(0.15);
+      chart.panes()[volIdx].setStretchFactor(0.18);
 
       // ═══ RSI Pane ═══
       chart.addPane();
@@ -422,27 +395,16 @@
       rsiSeries.createPriceLine({ price: 70, color: 'rgba(255,45,85,.35)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
       rsiSeries.createPriceLine({ price: 30, color: 'rgba(0,255,136,.35)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
       rsiSeries.createPriceLine({ price: 50, color: 'rgba(255,255,255,.06)', lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: '' });
-      chart.panes()[rsiIdx].setStretchFactor(0.15);
-
-      // ═══ OI Pane ═══
-      chart.addPane();
-      const oiIdx = chart.panes().length - 1;
-      oiSeries = chart.addSeries(lwc.HistogramSeries, {
-        color: '#26a69a', priceLineVisible: false, lastValueVisible: true,
-        priceFormat: { type: 'custom', formatter: bigFmt, minMove: 1000000 },
-      }, oiIdx);
-      chart.panes()[oiIdx].setStretchFactor(0.12);
-
-      // ═══ OBV Pane ═══
-      chart.addPane();
-      const obvIdx = chart.panes().length - 1;
-      obvSeries = chart.addSeries(lwc.LineSeries, {
-        color: '#ab47bc', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true,
-        crosshairMarkerVisible: false, priceFormat: { type: 'custom', formatter: bigFmt, minMove: 1 },
-      }, obvIdx);
-      chart.panes()[obvIdx].setStretchFactor(0.12);
+      chart.panes()[rsiIdx].setStretchFactor(0.18);
 
       await loadKlines();
+
+      // ═══ Lazy-load: detect scroll to left edge ═══
+      chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+        if (range && range.from < 20 && !_isLoadingMore && !_noMoreHistory) {
+          loadMoreHistory();
+        }
+      });
 
       const ro = new ResizeObserver(() => {
         if (chart && chartMode === 'agent') chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
@@ -454,14 +416,52 @@
     } catch (e) { error = 'Chart initialization failed'; console.error(e); }
   });
 
+  // ═══ Lazy-load older candles when user scrolls left ═══
+  async function loadMoreHistory() {
+    if (_isLoadingMore || _noMoreHistory || !series || !chart || klineCache.length === 0) return;
+    _isLoadingMore = true;
+
+    try {
+      const earliest = klineCache[0];
+      const endTimeMs = earliest.time * 1000 - 1; // just before the earliest candle
+      const older = await fetchKlines(_currentSymbol, _currentInterval, 1000, endTimeMs);
+      if (!series || !chart || older.length === 0) { _noMoreHistory = true; _isLoadingMore = false; return; }
+
+      // Deduplicate: remove any overlap
+      const earliestTime = earliest.time;
+      const unique = older.filter(k => k.time < earliestTime);
+      if (unique.length === 0) { _noMoreHistory = true; _isLoadingMore = false; return; }
+
+      // Prepend to cache
+      klineCache = [...unique, ...klineCache];
+
+      // Re-set all series data
+      series.setData(klineCache.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close })));
+      if (volumeSeries) volumeSeries.setData(klineCache.map(k => ({ time: k.time, value: k.volume, color: k.close >= k.open ? 'rgba(0,255,136,.25)' : 'rgba(255,45,85,.25)' })));
+
+      const closes = klineCache.map(k => ({ time: k.time, close: k.close }));
+      if (ma7Series) ma7Series.setData(computeSMA(closes, 7));
+      if (ma25Series) ma25Series.setData(computeSMA(closes, 25));
+      if (ma99Series) ma99Series.setData(computeSMA(closes, 99));
+      if (rsiSeries) rsiSeries.setData(computeRSI(closes, 14));
+      // Don't call fitContent — preserve user's scroll position
+    } catch (e) {
+      console.error('[ChartPanel] loadMoreHistory error:', e);
+    }
+    _isLoadingMore = false;
+  }
+
   async function loadKlines(overrideSymbol?: string, overrideInterval?: string) {
     if (!series || !volumeSeries || !chart) return;
     const sym = overrideSymbol || symbol;
     const intv = overrideInterval || interval;
+    _currentSymbol = sym;
+    _currentInterval = intv;
+    _noMoreHistory = false;
     isLoading = true; error = '';
 
     try {
-      const klines = await fetchKlines(sym, intv, 300);
+      const klines = await fetchKlines(sym, intv, 1000);
       if (!series || !chart) return;
       if (klines.length === 0) { error = 'No data received'; isLoading = false; return; }
 
@@ -479,20 +479,12 @@
       if (ma25Series) ma25Series.setData(computeSMA(closes, 25));
       if (ma99Series) ma99Series.setData(computeSMA(closes, 99));
       if (rsiSeries) rsiSeries.setData(computeRSI(closes, 14));
-      if (obvSeries) obvSeries.setData(computeOBV(klines));
 
       // Cache MA display values
       const len = klines.length;
       if (len >= 7) ma7Val = klines.slice(-7).reduce((a, k) => a + k.close, 0) / 7;
       if (len >= 25) ma25Val = klines.slice(-25).reduce((a, k) => a + k.close, 0) / 25;
       if (len >= 99) ma99Val = klines.slice(-99).reduce((a, k) => a + k.close, 0) / 99;
-
-      // OI from Coinalyze (async, non-blocking)
-      if (oiSeries) {
-        fetchOIData().then(oiData => {
-          if (oiSeries && oiData.length > 0) oiSeries.setData(oiData.map(d => ({ ...d, color: 'rgba(38,166,154,.5)' })));
-        });
-      }
 
       const lastKline = klines[len - 1];
       livePrice = lastKline.close;
@@ -504,7 +496,7 @@
 
       // ═══ WebSocket real-time ═══
       if (wsCleanup) wsCleanup();
-      wsCleanup = subscribeKlines(sym, state.timeframe, (kline: BinanceKline) => {
+      wsCleanup = subscribeKlines(sym, intv, (kline: BinanceKline) => {
         if (!series) return;
 
         series.update({ time: kline.time, open: kline.open, high: kline.high, low: kline.low, close: kline.close });
@@ -538,13 +530,6 @@
           _rsiAvgLoss = (_rsiAvgLoss * 13 + (d < 0 ? -d : 0)) / 14;
           const rsi = _rsiAvgLoss === 0 ? 100 : 100 - 100 / (1 + _rsiAvgGain / _rsiAvgLoss);
           rsiSeries.update({ time: kline.time, value: rsi });
-        }
-
-        // OBV — incremental
-        if (obvSeries && cLen > 1) {
-          if (kline.close > prevClose) _lastObv += kline.volume;
-          else if (kline.close < prevClose) _lastObv -= kline.volume;
-          obvSeries.update({ time: kline.time, value: _lastObv });
         }
 
         livePrice = kline.close;
@@ -593,10 +578,16 @@
   }
 
   function changePair(pair: string) { gameState.update(s => ({ ...s, pair })); loadKlines(pairToSymbol(pair), interval); }
-  function changeTF(tf: string) { gameState.update(s => ({ ...s, timeframe: tf })); loadKlines(symbol, INTERVALS[tf] || tf); }
+  function changeTF(tf: string) {
+    const normalized = normalizeTimeframe(tf);
+    gameState.update(s => ({ ...s, timeframe: normalized }));
+    loadKlines(symbol, toBinanceInterval(normalized));
+  }
 
   onDestroy(() => {
     if (_priceUpdateTimer) clearTimeout(_priceUpdateTimer);
+    if (_tvInitTimer) clearTimeout(_tvInitTimer);
+    if (_drawRAF) cancelAnimationFrame(_drawRAF);
     if (cleanup) cleanup();
     if (wsCleanup) wsCleanup();
     destroyTradingView();
@@ -613,8 +604,14 @@
     <TokenDropdown value={state.pair} compact on:select={e => changePair(e.detail.pair)} />
 
     <div class="tf-btns">
-      {#each ['15m', '1H', '4H', '1D'] as tf}
-        <button class="tfbtn" class:active={state.timeframe === tf} on:click={() => changeTF(tf)}>{tf}</button>
+      {#each CORE_TIMEFRAME_OPTIONS as tf}
+        <button
+          class="tfbtn"
+          class:active={normalizeTimeframe(state.timeframe) === tf.value}
+          on:click={() => changeTF(tf.value)}
+        >
+          {tf.label}
+        </button>
       {/each}
     </div>
 
@@ -730,7 +727,7 @@
   <div class="chart-footer">
     <span class="src-badge">{chartMode === 'trading' ? '📊 TV' : '📡 BINANCE'}</span>
     <span class="src-pair">{chartMode === 'trading' ? pairToTVSymbol(state.pair) : symbol}</span>
-    <span class="src-tf">{state.timeframe}</span>
+    <span class="src-tf">{formatTimeframeLabel(state.timeframe)}</span>
     {#if chartMode === 'agent' && drawings.length > 0}
       <span class="draw-count">✏️ {drawings.length}</span>
     {/if}

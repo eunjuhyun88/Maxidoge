@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { AGDEFS } from '$lib/data/agents';
   import type { SquadConfig, RiskLevel, SquadTimeframe } from '$lib/stores/gameState';
+  import { CORE_TIMEFRAME_OPTIONS } from '$lib/utils/timeframe';
 
   const dispatch = createEventDispatcher<{
     deploy: { config: SquadConfig };
@@ -24,12 +25,22 @@
     { value: 'aggro', label: 'AGGRO', emoji: '🔥', desc: 'High risk, high reward. Wide SL.', color: '#ff2d55' }
   ];
 
-  const TF_OPTIONS: { value: SquadTimeframe; label: string; desc: string }[] = [
-    { value: '5m', label: '5M', desc: 'Scalp' },
-    { value: '1h', label: '1H', desc: 'Intraday' },
-    { value: '4h', label: '4H', desc: 'Swing' },
-    { value: '1D', label: '1D', desc: 'Macro' }
-  ];
+  const TF_DESCRIPTIONS: Record<SquadTimeframe, string> = {
+    '1m': 'Ultra scalp',
+    '5m': 'Scalp',
+    '15m': 'Fast intraday',
+    '30m': 'Intraday',
+    '1h': 'Session trend',
+    '4h': 'Swing',
+    '1d': 'Macro',
+    '1w': 'Position',
+  };
+
+  const TF_OPTIONS: { value: SquadTimeframe; label: string; desc: string }[] = CORE_TIMEFRAME_OPTIONS.map((tf) => ({
+    value: tf.value,
+    label: tf.label,
+    desc: TF_DESCRIPTIONS[tf.value],
+  }));
 
   function handleDeploy() {
     dispatch('deploy', {

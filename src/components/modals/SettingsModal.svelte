@@ -1,5 +1,7 @@
 <script lang="ts">
   import { gameState } from '$lib/stores/gameState';
+  import { RESETTABLE_STORAGE_KEYS } from '$lib/stores/storageKeys';
+  import { CORE_TIMEFRAME_OPTIONS, normalizeTimeframe } from '$lib/utils/timeframe';
 
   export let onClose: () => void = () => {};
 
@@ -17,8 +19,9 @@
 
   function resetData() {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('maxidoge_state');
-      localStorage.removeItem('maxidoge_agents');
+      for (const key of RESETTABLE_STORAGE_KEYS) {
+        localStorage.removeItem(key);
+      }
       window.location.reload();
     }
   }
@@ -82,10 +85,10 @@
       <div class="st-section">
         <div class="st-label">DEFAULT TIMEFRAME</div>
         <div class="st-btns">
-          {#each ['15m', '1H', '4H', '1D'] as tf}
-            <button class="tf-btn" class:active={state.timeframe === tf}
-              on:click={() => gameState.update(s => ({...s, timeframe: tf}))}>
-              {tf}
+          {#each CORE_TIMEFRAME_OPTIONS as tf}
+            <button class="tf-btn" class:active={normalizeTimeframe(state.timeframe) === tf.value}
+              on:click={() => gameState.update(s => ({...s, timeframe: tf.value}))}>
+              {tf.label}
             </button>
           {/each}
         </div>

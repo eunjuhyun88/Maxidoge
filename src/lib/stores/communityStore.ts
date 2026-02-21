@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
+import { STORAGE_KEYS } from './storageKeys';
 
 export interface CommunityPost {
   id: string;
@@ -19,7 +20,7 @@ interface CommunityState {
   posts: CommunityPost[];
 }
 
-const STORAGE_KEY = 'maxidoge_community';
+const STORAGE_KEY = STORAGE_KEYS.community;
 
 function loadPosts(): CommunityState {
   if (typeof window === 'undefined') return { posts: [] };

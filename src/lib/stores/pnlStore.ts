@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
+import { STORAGE_KEYS } from './storageKeys';
 
 export interface PnLEntry {
   id: string;
@@ -18,7 +19,7 @@ interface PnLState {
   entries: PnLEntry[];
 }
 
-const STORAGE_KEY = 'maxidoge_pnl';
+const STORAGE_KEY = STORAGE_KEYS.pnl;
 const MAX_ENTRIES = 500;
 
 function loadPnL(): PnLState {

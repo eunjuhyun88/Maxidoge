@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
+import { STORAGE_KEYS } from './storageKeys';
 
 export interface MatchRecord {
   id: string;
@@ -48,7 +49,7 @@ interface MatchHistoryState {
   records: MatchRecord[];
 }
 
-const STORAGE_KEY = 'maxidoge_match_history';
+const STORAGE_KEY = STORAGE_KEYS.matchHistory;
 const MAX_RECORDS = 100;
 
 function loadHistory(): MatchHistoryState {

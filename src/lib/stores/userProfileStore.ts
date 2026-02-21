@@ -8,6 +8,7 @@ import { writable, derived, get } from 'svelte/store';
 import { walletStore } from './walletStore';
 import { matchHistoryStore, winRate, bestStreak } from './matchHistoryStore';
 import { totalQuickPnL, openTradeCount } from './quickTradeStore';
+import { STORAGE_KEYS } from './storageKeys';
 
 export type ProfileTier = 'bronze' | 'silver' | 'gold' | 'diamond';
 
@@ -57,7 +58,7 @@ const BADGE_DEFS: Omit<Badge, 'earnedAt'>[] = [
   { id: 'first_track', name: 'Signal Scout', icon: '📌', description: 'Track your first signal', condition: 'trackedSignals >= 1' },
 ];
 
-const STORAGE_KEY = 'maxidoge_profile';
+const STORAGE_KEY = STORAGE_KEYS.profile;
 
 function loadProfile(): UserProfile {
   if (typeof window === 'undefined') return createDefault();
