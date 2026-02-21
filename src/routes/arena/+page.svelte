@@ -1,7 +1,7 @@
 <script lang="ts">
   import { gameState } from '$lib/stores/gameState';
   import { agentStats, addXP } from '$lib/stores/agentData';
-  import { AGDEFS, SOURCES, getReactionImg, PHASE_REACTIONS, type ReactionType } from '$lib/data/agents';
+  import { AGDEFS, SOURCES } from '$lib/data/agents';
   import { sfx } from '$lib/audio/sfx';
   import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_GATHER, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, DOGE_VOTE_LONG, DOGE_WORDS, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, startGameLoop, resetPhaseInit } from '$lib/engine/gameLoop';
@@ -37,18 +37,6 @@
   let resultVisible = false;
   let resultData = { win: false, lp: 0, tag: '', motto: '' };
   let floatingWords: Array<{id: number; text: string; color: string; x: number; dur: number}> = [];
-
-  // ═══════ FLYING REACTION STATE ═══════
-  let flyingReactions: Array<{
-    id: number;
-    img: string;
-    fromX: number; fromY: number;  // start position (%)
-    toX: number; toY: number;      // end position (%)
-    size: number;                   // px
-    dur: number;                    // animation duration (s)
-    delay: number;                  // animation delay (s)
-    rotate: number;                 // rotation degrees
-  }> = [];
   let feedMessages: Array<{icon: string; name: string; color: string; text: string; dir?: string; isNew?: boolean}> = [];
   let councilActive = false;
   let phaseLabel = { name: 'STANDBY', color: '#888', emoji: '💤' };
@@ -377,45 +365,6 @@
     }
   }
 
-  // ═══════ FLYING REACTIONS ═══════
-  function spawnReactions(phaseKey: string, count = 4) {
-    const types = PHASE_REACTIONS[phaseKey];
-    if (!types) return;
-
-    const edges = ['left', 'right', 'top', 'bottom'] as const;
-
-    for (let i = 0; i < count; i++) {
-      const delay = i * 0.15 + Math.random() * 0.2;
-      const reactionType = types[Math.floor(Math.random() * types.length)];
-      const img = getReactionImg(reactionType);
-      const edge = edges[Math.floor(Math.random() * edges.length)];
-      const size = 36 + Math.floor(Math.random() * 28); // 36-64px
-      const dur = 0.8 + Math.random() * 0.6; // 0.8-1.4s
-      const rotate = -30 + Math.random() * 60; // -30 to 30 deg
-
-      // Start from random edge, fly toward center area
-      let fromX: number, fromY: number;
-      switch (edge) {
-        case 'left':  fromX = -10; fromY = 10 + Math.random() * 80; break;
-        case 'right': fromX = 110; fromY = 10 + Math.random() * 80; break;
-        case 'top':   fromX = 10 + Math.random() * 80; fromY = -10; break;
-        case 'bottom': fromX = 10 + Math.random() * 80; fromY = 110; break;
-      }
-
-      // End somewhere in the main arena area
-      const toX = 15 + Math.random() * 70;
-      const toY = 15 + Math.random() * 60;
-
-      const id = Date.now() + i * 7;
-      flyingReactions = [...flyingReactions, { id, img, fromX, fromY, toX, toY, size, dur, delay, rotate }];
-
-      // Remove after animation completes
-      setTimeout(() => {
-        flyingReactions = flyingReactions.filter(r => r.id !== id);
-      }, (delay + dur + 0.5) * 1000);
-    }
-  }
-
   // ═══════ HYPOTHESIS HANDLERS ═══════
   function onHypothesisSubmit(e: CustomEvent) {
     const h = e.detail;
@@ -529,7 +478,6 @@
     initAgentStates();
     sfx.enter();
     dogeFloat();
-    spawnReactions('deploy', 5);
     addFeed('🐕', 'ARENA', '#ff2d9b', 'Match started! Agents deploying...');
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
@@ -614,7 +562,6 @@
   }
 
   function initScout() {
-    spawnReactions('scout', 3);
     addFeed('🔍', 'SCOUT', '#cc6600', 'Agents scouting data sources...');
     // Generate chart annotations from active agents
     generateAnnotations();
@@ -700,7 +647,6 @@
   }
 
   function initCouncil() {
-    spawnReactions('council', 4);
     addFeed('🗳', 'COUNCIL', '#cc0066', 'Agents voting on direction...');
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
@@ -745,7 +691,6 @@
 
     sfx.verdict();
     dogeFloat();
-    spawnReactions(agentDir === 'LONG' ? 'verdict_bull' : 'verdict_bear', 5);
     addFeed('⭐', 'VERDICT', '#cc0066', `Agent verdict: ${agentDir} · Score ${score} · ${bullish}/${activeAgents.length} agree`, agentDir);
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
@@ -802,7 +747,6 @@
   function initBattle() {
     verdictVisible = false;
     compareVisible = false;
-    spawnReactions('battle', 6);
     addFeed('⚔', 'BATTLE', '#cc0033', 'Battle in progress!');
     activeAgents.forEach((ag, i) => {
       setAgentState(ag.id, 'alert');
@@ -923,11 +867,9 @@
     if (win) {
       sfx.win();
       dogeFloat();
-      spawnReactions('result_win', 7);
       activeAgents.forEach(ag => { setAgentState(ag.id, 'jump'); setSpeech(ag.id, DOGE_WIN[Math.floor(Math.random() * DOGE_WIN.length)], 800); });
     } else {
       sfx.lose();
-      spawnReactions('result_lose', 5);
       activeAgents.forEach(ag => { setAgentState(ag.id, 'sad'); setSpeech(ag.id, DOGE_LOSE[Math.floor(Math.random() * DOGE_LOSE.length)], 800); });
     }
 
@@ -1145,23 +1087,6 @@
         <div class="crypto-coin" style="left:15%;top:20%;animation-delay:0s">₿</div>
         <div class="crypto-coin" style="left:80%;top:25%;animation-delay:1.2s">Ξ</div>
         <div class="crypto-coin" style="left:55%;top:12%;animation-delay:2.5s">◎</div>
-
-        <!-- Flying Reaction Characters -->
-        {#each flyingReactions as r (r.id)}
-          <div class="fly-react"
-            style="
-              --fr-from-x:{r.fromX}%;
-              --fr-from-y:{r.fromY}%;
-              --fr-to-x:{r.toX}%;
-              --fr-to-y:{r.toY}%;
-              --fr-size:{r.size}px;
-              --fr-dur:{r.dur}s;
-              --fr-delay:{r.delay}s;
-              --fr-rotate:{r.rotate}deg;
-            ">
-            <img src={r.img} alt="" />
-          </div>
-        {/each}
 
         <!-- Data Sources -->
         {#each SOURCES as src}
@@ -1582,55 +1507,6 @@
   @keyframes coinFloat {
     0%,100% { transform: translateY(0) rotate(-10deg) scale(1); }
     50% { transform: translateY(-20px) rotate(10deg) scale(1.1); }
-  }
-
-  /* ══ Flying Reaction Characters ══ */
-  .fly-react {
-    position: absolute;
-    z-index: 25;
-    pointer-events: none;
-    width: var(--fr-size, 48px);
-    height: var(--fr-size, 48px);
-    animation: flyReact var(--fr-dur, 1s) cubic-bezier(.22,.68,.36,1.2) var(--fr-delay, 0s) forwards;
-    opacity: 0;
-    will-change: transform, opacity;
-    filter: drop-shadow(3px 3px 0 #000);
-  }
-  .fly-react img {
-    width: 100%; height: 100%;
-    object-fit: contain;
-    border-radius: 50%;
-    border: 3px solid #fff;
-    box-shadow: 2px 2px 0 #000;
-    background: #fff;
-  }
-  @keyframes flyReact {
-    0% {
-      left: var(--fr-from-x);
-      top: var(--fr-from-y);
-      opacity: 0;
-      transform: scale(0.3) rotate(0deg);
-    }
-    30% {
-      opacity: 1;
-      transform: scale(1.3) rotate(calc(var(--fr-rotate) * 0.5));
-    }
-    60% {
-      left: var(--fr-to-x);
-      top: var(--fr-to-y);
-      opacity: 1;
-      transform: scale(1.1) rotate(var(--fr-rotate));
-    }
-    80% {
-      opacity: .8;
-      transform: scale(1.2) rotate(calc(var(--fr-rotate) * -0.3));
-    }
-    100% {
-      left: var(--fr-to-x);
-      top: var(--fr-to-y);
-      opacity: 0;
-      transform: scale(0.4) rotate(var(--fr-rotate));
-    }
   }
 
   .zap { font-size: 36px; --rot: 8deg; color: #a855f7; }
