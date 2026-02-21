@@ -273,7 +273,7 @@
     height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    background: #1a0a2e;
+    background: #0a0a14;
     display: flex;
     flex-direction: column;
   }
@@ -427,8 +427,10 @@
   /* ═══ STATS STRIP ═══ */
   .stats-strip {
     display: flex; align-items: center; justify-content: center;
-    gap: 0; padding: 12px 24px;
-    background: #000; border-bottom: 4px solid var(--yel);
+    gap: 0; padding: 14px 24px;
+    background: linear-gradient(90deg, #1a0025 0%, #000 50%, #1a0025 100%);
+    border-top: 4px solid var(--yel);
+    border-bottom: 4px solid var(--yel);
   }
   .ss-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 24px; }
   .ss-sep { width: 1px; height: 28px; background: rgba(255,255,255,.12); flex-shrink: 0; }
@@ -438,11 +440,14 @@
 
   /* ═══ 3-STEP FLOW (Pop-Art Horizontal Grid) ═══ */
   .flow-section {
-    padding: 24px 18px 20px;
-    background: linear-gradient(180deg, #1a0520 0%, #0e0818 100%);
-    background-image:
-      radial-gradient(circle, rgba(255,105,180,.06) 1px, transparent 1px);
-    background-size: 20px 20px;
+    padding: 28px 18px 24px;
+    background:
+      radial-gradient(circle, rgba(255,230,0,.04) 1px, transparent 1px),
+      radial-gradient(circle, rgba(255,105,180,.03) 1px, transparent 1px),
+      linear-gradient(180deg, #12082a 0%, #0a0418 100%);
+    background-size: 24px 24px, 16px 16px, 100% 100%;
+    background-position: 0 0, 12px 12px, 0 0;
+    border-bottom: 4px solid rgba(255,230,0,.15);
   }
   .flow-title {
     font-family: var(--fd); font-size: 14px; font-weight: 900;
@@ -465,9 +470,9 @@
   }
   .fc:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 #000; }
   .fc:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
-  .fc-1 { background: linear-gradient(135deg, #0a1628, #0d2240); }
-  .fc-2 { background: linear-gradient(135deg, #1a0a1e, #2a0a38); }
-  .fc-3 { background: linear-gradient(135deg, #0a1e0a, #0a2818); }
+  .fc-1 { background: linear-gradient(135deg, #081830 0%, #0d2a50 100%); border-color: rgba(0,255,255,.3); }
+  .fc-2 { background: linear-gradient(135deg, #200a28 0%, #380a50 100%); border-color: rgba(255,45,155,.3); }
+  .fc-3 { background: linear-gradient(135deg, #0a2010 0%, #0a3818 100%); border-color: rgba(0,255,136,.3); }
 
   .fc-num {
     font-family: var(--fd); font-size: 32px; font-weight: 900;
@@ -530,7 +535,12 @@
   }
 
   /* ═══ ARENA (Comic Panel) ═══ */
-  .arena-section { padding: 0 18px 16px; background: #0e0818; }
+  .arena-section {
+    padding: 20px 18px;
+    background:
+      repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(255,45,155,.03) 20px, rgba(255,45,155,.03) 40px),
+      linear-gradient(180deg, #0a0418 0%, #14082e 50%, #0a0418 100%);
+  }
   .arena-card {
     width: 100%; display: flex; align-items: center; gap: 0;
     border: 4px solid #000; border-radius: 18px;
@@ -578,7 +588,14 @@
   .arena-card:hover .arena-cta { box-shadow: 4px 4px 0 #000; }
 
   /* ═══ SQUAD (Pop-Art Grid) ═══ */
-  .squad-section { padding: 16px 18px; background: #0e0818; }
+  .squad-section {
+    padding: 20px 18px;
+    background:
+      radial-gradient(circle, rgba(0,255,255,.03) 1px, transparent 1px),
+      linear-gradient(180deg, #08061a 0%, #0c0a22 100%);
+    background-size: 18px 18px, 100% 100%;
+    border-top: 3px solid rgba(0,255,255,.1);
+  }
   .sq-title {
     font-family: var(--fd); font-size: 13px; font-weight: 900;
     letter-spacing: 4px; color: var(--yel); text-align: center;
@@ -590,9 +607,10 @@
   }
   .sq-card {
     display: flex; flex-direction: column; align-items: center; gap: 3px;
-    background: rgba(255,255,255,.03);
-    border: 2.5px solid rgba(255,255,255,.08); border-radius: 14px;
+    background: linear-gradient(135deg, rgba(255,255,255,.04) 0%, rgba(255,255,255,.01) 100%);
+    border: 2.5px solid rgba(255,255,255,.1); border-radius: 14px;
     padding: 12px 8px 10px; transition: all .15s; cursor: default;
+    box-shadow: 3px 3px 0 rgba(0,0,0,.4);
   }
   .sq-card:hover {
     border-color: var(--ac);
@@ -610,9 +628,12 @@
 
   /* ═══ QUICK NAV (Retro Game Buttons) ═══ */
   .quick-nav {
-    display: flex; gap: 8px; padding: 12px 18px;
+    display: flex; gap: 8px; padding: 14px 18px;
     justify-content: center; flex-wrap: wrap;
-    background: #0e0818;
+    background:
+      repeating-linear-gradient(-45deg, transparent, transparent 30px, rgba(255,230,0,.02) 30px, rgba(255,230,0,.02) 60px),
+      #0a0818;
+    border-top: 3px solid rgba(255,230,0,.08);
   }
   .qn {
     display: flex; align-items: center; gap: 6px;
@@ -639,7 +660,12 @@
   }
 
   /* ═══ WALLET CTA ═══ */
-  .wallet-cta { padding: 16px 18px 40px; text-align: center; background: #0e0818; }
+  .wallet-cta {
+    padding: 20px 18px 48px; text-align: center;
+    background:
+      radial-gradient(ellipse at center, rgba(255,230,0,.05) 0%, transparent 60%),
+      linear-gradient(180deg, #0a0818 0%, #06040e 100%);
+  }
   .wc-btn {
     font-family: var(--fd); font-size: 13px; font-weight: 900; letter-spacing: 4px;
     color: #000; background: var(--yel);
