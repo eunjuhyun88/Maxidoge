@@ -51,6 +51,7 @@
 
   /* ── Animation system ── */
   let homeEl: HTMLDivElement;
+  let heroRightEl: HTMLDivElement;
   let heroReady = false;
 
   function onScroll() {
@@ -75,6 +76,37 @@
     // Setup scroll & observer
     if (!homeEl) return;
     homeEl.addEventListener('scroll', onScroll, { passive: true });
+
+    // Scroll hijack: trap scroll in hero-right until it's fully scrolled
+    const onWheel = (e: WheelEvent) => {
+      if (!heroRightEl) return;
+      const heroRect = heroRightEl.getBoundingClientRect();
+      const inView = heroRect.top < window.innerHeight && heroRect.bottom > 0;
+      if (!inView) return;
+
+      const { scrollTop, scrollHeight, clientHeight } = heroRightEl;
+      const atTop = scrollTop <= 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 2;
+
+      // Ease down near edges: slower as you approach bottom/top
+      const remaining = e.deltaY > 0
+        ? scrollHeight - clientHeight - scrollTop
+        : scrollTop;
+      const ratio = Math.min(remaining / 150, 1); // 150px fade zone
+      const speed = 0.4 * (0.15 + 0.85 * ratio); // min 15% speed near edge
+
+      // scrolling down but right panel not at bottom → trap
+      if (e.deltaY > 0 && !atBottom) {
+        e.preventDefault();
+        heroRightEl.scrollTop += e.deltaY * speed;
+      }
+      // scrolling up but right panel not at top → trap
+      else if (e.deltaY < 0 && !atTop) {
+        e.preventDefault();
+        heroRightEl.scrollTop += e.deltaY * speed;
+      }
+    };
+    homeEl.addEventListener('wheel', onWheel, { passive: false });
     const obs = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
@@ -93,6 +125,7 @@
 
     return () => {
       homeEl.removeEventListener('scroll', onScroll);
+      homeEl.removeEventListener('wheel', onWheel);
       obs.disconnect();
     };
   });
@@ -161,7 +194,7 @@
       {#each Array(8) as _}<span class="vt">FEATURES</span>{/each}
     </div>
 
-    <div class="hero-right">
+    <div class="hero-right" bind:this={heroRightEl}>
       {#each FEATURES as feat, i}
         <button
           class="fc ha ha-r"
