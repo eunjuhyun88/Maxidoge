@@ -457,6 +457,7 @@
     position: relative;
     min-height: 100vh;
     z-index: 2;
+    align-items: flex-start; /* let sticky children anchor to top */
   }
 
   .hero-left {
@@ -544,10 +545,10 @@
     border-left: 1px solid rgba(232,150,125,0.1);
     display: flex; flex-direction: column;
     flex-shrink: 0;
-    position: relative; z-index: 3;
+    position: sticky; top: 36px;
+    z-index: 3;
     overflow-y: auto;
     max-height: calc(100vh - 36px);
-    position: sticky; top: 36px;
   }
   .hero-right::-webkit-scrollbar { width: 3px; }
   .hero-right::-webkit-scrollbar-thumb { background: var(--sp-pk); }
@@ -928,10 +929,10 @@
   /* ═══ RESPONSIVE ═══ */
   @media (max-width: 900px) {
     .hero { flex-direction: column; min-height: auto; }
-    .hero-left { padding: 50px 24px 80px; }
+    .hero-left { padding: 50px 24px 80px; position: relative; height: auto; }
     .hero-div { width: 100%; height: 30px; flex-direction: row; border-left: none; border-right: none; border-top: 1px solid rgba(232,150,125,0.12); border-bottom: 1px solid rgba(232,150,125,0.12); }
     .vt { writing-mode: horizontal-tb; text-orientation: initial; padding: 0 8px; }
-    .hero-right { width: 100%; max-width: 100%; }
+    .hero-right { width: 100%; max-width: 100%; position: relative; max-height: none; }
     .about-inner { flex-direction: column; align-items: center; }
     .about { padding: 40px 24px 30px; }
     .flow { padding: 50px 24px; }
