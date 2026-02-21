@@ -69,6 +69,54 @@ function canUseBrowserFetch(): boolean {
   return typeof window !== 'undefined' && typeof fetch === 'function';
 }
 
+export async function fetchQuickTradesApi(params?: {
+  limit?: number;
+  offset?: number;
+  status?: 'open' | 'closed' | 'stopped';
+}): Promise<ApiQuickTrade[] | null> {
+  if (!canUseBrowserFetch()) return null;
+  try {
+    const query = new URLSearchParams();
+    if (typeof params?.limit === 'number') query.set('limit', String(params.limit));
+    if (typeof params?.offset === 'number') query.set('offset', String(params.offset));
+    if (params?.status) query.set('status', params.status);
+    const qs = query.toString();
+    const result = await requestJson<{ success: boolean; records: ApiQuickTrade[] }>(
+      `/api/quick-trades${qs ? `?${qs}` : ''}`,
+      {
+        method: 'GET',
+      }
+    );
+    return Array.isArray(result.records) ? result.records : [];
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchTrackedSignalsApi(params?: {
+  limit?: number;
+  offset?: number;
+  status?: 'tracking' | 'expired' | 'converted';
+}): Promise<ApiTrackedSignal[] | null> {
+  if (!canUseBrowserFetch()) return null;
+  try {
+    const query = new URLSearchParams();
+    if (typeof params?.limit === 'number') query.set('limit', String(params.limit));
+    if (typeof params?.offset === 'number') query.set('offset', String(params.offset));
+    if (params?.status) query.set('status', params.status);
+    const qs = query.toString();
+    const result = await requestJson<{ success: boolean; records: ApiTrackedSignal[] }>(
+      `/api/signals${qs ? `?${qs}` : ''}`,
+      {
+        method: 'GET',
+      }
+    );
+    return Array.isArray(result.records) ? result.records : [];
+  } catch {
+    return null;
+  }
+}
+
 export async function openQuickTradeApi(payload: {
   pair: string;
   dir: 'LONG' | 'SHORT';
