@@ -1,6 +1,8 @@
 import { query } from './db';
+import { isIP } from 'node:net';
 
 const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+let _nonceInfraReady = false;
 
 export interface IssueWalletNonceResult {
   nonce: string;
@@ -31,6 +33,67 @@ export function extractNonceFromMessage(message: string): string | null {
   return match?.[1] || null;
 }
 
+function sanitizeIssuedIp(raw?: string | null): string | null {
+  if (!raw) return null;
+  const first = raw.split(',')[0]?.trim() || '';
+  if (!first) return null;
+
+  // Common proxy format: "1.2.3.4:5678"
+  const ipv4WithPort = first.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?$/);
+  if (ipv4WithPort?.[1] && isIP(ipv4WithPort[1]) === 4) {
+    return ipv4WithPort[1];
+  }
+
+  // Common proxy format: "[2001:db8::1]:443"
+  const bracketedIpv6 = first.match(/^\[([0-9a-fA-F:]+)\](?::\d+)?$/);
+  if (bracketedIpv6?.[1] && isIP(bracketedIpv6[1]) === 6) {
+    return bracketedIpv6[1];
+  }
+
+  if (isIP(first) > 0) return first;
+  return null;
+}
+
+async function ensureNonceInfrastructure(): Promise<void> {
+  if (_nonceInfraReady) return;
+
+  await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+  await query(
+    `
+      CREATE TABLE IF NOT EXISTS auth_nonces (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        address text NOT NULL,
+        nonce text NOT NULL,
+        message text NOT NULL,
+        provider text,
+        issued_ip inet,
+        user_agent text,
+        expires_at timestamptz NOT NULL,
+        consumed_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        CHECK (address ~ '^0x[0-9a-fA-F]{40}$'),
+        CHECK (char_length(nonce) BETWEEN 16 AND 128),
+        CHECK (expires_at > created_at)
+      )
+    `
+  );
+  await query(
+    `
+      CREATE INDEX IF NOT EXISTS idx_auth_nonces_address_created_at
+      ON auth_nonces (lower(address), created_at DESC)
+    `
+  );
+  await query(
+    `
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_auth_nonces_active_address_nonce
+      ON auth_nonces (lower(address), nonce)
+      WHERE consumed_at IS NULL
+    `
+  );
+
+  _nonceInfraReady = true;
+}
+
 export async function issueWalletNonce(args: {
   address: string;
   provider?: string | null;
@@ -38,8 +101,11 @@ export async function issueWalletNonce(args: {
   issuedIp?: string | null;
   ttlMinutes?: number;
 }): Promise<IssueWalletNonceResult> {
+  await ensureNonceInfrastructure();
+
   const address = normalizeEthAddress(args.address);
   const ttlMinutes = Number.isFinite(args.ttlMinutes) ? Math.max(1, Math.min(30, Number(args.ttlMinutes))) : 10;
+  const issuedIp = sanitizeIssuedIp(args.issuedIp);
 
   const nonce = crypto.randomUUID().replace(/-/g, '');
   const issuedAt = new Date();
@@ -67,7 +133,7 @@ export async function issueWalletNonce(args: {
       message,
       args.provider || null,
       args.userAgent || null,
-      args.issuedIp || null,
+      issuedIp,
       expiresAt.toISOString(),
     ]
   );
@@ -84,6 +150,8 @@ export async function consumeWalletNonce(args: {
   nonce: string;
   message: string;
 }): Promise<boolean> {
+  await ensureNonceInfrastructure();
+
   const result = await query<{ id: string }>(
     `
       UPDATE auth_nonces
