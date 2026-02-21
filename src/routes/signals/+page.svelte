@@ -36,7 +36,7 @@
   }
 
   let filter: string = 'all';
-  let signalsView: 'community' | 'signals' | 'live' = 'community';
+  let signalsView: 'community' | 'signals' = 'community';
   let communityFilter: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked' = 'all';
   const COMMUNITY_FILTERS: Array<{ key: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked'; label: string }> = [
     { key: 'all', label: 'All' },
@@ -233,11 +233,11 @@
     return s === 'arena' ? '#ff2d9b' : s === 'trade' ? '#3b9eff' : s === 'tracked' ? '#ff8c3b' : '#8b5cf6';
   }
 
-  function setSignalsView(next: 'community' | 'signals' | 'live') {
+  function setSignalsView(next: 'community' | 'signals') {
     signalsView = next;
     const query = new URLSearchParams($page.url.searchParams);
     if (next === 'community') query.delete('view');
-    else query.set('view', next);
+    else query.set('view', 'signals');
     const qs = query.toString();
     goto(`/signals${qs ? `?${qs}` : ''}`, {
       replaceState: true,
@@ -249,8 +249,17 @@
 
   onMount(() => {
     const v = $page.url.searchParams.get('view');
-    if (v === 'signals' || v === 'live' || v === 'community') {
-      signalsView = v;
+    signalsView = v === 'signals' ? 'signals' : 'community';
+    if (v === 'live') {
+      const query = new URLSearchParams($page.url.searchParams);
+      query.delete('view');
+      const qs = query.toString();
+      void goto(`/signals${qs ? `?${qs}` : ''}`, {
+        replaceState: true,
+        noScroll: true,
+        keepFocus: true,
+        invalidateAll: false
+      });
     }
   });
 </script>
@@ -261,14 +270,14 @@
     <div class="sh-bg"></div>
     <div class="sh-content">
       <div class="sh-top-row">
-        <h1 class="sh-title">SIGNAL ROOM</h1>
-        <div class="sh-live"><span class="sh-live-dot"></span> LIVE</div>
+        <h1 class="sh-title">COMMUNITY HUB</h1>
+        <div class="sh-live"><span class="sh-live-dot"></span> SIGNALS + LIVE</div>
       </div>
-      <p class="sh-sub">AI 에이전트 분석 기반 트레이딩 시그널</p>
+      <p class="sh-sub">AI 시그널과 실시간 활동 피드를 한 화면에서 운영합니다</p>
       <div class="sh-flow">
         <span class="sh-flow-step">🧠 WAR ROOM</span>
         <span class="sh-flow-arrow">→</span>
-        <span class="sh-flow-step active">📡 SIGNAL ROOM</span>
+        <span class="sh-flow-step active">💡 COMMUNITY HUB</span>
         <span class="sh-flow-arrow">→</span>
         <span class="sh-flow-step">🚀 COPY TRADE</span>
       </div>
@@ -283,51 +292,74 @@
 
   <div class="view-switch">
     <button class="vs-btn" class:active={signalsView === 'community'} on:click={() => setSignalsView('community')}>
-      💡 COMMUNITY IDEAS
+      💡 COMMUNITY HUB
     </button>
     <button class="vs-btn" class:active={signalsView === 'signals'} on:click={() => setSignalsView('signals')}>
       📡 SIGNAL LIST
     </button>
-    <button class="vs-btn" class:active={signalsView === 'live'} on:click={() => setSignalsView('live')}>
-      ⚡ LIVE FEED
-    </button>
   </div>
 
   {#if signalsView === 'community'}
-    <div class="community-ideas">
-      <div class="ci-head">
-        <div class="ci-title">Community Ideas</div>
-        <div class="ci-explore">Explore {allSignals.length.toLocaleString()}+ Signals →</div>
-      </div>
-      <div class="ci-filters">
-        {#each COMMUNITY_FILTERS as item}
-          <button class="ci-chip" class:active={communityFilter === item.key} on:click={() => communityFilter = item.key}>{item.label}</button>
-        {/each}
-      </div>
+    <div class="community-layout">
+      <section class="community-ideas">
+        <div class="ci-head">
+          <div>
+            <div class="ci-title">Community Ideas</div>
+            <div class="ci-sub">Signals + Live activity in one flow</div>
+          </div>
+          <div class="ci-explore">Explore {allSignals.length.toLocaleString()}+ Signals →</div>
+        </div>
+        <div class="ci-filters">
+          {#each COMMUNITY_FILTERS as item}
+            <button class="ci-chip" class:active={communityFilter === item.key} on:click={() => communityFilter = item.key}>{item.label}</button>
+          {/each}
+        </div>
 
-      <div class="ci-grid">
-        {#each communityIdeas as idea (idea.id)}
-          <article class="ci-card">
-            <div class="ci-tf">{idea.timeframe}</div>
-            <div class="ci-strategy">{idea.strategy}</div>
-            <div class="ci-subs">★ {idea.subscribers.toLocaleString()} subscribers</div>
-            <div class="ci-bottom">
-              <div class="ci-asset">
-                <div class="ci-pair">{idea.signal.pair}</div>
-                <div class="ci-dir" class:long={idea.signal.dir === 'LONG'} class:short={idea.signal.dir === 'SHORT'}>
-                  {idea.signal.dir} · {idea.signal.conf}%
+        {#if communityIdeas.length === 0}
+          <EmptyState
+            image={CHARACTER_ART.tradeSurge}
+            title="NO IDEAS YET"
+            subtitle="Open trades or run Arena matches to fill community ideas"
+            ctaText="⚔️ GO TO ARENA"
+            ctaHref="/arena"
+            icon="💡"
+            variant="orange"
+            compact
+          />
+        {:else}
+          <div class="ci-grid">
+            {#each communityIdeas as idea (idea.id)}
+              <article class="ci-card">
+                <div class="ci-top">
+                  <div class="ci-tf">{idea.timeframe}</div>
+                  <div class="ci-subs">★ {idea.subscribers.toLocaleString()} subscribers</div>
                 </div>
-              </div>
-              <button class="ci-view" on:click={() => handleTrade(idea.signal)}>✦ View</button>
-            </div>
-          </article>
-        {/each}
-      </div>
-    </div>
+                <div class="ci-strategy">{idea.strategy}</div>
+                <div class="ci-bottom">
+                  <div class="ci-asset">
+                    <div class="ci-pair">{idea.signal.pair}</div>
+                    <div class="ci-dir" class:long={idea.signal.dir === 'LONG'} class:short={idea.signal.dir === 'SHORT'}>
+                      {idea.signal.dir} · {idea.signal.conf}%
+                    </div>
+                  </div>
+                  <div class="ci-actions">
+                    <button class="ci-track" on:click={() => handleTrack(idea.signal)}>Track</button>
+                    <button class="ci-view" on:click={() => handleTrade(idea.signal)}>View</button>
+                  </div>
+                </div>
+              </article>
+            {/each}
+          </div>
+        {/if}
+      </section>
 
-  {:else if signalsView === 'live'}
-    <div class="signals-live-shell">
-      <LivePanel embedded={true} />
+      <aside class="community-live">
+        <div class="cl-head">
+          <span class="cl-title">⚡ LIVE STREAM</span>
+          <a class="cl-link" href="/terminal">OPEN TERMINAL →</a>
+        </div>
+        <LivePanel embedded={true} variant="stream" />
+      </aside>
     </div>
 
   {:else}
@@ -409,12 +441,118 @@
     background: linear-gradient(180deg, #1a1a0a, #0a0a1a);
   }
 
+  .sig-header {
+    position: relative;
+    padding: 20px 24px;
+    border-bottom: 4px solid #000;
+    background: linear-gradient(135deg, #ff8c3b, #ff6600);
+    overflow: hidden;
+  }
+  .sig-header::after {
+    content: '';
+    position: absolute;
+    right: -10px;
+    top: -10px;
+    width: 110px;
+    height: 110px;
+    background: url('/doge/trade-expressions.png') center/cover no-repeat;
+    opacity: .15;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(1px);
+  }
+  .sh-bg {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 70% 30%, rgba(255,255,255,.2), transparent 60%);
+  }
+  .sh-content { position: relative; z-index: 2; }
+  .sh-title {
+    font-family: var(--fc);
+    font-size: 28px;
+    color: #fff;
+    -webkit-text-stroke: 1px #000;
+    text-shadow: 3px 3px 0 rgba(0,0,0,.3);
+    letter-spacing: 3px;
+  }
+  .sh-top-row { display: flex; align-items: center; gap: 8px; }
+  .sh-live {
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+    color: #000;
+    background: var(--grn);
+    padding: 2px 7px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    border-radius: 4px;
+  }
+  .sh-live-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #000;
+    animation: sh-blink .9s infinite;
+  }
+  @keyframes sh-blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+  .sh-sub {
+    font-family: var(--fm);
+    font-size: 9px;
+    color: rgba(255,255,255,.78);
+    letter-spacing: 1.2px;
+    margin-top: 2px;
+  }
+  .sh-flow {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 7px;
+  }
+  .sh-flow-step {
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,.45);
+    padding: 2px 6px;
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 4px;
+    background: rgba(255,255,255,.03);
+  }
+  .sh-flow-step.active {
+    color: #fff;
+    border-color: var(--pk);
+    background: rgba(255,45,155,.15);
+  }
+  .sh-flow-arrow { font-size: 8px; color: rgba(255,255,255,.2); }
+  .sh-counts {
+    display: flex;
+    gap: 6px;
+    margin-top: 9px;
+    flex-wrap: wrap;
+  }
+  .sh-count {
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: 1.3px;
+    background: #000;
+    color: var(--grn);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .sh-count.arena { color: #ff2d9b; }
+  .sh-count.trade { color: #3b9eff; }
+  .sh-count.tracked { color: #ff8c3b; }
+
   .view-switch {
     display: flex;
     gap: 6px;
-    padding: 10px 16px 6px;
+    padding: 10px 16px 8px;
     border-bottom: 1px solid rgba(255,255,255,.06);
-    background: rgba(0,0,0,.25);
+    background: rgba(0,0,0,.28);
     position: sticky;
     top: 0;
     z-index: 4;
@@ -428,7 +566,7 @@
     border: 1.5px solid rgba(255,255,255,.18);
     background: rgba(255,255,255,.04);
     color: rgba(255,255,255,.55);
-    padding: 6px 10px;
+    padding: 7px 11px;
     cursor: pointer;
     transition: all .12s;
   }
@@ -438,26 +576,41 @@
     border-color: rgba(255,255,255,.65);
   }
 
-  .community-ideas {
-    padding: 12px 16px 18px;
+  .community-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+    gap: 0;
+    min-height: 560px;
     background: linear-gradient(180deg, #c8d3e8 0%, #b9c8e2 100%);
+  }
+  .community-ideas {
+    padding: 14px 16px 18px;
+    border-right: 1px solid rgba(24, 37, 58, .12);
   }
   .ci-head {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 10px;
   }
   .ci-title {
     font-family: var(--fd);
-    font-size: 28px;
+    font-size: 26px;
     color: #151a22;
-    letter-spacing: .5px;
+    letter-spacing: .4px;
+    line-height: 1;
+  }
+  .ci-sub {
+    font-family: var(--fm);
+    font-size: 11px;
+    color: #30405f;
+    margin-top: 5px;
+    letter-spacing: .4px;
   }
   .ci-explore {
     font-family: var(--fm);
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 700;
     color: #1b2538;
     white-space: nowrap;
@@ -470,181 +623,183 @@
   }
   .ci-chip {
     font-family: var(--fm);
-    font-size: 18px;
+    font-size: 12px;
+    font-weight: 700;
     border-radius: 999px;
-    border: none;
-    padding: 8px 16px;
+    border: 1px solid rgba(17, 27, 40, .1);
+    padding: 6px 12px;
     cursor: pointer;
-    background: rgba(255,255,255,.82);
+    background: rgba(255,255,255,.84);
     color: #202634;
+    transition: all .12s;
   }
   .ci-chip.active {
     background: #fff;
     box-shadow: 0 2px 8px rgba(14, 26, 44, .15);
+    border-color: rgba(17, 27, 40, .18);
   }
   .ci-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 14px;
-  }
-  .ci-card {
-    background: rgba(239, 243, 250, .86);
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,.6);
-    min-height: 220px;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
     gap: 12px;
   }
+  .ci-card {
+    background: rgba(239, 243, 250, .9);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.62);
+    min-height: 168px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 1px 6px rgba(19, 30, 49, .08);
+  }
+  .ci-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
   .ci-tf {
-    align-self: flex-start;
     border-radius: 999px;
-    padding: 6px 14px;
+    padding: 4px 10px;
     font-family: var(--fm);
-    font-size: 28px;
+    font-size: 11px;
+    font-weight: 900;
     color: #fff;
     background: #5852ef;
     box-shadow: 0 2px 8px rgba(57, 60, 170, .3);
   }
+  .ci-subs {
+    border-radius: 999px;
+    padding: 4px 9px;
+    font-family: var(--fm);
+    font-size: 10px;
+    color: #586174;
+    background: #f5f7fc;
+    white-space: nowrap;
+  }
   .ci-strategy {
     align-self: flex-start;
     border-radius: 999px;
-    padding: 8px 14px;
+    padding: 6px 10px;
     font-family: var(--fm);
-    font-size: 20px;
-    color: #555;
+    font-size: 11px;
+    color: #4f5665;
     background: #fff;
     box-shadow: 0 2px 8px rgba(27, 38, 58, .1);
     max-width: 100%;
   }
-  .ci-subs {
-    align-self: flex-start;
-    border-radius: 999px;
-    padding: 6px 12px;
-    font-family: var(--fm);
-    font-size: 18px;
-    color: #646b78;
-    background: #f5f7fc;
-  }
   .ci-bottom {
     margin-top: auto;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
     gap: 8px;
   }
   .ci-pair {
     font-family: var(--fd);
-    font-size: 26px;
+    font-size: 18px;
     color: #1a1f2a;
+    line-height: 1.1;
   }
   .ci-dir {
     font-family: var(--fm);
-    font-size: 16px;
-    margin-top: 2px;
+    font-size: 10px;
+    margin-top: 4px;
+    font-weight: 700;
   }
   .ci-dir.long { color: #0d9f59; }
   .ci-dir.short { color: #d64866; }
+  .ci-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ci-track,
   .ci-view {
     border: none;
     border-radius: 999px;
-    padding: 10px 18px;
+    padding: 7px 12px;
     font-family: var(--fm);
-    font-size: 20px;
+    font-size: 11px;
     font-weight: 800;
-    color: #fff;
-    background: linear-gradient(135deg, #6778ff, #6b5fe9);
     cursor: pointer;
   }
-
-  .signals-live-shell {
-    height: calc(100% - 54px);
-    min-height: 520px;
-    overflow: auto;
-    background: #06111f;
+  .ci-track {
+    background: rgba(255, 140, 59, .14);
+    color: #9d4a0c;
+    border: 1px solid rgba(218, 117, 45, .35);
   }
-
-  .sig-header {
-    position: relative;
-    padding: 20px 24px;
-    border-bottom: 4px solid #000;
-    background: linear-gradient(135deg, #ff8c3b, #ff6600);
-    overflow: hidden;
-  }
-  .sig-header::after {
-    content: '';
-    position: absolute;
-    right: -10px; top: -10px;
-    width: 110px; height: 110px;
-    background: url('/doge/trade-expressions.png') center/cover no-repeat;
-    opacity: .15;
-    border-radius: 50%;
-    pointer-events: none;
-    filter: blur(1px);
-  }
-  .sh-bg { position: absolute; inset: 0; background: radial-gradient(circle at 70% 30%, rgba(255,255,255,.2), transparent 60%); }
-  .sh-content { position: relative; z-index: 2; }
-  .sh-title {
-    font-family: var(--fc);
-    font-size: 28px;
+  .ci-view {
     color: #fff;
-    -webkit-text-stroke: 1px #000;
-    text-shadow: 3px 3px 0 rgba(0,0,0,.3);
-    letter-spacing: 3px;
+    background: linear-gradient(135deg, #6778ff, #6b5fe9);
   }
-  .sh-top-row { display: flex; align-items: center; gap: 8px; }
-  .sh-live {
-    font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 2px;
-    color: #000; background: var(--grn); padding: 2px 6px;
-    display: flex; align-items: center; gap: 3px; border-radius: 4px;
+
+  .community-live {
+    background: linear-gradient(180deg, #0c1e32 0%, #08111f 100%);
+    border-left: 1px solid rgba(255,255,255,.06);
+    min-height: 100%;
   }
-  .sh-live-dot { width: 4px; height: 4px; border-radius: 50%; background: #000; animation: sh-blink .9s infinite; }
-  @keyframes sh-blink { 0%,100%{opacity:1} 50%{opacity:.2} }
-  .sh-sub { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.7); letter-spacing: 2px; margin-top: 2px; }
-  .sh-flow {
-    display: flex; align-items: center; gap: 4px;
-    margin-top: 6px; margin-bottom: 2px;
+  .cl-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 12px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+    background: rgba(0,0,0,.2);
   }
-  .sh-flow-step {
-    font-family: var(--fm); font-size: 7px; font-weight: 700; letter-spacing: 1px;
-    color: rgba(255,255,255,.4); padding: 2px 6px;
-    border: 1px solid rgba(255,255,255,.1); border-radius: 4px;
-    background: rgba(255,255,255,.03);
+  .cl-title {
+    font-family: var(--fd);
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--yel);
   }
-  .sh-flow-step.active {
-    color: #fff; border-color: var(--pk); background: rgba(255,45,155,.15);
+  .cl-link {
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 700;
+    color: #86d1ff;
+    text-decoration: none;
+    letter-spacing: 1px;
   }
-  .sh-flow-arrow { font-size: 8px; color: rgba(255,255,255,.2); }
-  .sh-counts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-  .sh-count {
-    font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 1.5px;
-    background: #000; color: var(--grn); padding: 2px 8px; border-radius: 4px;
-  }
-  .sh-count.arena { color: #ff2d9b; }
-  .sh-count.trade { color: #3b9eff; }
-  .sh-count.tracked { color: #ff8c3b; }
+  .cl-link:hover { text-decoration: underline; }
 
   .filter-bar {
-    display: flex; gap: 4px; padding: 8px 16px;
+    display: flex;
+    gap: 4px;
+    padding: 8px 16px;
     border-bottom: 2px solid rgba(255,255,255,.05);
     overflow-x: auto;
   }
   .filter-btn {
-    font-family: var(--fm); font-size: 7px; font-weight: 700; letter-spacing: 1px;
-    padding: 3px 8px; border-radius: 6px;
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 3px 8px;
+    border-radius: 6px;
     border: 1.5px solid rgba(255,255,255,.1);
     background: rgba(255,255,255,.03);
     color: rgba(255,255,255,.4);
-    cursor: pointer; transition: all .15s; white-space: nowrap;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
   }
   .filter-btn.active {
-    background: var(--ora); color: #000; border-color: var(--ora);
+    background: var(--ora);
+    color: #000;
+    border-color: var(--ora);
     box-shadow: 0 0 8px rgba(255,140,59,.3);
   }
 
-  .signal-list { padding: 10px 16px; display: flex; flex-direction: column; gap: 6px; }
-
+  .signal-list {
+    padding: 10px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
   .signal-card {
     display: flex;
     border: 2px solid rgba(255,255,255,.06);
@@ -657,35 +812,57 @@
   .signal-card.inactive { opacity: .5; }
   .sig-strip { width: 3px; flex-shrink: 0; }
   .sig-body { flex: 1; padding: 8px 10px; }
-
   .sig-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
   .sig-source {
-    font-family: var(--fm); font-size: 6px; font-weight: 900; letter-spacing: 1px;
-    padding: 1px 5px; border: 1px solid; border-radius: 3px;
+    font-family: var(--fm);
+    font-size: 6px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    padding: 1px 5px;
+    border: 1px solid;
+    border-radius: 3px;
   }
   .sig-agent { display: flex; align-items: center; gap: 3px; }
-  .sig-agent-img { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,.1); object-fit: cover; }
+  .sig-agent-img {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,.1);
+    object-fit: cover;
+  }
   .sig-agent-name { font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: .5px; }
   .sig-pair { font-family: var(--fd); font-size: 11px; font-weight: 900; color: #fff; }
   .sig-priority {
-    font-family: var(--fm); font-size: 6px; font-weight: 900; letter-spacing: 1px;
-    padding: 1px 5px; border: 1px solid; border-radius: 3px;
+    font-family: var(--fm);
+    font-size: 6px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    padding: 1px 5px;
+    border: 1px solid;
+    border-radius: 3px;
   }
   .sig-time { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.2); margin-left: auto; }
-
   .sig-direction { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
   .sig-dir-badge {
-    font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px;
-    padding: 2px 6px; border: 1.5px solid; border-radius: 4px;
+    font-family: var(--fm);
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    padding: 2px 6px;
+    border: 1.5px solid;
+    border-radius: 4px;
   }
   .sig-dir-badge.long { color: var(--grn); border-color: rgba(0,255,136,.4); background: rgba(0,255,136,.08); }
   .sig-dir-badge.short { color: var(--red); border-color: rgba(255,45,85,.4); background: rgba(255,45,85,.08); }
   .sig-conf { font-family: var(--fm); font-size: 8px; font-weight: 700; color: var(--yel); }
   .sig-rr { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.4); }
-
   .sig-levels {
-    display: flex; gap: 12px; margin-bottom: 4px;
-    padding: 4px 6px; background: rgba(255,255,255,.02); border-radius: 4px;
+    display: flex;
+    gap: 12px;
+    margin-bottom: 4px;
+    padding: 4px 6px;
+    background: rgba(255,255,255,.02);
+    border-radius: 4px;
   }
   .sig-level { display: flex; flex-direction: column; }
   .sl-label { font-family: var(--fm); font-size: 6px; color: rgba(255,255,255,.25); }
@@ -693,29 +870,92 @@
   .sl-val.entry { color: #fff; }
   .sl-val.tp { color: var(--grn); }
   .sl-val.sl { color: var(--red); }
-
   .sig-reason { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.4); line-height: 1.4; margin-bottom: 4px; }
-
   .sig-actions { display: flex; gap: 4px; }
   .sig-btn {
-    font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 1px;
-    padding: 4px 10px; border-radius: 5px;
-    cursor: pointer; transition: all .15s;
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all .15s;
   }
   .sig-btn.track {
-    background: rgba(255,140,59,.1); color: var(--ora);
+    background: rgba(255,140,59,.1);
+    color: var(--ora);
     border: 1.5px solid rgba(255,140,59,.3);
   }
   .sig-btn.track:hover { background: rgba(255,140,59,.2); }
   .sig-btn.copy-trade {
-    background: var(--grn); color: #000;
+    background: var(--grn);
+    color: #000;
     border: 2px solid #000;
-    font-weight: 900; letter-spacing: 1.5px;
-    padding: 5px 14px; border-radius: 6px;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+    padding: 5px 14px;
+    border-radius: 6px;
     box-shadow: 2px 2px 0 #000;
     transition: all .12s;
   }
   .sig-btn.copy-trade:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 #000; }
 
-  /* Empty state handled by EmptyState component */
+  @media (max-width: 1200px) {
+    .community-layout {
+      grid-template-columns: 1fr;
+    }
+    .community-ideas {
+      border-right: none;
+      border-bottom: 1px solid rgba(24, 37, 58, .12);
+    }
+    .community-live {
+      min-height: 420px;
+    }
+  }
+
+  @media (max-width: 820px) {
+    .sig-header {
+      padding: 16px 14px;
+    }
+    .sh-title {
+      font-size: 23px;
+      letter-spacing: 2px;
+    }
+    .sh-live {
+      letter-spacing: 1px;
+    }
+    .sh-flow {
+      flex-wrap: wrap;
+    }
+    .view-switch,
+    .community-ideas,
+    .signal-list {
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+    .ci-head {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .ci-explore {
+      white-space: normal;
+    }
+    .ci-grid {
+      grid-template-columns: 1fr;
+    }
+    .ci-bottom {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 9px;
+    }
+    .ci-actions {
+      width: 100%;
+    }
+    .ci-track,
+    .ci-view {
+      flex: 1;
+    }
+  }
 </style>

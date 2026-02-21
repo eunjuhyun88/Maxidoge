@@ -1,7 +1,4 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
-  import { get } from 'svelte/store';
   import { gameState } from '$lib/stores/gameState';
   import { agentStats, addXP } from '$lib/stores/agentData';
   import { AGDEFS, SOURCES } from '$lib/data/agents';
@@ -10,7 +7,6 @@
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, startGameLoop, resetPhaseInit } from '$lib/engine/gameLoop';
   import { calculateLP, determineConsensus } from '$lib/engine/scoring';
   import Lobby from '../../components/arena/Lobby.svelte';
-  import LivePanel from '../../components/live/LivePanel.svelte';
   import ChartPanel from '../../components/arena/ChartPanel.svelte';
   import HypothesisPanel from '../../components/arena/HypothesisPanel.svelte';
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
@@ -48,7 +44,6 @@
   let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = [];
   let historyOpen = false;
   let matchHistoryOpen = false;
-  let arenaMode: 'battle' | 'live' = 'battle';
 
   // Squad Config handlers
   function onSquadDeploy(e: CustomEvent<{ config: import('$lib/stores/gameState').SquadConfig }>) {
@@ -67,16 +62,6 @@
   function onSquadBack() {
     // Go back to lobby
     gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'standby' }));
-  }
-
-  function switchArenaMode(mode: 'battle' | 'live') {
-    arenaMode = mode;
-    void goto(mode === 'live' ? '/arena?tab=live' : '/arena', {
-      replaceState: true,
-      noScroll: true,
-      keepFocus: true,
-      invalidateAll: false
-    });
   }
 
   // ═══════ HYPOTHESIS STATE ═══════
@@ -937,10 +922,6 @@
 
   onMount(() => {
     setPhaseInitCallback(onPhaseInit);
-    const tab = get(page).url.searchParams.get('tab');
-    if (tab === 'live') {
-      arenaMode = 'live';
-    }
   });
 
   onDestroy(() => {
@@ -953,45 +934,31 @@
 </script>
 
 <div class="arena-page">
-  <div class="arena-live-switch">
-    <button class="als-btn" class:active={arenaMode === 'battle'} on:click={() => switchArenaMode('battle')}>
-      ⚔️ ARENA
-    </button>
-    <button class="als-btn" class:active={arenaMode === 'live'} on:click={() => switchArenaMode('live')}>
-      📡 LIVE
-    </button>
-  </div>
-
-  {#if arenaMode === 'live'}
-    <div class="merged-live-shell">
-      <LivePanel embedded={true} />
-    </div>
-  {:else}
-    <!-- Wallet Gate Overlay -->
-    {#if !walletOk}
-      <div class="wallet-gate">
-        <div class="wg-card">
-          <div class="wg-icon">🔗</div>
-          <div class="wg-title">CONNECT WALLET</div>
-          <div class="wg-sub">Connect your wallet to access the Arena and start trading battles</div>
-          <button class="wg-btn" on:click={connectWallet}>
-            <span>⚡</span> CONNECT WALLET
-          </button>
-          <div class="wg-hint">Supported: MetaMask · WalletConnect · Coinbase</div>
-        </div>
+  <!-- Wallet Gate Overlay -->
+  {#if !walletOk}
+    <div class="wallet-gate">
+      <div class="wg-card">
+        <div class="wg-icon">🔗</div>
+        <div class="wg-title">CONNECT WALLET</div>
+        <div class="wg-sub">Connect your wallet to access the Arena and start trading battles</div>
+        <button class="wg-btn" on:click={connectWallet}>
+          <span>⚡</span> CONNECT WALLET
+        </button>
+        <div class="wg-hint">Supported: MetaMask · WalletConnect · Coinbase</div>
       </div>
-    {/if}
+    </div>
+  {/if}
 
-    {#if state.inLobby}
-      <Lobby />
-    {:else if state.phase === 'config'}
-      <SquadConfig selectedAgents={state.selectedAgents} on:deploy={onSquadDeploy} on:back={onSquadBack} />
-    {:else}
-      <!-- Match History Toggle -->
-      <button class="mh-toggle" on:click={() => matchHistoryOpen = !matchHistoryOpen}>
-        📋 {state.wins}W-{state.losses}L
-      </button>
-      <MatchHistory visible={matchHistoryOpen} on:close={() => matchHistoryOpen = false} />
+  {#if state.inLobby}
+    <Lobby />
+  {:else if state.phase === 'config'}
+    <SquadConfig selectedAgents={state.selectedAgents} on:deploy={onSquadDeploy} on:back={onSquadBack} />
+  {:else}
+    <!-- Match History Toggle -->
+    <button class="mh-toggle" on:click={() => matchHistoryOpen = !matchHistoryOpen}>
+      📋 {state.wins}W-{state.losses}L
+    </button>
+    <MatchHistory visible={matchHistoryOpen} on:close={() => matchHistoryOpen = false} />
 
       <div class="battle-layout">
       <!-- ═══════ LEFT: CHART ═══════ -->
@@ -1390,7 +1357,7 @@
         {/if}
       </div>
     </div>
-    {/if}
+  {/if}
   {/if}
 </div>
 

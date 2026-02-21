@@ -1,5 +1,6 @@
 <script lang="ts">
   export let embedded = false;
+  export let variant: 'full' | 'stream' = 'full';
 
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
   import { gameState } from '$lib/stores/gameState';
@@ -17,6 +18,7 @@
   $: trades = $openTrades;
   $: tracked = $activeSignals;
   $: profile = $userProfileStore;
+  $: isStream = embedded && variant === 'stream';
 
   // Live price ticker
   let prices: Array<{ symbol: string; price: string; change: string; up: boolean }> = [];
@@ -126,44 +128,46 @@
   }
 </script>
 
-<div class="live-page">
+<div class="live-page" class:stream={isStream}>
   {#if !embedded}
     <ContextBanner page="live" />
   {/if}
-  <div class="live-header">
-    <div class="lh-bg"></div>
-    <div class="lh-content">
-      <h1 class="lh-title">LIVE</h1>
-      <p class="lh-sub">Your arena sessions, trades & agent activity</p>
-      <div class="lh-stats">
-        <span class="lh-stat"><span class="lh-dot"></span> {trades.length} OPEN TRADES</span>
-        <span class="lh-stat">📌 {tracked.length} TRACKED</span>
-        <span class="lh-stat">⚔️ {records.length} MATCHES</span>
+  {#if !isStream}
+    <div class="live-header">
+      <div class="lh-bg"></div>
+      <div class="lh-content">
+        <h1 class="lh-title">LIVE</h1>
+        <p class="lh-sub">Your arena sessions, trades & agent activity</p>
+        <div class="lh-stats">
+          <span class="lh-stat"><span class="lh-dot"></span> {trades.length} OPEN TRADES</span>
+          <span class="lh-stat">📌 {tracked.length} TRACKED</span>
+          <span class="lh-stat">⚔️ {records.length} MATCHES</span>
+        </div>
       </div>
     </div>
-  </div>
+    <div class="price-ticker">
+      {#each prices as p}
+        <div class="pt-item">
+          <span class="pt-symbol">{p.symbol}</span>
+          <span class="pt-price">{p.price}</span>
+          <span class="pt-change" class:up={p.up} class:down={!p.up}>{p.change}</span>
+        </div>
+      {/each}
+    </div>
+  {/if}
 
-  <!-- Live Price Ticker -->
-  <div class="price-ticker">
-    {#each prices as p}
-      <div class="pt-item">
-        <span class="pt-symbol">{p.symbol}</span>
-        <span class="pt-price">{p.price}</span>
-        <span class="pt-change" class:up={p.up} class:down={!p.up}>{p.change}</span>
-      </div>
-    {/each}
-  </div>
-
-  <div class="live-body">
+  <div class="live-body" class:stream={isStream}>
     <!-- Recent Sessions -->
     <div class="live-section">
       <div class="ls-header">
         <span class="ls-title">⚔️ RECENT ARENA SESSIONS</span>
-        <a href="/arena" class="ls-link">VIEW ALL →</a>
+        {#if !isStream}
+          <a href="/arena" class="ls-link">VIEW ALL →</a>
+        {/if}
       </div>
       {#if records.length > 0}
         <div class="session-grid">
-          {#each records.slice(0, 3) as match (match.id)}
+          {#each records.slice(0, isStream ? 2 : 3) as match (match.id)}
             <div class="session-card" class:win={match.win} class:loss={!match.win}>
               <div class="sc-header">
                 <span class="sc-result" class:win={match.win}>{match.win ? '🏆 WIN' : '💀 LOSS'}</span>
@@ -211,7 +215,7 @@
       </div>
       {#if activityFeed.length > 0}
         <div class="activity-feed">
-          {#each activityFeed as item (item.id)}
+          {#each (isStream ? activityFeed.slice(0, 10) : activityFeed) as item (item.id)}
             <div class="af-item">
               <span class="af-icon">{item.icon}</span>
               <div class="af-content">
@@ -237,18 +241,18 @@
     </div>
   </div>
 
-  <!-- Reaction Bar -->
-  <div class="reaction-bar">
-    {#each ['🔥', '🐕', '💎', '🚀', '😂', '👑', '⚡', '💀'] as emoji}
-      <button class="reaction-btn" on:click={() => sendReaction(emoji)}>{emoji}</button>
-    {/each}
-    <button class="join-arena-btn" on:click={() => goto('/arena')}>⚔️ JOIN ARENA</button>
-  </div>
+  {#if !isStream}
+    <div class="reaction-bar">
+      {#each ['🔥', '🐕', '💎', '🚀', '😂', '👑', '⚡', '💀'] as emoji}
+        <button class="reaction-btn" on:click={() => sendReaction(emoji)}>{emoji}</button>
+      {/each}
+      <button class="join-arena-btn" on:click={() => goto('/arena')}>⚔️ JOIN ARENA</button>
+    </div>
 
-  <!-- Floating Reactions -->
-  {#each reactions as r (r.id)}
-    <div class="floating-reaction" style="left:{r.x}%;bottom:{r.y}%">{r.emoji}</div>
-  {/each}
+    {#each reactions as r (r.id)}
+      <div class="floating-reaction" style="left:{r.x}%;bottom:{r.y}%">{r.emoji}</div>
+    {/each}
+  {/if}
 </div>
 
 <style>
@@ -257,6 +261,12 @@
     overflow-y: auto;
     background: linear-gradient(180deg, #0a1a2e, #0a0a1a);
     position: relative;
+  }
+  .live-page.stream {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+    background: transparent;
   }
 
   .live-header {
@@ -308,8 +318,10 @@
 
   /* Body */
   .live-body { padding: 12px 16px; }
+  .live-body.stream { padding: 10px 10px 12px; }
 
   .live-section { margin-bottom: 16px; }
+  .live-page.stream .live-section { margin-bottom: 12px; }
   .ls-header {
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 8px;
@@ -326,6 +338,7 @@
 
   /* Session Cards */
   .session-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .live-page.stream .session-grid { grid-template-columns: 1fr; gap: 6px; }
   .session-card {
     background: rgba(255,255,255,.03);
     border: 2px solid rgba(255,255,255,.06);
@@ -333,6 +346,7 @@
     padding: 10px 12px;
     transition: all .15s;
   }
+  .live-page.stream .session-card { padding: 8px 10px; }
   .session-card:hover { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.1); }
   .session-card.win { border-left: 3px solid var(--grn); }
   .session-card.loss { border-left: 3px solid var(--red); }
@@ -360,6 +374,7 @@
     border-radius: 6px;
     transition: background .1s;
   }
+  .live-page.stream .af-item { padding: 5px 6px; }
   .af-item:hover { background: rgba(255,255,255,.03); }
   .af-icon { font-size: 14px; flex-shrink: 0; }
   .af-content { flex: 1; min-width: 0; }
