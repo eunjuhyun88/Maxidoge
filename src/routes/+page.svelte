@@ -23,45 +23,27 @@
 </script>
 
 <div class="home">
-  <!-- ═══ PSYCHEDELIC HERO ═══ -->
+  <!-- ═══ BLOCK PARTY HERO ═══ -->
   <section class="hero">
-    <!-- Rainbow swirl background -->
-    <div class="bg-layer">
-      <div class="bg-rainbow"></div>
-      <div class="bg-rainbow bg-rainbow2"></div>
-      <div class="bg-starburst"></div>
-      <div class="bg-halftone"></div>
-      <div class="bg-dots"></div>
-      <div class="bg-vignette"></div>
+    <!-- Scattered pop-art deco elements -->
+    <div class="deco-layer">
+      <img class="d d-burst-tl" src="/blockparty/deco-bursts.png" alt="" />
+      <img class="d d-burst-tr" src="/blockparty/deco-bursts.png" alt="" />
+      <img class="d d-cloud-l" src="/blockparty/deco-clouds.png" alt="" />
+      <img class="d d-cloud-r" src="/blockparty/deco-clouds-halftone.png" alt="" />
+      <img class="d d-star" src="/blockparty/deco-stars.png" alt="" />
+      <img class="d d-sparkle" src="/blockparty/deco-sparkles.png" alt="" />
+      <img class="d d-ball" src="/blockparty/deco-pow-doge.png" alt="" />
+      <img class="d d-glasses" src="/blockparty/deco-ball-glasses.png" alt="" />
+      <img class="d d-cam" src="/blockparty/deco-coin-camera.png" alt="" />
+      <img class="d d-halftone" src="/blockparty/deco-coin-doge-big.png" alt="" />
+      <img class="d d-pow" src="/blockparty/deco-halftone-blob.png" alt="" />
+      <img class="d d-coins" src="/blockparty/deco-top-doges.png" alt="" />
+      <img class="d d-doge-fly" src="/blockparty/deco-doge-cloud.png" alt="" />
+      <img class="d d-heart" src="/blockparty/deco-heart-doge.png" alt="" />
     </div>
 
-    <!-- Floating doge army -->
-    <div class="floaters">
-      <img class="float-doge fd1" src="/doge/sticker-grin.png" alt="" loading="lazy" />
-      <img class="float-doge fd2" src="/doge/meme-buff.png" alt="" loading="lazy" />
-      <img class="float-doge fd3" src="/doge/badge-rocket.png" alt="" loading="lazy" />
-      <img class="float-doge fd4" src="/doge/sticker-heart.png" alt="" loading="lazy" />
-    </div>
-
-    <!-- Comic POW/BOOM effects -->
-    <div class="comic-fx">
-      <span class="comic-pop pop1">WOW!</span>
-      <span class="comic-pop pop2">MUCH TRADE!</span>
-      <span class="comic-pop pop3">BOOM!</span>
-      <span class="comic-pop pop4">TO THE MOON!</span>
-      <span class="comic-pop pop5">SUCH PROFIT!</span>
-      <span class="comic-pop pop6">POW!</span>
-    </div>
-
-    <!-- Large hero doge -->
-    <div class="hero-doge-left">
-      <img src="/doge/meme-bodybuilder.png" alt="" class="hd-img" />
-    </div>
-    <div class="hero-doge-right">
-      <img src="/doge/trade-pump.png" alt="" class="hd-img" />
-    </div>
-
-    <!-- Content -->
+    <!-- Center content -->
     <div class="hero-content">
       <div class="hero-badge">AI AGENT TRADING PLATFORM</div>
       <h1 class="hero-title">
@@ -302,150 +284,52 @@
   .home::-webkit-scrollbar { width: 4px; }
   .home::-webkit-scrollbar-thumb { background: var(--yel); border-radius: 4px; }
 
-  /* ═══ PSYCHEDELIC HERO ═══ */
+  /* ═══ BLOCK PARTY HERO ═══ */
   .hero {
     position: relative;
-    padding: 60px 24px 45px;
     text-align: center;
     overflow: hidden;
-    min-height: 400px;
     display: flex;
     align-items: center;
     justify-content: center;
+    background: #000;
     border-bottom: 5px solid #000;
-    background: #ffe040;
-    contain: layout style paint;
+    min-height: 420px;
+    padding: 50px 24px 35px;
   }
 
-  /* ── Bright rainbow background layers ── */
-  .bg-layer { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+  /* ── Scattered deco elements ── */
+  .deco-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+  .d { position: absolute; object-fit: contain; }
 
-  .bg-rainbow {
-    position: absolute; inset: -40%;
-    width: 180%; height: 180%;
-    background: conic-gradient(from 0deg at 50% 50%,
-      #ff2d9b, #ff6b35, #ffe600, #39ff14, #00d4ff, #8b5cf6, #ff2d9b);
-    opacity: .35;
-    contain: strict;
-  }
-  .bg-rainbow2 {
-    background: conic-gradient(from 180deg at 35% 65%,
-      #00ff88, #ff8c3b, #3b9eff, #ff2d55, #ffe600, #00ff88);
-    opacity: .25;
-  }
-
-  .bg-starburst {
-    position: absolute; inset: -50%;
-    width: 200%; height: 200%;
-    background: repeating-conic-gradient(from 0deg,
-      rgba(255,255,255,0) 0deg, rgba(255,255,255,0) 5deg,
-      rgba(255,255,255,.12) 5deg, rgba(255,255,255,.12) 7deg);
-    contain: strict;
-  }
-
-  .bg-halftone {
-    position: absolute; inset: 0;
-    background:
-      radial-gradient(circle at 50% 100%, rgba(255,45,155,.4) 0%, transparent 45%),
-      radial-gradient(circle at 10% 10%, rgba(0,212,255,.3) 0%, transparent 30%),
-      radial-gradient(circle at 90% 15%, rgba(139,92,246,.3) 0%, transparent 30%),
-      radial-gradient(circle at 50% 50%, rgba(255,107,53,.15) 0%, transparent 50%);
-  }
-
-  .bg-dots {
-    position: absolute; inset: 0;
-    background-image: radial-gradient(circle, rgba(0,0,0,.04) 1.5px, transparent 1.5px);
-    background-size: 12px 12px;
-  }
-
-  .bg-vignette {
-    position: absolute; inset: 0;
-    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,.15) 100%);
-  }
-
-  /* ── Floating doge army ── */
-  .floaters { position: absolute; inset: 0; pointer-events: none; z-index: 2; contain: layout style; }
-  .float-doge {
-    position: absolute;
-    object-fit: contain;
-  }
-  .fd1  { left: 2%; top: 8%; width: 85px; opacity: .85; }
-  .fd2  { right: 3%; top: 5%; width: 72px; opacity: .75; transform: scaleX(-1); }
-  .fd3  { right: 12%; bottom: 8%; width: 78px; opacity: .8; }
-  .fd4  { left: 8%; bottom: 12%; width: 58px; opacity: .7; }
-
-  /* ── Comic FX ── */
-  .comic-fx { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
-  .comic-pop {
-    position: absolute;
-    font-family: var(--fc);
-    font-weight: 900;
-    letter-spacing: 3px;
-    -webkit-text-stroke: 3px #000;
-    paint-order: stroke fill;
-    opacity: .7;
-  }
-  .pop1 {
-    top: 6%; left: 3%;
-    font-size: 38px;
-    color: #fff;
-    text-shadow: 4px 4px 0 #000;
-    transform: rotate(-12deg);
-  }
-  .pop2 {
-    bottom: 6%; right: 2%;
-    font-size: 22px;
-    color: #fff;
-    text-shadow: 3px 3px 0 #ff2d9b;
-    transform: rotate(6deg);
-  }
-  .pop3 {
-    top: 12%; right: 4%;
-    font-size: 32px;
-    color: #fff;
-    text-shadow: 4px 4px 0 #ff6b35;
-    transform: rotate(-8deg);
-  }
-  .pop4 {
-    bottom: 18%; left: 1%;
-    font-size: 18px;
-    color: #fff;
-    text-shadow: 3px 3px 0 #8b5cf6;
-    transform: rotate(10deg);
-  }
-  .pop5 {
-    top: 48%; right: 6%;
-    font-size: 20px;
-    color: #fff;
-    text-shadow: 3px 3px 0 #00d4ff;
-    transform: rotate(-5deg);
-  }
-  .pop6 {
-    top: 42%; left: 4%;
-    font-size: 26px;
-    color: #fff;
-    text-shadow: 4px 4px 0 #8b5cf6;
-    transform: rotate(15deg);
-  }
-
-  /* ── Hero Doge characters ── */
-  .hero-doge-left, .hero-doge-right {
-    position: absolute;
-    z-index: 4;
-    pointer-events: none;
-  }
-  .hero-doge-left {
-    left: 10px; bottom: 10px;
-    width: 130px; height: 130px;
-  }
-  .hero-doge-right {
-    right: 10px; bottom: 15px;
-    width: 110px; height: 110px;
-  }
-  .hd-img {
-    width: 100%; height: 100%;
-    object-fit: contain;
-  }
+  /* Top-left bursts */
+  .d-burst-tl { left: -2%; top: -5%; width: 160px; opacity: .8; transform: rotate(-10deg); }
+  /* Top-right bursts (flipped) */
+  .d-burst-tr { right: -2%; top: -5%; width: 140px; opacity: .7; transform: scaleX(-1) rotate(5deg); }
+  /* Pink clouds left */
+  .d-cloud-l { left: -3%; top: 30%; width: 160px; opacity: .6; }
+  /* Pink clouds + halftone right */
+  .d-cloud-r { right: -4%; bottom: 15%; width: 180px; opacity: .5; }
+  /* Star cluster top-left */
+  .d-star { left: 5%; top: 8%; width: 90px; opacity: .8; }
+  /* Sparkles bottom-right */
+  .d-sparkle { right: 8%; bottom: 8%; width: 80px; opacity: .85; }
+  /* Basketball top-right */
+  .d-ball { right: 4%; top: 5%; width: 110px; opacity: .75; transform: rotate(10deg); }
+  /* Sunglasses + ball mid-left */
+  .d-glasses { left: 2%; bottom: 5%; width: 130px; opacity: .65; }
+  /* Coin + camera bottom center-right */
+  .d-cam { right: 15%; bottom: 0; width: 100px; opacity: .6; }
+  /* Halftone blob mid-right */
+  .d-halftone { right: 0; top: 40%; width: 120px; opacity: .4; }
+  /* POW / ZAP mid-left */
+  .d-pow { left: 0; bottom: 25%; width: 170px; opacity: .55; }
+  /* DOGE coins top center */
+  .d-coins { left: 50%; top: 0; width: 140px; opacity: .7; transform: translateX(-50%); }
+  /* Flying doge + cloud top-right */
+  .d-doge-fly { right: 0; top: 12%; width: 150px; opacity: .8; }
+  /* Heart DOGE coin bottom-left */
+  .d-heart { left: 12%; bottom: 2%; width: 90px; opacity: .75; }
 
   /* ── Hero Content ── */
   .hero-content { position: relative; z-index: 5; }
@@ -461,55 +345,48 @@
     box-shadow: 3px 3px 0 #000;
     padding: 5px 18px;
     border-radius: 20px;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
   }
 
   .hero-title {
     font-family: var(--fd);
-    font-size: 64px;
+    font-size: 72px;
     font-weight: 900;
     letter-spacing: 8px;
     line-height: 1;
     margin-bottom: 12px;
+    filter: drop-shadow(4px 4px 0 rgba(0,0,0,.8));
   }
   .title-maxi {
-    color: #fff;
-    text-shadow: 5px 5px 0 #000, -2px -2px 0 #ff2d9b;
-    -webkit-text-stroke: 2px #000;
+    color: #f5e6c8;
+    -webkit-text-stroke: 3px #000;
+    paint-order: stroke fill;
   }
   .title-bolt {
-    color: #ff2d9b;
-    text-shadow: 5px 5px 0 #000;
-    -webkit-text-stroke: 2px #000;
+    color: #ffe600;
+    -webkit-text-stroke: 3px #000;
+    paint-order: stroke fill;
     animation: boltFlash 1.5s ease infinite;
     display: inline-block;
-    font-size: 72px;
+    font-size: 80px;
   }
   @keyframes boltFlash {
     0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: .8; transform: scale(1.15); }
+    50% { opacity: .85; transform: scale(1.15); }
   }
   .title-doge {
-    color: #ff2d9b;
-    text-shadow: 5px 5px 0 #000;
-    -webkit-text-stroke: 2px #000;
+    color: #f5e6c8;
+    -webkit-text-stroke: 3px #000;
+    paint-order: stroke fill;
   }
 
   .hero-sub {
     font-family: var(--fb);
-    font-size: 14px;
-    color: #000;
+    font-size: 13px;
+    color: rgba(255,255,255,.6);
     font-weight: 700;
     letter-spacing: 2px;
     margin-bottom: 12px;
-    text-shadow: none;
-    background: rgba(255,255,255,.5);
-    display: block;
-    padding: 4px 16px;
-    border-radius: 8px;
-    width: fit-content;
-    margin-left: auto;
-    margin-right: auto;
   }
 
   /* ── Ticker ── */
@@ -517,12 +394,10 @@
     display: inline-flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 16px;
-    background: #000;
-    border: 3px solid #000;
+    background: rgba(255,255,255,.06);
+    border: 2px solid rgba(255,255,255,.1);
     border-radius: 30px;
     padding: 8px 24px;
-    box-shadow: 4px 4px 0 rgba(0,0,0,.3);
   }
   .tick-item { display: flex; align-items: center; gap: 5px; }
   .tick-coin { font-size: 16px; color: #f7931a; }
@@ -866,18 +741,27 @@
 
   /* ═══ RESPONSIVE ═══ */
   @media (max-width: 640px) {
-    .hero { padding: 35px 16px 30px; min-height: 280px; }
-    .hero-title { font-size: 42px; letter-spacing: 4px; }
-    .title-bolt { font-size: 48px; }
-    .hero-sub { font-size: 11px; padding: 3px 12px; }
-    .hero-doge-left { width: 80px; height: 80px; left: 5px; bottom: 5px; }
-    .hero-doge-right { width: 70px; height: 70px; right: 5px; bottom: 8px; }
+    .hero { min-height: 320px; padding: 35px 16px 25px; }
+    .hero-title { font-size: 46px; letter-spacing: 4px; }
+    .title-bolt { font-size: 52px; }
+    .hero-sub { font-size: 10px; }
+    .hero-ticker { padding: 6px 14px; gap: 8px; }
+    .tick-price { font-size: 12px; }
+    .tick-label { font-size: 7px; }
+    .d-burst-tl, .d-burst-tr { width: 100px !important; }
+    .d-cloud-l { width: 100px !important; }
+    .d-cloud-r { width: 110px !important; }
+    .d-ball { width: 70px !important; }
+    .d-doge-fly { width: 100px !important; }
+    .d-pow { width: 110px !important; }
+    .d-coins { width: 90px !important; }
+    .d-glasses { width: 80px !important; }
+    .d-heart { width: 60px !important; }
     .stats-strip { padding: 10px 12px; }
     .ss-item { padding: 0 14px; }
     .ss-v { font-size: 16px; }
     .flow-section { padding: 14px; }
     .flow-card { padding: 14px 14px 12px; }
     .fc-name { font-size: 18px; letter-spacing: 2px; }
-    .comic-pop { font-size: 60% !important; }
   }
 </style>
