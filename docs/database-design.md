@@ -1,5 +1,10 @@
 # Database Design (PostgreSQL)
 
+> Note (2026-02-21): This document describes the old `app_users/auth_sessions` naming model.
+> For the current runtime-aligned redesign based on page interactions, see:
+> - `docs/schema-redesign-analysis.md`
+> - `db/migrations/0002_unify_legacy_plus_events.sql`
+
 이 문서는 MAXI-DOGE의 현재 in-memory/localStorage 상태를 서버 DB로 옮기기 위한 기준 스키마입니다.
 
 ## 1) Design Goals
