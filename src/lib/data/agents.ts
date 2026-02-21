@@ -164,6 +164,47 @@ export const AGDEFS: AgentDef[] = [
   }
 ];
 
+// ═══ Reaction expression images — used for flying reactions in battle ═══
+// Each reaction type maps to an array of doge expression PNGs
+export const REACTION_EXPRESSIONS = {
+  // Positive/bullish reactions
+  excited: ['/doge/sticker-grin.png', '/doge/meme-thumbsup.png', '/doge/sticker-heart.png'],
+  victory: ['/doge/action-victory.png', '/doge/action-celebrate.png', '/doge/sticker-love.png'],
+  bullish: ['/doge/trade-bull.png', '/doge/trade-pump.png', '/doge/trade-surge.png'],
+  // Negative/bearish reactions
+  bearish: ['/doge/trade-bear.png', '/doge/meme-annoyed.png', '/doge/meme-skeptic.png'],
+  shocked: ['/doge/meme-shocked.png', '/doge/sticker-splash.png', '/doge/badge-angry.png'],
+  sad: ['/doge/sticker-sad.png', '/doge/sticker-sleep.png', '/doge/meme-annoyed.png'],
+  // Thinking/analyzing
+  think: ['/doge/sticker-think.png', '/doge/badge-coffee.png', '/doge/sticker-chill.png'],
+  scan: ['/doge/meme-classic.png', '/doge/badge-explorer.png', '/doge/sticker-default.png'],
+  // Power/action
+  charge: ['/doge/action-charge.png', '/doge/meme-buff.png', '/doge/meme-bodybuilder.png'],
+  money: ['/doge/meme-cash.png', '/doge/meme-money.png', '/doge/meme-greedy.png'],
+  whale: ['/doge/trade-whale.png', '/doge/trade-shield.png', '/doge/badge-diamond.png'],
+} as const;
+
+export type ReactionType = keyof typeof REACTION_EXPRESSIONS;
+
+/** Pick a random expression image for a given reaction type */
+export function getReactionImg(type: ReactionType): string {
+  const imgs = REACTION_EXPRESSIONS[type];
+  return imgs[Math.floor(Math.random() * imgs.length)];
+}
+
+/** Map phase events to reaction types */
+export const PHASE_REACTIONS: Record<string, ReactionType[]> = {
+  deploy: ['excited', 'charge'],
+  scout: ['scan', 'think'],
+  gather: ['think', 'scan'],
+  council: ['think', 'charge'],
+  verdict_bull: ['bullish', 'excited', 'money'],
+  verdict_bear: ['bearish', 'shocked'],
+  battle: ['charge', 'excited', 'whale'],
+  result_win: ['victory', 'money', 'excited'],
+  result_lose: ['sad', 'shocked', 'bearish'],
+};
+
 export const SOURCES = [
   { id: 'binance', icon: '📊', label: 'BINANCE', color: '#f0b90b', x: 0.08, y: 0.18, data: ['4H OHLCV', '거래량 $2.8B', '체결강도 62%'], tags: ['RSI 58', 'MACD↑', 'EMA200 ✓'] },
   { id: 'onchain', icon: '⛓', label: 'ON-CHAIN', color: '#00e68a', x: 0.92, y: 0.18, data: ['Net Flow -$128M', 'Whale 3건', 'Smart Money'], tags: ['Outflow↑', 'Whale Buy'] },
