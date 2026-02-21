@@ -54,7 +54,7 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    padding-top: 36px;
+    padding-top: 42px;
     overflow: hidden;
     position: relative;
   }

@@ -607,8 +607,8 @@
     flex: 1.1;
     display: flex; flex-direction: column; align-items: flex-start; justify-content: safe center;
     padding: 16px 40px 24px;
-    position: sticky; top: 36px; /* stick below header */
-    height: calc(100vh - 36px);
+    position: sticky; top: 42px; /* stick below header */
+    height: calc(100vh - 42px);
     overflow-y: auto;
     z-index: 3;
   }
@@ -704,8 +704,8 @@
     border-left: 1px solid rgba(232,150,125,0.1);
     display: flex; flex-direction: column;
     flex-shrink: 0;
-    position: sticky; top: 36px;
-    height: calc(100vh - 36px);
+    position: sticky; top: 42px;
+    height: calc(100vh - 42px);
     overflow-y: auto;
     z-index: 3;
   }
@@ -1242,7 +1242,7 @@
     }
 
     .hero {
-      min-height: calc(100vh - 36px);
+      min-height: calc(100vh - 42px);
       gap: clamp(14px, 1.8vw, 26px);
       padding-left: clamp(18px, 2.6vw, 40px);
       padding-right: 0;

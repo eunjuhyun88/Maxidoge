@@ -170,14 +170,14 @@
     top: 0; left: 0; right: 0;
     z-index: 110;
     flex-shrink: 0;
-    height: 36px;
+    height: 42px;
     font-family: var(--fp, 'Press Start 2P', monospace);
     color: #F0EDE4;
   }
 
   .nav-back {
     font-family: var(--fp);
-    font-size: 10px;
+    font-size: 12px;
     color: #E8967D;
     background: none;
     border: 1px solid rgba(232,150,125,0.3);
@@ -194,7 +194,7 @@
 
   .nav-logo {
     font-family: var(--fp);
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 1px;
     color: #F0EDE4;
     background: none;
@@ -213,7 +213,7 @@
 
   .nav-sep {
     width: 1px;
-    height: 16px;
+    height: 18px;
     background: rgba(232,150,125,0.15);
     margin: 0 8px;
     flex-shrink: 0;
@@ -229,23 +229,23 @@
   }
   .st-pair {
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     color: rgba(240,237,228,0.4);
     letter-spacing: 1px;
   }
   .st-price {
     font-family: var(--fp);
-    font-size: 9px;
+    font-size: 11px;
     color: #F0EDE4;
   }
 
   /* ── Nav Tabs ── */
   .nav-tab {
     font-family: var(--fp);
-    font-size: 6px;
+    font-size: 8px;
     letter-spacing: 1px;
     color: rgba(240,237,228,0.45);
-    padding: 0 10px;
+    padding: 0 8px;
     height: 100%;
     display: flex;
     align-items: center;
@@ -281,7 +281,7 @@
   }
 
   .tab-icon {
-    font-size: 6px;
+    font-size: 8px;
     opacity: 0.5;
     line-height: 1;
   }
@@ -298,7 +298,7 @@
 
   .score-badge {
     font-family: var(--fp);
-    font-size: 6px;
+    font-size: 8px;
     background: rgba(232,150,125,0.08);
     color: #E8967D;
     border: 1px solid rgba(232,150,125,0.2);
@@ -311,18 +311,18 @@
   }
   .score-badge b {
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 10px;
     color: #F0EDE4;
   }
   .score-bolt {
-    font-size: 8px;
+    font-size: 10px;
     text-shadow: 0 0 6px rgba(232,150,125,0.5);
   }
 
   /* ── Wallet ── */
   .wallet-btn {
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     background: #E8967D;
     color: #0a1a0d;
     border: none;
@@ -345,7 +345,7 @@
     color: #00cc66;
     border: 1px solid rgba(0,204,102,0.3);
     box-shadow: none;
-    font-size: 6px;
+    font-size: 8px;
   }
   .wallet-dot {
     width: 5px; height: 5px;
@@ -355,7 +355,7 @@
   }
 
   .settings-btn {
-    font-size: 12px;
+    font-size: 14px;
     background: none;
     border: none;
     cursor: pointer;
