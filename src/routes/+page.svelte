@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { gameState } from '$lib/stores/gameState';
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
@@ -20,11 +21,68 @@
 
   function enterArena() { goto('/arena'); }
   function enterTerminal() { goto('/terminal'); }
+
+  /* ── Rainbow blob canvas (doooing.be style) ── */
+  let canvasEl: HTMLCanvasElement;
+  let raf = 0;
+
+  const BLOBS = [
+    { px: 0,   py: 2.1, sx: 0.00030, sy: 0.00040, r: 280, c: [255, 80, 180] },
+    { px: 2.1, py: 0.7, sx: 0.00025, sy: 0.00045, r: 250, c: [130, 80, 255] },
+    { px: 4.2, py: 3.5, sx: 0.00035, sy: 0.00030, r: 300, c: [0, 200, 255]  },
+    { px: 1.3, py: 5.0, sx: 0.00020, sy: 0.00035, r: 220, c: [255, 160, 60]  },
+    { px: 3.7, py: 1.4, sx: 0.00028, sy: 0.00025, r: 260, c: [80, 255, 160]  },
+  ];
+
+  onMount(() => {
+    if (!canvasEl) return;
+    const ctx = canvasEl.getContext('2d');
+    if (!ctx) return;
+
+    const resize = () => {
+      canvasEl.width = canvasEl.offsetWidth;
+      canvasEl.height = canvasEl.offsetHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const draw = (t: number) => {
+      const w = canvasEl.width, h = canvasEl.height;
+      ctx.clearRect(0, 0, w, h);
+      const s = Math.min(w, h) / 800;
+
+      for (const b of BLOBS) {
+        const x = w * (0.5 + 0.35 * Math.sin(t * b.sx + b.px));
+        const y = h * (0.5 + 0.30 * Math.cos(t * b.sy + b.py));
+        const r = b.r * s;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, `rgba(${b.c[0]},${b.c[1]},${b.c[2]},0.45)`);
+        g.addColorStop(0.4, `rgba(${b.c[0]},${b.c[1]},${b.c[2]},0.15)`);
+        g.addColorStop(1, 'transparent');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+    };
+  });
+
+  onDestroy(() => { if (raf) cancelAnimationFrame(raf); });
 </script>
 
 <div class="home">
   <!-- ═══ HERO: MEME ARCADE EXPLOSION ═══ -->
   <section class="hero">
+    <!-- Canvas blobs (doooing.be style) -->
+    <canvas class="hero-canvas" bind:this={canvasEl}></canvas>
+    <!-- 3D perspective grid (onbeam style) -->
+    <div class="hero-grid"></div>
+
     <!-- Doge stickers: corners + sides -->
     <img class="hd stk-tl" src="/blockparty/f5-doge-bull.png" alt="" />
     <img class="hd stk-tr" src="/blockparty/f5-doge-fire.png" alt="" />
@@ -247,52 +305,72 @@
   .home {
     width: 100%; height: 100%;
     overflow-y: auto; overflow-x: hidden;
-    background: #060d1a;
+    background: #000;
     display: flex; flex-direction: column;
   }
   .home::-webkit-scrollbar { width: 4px; }
   .home::-webkit-scrollbar-thumb { background: var(--yel); border-radius: 4px; }
 
-  /* ═══ HERO: MEME ARCADE ═══ */
+  /* ═══ HERO: PREMIUM MEME ═══ */
   .hero {
     position: relative;
     overflow: hidden;
     display: flex; align-items: center; justify-content: center;
     text-align: center;
-    min-height: 580px;
+    min-height: 600px;
     padding: 60px 20px 50px;
-    background: linear-gradient(160deg, #0a1628 0%, #0f1e3a 30%, #162044 60%, #1a2650 100%);
-    background-size: 200% 200%;
-    animation: bg-drift 12s ease-in-out infinite;
+    background: #000;
   }
 
-  /* Manga speed lines - slowly rotating */
+  /* Soft radial overlay */
   .hero::before {
     content: '';
     position: absolute;
-    top: 50%; left: 50%;
-    width: 200%; height: 200%;
-    transform: translate(-50%, -50%);
-    background: repeating-conic-gradient(
-      transparent 0deg 4.5deg,
-      rgba(255,225,0,.025) 4.5deg 5.5deg
-    );
-    z-index: 0;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 40%, rgba(255,105,180,.06) 0%, transparent 65%);
+    z-index: 1;
     pointer-events: none;
-    animation: spin-lines 90s linear infinite;
   }
 
-  /* Yellow glow behind title - breathing */
+  /* Pink glow behind title - breathing */
   .hero::after {
     content: '';
     position: absolute;
-    top: 45%; left: 50%;
+    top: 42%; left: 50%;
     transform: translate(-50%, -50%);
-    width: 500px; height: 350px;
-    background: radial-gradient(ellipse, rgba(255,225,0,.08) 0%, transparent 65%);
-    z-index: 0;
+    width: 600px; height: 400px;
+    background: radial-gradient(ellipse, rgba(255,105,180,.1) 0%, rgba(168,85,247,.05) 40%, transparent 70%);
+    z-index: 1;
     pointer-events: none;
     animation: glow-breathe 5s ease-in-out infinite;
+  }
+
+  /* ── Canvas blobs (doooing.be style) ── */
+  .hero-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    filter: blur(80px);
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  /* ── 3D perspective grid (onbeam style) ── */
+  .hero-grid {
+    position: absolute;
+    bottom: 0; left: -20%; right: -20%;
+    height: 50%;
+    background:
+      linear-gradient(90deg, rgba(255,80,180,.05) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(255,80,180,.05) 1px, transparent 1px);
+    background-size: 50px 50px;
+    transform: perspective(400px) rotateX(60deg);
+    transform-origin: bottom center;
+    -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,.35) 0%, transparent 70%);
+    mask-image: linear-gradient(to top, rgba(0,0,0,.35) 0%, transparent 70%);
+    z-index: 1;
+    pointer-events: none;
   }
 
   /* ═══ HERO DECORATIONS ═══ */
@@ -300,7 +378,7 @@
     position: absolute;
     object-fit: contain;
     pointer-events: none;
-    filter: drop-shadow(3px 4px 6px rgba(0,0,0,.5));
+    filter: drop-shadow(0 0 15px rgba(255,105,180,.15)) drop-shadow(3px 4px 6px rgba(0,0,0,.6));
   }
 
   /* Sticker positions: around the title, DRIFTING */
@@ -461,17 +539,11 @@
     font-size: 130px;
     font-weight: 900;
     letter-spacing: 12px;
-    color: #ffe100;
-    -webkit-text-stroke: 5px #000;
-    paint-order: stroke fill;
-    text-shadow:
-      0 2px 0 #c4a000,
-      0 4px 0 #a08200,
-      0 6px 0 #7c6400,
-      0 8px 0 #584600,
-      0 10px 0 #342800,
-      0 10px 25px rgba(0,0,0,.6);
-    filter: drop-shadow(0 0 30px rgba(255,225,0,.2));
+    background: linear-gradient(135deg, #ff69b4 0%, #c084fc 40%, #22d3ee 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 40px rgba(255,105,180,.3)) drop-shadow(0 4px 12px rgba(0,0,0,.8));
   }
 
   .hero-meme-sub {
@@ -542,15 +614,6 @@
 
   /* ═══ ANIMATIONS ═══ */
 
-  /* Background drift */
-  @keyframes bg-drift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
-  @keyframes spin-lines {
-    from { transform: translate(-50%, -50%) rotate(0deg); }
-    to { transform: translate(-50%, -50%) rotate(360deg); }
-  }
   @keyframes glow-breathe {
     0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
     50% { transform: translate(-50%, -50%) scale(1.15); opacity: .6; }
@@ -639,7 +702,7 @@
   .stats-strip {
     display: flex; align-items: center; justify-content: center;
     gap: 0; padding: 14px 24px;
-    background: #060d1a;
+    background: #000;
     border-top: 3px solid rgba(255,225,0,.2);
     border-bottom: 3px solid rgba(255,225,0,.2);
   }
@@ -907,7 +970,7 @@
 
   @media (max-width: 640px) {
     .hero { min-height: 440px; padding: 40px 10px 40px; }
-    .tl { font-size: 72px !important; letter-spacing: 6px !important; -webkit-text-stroke: 4px #000 !important; }
+    .tl { font-size: 72px !important; letter-spacing: 6px !important; }
     .hero-meme-sub { font-size: 11px; }
     .hero-badge { font-size: 7px; padding: 4px 12px; letter-spacing: 2px; }
     .hero-ticker { padding: 6px 14px; gap: 6px; }
