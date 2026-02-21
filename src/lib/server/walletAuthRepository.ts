@@ -2,6 +2,7 @@ import { query } from './db';
 import { isIP } from 'node:net';
 
 const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 let _nonceInfraReady = false;
 
 export interface IssueWalletNonceResult {
@@ -22,6 +23,14 @@ function buildNonceMessage(address: string, nonce: string, issuedAtIso: string):
 
 export function isValidEthAddress(address: string): boolean {
   return ETH_ADDRESS_RE.test(address);
+}
+
+export function isValidSolAddress(address: string): boolean {
+  return SOL_ADDRESS_RE.test(address);
+}
+
+export function isValidWalletAddress(address: string): boolean {
+  return isValidEthAddress(address) || isValidSolAddress(address);
 }
 
 export function normalizeEthAddress(address: string): string {
@@ -180,7 +189,12 @@ export async function linkWalletToUser(args: {
   address: string;
   signature: string;
   provider?: string | null;
+  chain?: string | null;
+  meta?: Record<string, unknown> | null;
 }): Promise<void> {
+  const chain = args.chain?.trim() || 'ARB';
+  const metaJson = JSON.stringify(args.meta ?? {});
+
   await query(
     `
       UPDATE users
@@ -191,7 +205,7 @@ export async function linkWalletToUser(args: {
         phase = GREATEST(phase, 2),
         updated_at = now()
       WHERE id = $3
-    `,
+      `,
     [args.address, args.signature, args.userId]
   );
 
@@ -201,15 +215,23 @@ export async function linkWalletToUser(args: {
         INSERT INTO wallet_connections (
           user_id,
           address,
+          chain,
           provider,
           signature,
           verified,
           connected_at,
           meta
         )
-        VALUES ($1, $2, $3, $4, true, now(), '{}'::jsonb)
+        VALUES ($1, $2, $3, $4, $5, true, now(), $6::jsonb)
       `,
-      [args.userId, args.address, args.provider || null, args.signature]
+      [
+        args.userId,
+        args.address,
+        chain,
+        args.provider || null,
+        args.signature,
+        metaJson,
+      ]
     );
   } catch (error: any) {
     // wallet_connections is optional in some environments.

@@ -22,17 +22,76 @@
   function enterTerminal() { goto('/terminal'); }
 
   const FEATURES = [
-    { label: 'WAR ROOM', sub: 'TERMINAL', img: '/blockparty/f5-doge-chart.png', path: '/terminal' },
-    { label: 'BOSS FIGHT', sub: 'ARENA', img: '/blockparty/f5-doge-muscle.png', path: '/arena' },
-    { label: 'AI SIGNALS', sub: 'SIGNALS', img: '/blockparty/f5-doge-fire.png', path: '/signals' },
-    { label: 'COMMUNITY', sub: 'HUB', img: '/blockparty/f5-doge-excited.png', path: '/signals' },
+    { label: 'WAR ROOM', sub: 'TERMINAL', brief: 'YOU MISSED THE PUMP BECAUSE YOU WERE SLEEPING. NEVER AGAIN.', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
+      detail: '7 AI AGENTS RUN 24/7 — SCANNING CHARTS, TRACKING WHALES, READING DERIVATIVES, AND MONITORING SOCIAL SENTIMENT ACROSS 200+ PAIRS. YOU OPEN YOUR EYES. THE INTEL IS ALREADY THERE.',
+      stats: [{ k: 'AI AGENTS', v: '7' }, { k: 'PAIRS', v: '200+' }, { k: 'SCAN PATTERNS', v: '28' }] },
+    { label: 'AI vs YOU', sub: 'ARENA', brief: 'SUBMIT YOUR CALL. 7 AI AGENTS CHALLENGE EVERY ANGLE.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
+      detail: 'THINK YOU FOUND THE TRADE? SUBMIT IT. 7 AI AGENTS WILL ANALYZE YOUR ENTRY, TP, SL, AND R:R FROM EVERY ANGLE — STRUCTURE, FLOW, DERIVATIVES, SENTIMENT. IF YOUR THESIS SURVIVES 11 PHASES, IT MIGHT ACTUALLY WORK.',
+      stats: [{ k: 'PHASES', v: '11' }, { k: 'AI JUDGES', v: '7' }, { k: 'REWARDS', v: 'XP+RANK' }] },
+    { label: 'AI SCANNER', sub: 'SIGNALS', brief: 'THE MARKET WHISPERS BEFORE IT SCREAMS. WE HEAR IT FIRST.', img: '/blockparty/f5-doge-fire.png', path: '/signals',
+      detail: '28 ANOMALY PATTERNS CATCH WHAT HUMANS MISS — OI COMPRESSION BEFORE THE SQUEEZE, WHALE DEPOSITS BEFORE THE DUMP, LIQUIDATION CLUSTERS BEFORE THE CASCADE. SCORE 70+ = ALERT. SCORE 85+ = DROP EVERYTHING.',
+      stats: [{ k: 'PATTERNS', v: '28' }, { k: 'SCAN CYCLE', v: '15 MIN' }, { k: 'ALERTS', v: 'REAL-TIME' }] },
+    { label: 'COPY TRADE', sub: 'COMMUNITY', brief: 'STOP WATCHING. START COPYING. ONE CLICK.', img: '/blockparty/f5-doge-excited.png', path: '/signals',
+      detail: 'SEE A SIGNAL YOU LIKE? ONE TAP. THE COPY WIZARD BUILDS YOUR ORDER — ENTRY, TP, SL, R:R — ALL CALCULATED. YOU JUST APPROVE OR SKIP. NO MATH. NO HESITATION. YOUR WALLET, YOUR RULES.',
+      stats: [{ k: 'COPY WIZARD', v: '4-STEP' }, { k: 'R:R CALC', v: 'AUTO' }, { k: 'APPROVAL', v: 'YOU' }] },
   ];
 
+  const SCAN_CATS = [
+    { id: 'A', icon: '📊', label: 'OI + PRICE', desc: 'OI COMPRESSION, SHORT SQUEEZE, LONG LIQUIDATION TRAPS', count: 5 },
+    { id: 'B', icon: '📈', label: 'VOLUME', desc: 'VOLUME SPIKES ON FLAT PRICE, PANIC SELLS, DEAD VOLUME', count: 4 },
+    { id: 'C', icon: '⚡', label: 'FUNDING + LIQ', desc: 'EXTREME FUNDING RATES, LIQUIDATION CLUSTERS, L/S RATIOS', count: 4 },
+    { id: 'D', icon: '🐋', label: 'ON-CHAIN', desc: 'WHALE EXCHANGE DEPOSITS, WITHDRAWALS, BLOCK ACCUMULATION', count: 4 },
+    { id: 'E', icon: '💬', label: 'SOCIAL', desc: 'SOCIAL EXPLOSIONS, SENTIMENT DEPARTURE, FEAR & GREED', count: 3 },
+    { id: 'F', icon: '🔗', label: 'COMPOSITE', desc: 'MULTI-WARNING CONVERGENCE, BOTTOM CONFIRMATION, BTC DECOUPLING', count: 4 },
+    { id: 'G', icon: '🎯', label: 'DIRECT QUERY', desc: '"IS ETH SAFE TO BUY?" — ASK IN PLAIN ENGLISH, GET AI ANALYSIS', count: 4 },
+  ];
+
+  let selectedFeature: number | null = null;
+  let heroRightEl: HTMLDivElement;
+  let heroLeftEl: HTMLDivElement;
+
+  function selectFeature(i: number) {
+    selectedFeature = selectedFeature === i ? null : i;
+    // Reset left panel scroll to top when switching views
+    if (heroLeftEl) heroLeftEl.scrollTop = 0;
+  }
+
+  /** Scroll hijacking: right panel scrolls first, then page.
+   *  Captured on window so we intercept BEFORE native scroll. */
+  function onWheel(e: WheelEvent) {
+    if (!heroRightEl || window.innerWidth <= 900) return;
+
+    // Only when hero section occupies viewport
+    const heroSection = document.querySelector('.hero');
+    if (!heroSection) return;
+    const rect = heroSection.getBoundingClientRect();
+    // Hero must be mostly visible (top half still on screen)
+    if (rect.bottom <= 100 || rect.top >= window.innerHeight - 100) return;
+
+    const el = heroRightEl;
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    if (maxScroll <= 0) return; // nothing to scroll
+
+    const canScrollDown = el.scrollTop < maxScroll - 2;
+    const canScrollUp = el.scrollTop > 2;
+
+    if (e.deltaY > 0 && canScrollDown) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.scrollTop = Math.min(el.scrollTop + e.deltaY, maxScroll);
+    } else if (e.deltaY < 0 && canScrollUp) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.scrollTop = Math.max(el.scrollTop + e.deltaY, 0);
+    }
+    // At boundary → don't prevent → page scrolls naturally
+  }
+
   const FLOW_STEPS = [
-    { num: '01', title: 'CONNECT', desc: 'LINK WALLET & CREATE PROFILE', img: '/blockparty/f5-doge-excited.png', pct: 100 },
-    { num: '02', title: 'ANALYZE', desc: 'AI AGENTS SCAN MARKETS LIVE', img: '/blockparty/f5-doge-chart.png', pct: 85 },
-    { num: '03', title: 'BATTLE', desc: 'COMPETE VS AI IN THE ARENA', img: '/blockparty/f5-doge-muscle.png', pct: 70 },
-    { num: '04', title: 'EARN', desc: 'RANK UP & CLAIM REWARDS', img: '/blockparty/f5-doge-bull.png', pct: 95 },
+    { num: '01', title: 'CONNECT', desc: 'LINK WALLET IN 30 SECONDS. NO KYC. START FREE.', img: '/blockparty/f5-doge-excited.png', pct: 100 },
+    { num: '02', title: 'SET CONDITIONS', desc: 'TYPE "OI COMPRESSION" OR "WHALE DEPOSIT" — SCANNER DOES THE REST.', img: '/blockparty/f5-doge-chart.png', pct: 85 },
+    { num: '03', title: 'GET ALERTS', desc: 'SCORE 70+ = TOAST ALERT. SCORE 85+ = CRITICAL. AUTO DRAFT ORDERS.', img: '/blockparty/f5-doge-fire.png', pct: 90 },
+    { num: '04', title: 'ACT', desc: 'APPROVE THE AI\'S DRAFT ORDER, BATTLE IN THE ARENA, OR COPY TRADE.', img: '/blockparty/f5-doge-muscle.png', pct: 95 },
   ];
 
   /* ── Animation system ── */
@@ -58,9 +117,13 @@
       if (heroEl) heroEl.classList.add('hero-go');
     }, 300);
 
+    // Scroll hijack on window capture phase (intercepts before any element)
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
+
     // Setup scroll & observer
     if (!homeEl) return;
     homeEl.addEventListener('scroll', onScroll, { passive: true });
+
     const obs = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
@@ -78,6 +141,7 @@
     });
 
     return () => {
+      window.removeEventListener('wheel', onWheel, { capture: true });
       homeEl.removeEventListener('scroll', onScroll);
       obs.disconnect();
     };
@@ -93,43 +157,81 @@
        SECTION 1: HERO
        ═══════════════════════════════════════ -->
   <section class="hero" class:hero-go={heroReady}>
-    <div class="hero-left">
-      <div class="hero-stack">
-        <span class="htag ha" style="--ha-d:0s">//MAXI⚡DOGE PRESENTS</span>
-        <span class="hl hl-sm ha" style="--ha-d:0.12s">A NEW</span>
-        <span class="hl hl-pk ha" style="--ha-d:0.24s">DOGE</span>
-        <span class="hl hl-xl ha" style="--ha-d:0.36s">RUN</span>
-        <div class="hl-row ha" style="--ha-d:0.48s">
-          <span class="hl hl-sm">GAME</span>
-          <div class="ht hero-doge-wrap">
-            <img src="/blockparty/f5-doge-bull.png" alt="doge" class="hero-doge" />
+    <div class="hero-left" bind:this={heroLeftEl}>
+      {#if selectedFeature !== null}
+        <!-- Feature detail view -->
+        <div class="feat-detail">
+          <button class="feat-back" on:click={() => selectFeature(selectedFeature ?? 0)}>← BACK</button>
+          <span class="htag">//{FEATURES[selectedFeature].sub}</span>
+          <div class="ht feat-detail-img" style="--ht-img:url({FEATURES[selectedFeature].img})">
+            <img src={FEATURES[selectedFeature].img} alt="" />
+          </div>
+          <h2 class="feat-detail-title">{FEATURES[selectedFeature].label}</h2>
+          <p class="feat-detail-desc">{FEATURES[selectedFeature].detail}</p>
+          <div class="feat-detail-stats">
+            {#each FEATURES[selectedFeature].stats as s}
+              <div class="fds">
+                <span class="fds-v">{s.v}</span>
+                <span class="fds-k">{s.k}</span>
+              </div>
+            {/each}
+          </div>
+          <button class="feat-detail-cta" on:click={() => goto(FEATURES[selectedFeature ?? 0].path)}>
+            ENTER {FEATURES[selectedFeature].sub} →
+          </button>
+        </div>
+      {:else}
+        <!-- Default hero content -->
+        <div class="hero-stack">
+          <span class="htag ha" style="--ha-d:0s">//MAXI⚡DOGE</span>
+          <span class="hl hl-pk ha" style="--ha-d:0.12s">ALPHA</span>
+          <div class="hl-row ha" style="--ha-d:0.24s">
+            <span class="hl hl-xl">DOGS</span>
+            <div class="ht hero-doge-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)">
+              <img src="/blockparty/f5-doge-bull.png" alt="doge" class="hero-doge" />
+            </div>
           </div>
         </div>
-      </div>
-      <!-- Review badges -->
-      <div class="rbadges ha" style="--ha-d:0.6s">
-        <div class="rbdg rbdg-l">
-          <span class="rbdg-stars">★★★★★</span>
-          <span class="rbdg-src">— DEGENS</span>
+        <p class="hero-sub ha" style="--ha-d:0.44s">AI AGENTS THAT WATCH THE MARKET WHILE YOU SLEEP</p>
+        <div class="hero-props ha" style="--ha-d:0.52s">
+          <div class="hp"><span class="hp-icon">🔍</span><span class="hp-txt">28 ANOMALY PATTERNS SCAN 200+ PAIRS EVERY 15 MIN</span></div>
+          <div class="hp"><span class="hp-icon">🐋</span><span class="hp-txt">WHALE MOVES, OI SPIKES, LIQUIDATION CLUSTERS — AUTO-DETECTED</span></div>
+          <div class="hp"><span class="hp-icon">📋</span><span class="hp-txt">DRAFT ORDERS WITH TP/SL/R:R WHEN SCORE HITS 70+</span></div>
         </div>
-        <div class="rbdg rbdg-r">
-          <span class="rbdg-label">BEST AI DOGS</span>
-          <span class="rbdg-src">— CRYPTO TWITTER</span>
+        <div class="hero-ctas ha" style="--ha-d:0.6s">
+          <button class="hero-btn hero-btn-primary" on:click={enterTerminal}>ENTER WAR ROOM →</button>
+          {#if !connected}
+            <button class="hero-btn hero-btn-secondary" on:click={openWalletModal}>CONNECT WALLET</button>
+          {:else}
+            <button class="hero-btn hero-btn-secondary" on:click={enterArena}>ENTER ARENA →</button>
+          {/if}
         </div>
-      </div>
+        <div class="rbadges ha" style="--ha-d:0.7s">
+          <div class="rbdg rbdg-l">
+            <span class="rbdg-stars">★★★★★</span>
+            <span class="rbdg-src">— DEGENS</span>
+          </div>
+          <div class="rbdg rbdg-r">
+            <span class="rbdg-label">BEST AI DOGS</span>
+            <span class="rbdg-src">— CRYPTO TWITTER</span>
+          </div>
+        </div>
+      {/if}
     </div>
 
-    <div class="hero-div">
-      {#each Array(8) as _}<span class="vt">FEATURES</span>{/each}
-    </div>
-
-    <div class="hero-right">
+    <div class="hero-right" bind:this={heroRightEl}>
       {#each FEATURES as feat, i}
-        <button class="fc ha ha-r" style="--ha-d:{0.2 + i * 0.12}s" on:click={() => goto(feat.path)}>
-          <div class="fc-img"><div class="ht"><img src={feat.img} alt="" /></div></div>
+        <button
+          class="fc ha ha-r"
+          class:fc-active={selectedFeature === i}
+          style="--ha-d:{0.2 + i * 0.12}s"
+          on:click={() => selectFeature(i)}
+        >
+          <div class="fc-img"><div class="ht" style="--ht-img:url({feat.img})"><img src={feat.img} alt="" /></div></div>
           <div class="fc-txt">
             <span class="fc-sub">{feat.sub}</span>
             <h3 class="fc-lbl">{feat.label}</h3>
+            <p class="fc-brief">{feat.brief}</p>
           </div>
         </button>
       {/each}
@@ -164,7 +266,7 @@
             <p class="fstep-desc">{step.desc}</p>
             <div class="fstep-bar"><div class="fstep-fill" style="width:{step.pct}%"></div></div>
           </div>
-          <div class="ht fstep-imgwrap"><img src={step.img} alt="" class="fstep-img" /></div>
+          <div class="ht fstep-imgwrap" style="--ht-img:url({step.img})"><img src={step.img} alt="" class="fstep-img" /></div>
         </div>
       {/each}
     </div>
@@ -180,33 +282,32 @@
           <defs><path id="cp" d="M100,100 m-75,0 a75,75 0 1,1 150,0 a75,75 0 1,1 -150,0"/></defs>
           <text><textPath href="#cp" class="badge-txt">MUCH WOW ✦ MUCH WOW ✦ MUCH WOW ✦ MUCH WOW ✦</textPath></text>
         </svg>
-        <div class="ht badge-face-wrap"><img src="/blockparty/f5-doge-face.png" alt="" class="badge-face" /></div>
+        <div class="ht badge-face-wrap" style="--ht-img:url(/blockparty/f5-doge-face.png)"><img src="/blockparty/f5-doge-face.png" alt="" class="badge-face" /></div>
       </div>
 
       <div class="about-text sr sr-r" style="--d:0.15s">
         <p>
-          <strong class="ab">FOR</strong>
-          <em class="ai">every</em>
-          <strong class="ab abg">DEGEN,</strong>
-          <span class="ar">WE'VE BEEN</span>
-          <strong class="ab abg">BUILDING,</strong>
-          <em class="ai">training</em>
-          <strong class="ab abg">AI DOGS,</strong>
-          <span class="ar">SCANNING</span>
-          <strong class="ab abg">MARKETS,</strong>
-          <span class="as">GENERATING</span>
-          <strong class="ab abg">SIGNALS,</strong>
-          <span class="ar">AND</span>
-          <strong class="ab abg">CRAFTING</strong>
-          <em class="ai">relatable</em>
-          <span class="ar">MEMES FOR</span>
-          <strong class="ab abx">BIG</strong>
-          <span class="as">(AND TINY)</span>
-          <strong class="ab abx">GAINS.</strong>
+          <strong class="ab abg">7 AI DOGS</strong>
+          <span class="ar">WATCHING</span>
+          <strong class="ab abg">200+ PAIRS,</strong>
+          <em class="ai">scanning</em>
+          <strong class="ab abg">28 PATTERNS,</strong>
+          <span class="ar">DETECTING</span>
+          <strong class="ab abg">WHALE MOVES,</strong>
+          <span class="as">OI COMPRESSION,</span>
+          <strong class="ab abg">LIQUIDATION</strong>
+          <em class="ai">clusters,</em>
+          <span class="ar">FUNDING EXTREMES,</span>
+          <strong class="ab abg">VOLUME SPIKES</strong>
+          <span class="as">AND SOCIAL EXPLOSIONS</span>
+          <span class="ar">SO YOU</span>
+          <strong class="ab abx">NEVER</strong>
+          <span class="ar">MISS</span>
+          <strong class="ab abx">AGAIN.</strong>
         </p>
       </div>
     </div>
-    <div class="about-tag sr su" style="--d:0.3s">WE AIN'T NO ORDINARY DOGS.</div>
+    <div class="about-tag sr su" style="--d:0.3s">YOUR AI PACK. NO SLEEP. NO MERCY. NO MISSED TRADES.</div>
   </section>
 
   <!-- ═══════════════════════════════════════
@@ -224,7 +325,7 @@
       <div class="sq-grid">
         {#each AGDEFS as ag, i}
           <div class="sq-card sr sr-r" style="--ac:{ag.color};--d:{i * 0.07}s">
-            <div class="ht sq-av-wrap"><img src={ag.img.def} alt={ag.name} class="sq-av" /></div>
+            <div class="ht sq-av-wrap" style="--ht-img:url({ag.img.def})"><img src={ag.img.def} alt={ag.name} class="sq-av" /></div>
             <div class="sq-info">
               <span class="sq-nm" style="color:var(--ac)">{ag.name}</span>
               <span class="sq-rl">{ag.role}</span>
@@ -238,24 +339,57 @@
   </section>
 
   <!-- ═══════════════════════════════════════
-       SECTION 5: FEED
+       SECTION 5: SCANNER — WHAT WE DETECT
+       ═══════════════════════════════════════ -->
+  <section class="detect">
+    <div class="detect-header">
+      <span class="detect-tag sr sr-r">//ANOMALY DETECTION</span>
+      <h2 class="detect-title sr sr-r" style="--d:0.08s">
+        <span class="dt-w">WHAT WE</span>
+        <span class="dt-pk">DETECT</span>
+      </h2>
+      <p class="detect-sub sr sr-r" style="--d:0.18s">28 PATTERNS ACROSS 7 CATEGORIES — RUNNING 24/7</p>
+    </div>
+
+    <div class="detect-grid">
+      {#each SCAN_CATS as cat, i}
+        <div class="dcat sr sr-r" style="--d:{0.1 + i * 0.06}s">
+          <div class="dcat-head">
+            <span class="dcat-id">{cat.id}</span>
+            <span class="dcat-icon">{cat.icon}</span>
+            <span class="dcat-label">{cat.label}</span>
+            <span class="dcat-count">{cat.count}</span>
+          </div>
+          <p class="dcat-desc">{cat.desc}</p>
+        </div>
+      {/each}
+    </div>
+
+    <div class="detect-cta sr su" style="--d:0.5s">
+      <p class="detect-example">"FIND COINS WHERE OI ROSE 4 CANDLES STRAIGHT BUT PRICE DIDN'T MOVE" → SCANNER HANDLES IT</p>
+      <button class="hero-btn hero-btn-primary" on:click={enterTerminal}>TRY SCANNER NOW →</button>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       SECTION 6: FEED
        ═══════════════════════════════════════ -->
   <section class="feed">
     <div class="feed-l">
       <span class="fd-line fd-w sr sl">IN YOUR</span>
       <span class="fd-line fd-pk sr sl" style="--d:0.15s">FEED</span>
-      <div class="ht feed-doge-wrap sr sl" style="--d:0.3s"><img src="/blockparty/f5-doge-fire.png" alt="" class="feed-doge" /></div>
+      <div class="ht feed-doge-wrap sr sl" style="--d:0.3s;--ht-img:url(/blockparty/f5-doge-fire.png)"><img src="/blockparty/f5-doge-fire.png" alt="" class="feed-doge" /></div>
     </div>
     <div class="feed-r">
       <button class="arena sr sr-r" on:click={enterArena}>
         <div class="arena-row">
-          <div class="ht arena-img-wrap"><img src="/blockparty/f5-doge-muscle.png" alt="" class="arena-img" /></div>
+          <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-muscle.png)"><img src="/blockparty/f5-doge-muscle.png" alt="" class="arena-img" /></div>
           <div class="arena-mid">
-            <span class="arena-tag">BOSS FIGHT</span>
+            <span class="arena-tag">AI vs YOU</span>
             <h3 class="arena-name">ARENA</h3>
-            <p class="arena-sub">7 AI DOGS vs YOU</p>
+            <p class="arena-sub">YOUR THESIS vs 7 AI AGENTS</p>
           </div>
-          <div class="ht arena-img-wrap"><img src="/blockparty/f5-doge-bull.png" alt="" class="arena-img" /></div>
+          <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)"><img src="/blockparty/f5-doge-bull.png" alt="" class="arena-img" /></div>
         </div>
         <div class="arena-ft"><span>11-PHASE</span><span>7 AGENTS</span><span>RANKING</span></div>
       </button>
@@ -292,7 +426,7 @@
       </div>
     </div>
     <div class="cta-r">
-      <div class="ht cta-doge-wrap sr sr-r"><img src="/blockparty/f5-doge-excited.png" alt="" class="cta-doge" /></div>
+      <div class="ht cta-doge-wrap sr sr-r" style="--ht-img:url(/blockparty/f5-doge-excited.png)"><img src="/blockparty/f5-doge-excited.png" alt="" class="cta-doge" /></div>
       {#if !connected}
         <button class="cta-btn sr sr-r" style="--d:0.15s" on:click={openWalletModal}>⚡ CONNECT WALLET</button>
       {:else}
@@ -352,6 +486,7 @@
     display: flex; flex-direction: column;
     position: relative;
   }
+  .home > * { flex-shrink: 0; }
   .home::-webkit-scrollbar { width: 4px; }
   .home::-webkit-scrollbar-thumb { background: var(--sp-pk); border-radius: 4px; }
 
@@ -403,6 +538,14 @@
     background-size: 4px 4px;
     mix-blend-mode: multiply;
     pointer-events: none;
+    -webkit-mask-image: var(--ht-img);
+    mask-image: var(--ht-img);
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
   }
 
   /* ── PERSPECTIVE GRID FLOOR ── */
@@ -462,10 +605,11 @@
 
   .hero-left {
     flex: 1.1;
-    display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
-    padding: 60px 40px 120px;
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: safe center;
+    padding: 16px 40px 24px;
     position: sticky; top: 36px; /* stick below header */
     height: calc(100vh - 36px);
+    overflow-y: auto;
     z-index: 3;
   }
 
@@ -483,10 +627,10 @@
     color: var(--sp-w); display: block;
     text-shadow: 0 0 10px rgba(240,237,228,0.3);
   }
-  .hl-sm { font-size: clamp(18px, 3vw, 32px); margin-bottom: 8px; }
-  .hl-xl { font-size: clamp(48px, 9vw, 100px); letter-spacing: 6px; }
+  /* .hl-sm removed — no longer used */
+  .hl-xl { font-size: clamp(40px, 7vw, 80px); letter-spacing: 6px; }
   .hl-pk {
-    font-size: clamp(52px, 10vw, 120px); letter-spacing: 4px;
+    font-size: clamp(44px, 8vw, 90px); letter-spacing: 4px;
     color: var(--sp-pk);
     text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow), 0 0 120px rgba(232,150,125,0.15);
   }
@@ -523,22 +667,37 @@
     color: var(--sp-w); letter-spacing: 2px; opacity: 0.6;
   }
 
-  /* Vertical divider */
-  .hero-div {
-    width: 40px;
-    border-left: 1px solid rgba(232,150,125,0.15);
-    border-right: 1px solid rgba(232,150,125,0.15);
-    display: flex; flex-direction: column; align-items: center;
-    overflow: hidden; flex-shrink: 0; z-index: 3;
+  /* Hero subtitle + value props + CTAs */
+  .hero-sub {
+    font-family: var(--fp); font-size: 10px;
+    color: var(--sp-pk); letter-spacing: 3px; margin-top: 18px;
+    text-shadow: 0 0 12px var(--sp-glow);
   }
-  .vt {
-    font-family: var(--fp); font-size: 7px;
-    color: rgba(232,150,125,0.2);
-    writing-mode: vertical-rl; text-orientation: mixed;
-    white-space: nowrap; padding: 8px 0;
+  .hero-props { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .hp { display: flex; align-items: center; gap: 10px; }
+  .hp-icon { font-size: 14px; flex-shrink: 0; }
+  .hp-txt {
+    font-family: var(--fp); font-size: 9px;
+    color: var(--sp-w); letter-spacing: 1px; opacity: 0.85; line-height: 1.8;
   }
+  .hero-ctas { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+  .hero-btn {
+    font-family: var(--fp); font-size: 9px; letter-spacing: 2px;
+    border: none; border-radius: 6px; padding: 14px 24px;
+    cursor: pointer; transition: all .2s;
+  }
+  .hero-btn-primary {
+    color: var(--sp-bg); background: var(--sp-pk);
+    box-shadow: 0 0 15px var(--sp-glow);
+  }
+  .hero-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 25px var(--sp-pk); }
+  .hero-btn-secondary {
+    color: var(--sp-pk); background: transparent;
+    border: 1px solid rgba(232,150,125,0.3);
+  }
+  .hero-btn-secondary:hover { background: rgba(232,150,125,0.08); border-color: var(--sp-pk); }
 
-  /* Feature cards (right column) — independent scroll */
+  /* Feature cards (right column) — sticky panel with internal scroll */
   .hero-right {
     width: 400px; max-width: 38%;
     background: var(--sp-bg2);
@@ -546,12 +705,12 @@
     display: flex; flex-direction: column;
     flex-shrink: 0;
     position: sticky; top: 36px;
-    z-index: 3;
+    height: calc(100vh - 36px);
     overflow-y: auto;
-    max-height: calc(100vh - 36px);
+    z-index: 3;
   }
   .hero-right::-webkit-scrollbar { width: 3px; }
-  .hero-right::-webkit-scrollbar-thumb { background: var(--sp-pk); }
+  .hero-right::-webkit-scrollbar-thumb { background: var(--sp-pk); border-radius: 3px; }
 
   .fc {
     display: flex; flex-direction: column; background: transparent;
@@ -574,13 +733,18 @@
   .fc:hover .fc-img img { transform: scale(1.1) rotate(-2deg); }
   .fc-txt { padding: 12px 20px 16px; }
   .fc-sub {
-    font-family: var(--fp); font-size: 7px;
+    font-family: var(--fp); font-size: 8px;
     color: var(--sp-dim); letter-spacing: 2px;
   }
   .fc-lbl {
     font-family: var(--fp); font-size: 12px;
     color: var(--sp-pk); letter-spacing: 1px; line-height: 1.4; margin-top: 4px;
     text-shadow: 0 0 10px var(--sp-glow);
+  }
+  .fc-brief {
+    font-family: var(--fv); font-size: 11px;
+    color: var(--sp-w); letter-spacing: 0.5px; line-height: 1.5; margin-top: 6px;
+    opacity: 0.7;
   }
   .fc-all {
     display: flex; align-items: center; justify-content: space-between;
@@ -591,6 +755,69 @@
   }
   .fc-all:hover { color: var(--sp-pk); }
   .fc-arr { font-size: 16px; }
+
+  /* Active card highlight */
+  .fc-active { background: rgba(232,150,125,0.08); border-left: 3px solid var(--sp-pk); }
+  .fc-active .fc-lbl { text-shadow: 0 0 15px var(--sp-pk), 0 0 40px var(--sp-glow); }
+
+  /* ═══ FEATURE DETAIL (left panel) ═══ */
+  .feat-detail {
+    display: flex; flex-direction: column; align-items: flex-start;
+    gap: 16px; position: relative; z-index: 3;
+    animation: fadeSlideIn 0.35s cubic-bezier(.16,1,.3,1);
+  }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .feat-back {
+    font-family: var(--fp); font-size: 8px;
+    color: var(--sp-dim); letter-spacing: 2px;
+    background: none; border: 1px solid rgba(232,150,125,0.15);
+    padding: 6px 14px; cursor: pointer; border-radius: 4px;
+    transition: all .15s;
+  }
+  .feat-back:hover { color: var(--sp-pk); border-color: var(--sp-pk); }
+  .feat-detail-img { width: clamp(100px, 18vw, 200px); }
+  .feat-detail-img img { width: 100%; object-fit: contain; }
+  .feat-detail-title {
+    font-family: var(--fp); font-size: clamp(28px, 5vw, 52px);
+    color: var(--sp-pk); letter-spacing: 4px; line-height: 1;
+    text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
+  }
+  .feat-detail-desc {
+    font-family: var(--fv); font-size: 14px;
+    color: var(--sp-w); letter-spacing: 0.3px; line-height: 1.7;
+    max-width: 440px; opacity: 0.8;
+  }
+  .feat-detail-stats {
+    display: flex; gap: 20px; margin-top: 8px;
+  }
+  .fds {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 16px;
+    background: rgba(232,150,125,0.06);
+    border: 1px solid rgba(232,150,125,0.15);
+    border-radius: 8px;
+  }
+  .fds-v {
+    font-family: var(--fp); font-size: 16px;
+    color: var(--sp-pk); letter-spacing: 1px;
+    text-shadow: 0 0 8px var(--sp-glow);
+  }
+  .fds-k {
+    font-family: var(--fp); font-size: 7px;
+    color: var(--sp-dim); letter-spacing: 2px;
+  }
+  .feat-detail-cta {
+    font-family: var(--fp); font-size: 9px; letter-spacing: 2px;
+    color: var(--sp-bg); background: var(--sp-pk);
+    border: none; border-radius: 6px;
+    padding: 12px 24px; cursor: pointer; margin-top: 8px;
+    transition: all .2s;
+    box-shadow: 0 0 15px var(--sp-glow);
+  }
+  .feat-detail-cta:hover { transform: translateY(-2px); box-shadow: 0 0 25px var(--sp-pk); }
 
   /* ═══ FLOW — MISSION STAGES ═══ */
   .flow {
@@ -615,7 +842,7 @@
     text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
   }
   .flow-sub {
-    font-family: var(--fp); font-size: 8px;
+    font-family: var(--fp); font-size: 9px;
     color: var(--sp-dim); letter-spacing: 3px; margin-top: 12px;
   }
 
@@ -645,8 +872,9 @@
     text-shadow: 0 0 10px var(--sp-glow);
   }
   .fstep-desc {
-    font-family: var(--fp); font-size: 7px;
-    color: var(--sp-dim); letter-spacing: 1px; margin-top: 8px; line-height: 1.6;
+    font-family: var(--fv); font-size: 13px;
+    color: var(--sp-w); letter-spacing: 0.3px; margin-top: 8px; line-height: 1.6;
+    opacity: 0.7;
   }
   /* Stat bar */
   .fstep-bar {
@@ -707,7 +935,7 @@
   .abx { font-size: 1.4em; color: var(--sp-pk); text-shadow: 0 0 15px var(--sp-glow); }
 
   .about-tag {
-    font-family: var(--fp); font-size: 8px;
+    font-family: var(--fp); font-size: 9px;
     letter-spacing: 4px; color: var(--sp-dim); text-align: center;
     margin-top: 40px; padding-top: 20px;
     border-top: 1px solid rgba(232,150,125,0.08);
@@ -738,7 +966,7 @@
     text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
   }
   .sq-sub {
-    font-family: var(--fp); font-size: 7px;
+    font-family: var(--fp); font-size: 8px;
     color: var(--sp-dim); letter-spacing: 2px; margin-top: 8px;
     text-align: center; margin-bottom: 30px; position: relative; z-index: 2;
   }
@@ -765,13 +993,94 @@
   }
   .sq-card:hover { transform: translateY(-3px); box-shadow: 0 4px 20px rgba(232,150,125,0.12); }
   .sq-av-wrap { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; flex-shrink: 0; border: 2px solid var(--ac); }
+  .sq-av-wrap::after { -webkit-mask-size: cover; mask-size: cover; }
   .sq-av { width: 100%; height: 100%; object-fit: cover; }
   .sq-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-  .sq-nm { font-family: var(--fp); font-size: 7px; letter-spacing: 1px; }
+  .sq-nm { font-family: var(--fp); font-size: 8px; letter-spacing: 1px; }
   .sq-rl { font-family: var(--fv); font-size: 12px; color: var(--sp-dim); }
   .sq-bar { width: 100%; height: 4px; background: rgba(232,150,125,0.1); border-radius: 2px; margin-top: 3px; overflow: hidden; }
   .sq-fill { height: 100%; border-radius: 2px; box-shadow: 0 0 4px var(--sp-glow); }
   .sq-pct { font-family: var(--fp); font-size: 10px; color: var(--sp-pk); opacity: .6; margin-left: auto; }
+
+  /* ═══ DETECT — SCANNER SHOWCASE ═══ */
+  .detect {
+    background: var(--sp-bg);
+    padding: 80px 40px;
+    border-bottom: 2px solid rgba(232,150,125,0.15);
+    position: relative; overflow: hidden; z-index: 2;
+  }
+  .detect-header { text-align: center; margin-bottom: 40px; }
+  .detect-tag {
+    font-family: var(--fp); font-size: 9px;
+    color: var(--sp-pk); letter-spacing: 2px;
+    display: block; margin-bottom: 12px;
+    text-shadow: 0 0 10px var(--sp-glow);
+  }
+  .detect-title { font-family: var(--fp); line-height: 1.4; }
+  .dt-w { font-size: clamp(20px, 4vw, 36px); color: var(--sp-w); display: block; }
+  .dt-pk {
+    font-size: clamp(28px, 6vw, 56px); color: var(--sp-pk); display: block;
+    text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
+  }
+  .detect-sub {
+    font-family: var(--fp); font-size: 9px;
+    color: var(--sp-dim); letter-spacing: 3px; margin-top: 12px;
+  }
+
+  .detect-grid {
+    max-width: 900px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+  }
+  .dcat {
+    background: var(--sp-bg2);
+    border: 1px solid rgba(232,150,125,0.12);
+    border-radius: 10px;
+    padding: 16px 18px;
+    transition: transform .2s, box-shadow .2s, border-color .2s;
+  }
+  .dcat:hover { transform: translateY(-3px); box-shadow: 0 4px 20px rgba(232,150,125,0.1); border-color: rgba(232,150,125,0.3); }
+  .dcat-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .dcat-id {
+    font-family: var(--fp); font-size: 10px; font-weight: 700;
+    color: var(--sp-bg); background: var(--sp-pk);
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; text-shadow: none;
+    box-shadow: 0 0 8px var(--sp-glow);
+  }
+  .dcat-icon { font-size: 14px; flex-shrink: 0; }
+  .dcat-label {
+    font-family: var(--fp); font-size: 9px;
+    color: var(--sp-pk); letter-spacing: 1px;
+    text-shadow: 0 0 8px var(--sp-glow);
+  }
+  .dcat-count {
+    font-family: var(--fp); font-size: 7px;
+    color: var(--sp-dim); margin-left: auto;
+    background: rgba(232,150,125,0.06);
+    border: 1px solid rgba(232,150,125,0.15);
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .dcat-desc {
+    font-family: var(--fv); font-size: 11px;
+    color: var(--sp-w); letter-spacing: 0.3px; line-height: 1.5;
+    opacity: 0.6;
+  }
+
+  .detect-cta {
+    text-align: center; margin-top: 40px;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .detect-example {
+    font-family: var(--fv); font-size: 13px;
+    color: var(--sp-pk); letter-spacing: 0.3px;
+    background: rgba(232,150,125,0.04);
+    border: 1px solid rgba(232,150,125,0.12);
+    padding: 14px 24px; border-radius: 8px;
+    max-width: 700px; line-height: 1.6;
+    text-shadow: 0 0 8px var(--sp-glow);
+  }
 
   /* ═══ FEED ═══ */
   .feed {
@@ -927,15 +1236,87 @@
   .foot-tag { font-family: var(--fv); font-size: 14px; color: rgba(232,150,125,0.3); }
 
   /* ═══ RESPONSIVE ═══ */
+  @media (min-width: 901px) {
+    .home {
+      scroll-padding-top: 48px;
+    }
+
+    .hero {
+      min-height: calc(100vh - 36px);
+      gap: clamp(14px, 1.8vw, 26px);
+      padding-left: clamp(18px, 2.6vw, 40px);
+      padding-right: 0;
+    }
+    .hero-left {
+      max-width: min(760px, 57vw);
+      padding: 16px clamp(14px, 2vw, 30px) 24px;
+    }
+    .hero-right {
+      width: clamp(320px, 32vw, 460px);
+      max-width: none;
+    }
+    .fc-txt { padding: 12px 16px 14px; }
+    .fc-lbl { font-size: 11px; }
+
+    .rbadges { gap: 14px; margin-top: 24px; }
+    .rbdg {
+      padding: 8px 10px;
+      border: 1px solid rgba(232,150,125,0.12);
+      border-radius: 10px;
+      background: rgba(232,150,125,0.03);
+    }
+
+    .flow,
+    .about,
+    .squad,
+    .detect,
+    .feed,
+    .cta {
+      min-height: auto;
+    }
+
+    .flow { padding: 78px clamp(24px, 4vw, 64px); }
+    .flow-steps { max-width: 980px; gap: 10px; }
+    .fstep {
+      padding: 24px 20px;
+      border: 1px solid rgba(232,150,125,0.14);
+      border-radius: 12px;
+      background: rgba(232,150,125,0.03);
+    }
+    .fstep:last-child { border-bottom: 1px solid rgba(232,150,125,0.14); }
+
+    .about { padding: 84px clamp(24px, 4vw, 64px) 64px; }
+    .about-inner { max-width: 1140px; gap: 48px; }
+    .about-text p { text-align: left; font-size: clamp(24px, 2.3vw, 34px); }
+    .about-tag { max-width: 1080px; text-align: left; }
+
+    .squad { padding: 74px clamp(24px, 4vw, 64px); }
+    .detect { padding: 78px clamp(24px, 4vw, 64px); }
+    .detect-grid { max-width: 980px; }
+    .sq-frame { max-width: 1080px; padding: 22px; }
+    .sq-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+    .feed { align-items: stretch; }
+    .feed-l { flex: 0 0 38%; padding: 40px; }
+    .feed-r { padding: 24px 26px; overflow: visible; }
+
+    .cta { padding: 74px clamp(24px, 4vw, 64px) 100px; gap: 34px; }
+
+    .foot { padding: 28px clamp(24px, 4vw, 64px) 20px; }
+  }
+
   @media (max-width: 900px) {
     .hero { flex-direction: column; min-height: auto; }
-    .hero-left { padding: 50px 24px 80px; position: relative; height: auto; }
-    .hero-div { width: 100%; height: 30px; flex-direction: row; border-left: none; border-right: none; border-top: 1px solid rgba(232,150,125,0.12); border-bottom: 1px solid rgba(232,150,125,0.12); }
-    .vt { writing-mode: horizontal-tb; text-orientation: initial; padding: 0 8px; }
-    .hero-right { width: 100%; max-width: 100%; position: relative; max-height: none; }
+    .hero-left { padding: 30px 24px 40px; position: relative; height: auto; overflow-y: visible; }
+    .hero-right { width: 100%; max-width: 100%; position: static; height: auto; overflow-y: visible; }
+    .feat-detail-stats { flex-wrap: wrap; gap: 10px; }
+    .feat-detail-title { font-size: 28px; }
     .about-inner { flex-direction: column; align-items: center; }
     .about { padding: 40px 24px 30px; }
     .flow { padding: 50px 24px; }
+    .detect { padding: 50px 24px; }
+    .detect-grid { grid-template-columns: 1fr; }
+    .detect-example { font-size: 6px; padding: 10px 14px; }
     .feed { flex-direction: column; }
     .feed-l { padding: 30px 24px; }
     .cta { padding: 30px 24px 80px; }
@@ -946,7 +1327,7 @@
 
   @media (max-width: 640px) {
     .hero-left { padding: 40px 16px 60px; }
-    .hl-sm { font-size: 14px; }
+    /* .hl-sm removed */
     .hl-pk { font-size: 40px; }
     .hl-xl { font-size: 36px; }
     .hero-doge { width: 60px; }
@@ -974,7 +1355,7 @@
   }
 
   @media (max-width: 400px) {
-    .hl-sm { font-size: 12px; }
+    /* .hl-sm removed */
     .hl-pk { font-size: 32px; }
     .hl-xl { font-size: 28px; }
     .hero-doge { width: 50px; }

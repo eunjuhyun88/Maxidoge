@@ -18,6 +18,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     const address = typeof body?.address === 'string' ? body.address.trim() : '';
     const signature = typeof body?.signature === 'string' ? body.signature.trim() : '';
     const provider = typeof body?.provider === 'string' ? body.provider.trim() : 'unknown';
+    const chainRaw = typeof body?.chain === 'string' ? body.chain.trim().toUpperCase() : '';
+    const chain = chainRaw === 'SOLANA' ? 'SOL' : chainRaw || (address.startsWith('0x') ? 'ARB' : 'SOL');
 
     if (!address || !GENERIC_WALLET_RE.test(address)) {
       return json({ error: 'Valid wallet address required' }, { status: 400 });
@@ -62,7 +64,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       wallet: {
         address,
         shortAddr: address.slice(0, 6) + '...' + address.slice(-4),
-        chain: 'ARB',
+        chain,
         provider,
         verified,
         linkedAt: new Date().toISOString()

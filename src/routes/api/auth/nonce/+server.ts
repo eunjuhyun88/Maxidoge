@@ -14,6 +14,12 @@ export const POST: RequestHandler = async ({ request }) => {
     const body = await request.json();
     const addressRaw = typeof body?.address === 'string' ? body.address.trim() : '';
     const provider = typeof body?.provider === 'string' ? body.provider.trim() : null;
+    const chainRaw = typeof body?.chain === 'string' ? body.chain.trim().toUpperCase() : '';
+    const chain = chainRaw === 'SOLANA' ? 'SOL' : chainRaw || 'ARB';
+
+    if (chain === 'SOL') {
+      return json({ error: 'Nonce challenge is only used for EVM wallet verification' }, { status: 400 });
+    }
 
     if (!isValidEthAddress(addressRaw)) {
       return json({ error: 'Valid Ethereum wallet address required' }, { status: 400 });
@@ -30,6 +36,7 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({
       success: true,
       address: normalizeEthAddress(addressRaw),
+      chain,
       nonce: issued.nonce,
       message: issued.message,
       expiresAt: issued.expiresAt,

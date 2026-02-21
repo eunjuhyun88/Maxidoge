@@ -128,8 +128,8 @@ export function completeDemoView() {
 }
 
 // Wallet connection (now first step before email)
-export function connectWallet(provider: string = 'MetaMask', addressOverride?: string) {
-  const connection = createSimulatedWalletConnection(provider, addressOverride);
+export function connectWallet(provider: string = 'MetaMask', addressOverride?: string, chain: string = 'ARB') {
+  const connection = createSimulatedWalletConnection(provider, addressOverride, chain);
 
   walletStore.update(w => ({
     ...w,
@@ -139,6 +139,7 @@ export function connectWallet(provider: string = 'MetaMask', addressOverride?: s
     balance: connection.balance,
     chain: connection.chain,
     provider: connection.provider,
+    signature: null,
     walletModalStep: 'sign-message' // New: go to sign step
   }));
 }
@@ -174,6 +175,7 @@ export function disconnectWallet() {
     shortAddr: null,
     balance: 0,
     provider: null,
+    signature: null,
     tier: w.email ? 'registered' : 'guest'
   }));
 }
