@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
+  import { get } from 'svelte/store';
   import { gameState } from '$lib/stores/gameState';
   import { agentStats, addXP } from '$lib/stores/agentData';
   import { AGDEFS, SOURCES } from '$lib/data/agents';
@@ -7,7 +10,7 @@
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, startGameLoop, resetPhaseInit } from '$lib/engine/gameLoop';
   import { calculateLP, determineConsensus } from '$lib/engine/scoring';
   import Lobby from '../../components/arena/Lobby.svelte';
-  import LivePage from '../live/+page.svelte';
+  import LivePanel from '../../components/live/LivePanel.svelte';
   import ChartPanel from '../../components/arena/ChartPanel.svelte';
   import HypothesisPanel from '../../components/arena/HypothesisPanel.svelte';
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
@@ -68,6 +71,12 @@
 
   function switchArenaMode(mode: 'battle' | 'live') {
     arenaMode = mode;
+    void goto(mode === 'live' ? '/arena?tab=live' : '/arena', {
+      replaceState: true,
+      noScroll: true,
+      keepFocus: true,
+      invalidateAll: false
+    });
   }
 
   // ═══════ HYPOTHESIS STATE ═══════
@@ -928,6 +937,10 @@
 
   onMount(() => {
     setPhaseInitCallback(onPhaseInit);
+    const tab = get(page).url.searchParams.get('tab');
+    if (tab === 'live') {
+      arenaMode = 'live';
+    }
   });
 
   onDestroy(() => {
@@ -951,7 +964,7 @@
 
   {#if arenaMode === 'live'}
     <div class="merged-live-shell">
-      <LivePage />
+      <LivePanel embedded={true} />
     </div>
   {:else}
     <!-- Wallet Gate Overlay -->
