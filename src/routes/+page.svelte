@@ -23,35 +23,76 @@
 </script>
 
 <div class="home">
-  <!-- ═══ BLOCK PARTY HERO ═══ -->
+  <!-- ═══ BLOCK PARTY HERO – FULL SCREEN POP ART COLLAGE ═══ -->
   <section class="hero">
-    <!-- Scattered pop-art deco elements -->
+    <!-- LAYER 1: Pop-art deco elements (bursts, clouds, halftone, stars) -->
     <div class="deco-layer">
       <img class="d d-burst-tl" src="/blockparty/deco-bursts.png" alt="" />
       <img class="d d-burst-tr" src="/blockparty/deco-bursts.png" alt="" />
+      <img class="d d-burst-bl" src="/blockparty/deco-bursts.png" alt="" />
       <img class="d d-cloud-l" src="/blockparty/deco-clouds.png" alt="" />
       <img class="d d-cloud-r" src="/blockparty/deco-clouds-halftone.png" alt="" />
-      <img class="d d-star" src="/blockparty/deco-stars.png" alt="" />
-      <img class="d d-sparkle" src="/blockparty/deco-sparkles.png" alt="" />
-      <img class="d d-ball" src="/blockparty/deco-pow-doge.png" alt="" />
-      <img class="d d-glasses" src="/blockparty/deco-ball-glasses.png" alt="" />
-      <img class="d d-cam" src="/blockparty/deco-coin-camera.png" alt="" />
-      <img class="d d-halftone" src="/blockparty/deco-coin-doge-big.png" alt="" />
-      <img class="d d-pow" src="/blockparty/deco-halftone-blob.png" alt="" />
-      <img class="d d-coins" src="/blockparty/deco-top-doges.png" alt="" />
-      <img class="d d-doge-fly" src="/blockparty/deco-doge-cloud.png" alt="" />
-      <img class="d d-heart" src="/blockparty/deco-heart-doge.png" alt="" />
+      <img class="d d-halftone" src="/blockparty/deco-halftone-blob.png" alt="" />
+      <img class="d d-star1" src="/blockparty/deco-stars.png" alt="" />
+      <img class="d d-star2" src="/blockparty/deco-stars.png" alt="" />
+      <img class="d d-star3" src="/blockparty/deco-stars.png" alt="" />
+      <img class="d d-sparkle1" src="/blockparty/deco-sparkles.png" alt="" />
+      <img class="d d-sparkle2" src="/blockparty/deco-sparkles.png" alt="" />
     </div>
 
-    <!-- Center content -->
-    <div class="hero-content">
-      <div class="hero-badge">AI AGENT TRADING PLATFORM</div>
-      <h1 class="hero-title">
-        <span class="title-maxi">MAXI</span><span class="title-bolt">⚡</span><span class="title-doge">DOGE</span>
-      </h1>
-      <p class="hero-sub">AI 에이전트 팀과 함께하는 전략 트레이딩 배틀</p>
+    <!-- LAYER 2: Blockparty doge deco PNGs – HUGE -->
+    <div class="doge-layer">
+      <img class="dg dg-pow" src="/blockparty/deco-pow-doge.png" alt="" />
+      <img class="dg dg-glasses" src="/blockparty/deco-ball-glasses.png" alt="" />
+      <img class="dg dg-cam" src="/blockparty/deco-coin-camera.png" alt="" />
+      <img class="dg dg-coin" src="/blockparty/deco-coin-doge-big.png" alt="" />
+      <img class="dg dg-cloud" src="/blockparty/deco-doge-cloud.png" alt="" />
+      <img class="dg dg-heart" src="/blockparty/deco-heart-doge.png" alt="" />
+      <img class="dg dg-top" src="/blockparty/deco-top-doges.png" alt="" />
+      <img class="dg dg-row" src="/blockparty/deco-doges-row.png" alt="" />
+      <img class="dg dg-multi" src="/blockparty/deco-multi-doges.png" alt="" />
+      <img class="dg dg-left" src="/blockparty/deco-left-cluster.png" alt="" />
+      <img class="dg dg-zap" src="/blockparty/deco-zap-duck.png" alt="" />
+    </div>
 
-      <!-- Live price ticker -->
+    <!-- LAYER 3: folder5 individual doge stickers – scattered BOLD -->
+    <div class="sticker-layer">
+      <img class="s s-bull" src="/blockparty/f5-doge-bull.png" alt="" />
+      <img class="s s-bear" src="/blockparty/f5-doge-bear.png" alt="" />
+      <img class="s s-chart" src="/blockparty/f5-doge-chart.png" alt="" />
+      <img class="s s-angry" src="/blockparty/f5-doge-angry.png" alt="" />
+      <img class="s s-muscle" src="/blockparty/f5-doge-muscle.png" alt="" />
+      <img class="s s-fire" src="/blockparty/f5-doge-fire.png" alt="" />
+      <img class="s s-cross" src="/blockparty/f5-doge-cross.png" alt="" />
+      <img class="s s-wings" src="/blockparty/f5-doge-wings.png" alt="" />
+      <img class="s s-fist" src="/blockparty/f5-doge-fist.png" alt="" />
+      <img class="s s-excited" src="/blockparty/f5-doge-excited.png" alt="" />
+      <img class="s s-face" src="/blockparty/f5-doge-face.png" alt="" />
+      <img class="s s-circle" src="/blockparty/f5-doge-circle.png" alt="" />
+      <img class="s s-question" src="/blockparty/f5-doge-question.png" alt="" />
+      <img class="s s-heart" src="/blockparty/f5-doge-heart.png" alt="" />
+      <img class="s s-shock" src="/blockparty/f5-doge-shock.png" alt="" />
+      <img class="s s-cry" src="/blockparty/f5-doge-cry.png" alt="" />
+      <img class="s s-happy" src="/blockparty/f5-doge-happy.png" alt="" />
+      <img class="s s-grin" src="/blockparty/f5-doge-grin.png" alt="" />
+      <img class="s s-shield" src="/blockparty/f5-doge-shield.png" alt="" />
+      <img class="s s-tilt" src="/blockparty/f5-doge-tilt.png" alt="" />
+      <img class="s s-rage" src="/blockparty/f5-doge-rage.png" alt="" />
+      <img class="s s-bearish" src="/blockparty/f5-doge-bearish.png" alt="" />
+      <img class="s s-redarrow" src="/blockparty/f5-doge-redarrow.png" alt="" />
+      <img class="s s-splash" src="/blockparty/f5-doge-splash.png" alt="" />
+      <img class="s s-spin" src="/blockparty/f5-doge-spin.png" alt="" />
+      <img class="s s-love" src="/blockparty/f5-doge-love.png" alt="" />
+      <img class="s s-smirk" src="/blockparty/f5-doge-smirk.png" alt="" />
+    </div>
+
+    <!-- LAYER 4 (TOP): Title + ticker -->
+    <div class="hero-content">
+      <h1 class="hero-title">
+        <span class="title-line">MAXI</span>
+        <span class="title-line">DOGE</span>
+      </h1>
+      <div class="hero-badge">⚡ AI AGENT TRADING PLATFORM ⚡</div>
       <div class="hero-ticker">
         <div class="tick-item">
           <span class="tick-coin">₿</span>
@@ -284,7 +325,7 @@
   .home::-webkit-scrollbar { width: 4px; }
   .home::-webkit-scrollbar-thumb { background: var(--yel); border-radius: 4px; }
 
-  /* ═══ BLOCK PARTY HERO ═══ */
+  /* ═══ BLOCK PARTY HERO – FULL SCREEN POP ART ═══ */
   .hero {
     position: relative;
     text-align: center;
@@ -292,101 +333,121 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #000;
-    border-bottom: 5px solid #000;
-    min-height: 420px;
-    padding: 50px 24px 35px;
+    background: linear-gradient(160deg, #ffb6c1 0%, #ff69b4 25%, #ff8ca0 50%, #ffa0b4 75%, #ffccd5 100%);
+    min-height: 520px;
+    padding: 30px 16px;
   }
 
-  /* ── Scattered deco elements ── */
+  /* ── LAYER 1: Deco (bursts, clouds, halftone, stars) ── */
   .deco-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
   .d { position: absolute; object-fit: contain; }
 
-  /* Top-left bursts */
-  .d-burst-tl { left: -2%; top: -5%; width: 160px; opacity: .8; transform: rotate(-10deg); }
-  /* Top-right bursts (flipped) */
-  .d-burst-tr { right: -2%; top: -5%; width: 140px; opacity: .7; transform: scaleX(-1) rotate(5deg); }
-  /* Pink clouds left */
-  .d-cloud-l { left: -3%; top: 30%; width: 160px; opacity: .6; }
-  /* Pink clouds + halftone right */
-  .d-cloud-r { right: -4%; bottom: 15%; width: 180px; opacity: .5; }
-  /* Star cluster top-left */
-  .d-star { left: 5%; top: 8%; width: 90px; opacity: .8; }
-  /* Sparkles bottom-right */
-  .d-sparkle { right: 8%; bottom: 8%; width: 80px; opacity: .85; }
-  /* Basketball top-right */
-  .d-ball { right: 4%; top: 5%; width: 110px; opacity: .75; transform: rotate(10deg); }
-  /* Sunglasses + ball mid-left */
-  .d-glasses { left: 2%; bottom: 5%; width: 130px; opacity: .65; }
-  /* Coin + camera bottom center-right */
-  .d-cam { right: 15%; bottom: 0; width: 100px; opacity: .6; }
-  /* Halftone blob mid-right */
-  .d-halftone { right: 0; top: 40%; width: 120px; opacity: .4; }
-  /* POW / ZAP mid-left */
-  .d-pow { left: 0; bottom: 25%; width: 170px; opacity: .55; }
-  /* DOGE coins top center */
-  .d-coins { left: 50%; top: 0; width: 140px; opacity: .7; transform: translateX(-50%); }
-  /* Flying doge + cloud top-right */
-  .d-doge-fly { right: 0; top: 12%; width: 150px; opacity: .8; }
-  /* Heart DOGE coin bottom-left */
-  .d-heart { left: 12%; bottom: 2%; width: 90px; opacity: .75; }
+  .d-burst-tl { left: -8%; top: -12%; width: 380px; opacity: .9; transform: rotate(-15deg); }
+  .d-burst-tr { right: -6%; top: -10%; width: 350px; opacity: .85; transform: scaleX(-1) rotate(10deg); }
+  .d-burst-bl { left: -5%; bottom: -10%; width: 300px; opacity: .8; transform: rotate(15deg); }
+  .d-cloud-l { left: -5%; top: 20%; width: 320px; opacity: .7; }
+  .d-cloud-r { right: -8%; bottom: 5%; width: 360px; opacity: .65; }
+  .d-halftone { right: -3%; top: 30%; width: 300px; opacity: .5; }
+  .d-star1 { left: 8%; top: 5%; width: 120px; opacity: 1; }
+  .d-star2 { right: 15%; top: 15%; width: 90px; opacity: .9; transform: rotate(20deg); }
+  .d-star3 { left: 35%; bottom: 3%; width: 100px; opacity: .85; transform: rotate(-10deg); }
+  .d-sparkle1 { left: 20%; top: 10%; width: 110px; opacity: .9; }
+  .d-sparkle2 { right: 5%; bottom: 15%; width: 130px; opacity: .85; }
 
-  /* ── Hero Content ── */
-  .hero-content { position: relative; z-index: 5; }
+  /* ── LAYER 2: Blockparty doge deco PNGs ── */
+  .doge-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  .dg { position: absolute; object-fit: contain; }
+
+  .dg-pow    { left: -3%; top: 5%; width: 280px; transform: rotate(-8deg); }
+  .dg-glasses { right: 2%; bottom: 0; width: 260px; transform: rotate(5deg); }
+  .dg-cam    { right: 25%; bottom: -5%; width: 200px; }
+  .dg-coin   { left: 5%; bottom: 5%; width: 220px; transform: rotate(-5deg); }
+  .dg-cloud  { right: 0; top: 0; width: 300px; }
+  .dg-heart  { left: 30%; bottom: -3%; width: 180px; }
+  .dg-top    { left: 25%; top: -8%; width: 340px; }
+  .dg-row    { left: 0; bottom: -5%; width: 100%; max-width: 500px; opacity: .8; }
+  .dg-multi  { right: -5%; top: 15%; width: 280px; }
+  .dg-left   { left: -8%; top: 25%; width: 320px; }
+  .dg-zap    { left: 40%; bottom: 0; width: 200px; }
+
+  /* ── LAYER 3: Folder5 individual doge stickers ── */
+  .sticker-layer { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+  .s { position: absolute; object-fit: contain; filter: drop-shadow(3px 3px 2px rgba(0,0,0,.3)); }
+
+  /* LEFT SIDE stickers */
+  .s-bull    { left: -2%; top: 8%; width: 220px; transform: rotate(-5deg); }
+  .s-muscle  { left: 0; bottom: 2%; width: 200px; transform: scaleX(-1); }
+  .s-cross   { left: 3%; top: 45%; width: 170px; }
+  .s-wings   { left: 8%; bottom: 25%; width: 240px; }
+  .s-rage    { left: 15%; top: 2%; width: 150px; transform: rotate(8deg); }
+
+  /* RIGHT SIDE stickers */
+  .s-fire    { right: -2%; top: 5%; width: 230px; }
+  .s-chart   { right: 0; top: 35%; width: 220px; transform: rotate(5deg); }
+  .s-bear    { right: 5%; bottom: 5%; width: 200px; }
+  .s-angry   { right: 15%; top: 0; width: 180px; transform: rotate(-8deg); }
+  .s-fist    { right: 8%; bottom: 30%; width: 190px; }
+
+  /* TOP stickers */
+  .s-excited { left: 35%; top: -3%; width: 160px; transform: rotate(-5deg); }
+  .s-face    { right: 30%; top: 2%; width: 130px; transform: rotate(10deg); }
+  .s-circle  { left: 50%; top: -5%; width: 140px; transform: translateX(-50%) rotate(-3deg); }
+
+  /* BOTTOM stickers */
+  .s-shock   { left: 45%; bottom: -2%; width: 150px; }
+  .s-grin    { right: 35%; bottom: 0; width: 120px; }
+  .s-happy   { left: 20%; bottom: -3%; width: 180px; transform: rotate(5deg); }
+  .s-tilt    { right: 20%; bottom: -2%; width: 190px; transform: rotate(-3deg); }
+
+  /* MID scattered stickers */
+  .s-question { left: 5%; top: 65%; width: 160px; }
+  .s-heart   { right: 2%; top: 55%; width: 130px; transform: rotate(12deg); }
+  .s-cry     { left: 18%; top: 15%; width: 140px; transform: rotate(-10deg); }
+  .s-shield  { right: 10%; top: 60%; width: 130px; }
+  .s-bearish { left: 10%; bottom: 40%; width: 170px; }
+  .s-redarrow { right: 25%; top: 25%; width: 150px; transform: rotate(8deg); }
+  .s-splash  { left: 40%; top: 65%; width: 130px; }
+  .s-spin    { right: 40%; bottom: 20%; width: 110px; }
+  .s-love    { left: 55%; bottom: 15%; width: 120px; transform: rotate(-8deg); }
+  .s-smirk   { right: 45%; top: 10%; width: 100px; }
+
+  /* ── LAYER 4: Hero Content (TOP) ── */
+  .hero-content { position: relative; z-index: 10; }
+  .hero-title {
+    font-family: var(--fd);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: .85;
+    margin-bottom: 10px;
+  }
+  .title-line {
+    font-size: 120px;
+    font-weight: 900;
+    letter-spacing: 12px;
+    color: #1a0a00;
+    -webkit-text-stroke: 5px #000;
+    paint-order: stroke fill;
+    text-shadow:
+      6px 6px 0 rgba(0,0,0,.5),
+      -2px -2px 0 rgba(255,255,255,.3),
+      0 0 40px rgba(255,200,0,.4);
+    filter: drop-shadow(4px 6px 0 rgba(0,0,0,.6));
+  }
+
   .hero-badge {
     display: inline-block;
     font-family: var(--fm);
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 900;
     letter-spacing: 4px;
     color: #000;
     background: var(--yel);
-    border: 2px solid #000;
-    box-shadow: 3px 3px 0 #000;
-    padding: 5px 18px;
-    border-radius: 20px;
-    margin-bottom: 14px;
-  }
-
-  .hero-title {
-    font-family: var(--fd);
-    font-size: 72px;
-    font-weight: 900;
-    letter-spacing: 8px;
-    line-height: 1;
-    margin-bottom: 12px;
-    filter: drop-shadow(4px 4px 0 rgba(0,0,0,.8));
-  }
-  .title-maxi {
-    color: #f5e6c8;
-    -webkit-text-stroke: 3px #000;
-    paint-order: stroke fill;
-  }
-  .title-bolt {
-    color: #ffe600;
-    -webkit-text-stroke: 3px #000;
-    paint-order: stroke fill;
-    animation: boltFlash 1.5s ease infinite;
-    display: inline-block;
-    font-size: 80px;
-  }
-  @keyframes boltFlash {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: .85; transform: scale(1.15); }
-  }
-  .title-doge {
-    color: #f5e6c8;
-    -webkit-text-stroke: 3px #000;
-    paint-order: stroke fill;
-  }
-
-  .hero-sub {
-    font-family: var(--fb);
-    font-size: 13px;
-    color: rgba(255,255,255,.6);
-    font-weight: 700;
-    letter-spacing: 2px;
-    margin-bottom: 12px;
+    border: 3px solid #000;
+    box-shadow: 4px 4px 0 #000;
+    padding: 6px 20px;
+    border-radius: 24px;
+    margin-bottom: 10px;
   }
 
   /* ── Ticker ── */
@@ -394,18 +455,19 @@
     display: inline-flex;
     align-items: center;
     gap: 12px;
-    background: rgba(255,255,255,.06);
-    border: 2px solid rgba(255,255,255,.1);
+    background: rgba(0,0,0,.6);
+    border: 2px solid rgba(255,255,255,.2);
     border-radius: 30px;
     padding: 8px 24px;
+    backdrop-filter: blur(8px);
   }
   .tick-item { display: flex; align-items: center; gap: 5px; }
   .tick-coin { font-size: 16px; color: #f7931a; }
   .tick-coin.eth-coin { color: #627eea; }
   .tick-coin.sol-coin { color: #9945ff; }
-  .tick-label { font-family: var(--fm); font-size: 9px; font-weight: 700; color: rgba(255,255,255,.5); letter-spacing: 1px; }
+  .tick-label { font-family: var(--fm); font-size: 9px; font-weight: 700; color: rgba(255,255,255,.7); letter-spacing: 1px; }
   .tick-price { font-family: var(--fd); font-size: 15px; font-weight: 900; color: var(--yel); }
-  .tick-sep { color: rgba(255,255,255,.2); font-size: 12px; }
+  .tick-sep { color: rgba(255,255,255,.3); font-size: 12px; }
 
   /* ═══ STATS STRIP ═══ */
   .stats-strip {
@@ -741,22 +803,20 @@
 
   /* ═══ RESPONSIVE ═══ */
   @media (max-width: 640px) {
-    .hero { min-height: 320px; padding: 35px 16px 25px; }
-    .hero-title { font-size: 46px; letter-spacing: 4px; }
-    .title-bolt { font-size: 52px; }
-    .hero-sub { font-size: 10px; }
+    .hero { min-height: 400px; padding: 20px 8px; }
+    .title-line { font-size: 70px !important; letter-spacing: 6px !important; -webkit-text-stroke: 3px #000 !important; }
+    .hero-badge { font-size: 7px; padding: 4px 12px; }
     .hero-ticker { padding: 6px 14px; gap: 8px; }
     .tick-price { font-size: 12px; }
     .tick-label { font-size: 7px; }
-    .d-burst-tl, .d-burst-tr { width: 100px !important; }
-    .d-cloud-l { width: 100px !important; }
-    .d-cloud-r { width: 110px !important; }
-    .d-ball { width: 70px !important; }
-    .d-doge-fly { width: 100px !important; }
-    .d-pow { width: 110px !important; }
-    .d-coins { width: 90px !important; }
-    .d-glasses { width: 80px !important; }
-    .d-heart { width: 60px !important; }
+    /* Scale down deco */
+    .d-burst-tl, .d-burst-tr, .d-burst-bl { width: 200px !important; }
+    .d-cloud-l, .d-cloud-r { width: 180px !important; }
+    .d-halftone { width: 160px !important; }
+    /* Scale down blockparty doges */
+    .dg { transform: scale(.6) !important; }
+    /* Scale down stickers */
+    .s { transform: scale(.55) !important; }
     .stats-strip { padding: 10px 12px; }
     .ss-item { padding: 0 14px; }
     .ss-v { font-size: 16px; }
