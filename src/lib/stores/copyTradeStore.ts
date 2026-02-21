@@ -4,10 +4,11 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
-import { AGENT_SIGNALS, getConsensus, type AgentSignal } from '$lib/data/warroom';
-import { openQuickTrade } from './quickTradeStore';
-import { trackSignal } from './trackedSignalStore';
+import { AGENT_SIGNALS, getConsensus } from '$lib/data/warroom';
+import { openQuickTrade, replaceQuickTradeId } from './quickTradeStore';
+import { replaceTrackedSignalId, trackSignal } from './trackedSignalStore';
 import { incrementTrackedSignals } from './userProfileStore';
+import { publishCopyTradeApi } from '$lib/api/tradingApi';
 
 export interface CopyTradeDraft {
   pair: string;
@@ -167,21 +168,59 @@ function createCopyTradeStore() {
 
     publishSignal(): boolean {
       let success = false;
+      let localTradeId: string | null = null;
+      let localSignalId: string | null = null;
+      let payloadDraft: CopyTradeDraft | null = null;
+      let selectedSignalIds: string[] = [];
+      let confidence = 70;
+
       store.update(s => {
         const d = s.draft;
         const evidenceText = d.evidence.map(e => `${e.icon} ${e.name}: ${e.text} (${e.conf}%)`).join('\n');
         const noteText = d.note ? `${d.note}\n\n${evidenceText}` : evidenceText;
+        confidence = d.evidence.length
+          ? Math.round(d.evidence.reduce((a, e) => a + e.conf, 0) / d.evidence.length)
+          : 70;
+        selectedSignalIds = [...s.selectedSignalIds];
 
         // Open a QuickTrade position
-        openQuickTrade(d.pair, d.dir, d.entry, d.tp[0], d.sl, 'copy-trade', noteText);
+        localTradeId = openQuickTrade(d.pair, d.dir, d.entry, d.tp[0], d.sl, 'copy-trade', noteText, false);
 
         // Track as signal for Signal Room
-        trackSignal(d.pair, d.dir, d.entry, 'COPY TRADE', Math.round(d.evidence.reduce((a, e) => a + e.conf, 0) / d.evidence.length), noteText);
+        localSignalId = trackSignal(d.pair, d.dir, d.entry, 'COPY TRADE', confidence, noteText, false);
         incrementTrackedSignals();
+        payloadDraft = { ...d, note: noteText, source: 'copy-trade' };
 
         success = true;
         return { ...s, isOpen: false, step: 1, selectedSignalIds: [] };
       });
+
+      if (success && typeof window !== 'undefined' && localTradeId && localSignalId && payloadDraft) {
+        void publishCopyTradeApi({
+          selectedSignalIds,
+          draft: payloadDraft,
+          confidence,
+        }).then((result) => {
+          if (!result) return;
+
+          replaceQuickTradeId(localTradeId as string, result.trade.id, {
+            currentPrice: result.trade.currentPrice,
+            pnlPercent: result.trade.pnlPercent,
+            status: result.trade.status,
+            openedAt: result.trade.openedAt,
+          });
+
+          replaceTrackedSignalId(localSignalId as string, result.signal.id, {
+            confidence: result.signal.confidence,
+            currentPrice: result.signal.currentPrice,
+            pnlPercent: result.signal.pnlPercent,
+            status: result.signal.status,
+            trackedAt: result.signal.trackedAt,
+            expiresAt: result.signal.expiresAt,
+          });
+        });
+      }
+
       return success;
     },
   };

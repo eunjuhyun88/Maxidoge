@@ -30,6 +30,18 @@ export interface ApiTrackedSignal {
   expiresAt: number;
 }
 
+export interface ApiCopyTradeRun {
+  id: string;
+  userId: string;
+  selectedSignalIds: string[];
+  draft: Record<string, unknown>;
+  published: boolean;
+  publishedTradeId: string | null;
+  publishedSignalId: string | null;
+  createdAt: number;
+  publishedAt: number | null;
+}
+
 async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: {
@@ -161,5 +173,37 @@ export async function untrackSignalApi(signalId: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+export async function publishCopyTradeApi(payload: {
+  selectedSignalIds: string[];
+  draft: {
+    pair: string;
+    dir: 'LONG' | 'SHORT';
+    entry: number;
+    tp: number[];
+    sl: number;
+    orderType?: string;
+    leverage?: number;
+    sizePercent?: number;
+    marginMode?: string;
+    evidence?: { icon: string; name: string; text: string; conf: number; color: string }[];
+    note?: string;
+    source?: string;
+  };
+  confidence?: number;
+}): Promise<{ run: ApiCopyTradeRun; trade: ApiQuickTrade; signal: ApiTrackedSignal } | null> {
+  if (!canUseBrowserFetch()) return null;
+  try {
+    return await requestJson<{ run: ApiCopyTradeRun; trade: ApiQuickTrade; signal: ApiTrackedSignal }>(
+      '/api/copy-trades/publish',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    );
+  } catch {
+    return null;
   }
 }
