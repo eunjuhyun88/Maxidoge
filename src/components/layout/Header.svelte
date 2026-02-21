@@ -2,8 +2,9 @@
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { gameState, type ViewMode } from '$lib/stores/gameState';
-  import { walletStore, isWalletConnected, openWalletModal, disconnectWallet } from '$lib/stores/walletStore';
+  import { gameState } from '$lib/stores/gameState';
+  import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
+  import { hydrateDomainStores } from '$lib/stores/hydration';
   import { fetchPrices, subscribeMiniTicker } from '$lib/api/binance';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
 
@@ -26,6 +27,8 @@
   ];
 
   onMount(async () => {
+    void hydrateDomainStores();
+
     try {
       const prices = await fetchPrices(['BTCUSDT', 'ETHUSDT', 'SOLUSDT']);
       const btc = prices['BTCUSDT'] || state.prices.BTC;

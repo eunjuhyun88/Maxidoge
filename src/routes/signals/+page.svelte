@@ -9,6 +9,14 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { notifySignalTracked } from '$lib/stores/notificationStore';
+  import {
+    buildAgentSignals,
+    buildArenaSignals,
+    buildCommunityIdeas,
+    buildTrackedSignals,
+    buildTradeSignals,
+    type Signal
+  } from '$lib/signals/communitySignals';
   import LivePanel from '../../components/live/LivePanel.svelte';
   import EmptyState from '../../components/shared/EmptyState.svelte';
   import ContextBanner from '../../components/shared/ContextBanner.svelte';
@@ -17,23 +25,6 @@
   $: records = $matchHistoryStore.records;
   $: opens = $openTrades;
   $: tracked = $activeSignals;
-
-  interface Signal {
-    id: string;
-    agent: typeof AGDEFS[0] | null;
-    pair: string;
-    dir: 'LONG' | 'SHORT';
-    conf: number;
-    entry: number;
-    tp: number;
-    sl: number;
-    rr: string;
-    time: string;
-    priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-    source: 'arena' | 'trade' | 'tracked' | 'agent';
-    reason: string;
-    active: boolean;
-  }
 
   let filter: string = 'all';
   let signalsView: 'community' | 'signals' = 'community';
@@ -56,10 +47,10 @@
   ];
 
   // Build signals from real data sources
-  $: arenaSignals = buildArenaSignals(records);
+  $: arenaSignals = buildArenaSignals(records, AGDEFS, state);
   $: tradeSignals = buildTradeSignals(opens);
-  $: trackedSignals = buildTrackedSignals(tracked);
-  $: agentSignals = buildAgentSignals();
+  $: trackedSignals = buildTrackedSignals(tracked, AGDEFS);
+  $: agentSignals = buildAgentSignals(AGDEFS, state);
   $: allSignals = [...arenaSignals, ...tradeSignals, ...trackedSignals, ...agentSignals];
   $: filteredSignals = filter === 'all' ? allSignals
     : filter === 'active' ? allSignals.filter(s => s.active)
@@ -69,147 +60,7 @@
     : allSignals.filter(s => s.priority === filter);
   $: activeSignalCount = allSignals.filter((s) => s.active).length;
   $: highConvictionCount = allSignals.filter((s) => s.conf >= 78).length;
-
-  interface CommunityIdea {
-    id: string;
-    signal: Signal;
-    timeframe: '5m' | '15m' | '30m' | '1H' | '4H' | '1D';
-    strategy: string;
-    subscribers: number;
-    category: 'crypto' | 'arena' | 'trade' | 'tracked';
-  }
-
-  const TF_ROTATION: CommunityIdea['timeframe'][] = ['4H', '1D', '1H', '15m', '30m', '5m'];
-
-  function toCommunityCategory(sig: Signal): CommunityIdea['category'] {
-    if (sig.source === 'arena') return 'arena';
-    if (sig.source === 'trade') return 'trade';
-    if (sig.source === 'tracked') return 'tracked';
-    return 'crypto';
-  }
-
-  function toStrategyTitle(sig: Signal): string {
-    const base = sig.reason.split('·')[0]?.trim() || sig.reason;
-    if (base.length > 26) return `${base.slice(0, 26)}...`;
-    return base;
-  }
-
-  function toSubscribers(sig: Signal, idx: number): number {
-    return 36000 + sig.conf * 120 + idx * 170;
-  }
-
-  $: communityIdeas = filteredSignals
-    .map((sig, idx) => ({
-      id: `idea-${sig.id}`,
-      signal: sig,
-      timeframe: TF_ROTATION[idx % TF_ROTATION.length],
-      strategy: toStrategyTitle(sig),
-      subscribers: toSubscribers(sig, idx),
-      category: toCommunityCategory(sig)
-    }))
-    .filter((idea) => communityFilter === 'all' || idea.category === communityFilter)
-    .slice(0, 12);
-
-  function buildArenaSignals(recs: typeof records): Signal[] {
-    return recs.slice(0, 10).flatMap(r => {
-      if (!r.agentVotes) return [];
-      return r.agentVotes.map(v => {
-        const ag = AGDEFS.find(a => a.id === v.agentId) || AGDEFS[0];
-        const base = state.prices?.BTC || 97000;
-        return {
-          id: `arena-${r.id}-${v.agentId}`,
-          agent: ag,
-          pair: 'BTC/USDT',
-          dir: v.dir as 'LONG' | 'SHORT',
-          conf: v.conf,
-          entry: Math.round(base),
-          tp: Math.round(v.dir === 'LONG' ? base * 1.02 : base * 0.98),
-          sl: Math.round(v.dir === 'LONG' ? base * 0.99 : base * 1.01),
-          rr: '1:2.0',
-          time: timeSince(r.timestamp),
-          priority: v.conf >= 80 ? 'CRITICAL' as const : v.conf >= 70 ? 'HIGH' as const : 'MEDIUM' as const,
-          source: 'arena' as const,
-          reason: `Arena Match #${r.matchN} — ${r.win ? 'WIN' : 'LOSS'} (${v.name}: ${v.dir} ${v.conf}%)`,
-          active: true,
-        };
-      });
-    });
-  }
-
-  function buildTradeSignals(trades: typeof opens): Signal[] {
-    return trades.map(t => ({
-      id: `trade-${t.id}`,
-      agent: null,
-      pair: t.pair,
-      dir: t.dir,
-      conf: 75,
-      entry: Math.round(t.entry),
-      tp: t.tp ? Math.round(t.tp) : Math.round(t.dir === 'LONG' ? t.entry * 1.02 : t.entry * 0.98),
-      sl: t.sl ? Math.round(t.sl) : Math.round(t.dir === 'LONG' ? t.entry * 0.99 : t.entry * 1.01),
-      rr: '1:2.0',
-      time: timeSince(t.openedAt),
-      priority: Math.abs(t.pnlPercent) > 3 ? 'HIGH' as const : 'MEDIUM' as const,
-      source: 'trade' as const,
-      reason: `Open position: ${t.dir} ${t.pair} @ $${Math.round(t.entry).toLocaleString()} (PnL: ${t.pnlPercent >= 0 ? '+' : ''}${t.pnlPercent.toFixed(2)}%)`,
-      active: true,
-    }));
-  }
-
-  function buildTrackedSignals(sigs: typeof tracked): Signal[] {
-    return sigs.map(s => ({
-      id: `tracked-${s.id}`,
-      agent: AGDEFS.find(a => a.name === s.source) || null,
-      pair: s.pair,
-      dir: s.dir,
-      conf: s.confidence,
-      entry: Math.round(s.entryPrice),
-      tp: Math.round(s.dir === 'LONG' ? s.entryPrice * 1.02 : s.entryPrice * 0.98),
-      sl: Math.round(s.dir === 'LONG' ? s.entryPrice * 0.99 : s.entryPrice * 1.01),
-      rr: '1:2.0',
-      time: timeSince(s.trackedAt),
-      priority: s.confidence >= 80 ? 'HIGH' as const : 'MEDIUM' as const,
-      source: 'tracked' as const,
-      reason: `Tracked signal from ${s.source}: ${s.dir} ${s.pair} (PnL: ${s.pnlPercent >= 0 ? '+' : ''}${s.pnlPercent.toFixed(2)}%)`,
-      active: true,
-    }));
-  }
-
-  function buildAgentSignals(): Signal[] {
-    // Generate fresh signals from agents based on current state
-    return AGDEFS.slice(0, 5).map((ag, i) => {
-      const pairs = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'];
-      const pair = pairs[i % pairs.length];
-      const base = pair.startsWith('BTC') ? (state.prices?.BTC || 97000)
-        : pair.startsWith('ETH') ? (state.prices?.ETH || 3400)
-        : (state.prices?.SOL || 190);
-      const dir = ag.dir as 'LONG' | 'SHORT';
-      const spread = base * 0.02;
-      return {
-        id: `agent-${ag.id}`,
-        agent: ag,
-        pair,
-        dir,
-        conf: ag.conf,
-        entry: Math.round(base),
-        tp: Math.round(dir === 'LONG' ? base + spread : base - spread),
-        sl: Math.round(dir === 'LONG' ? base - spread * 0.5 : base + spread * 0.5),
-        rr: `1:${(1.5 + Math.random()).toFixed(1)}`,
-        time: 'LIVE',
-        priority: ag.conf >= 78 ? 'CRITICAL' as const : ag.conf >= 70 ? 'HIGH' as const : 'MEDIUM' as const,
-        source: 'agent' as const,
-        reason: ag.finding.title + ' — ' + ag.finding.detail,
-        active: true,
-      };
-    });
-  }
-
-  function timeSince(ts: number): string {
-    const sec = Math.floor((Date.now() - ts) / 1000);
-    if (sec < 60) return `${sec}s ago`;
-    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-    return `${Math.floor(sec / 86400)}d ago`;
-  }
+  $: communityIdeas = buildCommunityIdeas(filteredSignals, communityFilter);
 
   function handleTrack(sig: Signal) {
     trackSignal(sig.pair, sig.dir, sig.entry, sig.agent?.name || 'manual', sig.conf);
