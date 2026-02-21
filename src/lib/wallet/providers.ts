@@ -20,6 +20,7 @@ interface Eip1193Provider {
   isWalletConnect?: boolean;
   isPhantom?: boolean;
   isPhantomEthereum?: boolean;
+  disconnect?: () => Promise<void>;
 }
 
 interface PhantomSolanaConnectResult {
@@ -34,10 +35,12 @@ interface PhantomSolanaProvider {
   isPhantom?: boolean;
   connect: (args?: { onlyIfTrusted?: boolean }) => Promise<PhantomSolanaConnectResult>;
   signMessage: (message: Uint8Array, display?: 'utf8' | 'hex') => Promise<PhantomSolanaSignResult>;
+  publicKey?: { toString: () => string };
 }
 
 interface WalletWindow extends Window {
   ethereum?: Eip1193Provider;
+  solana?: PhantomSolanaProvider;
   phantom?: {
     solana?: PhantomSolanaProvider;
   };
@@ -82,12 +85,147 @@ function resolveInjectedEvmProvider(key: WalletProviderKey): Eip1193Provider | n
   return null;
 }
 
+let _walletConnectProvider: Eip1193Provider | null = null;
+let _coinbaseProvider: Eip1193Provider | null = null;
+
+function getWalletConnectProjectId(): string {
+  const fromPublic = (import.meta as any)?.env?.PUBLIC_WALLETCONNECT_PROJECT_ID;
+  const fromVite = (import.meta as any)?.env?.VITE_WALLETCONNECT_PROJECT_ID;
+  const projectId = typeof fromPublic === 'string' && fromPublic.trim()
+    ? fromPublic.trim()
+    : typeof fromVite === 'string' && fromVite.trim()
+      ? fromVite.trim()
+      : '';
+  if (!projectId) {
+    throw new Error('WalletConnect project id is missing. Set PUBLIC_WALLETCONNECT_PROJECT_ID.');
+  }
+  return projectId;
+}
+
+function getPreferredChainId(): number {
+  const rawPublic = (import.meta as any)?.env?.PUBLIC_EVM_CHAIN_ID;
+  const rawVite = (import.meta as any)?.env?.VITE_EVM_CHAIN_ID;
+  const value = typeof rawPublic === 'string' && rawPublic.trim()
+    ? Number(rawPublic)
+    : typeof rawVite === 'string' && rawVite.trim()
+      ? Number(rawVite)
+      : 42161;
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 42161;
+}
+
+function getPreferredRpcUrl(chainId: number): string {
+  const rawPublic = (import.meta as any)?.env?.PUBLIC_EVM_RPC_URL;
+  const rawVite = (import.meta as any)?.env?.VITE_EVM_RPC_URL;
+  const envUrl = typeof rawPublic === 'string' && rawPublic.trim()
+    ? rawPublic.trim()
+    : typeof rawVite === 'string' && rawVite.trim()
+      ? rawVite.trim()
+      : '';
+  if (envUrl) return envUrl;
+
+  if (chainId === 42161) return 'https://arb1.arbitrum.io/rpc';
+  if (chainId === 137) return 'https://polygon-rpc.com';
+  if (chainId === 8453) return 'https://mainnet.base.org';
+  return 'https://cloudflare-eth.com';
+}
+
+function mapChainIdToCode(chainId: number): string {
+  if (chainId === 1) return 'ETH';
+  if (chainId === 10) return 'OP';
+  if (chainId === 56) return 'BSC';
+  if (chainId === 137) return 'POL';
+  if (chainId === 8453) return 'BASE';
+  if (chainId === 42161) return 'ARB';
+  return 'EVM';
+}
+
+export function getPreferredEvmChainCode(): string {
+  return mapChainIdToCode(getPreferredChainId());
+}
+
+async function getWalletConnectProvider(): Promise<Eip1193Provider> {
+  if (_walletConnectProvider) return _walletConnectProvider;
+
+  let mod: any;
+  try {
+    const moduleName = '@walletconnect/ethereum-provider';
+    mod = await import(/* @vite-ignore */ moduleName);
+  } catch {
+    throw new Error('WalletConnect SDK is not installed. Add @walletconnect/ethereum-provider.');
+  }
+
+  const EthereumProvider = mod?.default ?? mod?.EthereumProvider ?? mod;
+  if (!EthereumProvider || typeof EthereumProvider.init !== 'function') {
+    throw new Error('WalletConnect SDK initialization failed.');
+  }
+
+  const projectId = getWalletConnectProjectId();
+  const chainId = getPreferredChainId();
+  const provider = await EthereumProvider.init({
+    projectId,
+    showQrModal: true,
+    chains: [chainId],
+    optionalChains: [1, 10, 56, 137, 8453, 42161],
+    methods: ['eth_requestAccounts', 'personal_sign'],
+  });
+
+  _walletConnectProvider = provider as Eip1193Provider;
+  return _walletConnectProvider;
+}
+
+async function getCoinbaseProvider(): Promise<Eip1193Provider> {
+  if (_coinbaseProvider) return _coinbaseProvider;
+
+  let mod: any;
+  try {
+    const moduleName = '@coinbase/wallet-sdk';
+    mod = await import(/* @vite-ignore */ moduleName);
+  } catch {
+    throw new Error('Coinbase Wallet SDK is not installed. Add @coinbase/wallet-sdk.');
+  }
+
+  const CoinbaseWalletSDK = mod?.default ?? mod?.CoinbaseWalletSDK ?? mod;
+  if (!CoinbaseWalletSDK) {
+    throw new Error('Coinbase Wallet SDK initialization failed.');
+  }
+
+  const chainId = getPreferredChainId();
+  const rpcUrl = getPreferredRpcUrl(chainId);
+  const sdk = new CoinbaseWalletSDK({
+    appName: 'MAXI DOGE',
+  });
+  const provider = sdk.makeWeb3Provider(rpcUrl, chainId);
+  if (!provider || typeof provider.request !== 'function') {
+    throw new Error('Coinbase Wallet provider could not be created.');
+  }
+
+  _coinbaseProvider = provider as Eip1193Provider;
+  return _coinbaseProvider;
+}
+
+async function resolveEvmProvider(key: WalletProviderKey): Promise<Eip1193Provider | null> {
+  if (key === 'walletconnect') {
+    return getWalletConnectProvider();
+  }
+
+  if (key === 'coinbase') {
+    try {
+      return await getCoinbaseProvider();
+    } catch {
+      return resolveInjectedEvmProvider(key);
+    }
+  }
+
+  return resolveInjectedEvmProvider(key);
+}
+
 export function hasInjectedEvmProvider(key: WalletProviderKey): boolean {
+  if (key === 'walletconnect' || key === 'coinbase') return true;
   return resolveInjectedEvmProvider(key) !== null;
 }
 
 export async function requestInjectedEvmAccount(key: WalletProviderKey): Promise<string> {
-  const provider = resolveInjectedEvmProvider(key);
+  const provider = await resolveEvmProvider(key);
   if (!provider) {
     throw new Error(`${WALLET_PROVIDER_LABEL[key]} provider not detected. Check extension/app connection.`);
   }
@@ -106,7 +244,7 @@ export async function signInjectedEvmMessage(
   message: string,
   address: string
 ): Promise<string> {
-  const provider = resolveInjectedEvmProvider(key);
+  const provider = await resolveEvmProvider(key);
   if (!provider) {
     throw new Error(`${WALLET_PROVIDER_LABEL[key]} provider is unavailable for signing.`);
   }
@@ -124,7 +262,7 @@ export async function signInjectedEvmMessage(
 
 function getPhantomSolanaProvider(): PhantomSolanaProvider | null {
   const w = getWalletWindow();
-  const provider = w?.phantom?.solana;
+  const provider = w?.solana || w?.phantom?.solana;
   if (!provider) return null;
   if (typeof provider.connect !== 'function' || typeof provider.signMessage !== 'function') return null;
   if (provider.isPhantom !== true) return null;
@@ -138,7 +276,7 @@ export async function requestPhantomSolanaAccount(): Promise<string> {
   }
 
   const connected = await provider.connect();
-  const address = connected?.publicKey?.toString();
+  const address = connected?.publicKey?.toString() || provider.publicKey?.toString();
   if (!address) {
     throw new Error('Failed to read Phantom Solana address.');
   }

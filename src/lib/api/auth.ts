@@ -8,6 +8,7 @@ export interface RegisterAuthPayload {
 export interface WalletNoncePayload {
   address: string;
   provider?: string;
+  chain?: string;
 }
 
 export interface VerifyWalletPayload {
@@ -15,6 +16,7 @@ export interface VerifyWalletPayload {
   message: string;
   signature: string;
   provider?: string;
+  chain?: string;
 }
 
 interface ApiErrorPayload {
@@ -55,6 +57,7 @@ export function requestWalletNonce(payload: WalletNoncePayload) {
   return postJson<{
     success: boolean;
     address: string;
+    chain?: string;
     nonce: string;
     message: string;
     expiresAt: string;

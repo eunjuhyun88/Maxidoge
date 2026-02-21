@@ -15,7 +15,7 @@ import {
 } from '$lib/server/session';
 
 const GENERIC_WALLET_RE = /^0x[0-9a-fA-F]{40}$|^[A-Za-z0-9]{20,64}$/;
-const ETH_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
+const WALLET_SIGNATURE_RE = /^0x[0-9a-fA-F]{64,512}$/;
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
   try {
@@ -37,7 +37,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     if (walletAddress && !GENERIC_WALLET_RE.test(walletAddress)) {
       return json({ error: 'Invalid wallet address format' }, { status: 400 });
     }
-    if (walletSignature && !ETH_SIGNATURE_RE.test(walletSignature)) {
+    if (walletSignature && !WALLET_SIGNATURE_RE.test(walletSignature)) {
       return json({ error: 'Invalid wallet signature format' }, { status: 400 });
     }
     if (walletSignature && !walletAddress) {

@@ -9,6 +9,7 @@
   import { registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
   import {
     WALLET_PROVIDER_LABEL,
+    getPreferredEvmChainCode,
     hasInjectedEvmProvider,
     requestInjectedEvmAccount,
     requestPhantomSolanaAccount,
@@ -28,7 +29,8 @@
   let connectingProvider = '';
   let signingMessage = false;
 
-  const ETH_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
+  const WALLET_SIGNATURE_RE = /^0x[0-9a-fA-F]{64,512}$/;
+  const preferredEvmChain = getPreferredEvmChainCode();
 
   function isWalletProviderKey(value: string): value is WalletProviderKey {
     return value === 'metamask'
@@ -53,10 +55,8 @@
         nickname: nicknameInput.trim(),
         walletAddress: state.connected ? state.address || undefined : undefined,
         walletSignature: state.connected
-          && typeof state.address === 'string'
           && typeof state.signature === 'string'
-          && isEvmAddress(state.address)
-          && ETH_SIGNATURE_RE.test(state.signature)
+          && WALLET_SIGNATURE_RE.test(state.signature)
           ? state.signature
           : undefined,
       });
@@ -81,14 +81,14 @@
         // Prefer EVM-injected Phantom first. If unavailable, use Phantom Solana provider.
         if (hasInjectedEvmProvider('phantom')) {
           const walletAddress = await requestInjectedEvmAccount('phantom');
-          connectWallet(provider, walletAddress, 'ARB');
+          connectWallet(provider, walletAddress, preferredEvmChain);
         } else {
           const solAddress = await requestPhantomSolanaAccount();
           connectWallet(provider, solAddress, 'SOL');
         }
       } else {
         const walletAddress = await requestInjectedEvmAccount(provider);
-        connectWallet(provider, walletAddress, 'ARB');
+        connectWallet(provider, walletAddress, preferredEvmChain);
       }
     } catch (error) {
       actionError = error instanceof Error ? error.message : 'Failed to connect wallet';
@@ -117,6 +117,7 @@
         const noncePayload = await requestWalletNonce({
           address: state.address,
           provider,
+          chain: state.chain,
         });
 
         const signature = await signInjectedEvmMessage(provider, noncePayload.message, state.address);
@@ -126,13 +127,14 @@
           message: noncePayload.message,
           signature,
           provider,
+          chain: state.chain,
         });
 
         signMessage(signature);
         return;
       }
 
-      // Non-EVM wallets (e.g. Phantom Solana) are locally signed and linked at registration.
+      // Non-EVM wallets (e.g. Phantom Solana) use a direct verification call without nonce.
       if (provider === 'phantom') {
         const message = [
           'MAXI DOGE Wallet Verification',
@@ -142,6 +144,13 @@
         ].join('\n');
 
         const signature = await signPhantomSolanaUtf8Message(message);
+        await verifyWalletSignature({
+          address: state.address,
+          message,
+          signature,
+          provider,
+          chain: 'SOL',
+        });
         signMessage(signature);
         return;
       }

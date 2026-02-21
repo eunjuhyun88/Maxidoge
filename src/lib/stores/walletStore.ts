@@ -139,6 +139,7 @@ export function connectWallet(provider: string = 'MetaMask', addressOverride?: s
     balance: connection.balance,
     chain: connection.chain,
     provider: connection.provider,
+    signature: null,
     walletModalStep: 'sign-message' // New: go to sign step
   }));
 }
@@ -174,6 +175,7 @@ export function disconnectWallet() {
     shortAddr: null,
     balance: 0,
     provider: null,
+    signature: null,
     tier: w.email ? 'registered' : 'guest'
   }));
 }
