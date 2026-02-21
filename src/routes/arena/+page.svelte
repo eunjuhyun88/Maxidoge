@@ -1,0 +1,2122 @@
+<script lang="ts">
+  import { gameState } from '$lib/stores/gameState';
+  import { agentStats, addXP } from '$lib/stores/agentData';
+  import { AGDEFS, SOURCES } from '$lib/data/agents';
+  import { sfx } from '$lib/audio/sfx';
+  import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_GATHER, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, DOGE_VOTE_LONG, DOGE_WORDS, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
+  import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, startGameLoop, resetPhaseInit } from '$lib/engine/gameLoop';
+  import { calculateLP, determineConsensus } from '$lib/engine/scoring';
+  import Lobby from '../../components/arena/Lobby.svelte';
+  import ChartPanel from '../../components/arena/ChartPanel.svelte';
+  import HypothesisPanel from '../../components/arena/HypothesisPanel.svelte';
+  import SquadConfig from '../../components/arena/SquadConfig.svelte';
+  import MatchHistory from '../../components/arena/MatchHistory.svelte';
+  import SpeechBubble from '../../components/arena/SpeechBubble.svelte';
+  import { pushFeedItem, clearFeed } from '$lib/stores/battleFeedStore';
+  import { addMatchRecord, type MatchRecord } from '$lib/stores/matchHistoryStore';
+  import { matchRecordToReplayData, generateReplaySteps, createReplayState, type ReplayStep } from '$lib/engine/replay';
+  import { addPnLEntry } from '$lib/stores/pnlStore';
+  import { deployFromConfig } from '$lib/engine/gameLoop';
+  import type { Phase } from '$lib/stores/gameState';
+  import { onMount, onDestroy } from 'svelte';
+  import { isWalletConnected, connectWallet } from '$lib/stores/walletStore';
+
+  $: walletOk = $isWalletConnected;
+
+  $: state = $gameState;
+  $: stats = $agentStats;
+
+  // Active agents for this match
+  $: activeAgents = AGDEFS.filter(a => state.selectedAgents.includes(a.id));
+
+  // UI state
+  let findings: Array<{def: typeof AGDEFS[0]; visible: boolean}> = [];
+  let agentStates: Record<string, {state: string; speech: string; energy: number; voteDir: string; posX?: number; posY?: number}> = {};
+  let verdictVisible = false;
+  let resultVisible = false;
+  let resultData = { win: false, lp: 0, tag: '', motto: '' };
+  let floatingWords: Array<{id: number; text: string; color: string; x: number; dur: number}> = [];
+  let feedMessages: Array<{icon: string; name: string; color: string; text: string; dir?: string; isNew?: boolean}> = [];
+  let councilActive = false;
+  let phaseLabel = { name: 'STANDBY', color: '#888', emoji: '💤' };
+  let pvpVisible = false;
+  let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = [];
+  let historyOpen = false;
+  let matchHistoryOpen = false;
+
+  // Squad Config handlers
+  function onSquadDeploy(e: CustomEvent<{ config: import('$lib/stores/gameState').SquadConfig }>) {
+    gameState.update(s => ({ ...s, squadConfig: e.detail.config }));
+    clearFeed();
+    pushFeedItem({
+      agentId: 'system', agentName: 'SYSTEM', agentIcon: '🐕',
+      agentColor: '#ffe600', text: `Squad configured! Risk: ${e.detail.config.riskLevel.toUpperCase()} · TF: ${e.detail.config.timeframe} · Deploying...`,
+      phase: 'config'
+    });
+    // Advance from config → deploy
+    deployFromConfig();
+  }
+
+  function onSquadBack() {
+    // Go back to lobby
+    gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'standby' }));
+  }
+
+  // ═══════ HYPOTHESIS STATE ═══════
+  let hypothesisVisible = false;
+  let hypothesisTimer = 45;
+  let hypothesisInterval: ReturnType<typeof setInterval> | null = null;
+
+  // ═══════ REPLAY STATE ═══════
+  let replayState = createReplayState();
+  let replaySteps: ReplayStep[] = [];
+  let replayTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function startReplay(record: MatchRecord) {
+    const data = matchRecordToReplayData(record);
+    replaySteps = generateReplaySteps(data);
+    replayState = { active: true, data, currentStep: 0, totalSteps: replaySteps.length, paused: false };
+
+    // Close history panel
+    historyOpen = false;
+
+    addFeed('🎬', 'REPLAY', '#c840ff', `Replaying Match #${record.matchN}...`);
+    executeReplayStep(0);
+  }
+
+  function executeReplayStep(stepIdx: number) {
+    if (stepIdx >= replaySteps.length || !replayState.active) {
+      // Replay finished
+      replayState = { ...replayState, active: false };
+      addFeed('🎬', 'REPLAY', '#c840ff', 'Replay complete!');
+      return;
+    }
+
+    replayState = { ...replayState, currentStep: stepIdx };
+    const step = replaySteps[stepIdx];
+    const speed = state.speed || 3;
+
+    switch (step.type) {
+      case 'deploy':
+        addFeed('🐕', 'REPLAY', '#c840ff', `Agents deployed: ${step.agents.length} agents`);
+        break;
+      case 'hypothesis':
+        if (step.hypothesis) {
+          addFeed('🐕', 'REPLAY', '#c840ff', `Your call: ${step.hypothesis.dir} · R:R 1:${step.hypothesis.rr.toFixed(1)}`);
+        }
+        break;
+      case 'scout':
+        step.agentVotes.forEach((v, i) => {
+          setTimeout(() => {
+            addFeed(v.icon, v.name, v.color, `${v.dir} — ${v.conf}% confidence`);
+          }, i * 300 / speed);
+        });
+        break;
+      case 'council':
+        addFeed('🗳', 'REPLAY', '#c840ff', 'Council deliberation...');
+        break;
+      case 'verdict':
+        addFeed('★', 'REPLAY', '#c840ff', `Consensus: ${step.consensusType?.toUpperCase() || 'UNKNOWN'}`);
+        break;
+      case 'battle':
+        addFeed('⚔', 'REPLAY', '#c840ff', `Battle result: ${step.battleResult?.toUpperCase() || 'UNKNOWN'}`);
+        break;
+      case 'result':
+        addFeed(step.win ? '🏆' : '😢', 'REPLAY', step.win ? '#00cc66' : '#ff2d55',
+          `${step.win ? 'WIN' : 'LOSS'} · ${step.lp > 0 ? '+' : ''}${step.lp} LP`);
+        break;
+    }
+
+    // Auto-advance to next step
+    replayTimer = setTimeout(() => {
+      executeReplayStep(stepIdx + 1);
+    }, 2000 / speed);
+  }
+
+  function exitReplay() {
+    if (replayTimer) { clearTimeout(replayTimer); replayTimer = null; }
+    replayState = createReplayState();
+    replaySteps = [];
+  }
+
+  // ═══════ PREVIEW STATE ═══════
+  let previewVisible = false;
+  let previewAutoTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ═══════ FLOATING DIR BAR STATE ═══════
+  let floatDir: 'LONG' | 'SHORT' | null = null;
+
+  // ═══════ COMPARE STATE ═══════
+  let compareVisible = false;
+  let compareData = {
+    userDir: 'LONG' as string,
+    agentDir: 'LONG' as string,
+    userEntry: 0, userTp: 0, userSl: 0,
+    agentScore: 0,
+    consensus: { type: 'partial', lpMult: 1.0, badge: 'PARTIAL x1.0' },
+    agentVotes: [] as Array<{name: string; icon: string; color: string; dir: string; conf: number}>
+  };
+
+  // ═══════ CHART POSITION STATE ═══════
+  let showChartPosition = false;
+  let chartPosEntry: number | null = null;
+  let chartPosTp: number | null = null;
+  let chartPosSl: number | null = null;
+  let chartPosDir = 'LONG';
+
+  // ═══════ CHART AGENT MARKERS ═══════
+  let chartAgentMarkers: Array<{
+    time: number;
+    position: 'aboveBar' | 'belowBar';
+    color: string;
+    shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown';
+    text: string;
+  }> = [];
+
+  // ═══════ CHART ANNOTATIONS ═══════
+  let chartAnnotations: Array<{
+    id: string; icon: string; name: string; color: string;
+    label: string; detail: string;
+    yPercent: number; xPercent: number;
+    type: 'ob' | 'funding' | 'whale' | 'signal';
+  }> = [];
+
+  function generateAnnotations() {
+    const anns: typeof chartAnnotations = [];
+    const agents = activeAgents;
+
+    // STRUCTURE agent → OB zone
+    const structAg = agents.find(a => a.id === 'structure');
+    if (structAg) {
+      anns.push({
+        id: 'ob-zone', icon: '⚡', name: 'STRUCTURE', color: structAg.color,
+        label: structAg.finding.title,
+        detail: structAg.finding.detail,
+        yPercent: 25 + Math.random() * 15,
+        xPercent: 60 + Math.random() * 20,
+        type: 'ob'
+      });
+    }
+
+    // DERIV agent → Funding rate
+    const derivAg = agents.find(a => a.id === 'deriv');
+    if (derivAg) {
+      anns.push({
+        id: 'funding-zone', icon: '📊', name: 'DERIV', color: derivAg.color,
+        label: derivAg.finding.title,
+        detail: derivAg.finding.detail,
+        yPercent: 15 + Math.random() * 10,
+        xPercent: 75 + Math.random() * 15,
+        type: 'funding'
+      });
+    }
+
+    // FLOW agent → Whale deposit
+    const flowAg = agents.find(a => a.id === 'flow');
+    if (flowAg) {
+      anns.push({
+        id: 'whale-zone', icon: '💰', name: 'FLOW', color: flowAg.color,
+        label: flowAg.finding.title,
+        detail: flowAg.finding.detail,
+        yPercent: 40 + Math.random() * 15,
+        xPercent: 45 + Math.random() * 20,
+        type: 'whale'
+      });
+    }
+
+    // SENTI agent → Social signal
+    const sentiAg = agents.find(a => a.id === 'senti');
+    if (sentiAg) {
+      anns.push({
+        id: 'senti-zone', icon: '💜', name: 'SENTI', color: sentiAg.color,
+        label: sentiAg.finding.title,
+        detail: sentiAg.finding.detail,
+        yPercent: 55 + Math.random() * 15,
+        xPercent: 55 + Math.random() * 25,
+        type: 'signal'
+      });
+    }
+
+    // GUARDIAN agent → Risk zone
+    const guardAg = agents.find(a => a.id === 'guardian');
+    if (guardAg) {
+      anns.push({
+        id: 'risk-zone', icon: '🛡', name: 'GUARDIAN', color: guardAg.color,
+        label: guardAg.finding.title,
+        detail: guardAg.finding.detail,
+        yPercent: 70 + Math.random() * 10,
+        xPercent: 30 + Math.random() * 15,
+        type: 'signal'
+      });
+    }
+
+    chartAnnotations = anns;
+  }
+
+  function generateAgentMarkers() {
+    // Generate LWC markers from active agents' signals
+    const now = Math.floor(Date.now() / 1000);
+    const markers: typeof chartAgentMarkers = [];
+
+    activeAgents.forEach((ag, i) => {
+      const isLong = ag.dir === 'LONG';
+      markers.push({
+        time: now - (activeAgents.length - i) * 3600, // spread across recent candles
+        position: isLong ? 'belowBar' : 'aboveBar',
+        color: ag.color,
+        shape: isLong ? 'arrowUp' : 'arrowDown',
+        text: `${ag.icon} ${ag.name}`
+      });
+    });
+
+    // Sort by time (required by LWC)
+    markers.sort((a, b) => a.time - b.time);
+    chartAgentMarkers = markers;
+  }
+
+  function initAgentStates() {
+    agentStates = {};
+    for (const ag of activeAgents) {
+      agentStates[ag.id] = { state: 'idle', speech: '', energy: 0, voteDir: '' };
+    }
+  }
+
+  // Typing animation state
+  let speechTimers: Record<string, ReturnType<typeof setInterval>> = {};
+
+  function setSpeech(agentId: string, text: string, dur = 1500) {
+    // Clear any existing typing timer for this agent
+    if (speechTimers[agentId]) { clearInterval(speechTimers[agentId]); delete speechTimers[agentId]; }
+
+    // Start typing effect: reveal one char at a time
+    let charIdx = 0;
+    const fullText = text;
+    agentStates[agentId] = { ...agentStates[agentId], speech: '' };
+    agentStates = { ...agentStates };
+
+    speechTimers[agentId] = setInterval(() => {
+      charIdx++;
+      if (charIdx >= fullText.length) {
+        // Typing complete
+        clearInterval(speechTimers[agentId]);
+        delete speechTimers[agentId];
+        agentStates[agentId] = { ...agentStates[agentId], speech: fullText };
+        agentStates = { ...agentStates };
+
+        // Clear after duration
+        if (dur > 0) setTimeout(() => {
+          if (agentStates[agentId]) {
+            agentStates[agentId] = { ...agentStates[agentId], speech: '' };
+            agentStates = { ...agentStates };
+          }
+        }, dur);
+      } else {
+        agentStates[agentId] = { ...agentStates[agentId], speech: fullText.slice(0, charIdx) + '|' };
+        agentStates = { ...agentStates };
+      }
+    }, 30);
+  }
+
+  function setAgentState(agentId: string, st: string) {
+    if (agentStates[agentId]) {
+      agentStates[agentId] = { ...agentStates[agentId], state: st };
+      agentStates = { ...agentStates };
+    }
+  }
+
+  function setAgentEnergy(agentId: string, e: number) {
+    if (agentStates[agentId]) {
+      agentStates[agentId] = { ...agentStates[agentId], energy: e };
+      agentStates = { ...agentStates };
+    }
+  }
+
+  let feedCursorTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function addFeed(icon: string, name: string, color: string, text: string, dir?: string) {
+    // Add with 'new' flag for slide-in animation + blinking cursor
+    const msg = { icon, name, color, text, dir, isNew: true };
+    feedMessages = [...feedMessages.map(m => ({ ...m, isNew: false })), msg].slice(-10);
+
+    // Remove cursor after 500ms
+    if (feedCursorTimer) clearTimeout(feedCursorTimer);
+    feedCursorTimer = setTimeout(() => {
+      feedMessages = feedMessages.map(m => ({ ...m, isNew: false }));
+    }, 500);
+  }
+
+  function dogeFloat() {
+    const colors = ['#ff2d55', '#ff2d9b', '#00d4ff', '#00ff88', '#c840ff', '#ffe600'];
+    const n = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => {
+        const id = Date.now() + i;
+        floatingWords = [...floatingWords, {
+          id,
+          text: DOGE_WORDS[Math.floor(Math.random() * DOGE_WORDS.length)],
+          color: colors[Math.floor(Math.random() * colors.length)],
+          x: 10 + Math.random() * 80,
+          dur: 1.5 + Math.random() * 1
+        }];
+        setTimeout(() => { floatingWords = floatingWords.filter(w => w.id !== id); }, 2500);
+      }, i * 200);
+    }
+  }
+
+  // ═══════ HYPOTHESIS HANDLERS ═══════
+  function onHypothesisSubmit(e: CustomEvent) {
+    const h = e.detail;
+    // Clear timer
+    if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
+    hypothesisVisible = false;
+
+    // Set hypothesis in game state
+    gameState.update(s => ({
+      ...s,
+      hypothesis: {
+        dir: h.dir,
+        conf: h.conf,
+        tags: new Set(),
+        tf: h.tf,
+        vmode: h.vmode,
+        closeN: h.closeN,
+        entry: h.entry,
+        tp: h.tp,
+        sl: h.sl,
+        rr: h.rr
+      }
+    }));
+
+    // Show position on chart
+    showChartPosition = true;
+    chartPosEntry = h.entry;
+    chartPosTp = h.tp;
+    chartPosSl = h.sl;
+    chartPosDir = h.dir;
+
+    addFeed('🐕', 'YOU', '#ffe600', `${h.dir} · TP $${h.tp.toLocaleString()} · SL $${h.sl.toLocaleString()} · R:R 1:${h.rr}`, h.dir);
+    sfx.vote();
+
+    // Advance to scout phase
+    advancePhase();
+  }
+
+  // Floating direction bar handler
+  function selectFloatDir(d: 'LONG' | 'SHORT') {
+    floatDir = d;
+  }
+
+  // Chart drag handlers
+  function onDragTP(e: CustomEvent) {
+    chartPosTp = e.detail.price;
+    // Also update hypothesis panel if visible
+    gameState.update(s => {
+      if (s.hypothesis) {
+        return { ...s, hypothesis: { ...s.hypothesis, tp: e.detail.price, rr: Math.abs(e.detail.price - (s.hypothesis.entry || 0)) / Math.max(1, Math.abs((s.hypothesis.entry || 0) - (s.hypothesis.sl || 0))) } };
+      }
+      return s;
+    });
+  }
+
+  function onDragSL(e: CustomEvent) {
+    chartPosSl = e.detail.price;
+    gameState.update(s => {
+      if (s.hypothesis) {
+        return { ...s, hypothesis: { ...s.hypothesis, sl: e.detail.price, rr: Math.abs((s.hypothesis.tp || 0) - (s.hypothesis.entry || 0)) / Math.max(1, Math.abs((s.hypothesis.entry || 0) - e.detail.price)) } };
+      }
+      return s;
+    });
+  }
+
+  function onDragEntry(e: CustomEvent) {
+    chartPosEntry = e.detail.price;
+    gameState.update(s => {
+      if (s.hypothesis) {
+        return { ...s, hypothesis: { ...s.hypothesis, entry: e.detail.price } };
+      }
+      return s;
+    });
+  }
+
+  // ═══════ PHASE HANDLERS ═══════
+  function onPhaseInit(phase: Phase) {
+    phaseLabel = PHASE_LABELS[phase] || PHASE_LABELS.standby;
+
+    switch (phase) {
+      case 'deploy': initDeploy(); break;
+      case 'hypothesis': initHypothesis(); break;
+      case 'preview': initPreview(); break;
+      case 'scout': initScout(); break;
+      case 'gather': initGather(); break;
+      case 'council': initCouncil(); break;
+      case 'verdict': initVerdict(); break;
+      case 'compare': initCompare(); break;
+      case 'battle': initBattle(); break;
+      case 'result': initResult(); break;
+      case 'cooldown': initCooldown(); break;
+    }
+  }
+
+  function initDeploy() {
+    findings = [];
+    verdictVisible = false;
+    resultVisible = false;
+    pvpVisible = false;
+    councilActive = false;
+    hypothesisVisible = false;
+    compareVisible = false;
+    previewVisible = false;
+    floatDir = null;
+    showChartPosition = false;
+    chartPosEntry = null;
+    chartPosTp = null;
+    chartPosSl = null;
+    chartAnnotations = [];
+    chartAgentMarkers = [];
+    initAgentStates();
+    sfx.enter();
+    dogeFloat();
+    addFeed('🐕', 'ARENA', '#ff2d9b', 'Match started! Agents deploying...');
+    activeAgents.forEach((ag, i) => {
+      setTimeout(() => {
+        setAgentState(ag.id, 'alert');
+        setSpeech(ag.id, DOGE_DEPLOYS[i % DOGE_DEPLOYS.length], 800);
+      }, i * 200);
+    });
+  }
+
+  function initHypothesis() {
+    // Show hypothesis panel for user prediction
+    hypothesisVisible = true;
+    floatDir = null; // Reset floating dir bar
+    const speed = state.speed || 3;
+    hypothesisTimer = Math.round(45 / speed);
+
+    // Countdown timer
+    if (hypothesisInterval) clearInterval(hypothesisInterval);
+    hypothesisInterval = setInterval(() => {
+      hypothesisTimer -= 1;
+      if (hypothesisTimer <= 0) {
+        // Auto-skip if time runs out
+        if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
+        hypothesisVisible = false;
+
+        // Default: NEUTRAL (skip)
+        const price = state.prices.BTC;
+        gameState.update(s => ({
+          ...s,
+          hypothesis: {
+            dir: 'NEUTRAL', conf: 1, tags: new Set(), tf: '1h', vmode: 'tpsl', closeN: 3,
+            entry: price, tp: price * 1.02, sl: price * 0.985, rr: 1.3
+          }
+        }));
+        showChartPosition = true;
+        chartPosEntry = price;
+        chartPosTp = price * 1.02;
+        chartPosSl = price * 0.985;
+        chartPosDir = 'NEUTRAL';
+        addFeed('⏰', 'TIMEOUT', '#888', 'Time expired — auto-skip');
+        advancePhase();
+      }
+    }, 1000);
+
+    addFeed('🐕', 'ARENA', '#9900cc', 'YOUR CALL? Pick direction, set TP/SL!');
+
+    // Agents go into think state
+    activeAgents.forEach((ag, i) => {
+      setTimeout(() => {
+        setAgentState(ag.id, 'think');
+        setSpeech(ag.id, '🤔...', 600);
+      }, i * 300);
+    });
+  }
+
+  function initPreview() {
+    previewVisible = true;
+    const h = state.hypothesis;
+    addFeed('👁', 'PREVIEW', '#ff6600', `Position: ${h?.dir || 'NEUTRAL'} · Entry $${(h?.entry || 0).toLocaleString()} · R:R 1:${(h?.rr || 1).toFixed(1)}`);
+
+    // Agents look at the position
+    activeAgents.forEach((ag, i) => {
+      setTimeout(() => {
+        setAgentState(ag.id, 'think');
+        setSpeech(ag.id, '📋 reviewing...', 600);
+      }, i * 200);
+    });
+
+    // Auto-advance after 5s if user doesn't confirm
+    const speed = state.speed || 3;
+    previewAutoTimer = setTimeout(() => {
+      confirmPreview();
+    }, 5000 / speed);
+  }
+
+  function confirmPreview() {
+    if (previewAutoTimer) { clearTimeout(previewAutoTimer); previewAutoTimer = null; }
+    previewVisible = false;
+    sfx.charge();
+    addFeed('✅', 'CONFIRMED', '#00cc66', 'Position confirmed — scouting begins!');
+    advancePhase();
+  }
+
+  function initScout() {
+    addFeed('🔍', 'SCOUT', '#cc6600', 'Agents scouting data sources...');
+    // Generate chart annotations from active agents
+    generateAnnotations();
+    // Generate agent signal markers on chart
+    generateAgentMarkers();
+    const speed = state.speed || 3;
+
+    // Map agents to their nearest data source
+    const sourceMap: Record<string, typeof SOURCES[0]> = {};
+    const agentSourcePairs: Array<{agentId: string; source: typeof SOURCES[0]}> = [
+      { agentId: 'structure', source: SOURCES.find(s => s.id === 'binance')! },
+      { agentId: 'deriv', source: SOURCES.find(s => s.id === 'coinglass')! },
+      { agentId: 'flow', source: SOURCES.find(s => s.id === 'onchain')! },
+      { agentId: 'senti', source: SOURCES.find(s => s.id === 'social')! },
+      { agentId: 'guardian', source: SOURCES.find(s => s.id === 'feargreed')! },
+    ];
+
+    activeAgents.forEach((ag, i) => {
+      const pair = agentSourcePairs.find(p => p.agentId === ag.id);
+      const targetSource = pair?.source || SOURCES[i % SOURCES.length];
+
+      setTimeout(() => {
+        // Phase 1: Walk toward data source — move agent position
+        setAgentState(ag.id, 'walk');
+        if (targetSource) {
+          agentStates[ag.id] = {
+            ...agentStates[ag.id],
+            posX: targetSource.x * 100,
+            posY: targetSource.y * 100
+          };
+          agentStates = { ...agentStates };
+        }
+        sfx.scan();
+
+        setTimeout(() => {
+          // Phase 2: Arrive at source + charge up energy
+          setAgentState(ag.id, 'charge');
+          setAgentEnergy(ag.id, 30);
+          setSpeech(ag.id, ag.speech.scout, 800 / speed);
+
+          setTimeout(() => {
+            // Phase 3: Energy full → show finding (at source)
+            setAgentEnergy(ag.id, 75);
+            addFeed(ag.icon, ag.name, ag.color, ag.finding.title, ag.dir);
+
+            setTimeout(() => {
+              // Phase 4: Full charge + decision — return to original position
+              setAgentEnergy(ag.id, 100);
+              sfx.charge();
+              setAgentState(ag.id, 'alert');
+
+              // Return to home position
+              const homeX = 50 + (i - Math.floor(activeAgents.length / 2)) * 16;
+              agentStates[ag.id] = {
+                ...agentStates[ag.id],
+                posX: homeX,
+                posY: 44
+              };
+              agentStates = { ...agentStates };
+
+              findings = [...findings, { def: ag, visible: true }];
+
+              // Phase 5: Return to idle stance
+              setTimeout(() => {
+                setAgentState(ag.id, 'idle');
+              }, 500 / speed);
+            }, 300 / speed);
+          }, 300 / speed);
+        }, 500 / speed);
+      }, i * 500 / speed);
+    });
+  }
+
+  function initGather() {
+    councilActive = true;
+    addFeed('📊', 'GATHER', '#cc6600', 'Gathering analysis data...');
+    activeAgents.forEach((ag, i) => {
+      setTimeout(() => {
+        setAgentState(ag.id, 'vote');
+        setSpeech(ag.id, DOGE_GATHER[i % DOGE_GATHER.length], 400);
+      }, i * 150);
+    });
+  }
+
+  function initCouncil() {
+    addFeed('🗳', 'COUNCIL', '#cc0066', 'Agents voting on direction...');
+    activeAgents.forEach((ag, i) => {
+      setTimeout(() => {
+        const dir = ag.dir;
+        agentStates[ag.id] = { ...agentStates[ag.id], voteDir: dir };
+        agentStates = { ...agentStates };
+        setSpeech(ag.id, ag.speech.vote, 600);
+        sfx.vote();
+        addFeed(ag.icon, ag.name, ag.color, `Vote: ${dir} (${ag.conf}%)`, dir);
+      }, i * 400 / (state.speed || 3));
+    });
+  }
+
+  function initVerdict() {
+    const score = Math.round(state.score);
+    const bullish = activeAgents.filter(a => a.dir === 'LONG').length;
+    const agentDir = score >= 60 ? 'LONG' : 'WAIT';
+    verdictVisible = true;
+
+    // Set position from hypothesis
+    const curPrice = state.prices.BTC;
+    gameState.update(s => ({
+      ...s,
+      pos: s.hypothesis ? {
+        entry: s.hypothesis.entry, tp: s.hypothesis.tp, sl: s.hypothesis.sl,
+        dir: s.hypothesis.dir as any, rr: s.hypothesis.rr, size: 0, lev: 0
+      } : {
+        entry: curPrice, tp: curPrice * 1.02, sl: curPrice * 0.985,
+        dir: 'LONG', rr: 1.3, size: 0, lev: 0
+      }
+    }));
+
+    // Update chart position to match
+    const h = state.hypothesis;
+    if (h) {
+      showChartPosition = true;
+      chartPosEntry = h.entry;
+      chartPosTp = h.tp;
+      chartPosSl = h.sl;
+      chartPosDir = h.dir;
+    }
+
+    sfx.verdict();
+    dogeFloat();
+    addFeed('⭐', 'VERDICT', '#cc0066', `Agent verdict: ${agentDir} · Score ${score} · ${bullish}/${activeAgents.length} agree`, agentDir);
+    activeAgents.forEach((ag, i) => {
+      setTimeout(() => {
+        setAgentState(ag.id, 'jump');
+        setSpeech(ag.id, DOGE_VOTE_LONG[i % DOGE_VOTE_LONG.length], 600);
+      }, i * 100);
+    });
+  }
+
+  function initCompare() {
+    // Compare user hypothesis vs agent consensus
+    const h = state.hypothesis;
+    const userDir = h?.dir || 'NEUTRAL';
+    const agentDirs = activeAgents.map(a => a.dir);
+    const longs = agentDirs.filter(d => d === 'LONG').length;
+    const agentDir = longs > agentDirs.length / 2 ? 'LONG' : 'SHORT';
+    const consensus = determineConsensus(userDir, agentDirs, false);
+
+    compareData = {
+      userDir,
+      agentDir,
+      userEntry: h?.entry || 0,
+      userTp: h?.tp || 0,
+      userSl: h?.sl || 0,
+      agentScore: Math.round(state.score),
+      consensus,
+      agentVotes: activeAgents.map(ag => ({
+        name: ag.name,
+        icon: ag.icon,
+        color: ag.color,
+        dir: ag.dir,
+        conf: ag.conf
+      }))
+    };
+    compareVisible = true;
+
+    // Update consensus in game state
+    gameState.update(s => ({
+      ...s,
+      hypothesis: s.hypothesis ? { ...s.hypothesis, consensusType: consensus.type, lpMult: consensus.lpMult } : s.hypothesis
+    }));
+
+    addFeed('⚔️', 'COMPARE', '#ff6600', `${consensus.badge} — You: ${userDir} vs Agents: ${agentDir}`);
+    sfx.charge();
+
+    // Auto-advance after compare display
+    const speed = state.speed || 3;
+    setTimeout(() => {
+      compareVisible = false;
+      advancePhase();
+    }, 4000 / speed);
+  }
+
+  function initBattle() {
+    verdictVisible = false;
+    compareVisible = false;
+    addFeed('⚔', 'BATTLE', '#cc0033', 'Battle in progress!');
+    activeAgents.forEach((ag, i) => {
+      setAgentState(ag.id, 'alert');
+      setSpeech(ag.id, DOGE_BATTLE[i % DOGE_BATTLE.length], 400);
+    });
+
+    // Simulate TP/SL hit
+    const pos = state.pos;
+    if (!pos) {
+      gameState.update(s => ({ ...s, battleResult: null }));
+      setTimeout(() => advancePhase(), 3000);
+      return;
+    }
+
+    let elapsed = 0;
+    const battleInterval = setInterval(() => {
+      elapsed += 500;
+      gameState.update(s => {
+        const price = s.prices.BTC * (1 + (Math.random() - 0.48) * 0.0015);
+        const isLong = pos.dir === 'LONG';
+        const tpHit = isLong ? price >= pos.tp : price <= pos.tp;
+        const slHit = isLong ? price <= pos.sl : price >= pos.sl;
+        if (tpHit || slHit || elapsed >= 8000) {
+          clearInterval(battleInterval);
+          const result = tpHit ? 'tp' : slHit ? 'sl' : (price > pos.entry ? 'time_win' : 'time_loss');
+          setTimeout(() => advancePhase(), 500);
+          return { ...s, prices: { ...s.prices, BTC: price }, battleResult: result };
+        }
+        return { ...s, prices: { ...s.prices, BTC: price } };
+      });
+    }, 500);
+  }
+
+  function initResult() {
+    const myScore = Math.round(state.score);
+    const oppScore = Math.round(50 + Math.random() * 35);
+    const br = state.battleResult;
+
+    let win = false;
+    let resultTag = '';
+    if (br === 'tp') { win = true; resultTag = 'TP HIT! ✅'; }
+    else if (br === 'sl') { win = false; resultTag = 'SL HIT ❌'; }
+    else if (br === 'close_win' || br === 'time_win') { win = true; resultTag = 'Profit ✅'; }
+    else if (br === 'close_loss' || br === 'time_loss') { win = false; resultTag = 'Loss ❌'; }
+    else { win = myScore > oppScore; resultTag = 'Score'; }
+
+    const consensus = determineConsensus(
+      state.hypothesis?.dir || 'LONG',
+      activeAgents.map(a => a.dir),
+      false
+    );
+    const lpChange = calculateLP(win, state.streak, consensus.lpMult);
+
+    gameState.update(s => ({
+      ...s,
+      matchN: s.matchN + 1,
+      wins: win ? s.wins + 1 : s.wins,
+      losses: win ? s.losses : s.losses + 1,
+      streak: win ? s.streak + 1 : 0,
+      lp: Math.max(0, s.lp + lpChange)
+    }));
+
+    // Update agent stats
+    activeAgents.forEach(ag => {
+      agentStats.update(all => {
+        const d = all[ag.id];
+        if (!d) return all;
+        if (win) { d.wins++; d.curStreak++; if (d.curStreak > d.bestStreak) { d.bestStreak = d.curStreak; d.stamps.streak++; } d.stamps.win++; }
+        else { d.losses++; d.curStreak = 0; d.stamps.lose++; }
+        d.matches.push({ matchN: state.matchN + 1, dir: ag.dir, conf: ag.conf, win, lp: lpChange });
+        if (d.matches.length > 30) d.matches.shift();
+        addXP(ag.id, win ? 25 : 5);
+        return { ...all };
+      });
+    });
+
+    // History (local + persistent store)
+    matchHistory = [{ n: state.matchN + 1, win, lp: lpChange, score: myScore, streak: win ? state.streak + 1 : 0 }, ...matchHistory].slice(0, 30);
+
+    // Persist to matchHistoryStore
+    addMatchRecord({
+      matchN: state.matchN + 1,
+      win,
+      lp: lpChange,
+      score: myScore,
+      streak: win ? state.streak + 1 : 0,
+      agents: state.selectedAgents,
+      agentVotes: activeAgents.map(ag => ({
+        agentId: ag.id, name: ag.name, icon: ag.icon, color: ag.color, dir: ag.dir, conf: ag.conf
+      })),
+      hypothesis: state.hypothesis ? {
+        dir: state.hypothesis.dir, conf: state.hypothesis.conf,
+        tf: state.hypothesis.tf, entry: state.hypothesis.entry,
+        tp: state.hypothesis.tp, sl: state.hypothesis.sl, rr: state.hypothesis.rr
+      } : null,
+      battleResult: state.battleResult,
+      consensusType: consensus.type,
+      lpMult: consensus.lpMult,
+      signals: activeAgents.map(ag => `${ag.name}: ${ag.dir} ${ag.conf}%`)
+    });
+
+    // Record PnL entry
+    addPnLEntry(
+      'arena',
+      `match-${state.matchN + 1}`,
+      lpChange,
+      `${win ? 'WIN' : 'LOSS'} · M${state.matchN + 1} · ${state.hypothesis?.dir || 'NEUTRAL'} · ${consensus.type}`
+    );
+
+    resultData = {
+      win,
+      lp: lpChange,
+      tag: resultTag,
+      motto: win ? WIN_MOTTOS[Math.floor(Math.random() * WIN_MOTTOS.length)] : LOSE_MOTTOS[Math.floor(Math.random() * LOSE_MOTTOS.length)]
+    };
+    resultVisible = true;
+
+    if (win) {
+      sfx.win();
+      dogeFloat();
+      activeAgents.forEach(ag => { setAgentState(ag.id, 'jump'); setSpeech(ag.id, DOGE_WIN[Math.floor(Math.random() * DOGE_WIN.length)], 800); });
+    } else {
+      sfx.lose();
+      activeAgents.forEach(ag => { setAgentState(ag.id, 'sad'); setSpeech(ag.id, DOGE_LOSE[Math.floor(Math.random() * DOGE_LOSE.length)], 800); });
+    }
+
+    addFeed(win ? '🏆' : '💀', 'RESULT', win ? '#00aa44' : '#ff2d55',
+      win ? `WIN! +${lpChange} LP [${resultTag}]` : `LOSE [${resultTag}] ${lpChange} LP`);
+
+    setTimeout(() => { pvpVisible = true; }, 1500);
+  }
+
+  function initCooldown() {
+    verdictVisible = false;
+    resultVisible = false;
+    councilActive = false;
+    compareVisible = false;
+    previewVisible = false;
+    showChartPosition = false;
+    activeAgents.forEach(ag => {
+      setAgentState(ag.id, 'idle');
+      setAgentEnergy(ag.id, 0);
+    });
+    gameState.update(s => ({ ...s, running: false }));
+  }
+
+  function goLobby() {
+    pvpVisible = false;
+    resultVisible = false;
+    verdictVisible = false;
+    hypothesisVisible = false;
+    compareVisible = false;
+    previewVisible = false;
+    floatDir = null;
+    showChartPosition = false;
+    if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
+    gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'standby' }));
+  }
+
+  function playAgain() {
+    pvpVisible = false;
+    resultVisible = false;
+    verdictVisible = false;
+    hypothesisVisible = false;
+    compareVisible = false;
+    previewVisible = false;
+    floatDir = null;
+    showChartPosition = false;
+    findings = [];
+    resetPhaseInit();
+    engineStartMatch();
+  }
+
+  onMount(() => {
+    setPhaseInitCallback(onPhaseInit);
+  });
+
+  onDestroy(() => {
+    if (hypothesisInterval) clearInterval(hypothesisInterval);
+    if (previewAutoTimer) clearTimeout(previewAutoTimer);
+    if (replayTimer) clearTimeout(replayTimer);
+    // Clean up typing timers
+    Object.values(speechTimers).forEach(t => clearInterval(t));
+  });
+</script>
+
+<div class="arena-page">
+  <!-- Wallet Gate Overlay -->
+  {#if !walletOk}
+    <div class="wallet-gate">
+      <div class="wg-card">
+        <div class="wg-icon">🔗</div>
+        <div class="wg-title">CONNECT WALLET</div>
+        <div class="wg-sub">Connect your wallet to access the Arena and start trading battles</div>
+        <button class="wg-btn" on:click={connectWallet}>
+          <span>⚡</span> CONNECT WALLET
+        </button>
+        <div class="wg-hint">Supported: MetaMask · WalletConnect · Coinbase</div>
+      </div>
+    </div>
+  {/if}
+
+  {#if state.inLobby}
+    <Lobby />
+  {:else if state.phase === 'config'}
+    <SquadConfig selectedAgents={state.selectedAgents} on:deploy={onSquadDeploy} on:back={onSquadBack} />
+  {:else}
+    <!-- Match History Toggle -->
+    <button class="mh-toggle" on:click={() => matchHistoryOpen = !matchHistoryOpen}>
+      📋 {state.wins}W-{state.losses}L
+    </button>
+    <MatchHistory visible={matchHistoryOpen} on:close={() => matchHistoryOpen = false} />
+
+    <div class="battle-layout">
+      <!-- ═══════ LEFT: CHART ═══════ -->
+      <div class="chart-side">
+        <ChartPanel
+          showPosition={showChartPosition}
+          posEntry={chartPosEntry}
+          posTp={chartPosTp}
+          posSl={chartPosSl}
+          posDir={chartPosDir}
+          agentAnnotations={chartAnnotations}
+          agentMarkers={chartAgentMarkers}
+          on:dragTP={onDragTP}
+          on:dragSL={onDragSL}
+          on:dragEntry={onDragEntry}
+        />
+
+        <!-- Hypothesis Panel on right side during hypothesis phase -->
+        {#if hypothesisVisible}
+          <div class="hypo-sidebar">
+            <HypothesisPanel timeLeft={hypothesisTimer} on:submit={onHypothesisSubmit} />
+          </div>
+        {/if}
+
+        <!-- Floating LONG/SHORT Direction Bar (hypothesis phase) -->
+        {#if hypothesisVisible}
+          <div class="dir-float-bar">
+            <button class="dfb-btn long" class:sel={floatDir === 'LONG'} on:click={() => selectFloatDir('LONG')}>
+              ▲ LONG
+            </button>
+            <div class="dfb-divider"></div>
+            <button class="dfb-btn short" class:sel={floatDir === 'SHORT'} on:click={() => selectFloatDir('SHORT')}>
+              ▼ SHORT
+            </button>
+          </div>
+        {/if}
+
+        <!-- Position Preview Overlay -->
+        {#if previewVisible && state.hypothesis}
+          <div class="preview-overlay">
+            <div class="preview-card">
+              <div class="preview-header">
+                <span class="prev-icon">👁</span>
+                <span class="prev-title">POSITION PREVIEW</span>
+              </div>
+              <div class="preview-dir {state.hypothesis.dir.toLowerCase()}">
+                {state.hypothesis.dir === 'LONG' ? '▲' : state.hypothesis.dir === 'SHORT' ? '▼' : '●'} {state.hypothesis.dir}
+              </div>
+              <div class="preview-levels">
+                <div class="prev-row">
+                  <span class="prev-lbl">ENTRY</span>
+                  <span class="prev-val">${Math.round(state.hypothesis.entry).toLocaleString()}</span>
+                </div>
+                <div class="prev-row tp">
+                  <span class="prev-lbl">TP</span>
+                  <span class="prev-val">${Math.round(state.hypothesis.tp).toLocaleString()}</span>
+                </div>
+                <div class="prev-row sl">
+                  <span class="prev-lbl">SL</span>
+                  <span class="prev-val">${Math.round(state.hypothesis.sl).toLocaleString()}</span>
+                </div>
+              </div>
+              <div class="preview-rr">
+                R:R <span class="prev-rr-val">1:{state.hypothesis.rr.toFixed(1)}</span>
+              </div>
+              <div class="preview-config">
+                {state.squadConfig.riskLevel.toUpperCase()} · {state.squadConfig.timeframe} · Lev {state.squadConfig.leverageBias}x
+              </div>
+              <button class="preview-confirm" on:click={confirmPreview}>
+                ✅ CONFIRM & SCOUT
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        <div class="score-bar">
+          <div class="sr">
+            <svg viewBox="0 0 44 44">
+              <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="3"/>
+              <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00ff88' : '#ff2d55'} stroke-width="3"
+                stroke-dasharray="{state.score * 1.13} 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
+            </svg>
+            <span class="n">{state.score}</span>
+          </div>
+          <div>
+            <div class="sdir" style="color:{state.score >= 60 ? '#00ff88' : '#ff2d55'}">{state.score >= 60 ? 'LONG' : 'SHORT'}</div>
+            <div class="smeta">{activeAgents.length} agents · M{state.matchN}</div>
+          </div>
+          <div class="score-stats">
+            <span class="ss-item">🔥{state.streak}</span>
+            <span class="ss-item">{state.wins}W-{state.losses}L</span>
+            <span class="ss-item lp">⚡{state.lp} LP</span>
+          </div>
+          {#if state.hypothesis}
+            <div class="hypo-badge {state.hypothesis.dir.toLowerCase()}">
+              {state.hypothesis.dir} · R:R 1:{state.hypothesis.rr.toFixed(1)}
+            </div>
+          {/if}
+          <button class="mbtn" on:click={goLobby}>↺ LOBBY</button>
+        </div>
+      </div>
+
+      <!-- ═══════ RIGHT: BATTLE ARENA ═══════ -->
+      <div class="arena-side">
+        <!-- Background Layers -->
+        <div class="sunburst"></div>
+        <div class="halftone"></div>
+        <div class="ground"></div>
+
+        <!-- Comic Bursts -->
+        <div class="comic-burst boom" style="left:5%;top:12%">BOOM!</div>
+        <div class="comic-burst pow" style="left:75%;top:55%">POW!</div>
+        <div class="comic-burst wow" style="left:40%;top:6%">WOW!</div>
+
+        <!-- Floating sticker emojis -->
+        {#each ['🐕','⭐','💰','🔥','💎','🚀'] as emoji, i}
+          <div class="sticker" style="left:{10+i*15}%;top:{8+Math.sin(i)*20}%;animation-delay:{i*0.7}s;font-size:{14+Math.random()*10}px">{emoji}</div>
+        {/each}
+
+        <!-- Data Sources -->
+        {#each SOURCES as src}
+          <div class="dsrc" style="left:{src.x * 100}%;top:{src.y * 100}%">
+            <div class="dp"></div>
+            <div class="di" style="border-color:{src.color}">{src.icon}</div>
+            <div class="dl">{src.label}</div>
+          </div>
+        {/each}
+
+        <!-- Council Table -->
+        <div class="ctable" class:on={councilActive}>
+          <span class="cl">COUNCIL</span>
+        </div>
+
+        <!-- Agent Sprites with Inline Findings -->
+        {#each activeAgents as ag, i}
+          {@const defaultX = 50 + (i - Math.floor(activeAgents.length / 2)) * 16}
+          {@const agState = agentStates[ag.id] || { state: 'idle', speech: '', energy: 0, voteDir: '' }}
+          {@const agFinding = findings.find(f => f.def.id === ag.id)}
+          {@const xPos = agState.posX ?? defaultX}
+          {@const yPos = agState.posY ?? 44}
+          <div class="ag {agState.state}" style="left:{xPos}%;top:{yPos}%;--ag-delay:{i * 0.1}s;--ag-color:{ag.color}">
+            <!-- Speech Bubble -->
+            {#if agState.speech}
+              <div class="sp v">
+                <span>{agState.speech}</span>
+              </div>
+            {/if}
+            <!-- Vote Badge -->
+            {#if agState.voteDir}
+              <div class="vb v {agState.voteDir === 'LONG' ? 'long' : agState.voteDir === 'SHORT' ? 'short' : 'neutral'}">{agState.voteDir} 🔥</div>
+            {/if}
+            <div class="sha"></div>
+            <div class="wr">
+              <!-- State Reaction Emoji -->
+              <div class="react">
+                {#if agState.state === 'walk'}🏃{:else if agState.state === 'think'}🤔{:else if agState.state === 'charge'}🔥{:else if agState.state === 'vote'}🗳️{:else if agState.state === 'jump'}💪{:else if agState.state === 'sad'}😢{:else if agState.state === 'alert'}⚡{/if}
+              </div>
+
+              <!-- Energy Aura (during charge/vote) -->
+              {#if agState.state === 'charge' || agState.state === 'vote' || agState.state === 'jump'}
+                <div class="energy-aura" style="--aura-color:{ag.color}"></div>
+              {/if}
+
+              <!-- Trail particles (during walk/charge) -->
+              {#if agState.state === 'walk' || agState.state === 'charge'}
+                <div class="trail-particles">
+                  <span class="tp" style="--tp-d:0.2s;--tp-x:-8px">✦</span>
+                  <span class="tp" style="--tp-d:0.5s;--tp-x:6px">✧</span>
+                  <span class="tp" style="--tp-d:0.8s;--tp-x:-4px">✦</span>
+                </div>
+              {/if}
+
+              <div class="agent-sprite" style="border-color:{ag.color};box-shadow:0 0 12px {ag.color}40">
+                {#if ag.img.def}
+                  <img class="sprite-img"
+                    src={agState.state === 'jump' || agState.state === 'vote' ? ag.img.win : agState.state === 'sad' || agState.state === 'alert' ? ag.img.alt : ag.img.def}
+                    alt={ag.name} />
+                {:else}
+                  <span class="sprite-icon">{ag.icon}</span>
+                {/if}
+              </div>
+              <div class="rbadge" style="background:{ag.color};color:#fff">{ag.icon}</div>
+              <div class="nm" style="color:{ag.color}">{ag.name}</div>
+
+              <!-- Energy Bar -->
+              <div class="ebar">
+                <div class="efill" style="width:{agState.energy}%;background:{ag.color}"></div>
+                {#if agState.energy >= 100}
+                  <div class="ebar-glow" style="background:{ag.color}"></div>
+                {/if}
+              </div>
+
+              <!-- Agent Decision Card (inline below agent) -->
+              {#if agFinding && agFinding.visible}
+                <div class="ag-decision" style="--ag-color:{ag.color}">
+                  <div class="agd-dir {ag.dir.toLowerCase()}">{ag.dir} {ag.conf}%</div>
+                  <div class="agd-finding">{ag.finding.title}</div>
+                  <div class="agd-bar"><div class="agd-fill" style="width:{ag.conf}%;background:{ag.color}"></div></div>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/each}
+
+        <!-- Phase Display -->
+        <div class="phase-display">
+          <div class="phase-emoji">{phaseLabel.emoji}</div>
+          <div class="phase-name" style="color:{phaseLabel.color}">{phaseLabel.name}</div>
+          <div class="phase-timer">{state.timer > 0 ? Math.ceil(state.timer) + 's' : '--'}</div>
+        </div>
+
+        <!-- Feed Log -->
+        <div class="feed-panel">
+          {#each feedMessages as msg}
+            <div class="feed-msg" class:feed-new={msg.isNew}>
+              <span class="feed-icon">{msg.icon}</span>
+              <span class="feed-name" style="color:{msg.color}">{msg.name}</span>
+              <span class="feed-text">{msg.text}{#if msg.isNew}<span class="feed-cursor">|</span>{/if}</span>
+              {#if msg.dir}
+                <span class="feed-dir {msg.dir.toLowerCase()}">{msg.dir}</span>
+              {/if}
+            </div>
+          {/each}
+        </div>
+
+        <!-- ═══════ COMPARE OVERLAY ═══════ -->
+        {#if compareVisible}
+          <div class="compare-overlay">
+            <div class="compare-card">
+              <div class="compare-header">
+                <span class="compare-icon">⚔️</span>
+                <span class="compare-title">COMPARE</span>
+              </div>
+
+              <!-- User vs Agents -->
+              <div class="compare-vs">
+                <div class="compare-side user">
+                  <div class="compare-label">YOUR CALL</div>
+                  <div class="compare-dir {compareData.userDir.toLowerCase()}">{compareData.userDir}</div>
+                  <div class="compare-levels">
+                    <span class="cmp-tp">TP ${Math.round(compareData.userTp).toLocaleString()}</span>
+                    <span class="cmp-entry">Entry ${Math.round(compareData.userEntry).toLocaleString()}</span>
+                    <span class="cmp-sl">SL ${Math.round(compareData.userSl).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div class="compare-badge-wrap">
+                  <div class="compare-consensus-badge {compareData.consensus.type}">
+                    {compareData.consensus.badge}
+                  </div>
+                  <div class="compare-vs-icon">VS</div>
+                </div>
+
+                <div class="compare-side agents">
+                  <div class="compare-label">AGENT COUNCIL</div>
+                  <div class="compare-dir {compareData.agentDir.toLowerCase()}">{compareData.agentDir}</div>
+                  <div class="compare-score">Score: {compareData.agentScore}</div>
+                  <div class="compare-votes">
+                    {#each compareData.agentVotes as vote}
+                      <div class="compare-vote">
+                        <span style="color:{vote.color}">{vote.icon}</span>
+                        <span class="cv-dir {vote.dir.toLowerCase()}">{vote.dir}</span>
+                        <span class="cv-conf">{vote.conf}%</span>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              </div>
+
+              <!-- LP Multiplier -->
+              <div class="compare-mult">
+                LP MULTIPLIER: <span class="mult-val" style="color:{compareData.consensus.lpMult >= 1.5 ? '#00ff88' : compareData.consensus.lpMult >= 1 ? '#ffe600' : '#ff2d55'}">x{compareData.consensus.lpMult}</span>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Verdict Overlay -->
+        {#if verdictVisible}
+          <div class="verdict-overlay">
+            <div class="verdict-card">
+              <div class="verdict-score">
+                <svg viewBox="0 0 44 44">
+                  <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(0,0,0,.1)" stroke-width="3"/>
+                  <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00cc66' : '#ff2d55'} stroke-width="3"
+                    stroke-dasharray="{state.score * 1.13} 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
+                </svg>
+                <span class="vs-num">{Math.round(state.score)}</span>
+              </div>
+              <div class="verdict-dir" class:long={state.score >= 60} class:short={state.score < 60}>
+                {state.score >= 60 ? 'MUCH LONG' : 'SUCH WAIT'}
+              </div>
+              <div class="verdict-meta">
+                Council: {activeAgents.filter(a => a.dir === 'LONG').length}/{activeAgents.length} · Score: {Math.round(state.score)}
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Result Overlay -->
+        {#if resultVisible}
+          <div class="result-overlay" class:win={resultData.win} class:lose={!resultData.win}>
+            <div class="result-text">{resultData.win ? 'VERY WIN WOW!' : 'SUCH SAD'}</div>
+            <div class="result-lp">{resultData.tag}<br>{resultData.lp >= 0 ? '+' : ''}{resultData.lp} LP</div>
+            {#if state.streak >= 3}
+              <div class="result-streak">🔥×{state.streak} MUCH STREAK</div>
+            {/if}
+            <div class="result-motto">{resultData.motto}</div>
+          </div>
+        {/if}
+
+        <!-- PvP Result Screen -->
+        {#if pvpVisible}
+          <div class="pvp-overlay">
+            <div class="pvp-card">
+              <div class="pvp-title">{resultData.win ? '🏆 YOU WIN! 🏆' : '💀 YOU LOSE 💀'}</div>
+              <div class="pvp-scores">
+                <div class="pvp-side">
+                  <div class="pvp-label">YOUR SCORE</div>
+                  <div class="pvp-score">{Math.round(state.score)}</div>
+                </div>
+                <div class="pvp-vs">VS</div>
+                <div class="pvp-side">
+                  <div class="pvp-label">OPPONENT</div>
+                  <div class="pvp-score">{Math.round(50 + Math.random() * 35)}</div>
+                </div>
+              </div>
+              <div class="pvp-lp" class:pos={resultData.lp >= 0} class:neg={resultData.lp < 0}>
+                {resultData.lp >= 0 ? '+' : ''}{resultData.lp} LP
+              </div>
+              {#if state.hypothesis}
+                <div class="pvp-hypo">
+                  Your call: <span class="{state.hypothesis.dir.toLowerCase()}">{state.hypothesis.dir}</span>
+                  · R:R 1:{state.hypothesis.rr.toFixed(1)}
+                  {#if state.hypothesis.consensusType}
+                    · <span class="pvp-consensus">{state.hypothesis.consensusType.toUpperCase()}</span>
+                  {/if}
+                </div>
+              {/if}
+              <div class="pvp-btns">
+                <button class="pvp-btn lobby" on:click={goLobby}>↺ LOBBY</button>
+                <button class="pvp-btn again" on:click={playAgain}>🐕 PLAY AGAIN</button>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Replay Banner -->
+        {#if replayState.active}
+          <div class="replay-banner">
+            <span class="replay-icon">🎬</span>
+            <span class="replay-text">REPLAY — Match #{replayState.data?.matchN}</span>
+            <span class="replay-step">{replayState.currentStep + 1}/{replayState.totalSteps}</span>
+            <button class="replay-exit" on:click={exitReplay}>✕ EXIT REPLAY</button>
+          </div>
+        {/if}
+
+        <!-- Floating Doge Words -->
+        {#each floatingWords as w (w.id)}
+          <div class="doge-float" style="left:{w.x}%;color:{w.color};animation-duration:{w.dur}s">{w.text}</div>
+        {/each}
+
+        <!-- History Button -->
+        <button class="hist-btn" on:click={() => historyOpen = !historyOpen}>📜 {matchHistory.length}</button>
+
+        <!-- History Panel -->
+        {#if historyOpen}
+          <div class="hist-panel">
+            <div class="hist-header">
+              <span>MATCH HISTORY</span>
+              <button class="hist-close" on:click={() => historyOpen = false}>✕</button>
+            </div>
+            {#each matchHistory as h}
+              <div class="hitem">
+                <span class="hnum">M{h.n}</span>
+                <span class="hres" class:w={h.win} class:l={!h.win}>{h.win ? 'WIN' : 'LOSE'}</span>
+                <span class="hlp" class:pos={h.lp >= 0} class:neg={h.lp < 0}>{h.lp >= 0 ? '+' : ''}{h.lp} LP</span>
+                <span class="hscore">{h.score}</span>
+                {#if h.streak >= 3}<span class="hstreak">🔥{h.streak}</span>{/if}
+              </div>
+            {/each}
+            {#if matchHistory.length === 0}
+              <div class="hist-empty">No matches yet</div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
+</div>
+
+<style>
+  .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; }
+  .battle-layout { display: grid; grid-template-columns: 45% 1fr; height: 100%; overflow: hidden; }
+
+  /* Match History Toggle */
+  .mh-toggle {
+    position: absolute;
+    top: 8px; right: 8px;
+    z-index: 55;
+    padding: 4px 10px;
+    border: 2px solid #000;
+    border-radius: 8px;
+    background: #fff;
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 #000;
+    transition: all .15s;
+  }
+  .mh-toggle:hover { background: #ffe600; }
+  .chart-side { display: flex; flex-direction: column; background: #0a0a1a; overflow: hidden; border-right: 4px solid #000; position: relative; }
+  .arena-side { position: relative; overflow: hidden; background: #ffe600; }
+
+  /* ═══════ HYPOTHESIS SIDEBAR ═══════ */
+  .hypo-sidebar {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 50px;
+    z-index: 30;
+    overflow-y: auto;
+    animation: hypoSlideIn .3s ease;
+    filter: drop-shadow(-4px 0 20px rgba(0,0,0,.3));
+  }
+  @keyframes hypoSlideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Score Bar */
+  .score-bar {
+    padding: 6px 12px; border-top: 3px solid #000;
+    background: linear-gradient(90deg, #1a1a3a, #0a0a2a);
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .sr { position: relative; width: 40px; height: 40px; flex-shrink: 0; }
+  .sr svg { width: 40px; height: 40px; }
+  .sr .n { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 900; font-family: var(--fd); color: #fff; }
+  .sdir { font-size: 13px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; text-shadow: 0 0 10px currentColor; }
+  .smeta { font-size: 7px; color: #888; font-family: var(--fm); }
+  .score-stats { display: flex; gap: 8px; margin-left: auto; }
+  .ss-item { font-size: 8px; font-weight: 700; font-family: var(--fm); color: #aaa; }
+  .ss-item.lp { color: #ffe600; }
+
+  /* Hypothesis Badge in score bar */
+  .hypo-badge {
+    padding: 3px 10px; border-radius: 8px; font-size: 8px; font-weight: 900;
+    font-family: var(--fd); letter-spacing: 1px; border: 2px solid;
+  }
+  .hypo-badge.long { background: rgba(0,255,136,.15); border-color: #00ff88; color: #00ff88; }
+  .hypo-badge.short { background: rgba(255,45,85,.15); border-color: #ff2d55; color: #ff2d55; }
+  .hypo-badge.neutral { background: rgba(255,170,0,.15); border-color: #ffaa00; color: #ffaa00; }
+
+  .mbtn { padding: 6px 16px; border-radius: 16px; background: #ffe600; border: 3px solid #000; color: #000; font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
+  .mbtn:hover { background: #ffcc00; }
+
+  /* Arena Background */
+  .sunburst { position: absolute; inset: -50%; z-index: 0; pointer-events: none; background: repeating-conic-gradient(transparent 0deg 8deg, rgba(255,180,0,.08) 8deg 16deg); animation: sunSpin 60s linear infinite; will-change: transform; contain: strict; }
+  @keyframes sunSpin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+  .halftone { position: absolute; inset: 0; z-index: 1; pointer-events: none; background-image: radial-gradient(circle, rgba(255,140,0,.12) 1.5px, transparent 1.5px); background-size: 10px 10px; }
+  .ground { position: absolute; bottom: 0; left: 0; right: 0; height: 12%; z-index: 2; pointer-events: none; background: #00cc44; border-top: 4px solid #000; box-shadow: inset 0 4px 0 rgba(255,255,255,.15); }
+
+  /* Comic Bursts */
+  .comic-burst {
+    position: absolute; z-index: 3; pointer-events: none;
+    font-family: var(--fc); font-weight: 900; font-style: italic;
+    color: #000; opacity: .12;
+    transform: rotate(var(--rot, -5deg));
+    animation: burstPop 3s ease-in-out infinite;
+  }
+  .boom { font-size: 32px; --rot: -8deg; }
+  .pow { font-size: 26px; --rot: 5deg; }
+  .wow { font-size: 28px; --rot: -3deg; }
+  @keyframes burstPop { 0%,100% { transform: rotate(var(--rot, 0)) scale(1) } 50% { transform: rotate(var(--rot, 0)) scale(1.08) } }
+
+  /* Stickers */
+  .sticker { position: absolute; z-index: 2; pointer-events: none; opacity: .12; animation: stickerFloat 8s ease-in-out infinite; filter: drop-shadow(2px 2px 0 rgba(0,0,0,.2)); will-change: transform; contain: layout style; }
+  @keyframes stickerFloat { 0%,100% { transform: translateY(0) rotate(-5deg) } 50% { transform: translateY(-12px) rotate(5deg) } }
+
+  /* Data Sources */
+  .dsrc { position: absolute; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; transform: translate(-50%, -50%); }
+  .dp { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: transparent; border: 2px solid rgba(0,0,0,.08); animation: dpPulse 2s ease infinite; will-change: transform, opacity; contain: strict; }
+  @keyframes dpPulse { 0%,100% { transform: scale(1); opacity: .3 } 50% { transform: scale(1.3); opacity: 0 } }
+  .di { width: 38px; height: 38px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #fff; border: 3px solid; box-shadow: 3px 3px 0 #000; }
+  .dl { font-size: 6px; color: #000; letter-spacing: 1.5px; font-family: var(--fd); font-weight: 900; background: rgba(255,255,255,.85); padding: 1px 4px; border-radius: 6px; }
+
+  /* Council Table */
+  .ctable { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90px; height: 55px; border-radius: 50%; border: 3px dashed rgba(0,0,0,.15); background: rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; z-index: 4; transition: all .3s; }
+  .ctable.on { border-color: #000; border-style: solid; border-width: 4px; background: rgba(255,255,255,.2); box-shadow: 0 0 30px rgba(255,45,155,.2), 4px 4px 0 rgba(0,0,0,.3); }
+  .cl { font-size: 6px; color: rgba(0,0,0,.25); letter-spacing: 2px; font-family: var(--fd); font-weight: 900; }
+  .ctable.on .cl { color: #000; }
+
+  /* Agent Sprites */
+  .ag {
+    position: absolute; z-index: 10; width: 90px; text-align: center;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    transition: left .6s cubic-bezier(.4,0,.2,1), top .6s cubic-bezier(.4,0,.2,1);
+    will-change: transform, left, top;
+    contain: layout style;
+  }
+  .ag .sha {
+    position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+    width: 48px; height: 8px; background: rgba(0,0,0,.5);
+    border-radius: 50%; filter: blur(2px);
+    transition: width .3s, opacity .3s;
+  }
+  .ag.jump .sha { width: 36px; opacity: .3; }
+  .ag .wr { position: relative; display: flex; flex-direction: column; align-items: center; animation-delay: var(--ag-delay, 0s); }
+
+  /* ── Idle: gentle float ── */
+  .ag.idle .wr { animation: aI 1.4s ease-in-out infinite; }
+  @keyframes aI {
+    0%,100% { transform: translateY(0) rotate(0) }
+    25% { transform: translateY(-3px) rotate(-0.5deg) }
+    75% { transform: translateY(-2px) rotate(0.5deg) }
+  }
+
+  /* ── Walk: energetic run ── */
+  .ag.walk .wr { animation: aW .25s ease-in-out infinite; }
+  @keyframes aW {
+    0%   { transform: translateX(0) translateY(0) rotate(0) }
+    25%  { transform: translateX(-4px) translateY(-5px) rotate(-3deg) }
+    50%  { transform: translateX(0) translateY(-2px) rotate(0) }
+    75%  { transform: translateX(4px) translateY(-5px) rotate(3deg) }
+    100% { transform: translateX(0) translateY(0) rotate(0) }
+  }
+
+  /* ── Think: head bob ── */
+  .ag.think .wr { animation: aT 1.5s ease-in-out infinite; }
+  @keyframes aT {
+    0%,100% { transform: rotate(0) scale(1) }
+    20% { transform: rotate(-4deg) scale(.98) }
+    40% { transform: rotate(3deg) scale(1.01) }
+    60% { transform: rotate(-2deg) scale(.99) }
+    80% { transform: rotate(4deg) scale(1) }
+  }
+
+  /* ── Alert: pulse glow ── */
+  .ag.alert .wr { animation: aA .4s ease infinite; }
+  .ag.alert .agent-sprite { box-shadow: 0 0 20px var(--ag-color, #ffe600) !important; }
+  @keyframes aA {
+    0%,100% { transform: scale(1) }
+    50% { transform: scale(1.08) }
+  }
+
+  /* ── Charge: intense vibrate ── */
+  .ag.charge .wr { animation: aC .1s linear infinite; }
+  .ag.charge .agent-sprite { box-shadow: 0 0 24px var(--ag-color, #ff0) !important; }
+  @keyframes aC {
+    0%  { transform: translateX(-2px) translateY(1px) }
+    25% { transform: translateX(2px) translateY(-1px) }
+    50% { transform: translateX(-1px) translateY(-2px) }
+    75% { transform: translateX(1px) translateY(2px) }
+  }
+
+  /* ── Vote: bounce up ── */
+  .ag.vote .wr { animation: aV .5s ease infinite; }
+  @keyframes aV {
+    0%,100% { transform: translateY(0) scale(1) }
+    30% { transform: translateY(-8px) scale(1.06) }
+    60% { transform: translateY(-2px) scale(1.02) }
+  }
+
+  /* ── Jump: victory leap ── */
+  .ag.jump .wr { animation: aJ .4s ease-in-out infinite; }
+  @keyframes aJ {
+    0%,100% { transform: translateY(0) rotate(0) scale(1) }
+    20% { transform: translateY(-18px) rotate(-5deg) scale(1.1) }
+    50% { transform: translateY(-22px) rotate(3deg) scale(1.12) }
+    80% { transform: translateY(-8px) rotate(-2deg) scale(1.05) }
+  }
+
+  /* ── Sad: droopy wobble ── */
+  .ag.sad .wr { animation: aS 2s ease infinite; }
+  @keyframes aS {
+    0%,100% { transform: translateY(0) rotate(0) }
+    30% { transform: translateY(4px) rotate(-4deg) }
+    70% { transform: translateY(3px) rotate(3deg) }
+  }
+
+  /* ══ Energy Aura ══ */
+  .energy-aura {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--aura-color) 0%, transparent 70%);
+    opacity: .2;
+    z-index: -1;
+    animation: auraBreath 1.5s ease-in-out infinite;
+    pointer-events: none;
+    will-change: transform, opacity;
+    contain: strict;
+  }
+  @keyframes auraBreath {
+    0%,100% { transform: translate(-50%, -50%) scale(1); opacity: .15; }
+    50% { transform: translate(-50%, -50%) scale(1.3); opacity: .3; }
+  }
+
+  /* ══ Trail Particles ══ */
+  .trail-particles {
+    position: absolute;
+    bottom: -10px; left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+  .tp {
+    position: absolute;
+    font-size: 8px;
+    color: var(--ag-color, #ffe600);
+    opacity: 0;
+    animation: tpFade .8s ease-out infinite;
+    animation-delay: var(--tp-d, 0s);
+    left: var(--tp-x, 0px);
+    will-change: transform, opacity;
+    contain: layout style;
+  }
+  @keyframes tpFade {
+    0% { opacity: .8; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(12px) scale(.5); }
+  }
+
+  /* ══ Energy Bar Glow ══ */
+  .ebar-glow {
+    position: absolute;
+    inset: 0;
+    border-radius: 4px;
+    opacity: .4;
+    animation: ebarGlow .5s ease infinite;
+  }
+  @keyframes ebarGlow { 0%,100% { opacity: .3 } 50% { opacity: .6 } }
+
+  /* Speech Bubble */
+  .sp { position: absolute; top: -32px; left: 50%; transform: translateX(-50%); background: #fff; border: 2px solid #000; border-radius: 10px 10px 10px 2px; padding: 3px 8px; font-size: 7px; font-weight: 700; white-space: nowrap; opacity: 0; transition: opacity .2s; z-index: 20; box-shadow: 2px 2px 0 #000; font-family: var(--fm); }
+  .sp.v { opacity: 1; }
+
+  /* Vote Badge */
+  .vb { position: absolute; top: -18px; right: -10px; background: #00ff88; border: 2px solid #000; border-radius: 8px; padding: 1px 6px; font-size: 7px; font-weight: 900; font-family: var(--fd); letter-spacing: 1px; opacity: 0; transition: opacity .2s; z-index: 19; box-shadow: 2px 2px 0 #000; }
+  .vb.v { opacity: 1; }
+  .vb.long { background: #00ff88; color: #000; }
+  .vb.short { background: #ff2d55; color: #fff; }
+  .vb.neutral { background: #ffaa00; color: #000; }
+
+  .agent-sprite { width: 58px; height: 58px; border-radius: 16px; border: 4px solid; display: flex; align-items: center; justify-content: center; background: #fff; box-shadow: 4px 4px 0 #000; transition: all .15s; overflow: hidden; }
+  .sprite-icon { font-size: 26px; }
+  .sprite-img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+  .ag .rbadge { position: absolute; top: -4px; right: -4px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; border: 2px solid #000; z-index: 3; text-shadow: 0 1px 0 #000; }
+  .ag .react { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); font-size: 14px; z-index: 15; }
+  .ag .nm { font-size: 7px; font-weight: 900; letter-spacing: 1.5px; margin-top: 3px; font-family: var(--fd); background: rgba(255,255,255,.9); padding: 1px 5px; border-radius: 6px; border: 1px solid #000; }
+  .ag .ebar { width: 46px; height: 5px; margin: 2px auto 0; border-radius: 4px; background: #ddd; overflow: hidden; border: 2px solid #000; position: relative; }
+  .ag .efill { height: 100%; border-radius: 2px; transition: width .3s; }
+
+  /* Phase Display */
+  .phase-display { position: absolute; top: 8px; right: 8px; z-index: 15; background: #fff; border-radius: 12px; padding: 6px 14px; border: 3px solid #000; box-shadow: 3px 3px 0 #000; text-align: center; }
+  .phase-emoji { font-size: 14px; }
+  .phase-name { font-size: 11px; font-weight: 900; font-family: var(--fc); letter-spacing: 2px; }
+  .phase-timer { font-size: 9px; font-family: var(--fm); color: #666; font-weight: 700; }
+
+  /* Agent Decision Card (below sprite) */
+  .ag-decision {
+    margin-top: 3px;
+    background: #fff;
+    border: 2px solid #000;
+    border-radius: 6px;
+    padding: 3px 5px;
+    box-shadow: 2px 2px 0 #000;
+    font-family: var(--fm);
+    animation: decisionSlideIn .3s ease;
+    width: 80px;
+  }
+  @keyframes decisionSlideIn {
+    from { opacity: 0; transform: translateY(-6px) scale(.9); }
+    to { opacity: 1; transform: none; }
+  }
+  .agd-dir {
+    font-size: 7px; font-weight: 900; letter-spacing: 1px;
+    padding: 1px 4px; border-radius: 4px; text-align: center;
+    border: 1.5px solid #000;
+  }
+  .agd-dir.long { background: #00ff88; color: #000; }
+  .agd-dir.short { background: #ff2d55; color: #fff; }
+  .agd-dir.neutral { background: #ffaa00; color: #000; }
+  .agd-finding {
+    font-size: 6px; color: #444; line-height: 1.3;
+    margin-top: 2px; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .agd-bar {
+    height: 3px; border-radius: 2px; background: #eee;
+    overflow: hidden; margin-top: 2px; border: 1px solid rgba(0,0,0,.15);
+  }
+  .agd-fill { height: 100%; border-radius: 2px; transition: width .5s; }
+
+  /* Feed */
+  .feed-panel { position: absolute; bottom: 14%; left: 8px; right: 8px; z-index: 14; max-height: 70px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+  .feed-msg { display: flex; align-items: center; gap: 4px; font-size: 7px; font-family: var(--fm); background: rgba(255,255,255,.7); padding: 2px 6px; border-radius: 4px; backdrop-filter: blur(2px); }
+  .feed-icon { font-size: 8px; }
+  .feed-name { font-weight: 900; font-size: 7px; }
+  .feed-text { color: #333; flex: 1; }
+  .feed-dir { font-size: 6px; padding: 1px 4px; border-radius: 4px; font-weight: 900; }
+  .feed-dir.long { background: #00ff88; color: #000; }
+  .feed-dir.short { background: #ff2d55; color: #fff; }
+  .feed-new { animation: feedSlideIn .3s ease; }
+  @keyframes feedSlideIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .feed-cursor {
+    animation: feedBlink .5s step-end infinite;
+    color: #000;
+    font-weight: 900;
+  }
+  @keyframes feedBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+  /* ═══════ COMPARE OVERLAY ═══════ */
+  .compare-overlay {
+    position: absolute; inset: 0; z-index: 32;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.25);
+    animation: fadeIn .3s ease;
+  }
+  .compare-card {
+    background: #fff; border: 4px solid #000; border-radius: 16px;
+    padding: 14px 18px; box-shadow: 8px 8px 0 #000;
+    min-width: 320px; animation: popIn .3s ease;
+  }
+  .compare-header {
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 3px solid #000; padding-bottom: 8px; margin-bottom: 10px;
+  }
+  .compare-icon { font-size: 18px; }
+  .compare-title { font-size: 16px; font-weight: 900; font-family: var(--fc); letter-spacing: 3px; }
+  .compare-vs {
+    display: flex; align-items: flex-start; gap: 12px; justify-content: center;
+  }
+  .compare-side {
+    flex: 1; text-align: center; padding: 8px;
+    border: 2px solid #eee; border-radius: 10px;
+  }
+  .compare-side.user { background: rgba(255,230,0,.05); }
+  .compare-side.agents { background: rgba(0,200,255,.05); }
+  .compare-label {
+    font-size: 7px; font-weight: 900; font-family: var(--fd);
+    letter-spacing: 2px; color: #888; margin-bottom: 4px;
+  }
+  .compare-dir {
+    font-size: 18px; font-weight: 900; font-family: var(--fc);
+    letter-spacing: 2px;
+  }
+  .compare-dir.long { color: #00cc66; }
+  .compare-dir.short { color: #ff2d55; }
+  .compare-dir.neutral { color: #ffaa00; }
+  .compare-levels {
+    display: flex; flex-direction: column; gap: 1px;
+    font-size: 7px; font-family: var(--fm); font-weight: 700;
+    margin-top: 4px;
+  }
+  .cmp-tp { color: #00cc66; }
+  .cmp-entry { color: #ffaa00; }
+  .cmp-sl { color: #ff2d55; }
+  .compare-score {
+    font-size: 9px; font-weight: 900; font-family: var(--fd);
+    color: #000; margin-top: 4px;
+  }
+  .compare-votes {
+    display: flex; flex-wrap: wrap; gap: 3px; justify-content: center;
+    margin-top: 4px;
+  }
+  .compare-vote {
+    display: flex; align-items: center; gap: 2px;
+    font-size: 7px; font-family: var(--fm);
+    background: #f5f5f5; border-radius: 4px; padding: 2px 4px;
+  }
+  .cv-dir { font-weight: 900; font-size: 6px; padding: 1px 3px; border-radius: 3px; }
+  .cv-dir.long { background: #00ff88; color: #000; }
+  .cv-dir.short { background: #ff2d55; color: #fff; }
+  .cv-conf { color: #888; font-size: 6px; }
+  .compare-badge-wrap {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    min-width: 80px;
+  }
+  .compare-consensus-badge {
+    padding: 4px 10px; border-radius: 8px; border: 3px solid #000;
+    font-size: 8px; font-weight: 900; font-family: var(--fd); letter-spacing: 1px;
+    box-shadow: 2px 2px 0 #000; text-align: center;
+  }
+  .compare-consensus-badge.consensus { background: #00ff88; color: #000; }
+  .compare-consensus-badge.partial { background: #ffe600; color: #000; }
+  .compare-consensus-badge.dissent { background: #ff2d55; color: #fff; }
+  .compare-consensus-badge.override { background: #c840ff; color: #fff; }
+  .compare-vs-icon {
+    font-size: 14px; font-weight: 900; font-family: var(--fc); color: #000;
+  }
+  .compare-mult {
+    text-align: center; margin-top: 10px; padding: 6px;
+    background: #000; border-radius: 8px;
+    font-size: 9px; font-weight: 900; font-family: var(--fd);
+    letter-spacing: 2px; color: #888;
+  }
+  .mult-val { font-size: 16px; }
+
+  /* Verdict Overlay */
+  .verdict-overlay { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.2); }
+  .verdict-card { background: #fff; border: 4px solid #000; border-radius: 16px; padding: 16px 24px; text-align: center; box-shadow: 6px 6px 0 #000; animation: popIn .3s ease; }
+  .verdict-score { position: relative; width: 60px; height: 60px; margin: 0 auto 8px; }
+  .verdict-score svg { width: 60px; height: 60px; }
+  .vs-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; font-family: var(--fc); }
+  .verdict-dir { font-size: 20px; font-weight: 900; font-family: var(--fc); letter-spacing: 3px; }
+  .verdict-dir.long { color: #00cc66; }
+  .verdict-dir.short { color: #ff2d55; }
+  .verdict-meta { font-size: 8px; color: #888; font-family: var(--fm); margin-top: 4px; }
+
+  /* Result Overlay */
+  .result-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 35; text-align: center; animation: popIn .3s ease; padding: 16px 28px; border-radius: 16px; border: 4px solid #000; box-shadow: 6px 6px 0 #000; }
+  .result-overlay.win { background: linear-gradient(135deg, #00ff88, #00cc66); }
+  .result-overlay.lose { background: linear-gradient(135deg, #ff2d55, #cc0033); }
+  .result-text { font-size: 22px; font-weight: 900; font-family: var(--fc); color: #000; letter-spacing: 3px; text-shadow: 2px 2px 0 rgba(255,255,255,.3); }
+  .result-lp { font-size: 14px; font-weight: 900; font-family: var(--fd); color: #000; margin-top: 4px; }
+  .result-streak { font-size: 10px; font-weight: 700; color: #000; margin-top: 4px; }
+  .result-motto { font-size: 8px; font-family: var(--fc); color: #000; margin-top: 8px; font-style: italic; opacity: .7; }
+
+  /* PvP Result */
+  .pvp-overlay { position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.6); backdrop-filter: blur(4px); animation: fadeIn .3s ease; }
+  .pvp-card { background: #fff; border: 4px solid #000; border-radius: 16px; padding: 20px 30px; text-align: center; box-shadow: 8px 8px 0 #000; min-width: 260px; }
+  .pvp-title { font-size: 18px; font-weight: 900; font-family: var(--fc); letter-spacing: 3px; color: #000; }
+  .pvp-scores { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 12px 0; }
+  .pvp-side { text-align: center; }
+  .pvp-label { font-size: 7px; color: #888; font-family: var(--fd); letter-spacing: 2px; }
+  .pvp-score { font-size: 28px; font-weight: 900; font-family: var(--fc); }
+  .pvp-vs { font-size: 14px; font-weight: 900; font-family: var(--fc); color: #888; }
+  .pvp-lp { font-size: 16px; font-weight: 900; font-family: var(--fd); margin: 8px 0; }
+  .pvp-lp.pos { color: #00cc66; }
+  .pvp-lp.neg { color: #ff2d55; }
+  .pvp-hypo {
+    font-size: 9px; font-family: var(--fm); font-weight: 700;
+    color: #666; margin: 4px 0 8px;
+  }
+  .pvp-hypo .long { color: #00cc66; }
+  .pvp-hypo .short { color: #ff2d55; }
+  .pvp-hypo .neutral { color: #ffaa00; }
+  .pvp-consensus { color: #c840ff; }
+  .pvp-btns { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+  .pvp-btn { padding: 8px 20px; border-radius: 12px; border: 3px solid #000; font-family: var(--fd); font-size: 9px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
+  .pvp-btn.lobby { background: #eee; color: #000; }
+  .pvp-btn.again { background: #ffe600; color: #000; }
+  .pvp-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 #000; }
+
+  /* Doge Float */
+  .doge-float { position: absolute; z-index: 25; font-family: var(--fc); font-weight: 900; font-style: italic; font-size: 16px; letter-spacing: 2px; pointer-events: none; animation: dogeUp ease forwards; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000; -webkit-text-stroke: 1px #000; }
+  @keyframes dogeUp { 0% { opacity: 1; transform: translateY(0) rotate(-5deg) scale(1); } 100% { opacity: 0; transform: translateY(-100px) rotate(15deg) scale(1.5); } }
+
+  /* History */
+  .hist-btn { position: absolute; bottom: 14%; right: 8px; z-index: 16; padding: 4px 10px; border-radius: 8px; background: #fff; border: 2px solid #000; font-size: 8px; font-weight: 700; cursor: pointer; box-shadow: 2px 2px 0 #000; }
+  .hist-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 180px; z-index: 50; background: #fff; border-left: 4px solid #000; padding: 10px; overflow-y: auto; box-shadow: -4px 0 20px rgba(0,0,0,.2); }
+  .hist-header { display: flex; align-items: center; justify-content: space-between; font-size: 9px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; margin-bottom: 8px; border-bottom: 2px solid #000; padding-bottom: 6px; }
+  .hist-close { background: none; border: none; font-size: 14px; cursor: pointer; }
+  .hitem { display: flex; align-items: center; gap: 4px; padding: 3px 0; border-bottom: 1px solid #eee; font-size: 8px; font-family: var(--fm); }
+  .hnum { font-weight: 700; color: #888; width: 24px; }
+  .hres { font-weight: 900; font-size: 7px; padding: 1px 5px; border-radius: 4px; }
+  .hres.w { background: #00ff88; color: #000; }
+  .hres.l { background: #ff2d55; color: #fff; }
+  .hlp { font-weight: 700; }
+  .hlp.pos { color: #00cc66; }
+  .hlp.neg { color: #ff2d55; }
+  .hscore { color: #888; margin-left: auto; }
+  .hstreak { font-size: 7px; }
+  .hist-empty { text-align: center; color: #aaa; font-size: 9px; padding: 20px 0; }
+
+  /* ═══════ REPLAY BANNER ═══════ */
+  .replay-banner {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #c840ff;
+    border: 3px solid #000;
+    border-radius: 12px;
+    padding: 6px 14px;
+    box-shadow: 3px 3px 0 #000;
+    animation: floatBarIn .3s ease;
+  }
+  .replay-icon { font-size: 14px; }
+  .replay-text {
+    font-family: var(--fd);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: #fff;
+  }
+  .replay-step {
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 700;
+    color: rgba(255,255,255,.6);
+  }
+  .replay-exit {
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    padding: 3px 8px;
+    border: 2px solid #fff;
+    border-radius: 6px;
+    background: rgba(255,255,255,.15);
+    color: #fff;
+    cursor: pointer;
+  }
+  .replay-exit:hover { background: rgba(255,255,255,.3); }
+
+  /* ═══════ FLOATING DIRECTION BAR ═══════ */
+  .dir-float-bar {
+    position: absolute;
+    bottom: 55px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: #fff;
+    border: 3px solid #000;
+    border-radius: 20px;
+    box-shadow: 4px 4px 0 #000;
+    overflow: hidden;
+    animation: floatBarIn .3s ease;
+  }
+  @keyframes floatBarIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+  .dfb-btn {
+    padding: 10px 28px;
+    border: none;
+    font-family: var(--fd);
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all .15s;
+    background: #fafafa;
+    color: #888;
+  }
+  .dfb-btn.long:hover { background: #e8fff0; color: #00aa44; }
+  .dfb-btn.short:hover { background: #ffe8ec; color: #cc0033; }
+  .dfb-btn.long.sel { background: #00ff88; color: #000; }
+  .dfb-btn.short.sel { background: #ff2d55; color: #fff; }
+  .dfb-divider { width: 2px; height: 28px; background: #000; }
+
+  /* ═══════ POSITION PREVIEW OVERLAY ═══════ */
+  .preview-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 28;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,.15);
+    animation: fadeIn .3s ease;
+  }
+  .preview-card {
+    background: #fff;
+    border: 4px solid #000;
+    border-radius: 16px;
+    padding: 16px 22px;
+    box-shadow: 6px 6px 0 #000;
+    text-align: center;
+    min-width: 240px;
+    animation: popIn .3s ease;
+  }
+  .preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-bottom: 3px solid #000;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .prev-icon { font-size: 18px; }
+  .prev-title {
+    font-family: var(--fc);
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: #000;
+  }
+  .preview-dir {
+    font-family: var(--fc);
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    margin-bottom: 8px;
+  }
+  .preview-dir.long { color: #00cc66; }
+  .preview-dir.short { color: #ff2d55; }
+  .preview-dir.neutral { color: #ffaa00; }
+  .preview-levels {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .prev-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: #f8f8f8;
+  }
+  .prev-row.tp { background: rgba(0,255,136,.1); }
+  .prev-row.sl { background: rgba(255,45,85,.08); }
+  .prev-lbl {
+    font-family: var(--fd);
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: #888;
+  }
+  .prev-val {
+    font-family: var(--fd);
+    font-size: 12px;
+    font-weight: 900;
+    color: #000;
+  }
+  .preview-rr {
+    font-family: var(--fd);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: #888;
+    background: #000;
+    border-radius: 8px;
+    padding: 4px 12px;
+    margin-bottom: 6px;
+    display: inline-block;
+  }
+  .prev-rr-val { font-size: 14px; color: #ffe600; }
+  .preview-config {
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 700;
+    color: #aaa;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+  .preview-confirm {
+    font-family: var(--fd);
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    padding: 10px 28px;
+    border: 3px solid #000;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #00ff88, #00cc66);
+    color: #000;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 #000;
+    transition: all .15s;
+  }
+  .preview-confirm:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 #000;
+    background: linear-gradient(180deg, #33ffaa, #00dd77);
+  }
+  .preview-confirm:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0 #000;
+  }
+
+  @keyframes popIn { from { transform: translate(-50%, -50%) scale(.8); opacity: 0 } to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+  @media (max-width: 768px) {
+    .battle-layout { grid-template-columns: 1fr; grid-template-rows: 45% 1fr; }
+    .chart-side { border-right: none; border-bottom: 4px solid #000; }
+  }
+
+  /* ── Wallet Gate ── */
+  .wallet-gate {
+    position: absolute;
+    inset: 0;
+    z-index: 90;
+    background: rgba(0,0,0,.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wg-card {
+    background: #111;
+    border: 4px solid var(--yel);
+    border-radius: 16px;
+    box-shadow: 0 0 40px rgba(255,230,0,.15), 8px 8px 0 #000;
+    padding: 40px 48px;
+    text-align: center;
+    max-width: 400px;
+    position: relative;
+    overflow: hidden;
+  }
+  .wg-card::before {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    background: repeating-conic-gradient(transparent 0deg 8deg, rgba(255,230,0,.04) 8deg 16deg);
+    animation: spin 60s linear infinite;
+    z-index: 0;
+  }
+  .wg-icon { font-size: 48px; margin-bottom: 12px; position: relative; z-index: 1; }
+  .wg-title {
+    font-family: var(--fd);
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    color: var(--yel);
+    margin-bottom: 8px;
+    position: relative; z-index: 1;
+  }
+  .wg-sub {
+    font-family: var(--fm);
+    font-size: 11px;
+    color: rgba(255,255,255,.5);
+    line-height: 1.5;
+    margin-bottom: 20px;
+    position: relative; z-index: 1;
+  }
+  .wg-btn {
+    font-family: var(--fd);
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    padding: 12px 32px;
+    border-radius: 24px;
+    border: 3px solid #000;
+    box-shadow: 4px 4px 0 #000;
+    cursor: pointer;
+    background: var(--pk);
+    color: #fff;
+    transition: all .2s;
+    position: relative; z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wg-btn:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #000; background: #ff1a8a; }
+  .wg-btn:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
+  .wg-hint {
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.25);
+    margin-top: 14px;
+    letter-spacing: .5px;
+    position: relative; z-index: 1;
+  }
+</style>

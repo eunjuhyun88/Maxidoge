@@ -1,0 +1,202 @@
+/* ═══════════════════════════════════════════════════════════════
+   MAXI⚡DOGE — Global Comic Pop-Art Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&family=Orbitron:wght@400;700;900&family=Bebas+Neue&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box;}
+
+:root{
+  /* ── COLORS ── */
+  --bg:#1a1a2e;
+  --s1:#16213e;
+  --s2:#0f3460;
+  --blk:#0A0808;
+  --card:#111010;
+  --card2:#1A1A1A;
+
+  --yel:#FFE600;
+  --pk:#FF2D9B;
+  --grn:#00FF88;
+  --red:#FF2D55;
+  --ora:#FF8C3B;
+  --blu:#00D4FF;
+  --pur:#C840FF;
+  --gold:#FFD060;
+  --cyan:#00D4FF;
+  --lime:#6AFF3B;
+  --chain:#FFBA30;
+
+  --fg:#FFFFFF;
+  --fg-strong:rgba(255,255,255,0.95);
+  --fg-medium:rgba(255,255,255,0.7);
+  --dim:rgba(255,255,255,0.5);
+  --dimmer:rgba(255,255,255,0.18);
+
+  /* ── BORDERS ── */
+  --bdr:3px solid #000;
+  --bdr-thick:4px solid #000;
+  --shadow:3px 3px 0 #000;
+  --shadow-sm:2px 2px 0 #000;
+
+  /* ── FONTS ── */
+  --fd:'Orbitron',monospace;
+  --fb:'Space Grotesk',sans-serif;
+  --fm:'JetBrains Mono',monospace;
+  --fc:'Impact','Arial Black',var(--fd);
+  --fcomic:'Comic Sans MS','Chalkboard SE',var(--fm);
+  --fdisplay:'Bebas Neue',sans-serif;
+
+  /* ── TEXT READABILITY ── */
+  --fs-xs: 8px;
+  --fs-sm: 9px;
+  --fs-base: 10px;
+  --fs-md: 11px;
+  --fs-lg: 13px;
+  --fs-xl: 15px;
+  --fs-2xl: 18px;
+  --fs-3xl: 22px;
+  --lh-tight: 1.25;
+  --lh-normal: 1.45;
+  --lh-relaxed: 1.6;
+}
+
+html,body{
+  height:100%;
+  overflow:hidden;
+  background:var(--yel);
+  color:var(--fg);
+  font-family:var(--fb);
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+  -webkit-text-size-adjust:100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:rgba(0,0,0,.2);}
+::-webkit-scrollbar-thumb{background:rgba(255,230,0,.35);border-radius:2px;}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,230,0,.55);}
+
+/* ── COMIC BASE CLASSES ── */
+.comic-card{
+  background:#fff;
+  border:var(--bdr);
+  border-radius:8px;
+  box-shadow:var(--shadow);
+  color:#000;
+}
+.comic-card-dark{
+  background:var(--card);
+  border:var(--bdr);
+  border-radius:8px;
+  box-shadow:var(--shadow);
+}
+.comic-badge{
+  font-family:var(--fm);
+  font-size: var(--fs-xs);
+  font-weight:900;
+  letter-spacing:1.5px;
+  padding:2px 8px;
+  border:2px solid #000;
+  border-radius:10px;
+  box-shadow:var(--shadow-sm);
+}
+.comic-btn{
+  font-family:var(--fd);
+  font-size: var(--fs-sm);
+  font-weight:900;
+  letter-spacing:2px;
+  padding:8px 20px;
+  border-radius:20px;
+  border:3px solid #000;
+  box-shadow:var(--shadow);
+  cursor:pointer;
+  transition:all .2s;
+  text-shadow:none;
+}
+.comic-btn:hover{
+  transform:translate(-1px,-1px);
+  box-shadow:4px 4px 0 #000;
+}
+.comic-btn:active{
+  transform:translate(1px,1px);
+  box-shadow:1px 1px 0 #000;
+}
+.comic-btn-primary{
+  background:var(--yel);
+  color:#000;
+}
+.comic-btn-primary:hover{
+  background:#ffcc00;
+}
+.comic-btn-danger{
+  background:var(--red);
+  color:#fff;
+}
+.comic-btn-success{
+  background:var(--grn);
+  color:#000;
+}
+.comic-btn-pink{
+  background:var(--pk);
+  color:#fff;
+}
+.comic-text-stroke{
+  -webkit-text-stroke:2px #000;
+  text-shadow:3px 3px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;
+}
+
+/* ── VOTE BADGES ── */
+.vote-long{color:var(--grn);border-color:rgba(0,255,136,.4);background:rgba(0,255,136,.08);}
+.vote-short{color:var(--red);border-color:rgba(255,45,85,.4);background:rgba(255,45,85,.08);}
+.vote-neutral{color:rgba(255,255,255,.25);border-color:rgba(255,255,255,.1);background:transparent;}
+
+/* ── ANIMATIONS ── */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes comicPop{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+/* ── HALFTONE OVERLAY ── */
+.halftone{
+  position:absolute;inset:0;z-index:1;pointer-events:none;
+  background-image:radial-gradient(circle,rgba(0,0,0,.06) 1px,transparent 1px);
+  background-size:8px 8px;
+}
+
+/* ── SUNBURST ── */
+.sunburst{
+  position:absolute;inset:-50%;z-index:0;pointer-events:none;
+  background:repeating-conic-gradient(transparent 0deg 8deg,rgba(255,180,0,.08) 8deg 16deg);
+  animation:spin 60s linear infinite;
+  will-change:transform;
+  contain:strict;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TEXT READABILITY ENHANCEMENTS
+   ══════════════════════════════════════════════════════════════ */
+
+/* Increase base contrast for dark backgrounds */
+body {
+  text-rendering: optimizeLegibility;
+}
+
+/* Make all mono-font text slightly larger and brighter */
+[style*="font-family: var(--fm)"],
+[class*="fm"] {
+  text-rendering: optimizeLegibility;
+}
+
+/* Global selection color */
+::selection {
+  background: var(--yel);
+  color: #000;
+}
