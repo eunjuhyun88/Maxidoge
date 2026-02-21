@@ -74,6 +74,14 @@
     goto(path);
   }
 
+  function handleBack() {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    goto('/');
+  }
+
   function isActive(path: string): boolean {
     if (path === '/arena') return activePath.startsWith('/arena');
     return activePath.startsWith(path);
@@ -97,7 +105,7 @@
 
 <nav id="nav">
   <!-- Back Button -->
-  <button class="nav-back" on:click={() => history.back()}>←</button>
+  <button class="nav-back" on:click={handleBack}>←</button>
 
   <!-- Logo -->
   <button class="nav-logo" on:click={() => nav('/')}>

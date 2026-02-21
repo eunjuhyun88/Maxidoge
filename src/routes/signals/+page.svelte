@@ -156,7 +156,18 @@
   }
 
   function handleTrade(sig: Signal) {
-    goto('/terminal');
+    const params = new URLSearchParams({
+      copyTrade: '1',
+      pair: sig.pair,
+      dir: sig.dir,
+      entry: String(Math.round(sig.entry)),
+      tp: String(Math.round(sig.tp)),
+      sl: String(Math.round(sig.sl)),
+      conf: String(Math.round(sig.conf)),
+      source: sig.agent?.name || sig.source.toUpperCase(),
+      reason: sig.reason,
+    });
+    goto(`/terminal?${params.toString()}`);
   }
 
   function priorityColor(p: string): string {

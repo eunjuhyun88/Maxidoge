@@ -11,6 +11,7 @@
   import { gameState } from '$lib/stores/gameState';
   import { updateAllPrices } from '$lib/stores/quickTradeStore';
   import { updateTrackedPrices } from '$lib/stores/trackedSignalStore';
+  import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { onMount, onDestroy } from 'svelte';
 
@@ -119,6 +120,44 @@
       updateAllPrices(prices);
       updateTrackedPrices(prices);
     }, 30000);
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('copyTrade') === '1') {
+      const pair = params.get('pair') || 'BTC/USDT';
+      const dir = params.get('dir') === 'SHORT' ? 'SHORT' : 'LONG';
+      const entry = Number(params.get('entry') || 0);
+      const tp = Number(params.get('tp') || 0);
+      const sl = Number(params.get('sl') || 0);
+      const conf = Number(params.get('conf') || 70);
+      const source = params.get('source') || 'SIGNAL ROOM';
+      const reason = params.get('reason') || '';
+
+      if (pair && Number.isFinite(entry) && entry > 0 && Number.isFinite(tp) && Number.isFinite(sl)) {
+        copyTradeStore.openFromSignal({
+          pair,
+          dir,
+          entry,
+          tp,
+          sl,
+          conf: Number.isFinite(conf) ? conf : 70,
+          source,
+          reason,
+        });
+      }
+
+      params.delete('copyTrade');
+      params.delete('pair');
+      params.delete('dir');
+      params.delete('entry');
+      params.delete('tp');
+      params.delete('sl');
+      params.delete('conf');
+      params.delete('source');
+      params.delete('reason');
+      const nextQuery = params.toString();
+      const nextUrl = nextQuery ? `${window.location.pathname}?${nextQuery}` : window.location.pathname;
+      history.replaceState({}, '', nextUrl);
+    }
   });
 
   onDestroy(() => {

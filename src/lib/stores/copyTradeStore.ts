@@ -30,6 +30,17 @@ interface CopyTradeState {
   draft: CopyTradeDraft;
 }
 
+export interface ExternalCopySignal {
+  pair: string;
+  dir: 'LONG' | 'SHORT';
+  entry: number;
+  tp: number;
+  sl: number;
+  conf: number;
+  source?: string;
+  reason?: string;
+}
+
 const defaultDraft: CopyTradeDraft = {
   pair: 'BTC/USDT',
   dir: 'SHORT',
@@ -85,6 +96,38 @@ function createCopyTradeStore() {
           marginMode: 'isolated',
           evidence: signals.map(s => ({ icon: s.icon, name: s.name, text: s.text, conf: s.conf, color: s.color })),
           note: '',
+        },
+      });
+    },
+
+    openFromSignal(signal: ExternalCopySignal) {
+      const source = signal.source || 'SIGNAL ROOM';
+      const confidence = Number.isFinite(signal.conf) ? Math.max(1, Math.min(100, Math.round(signal.conf))) : 70;
+
+      store.set({
+        isOpen: true,
+        step: 1,
+        selectedSignalIds: [],
+        draft: {
+          pair: signal.pair,
+          dir: signal.dir,
+          orderType: 'market',
+          entry: Math.round(signal.entry),
+          tp: [Math.round(signal.tp)],
+          sl: Math.round(signal.sl),
+          leverage: 5,
+          sizePercent: 50,
+          marginMode: 'isolated',
+          evidence: [
+            {
+              icon: '📡',
+              name: source,
+              text: signal.reason || `${signal.dir} ${signal.pair} signal imported`,
+              conf: confidence,
+              color: '#ff8c3b',
+            },
+          ],
+          note: signal.reason || '',
         },
       });
     },
