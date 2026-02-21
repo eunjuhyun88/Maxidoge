@@ -4,6 +4,7 @@
 
 import { writable, derived } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
+import { createMatchApi, fetchMatchesApi, type ApiMatchRecord } from '$lib/api/matchesApi';
 
 export interface MatchRecord {
   id: string;
@@ -51,6 +52,7 @@ interface MatchHistoryState {
 
 const STORAGE_KEY = STORAGE_KEYS.matchHistory;
 const MAX_RECORDS = 100;
+let _matchHistoryHydrated = false;
 
 function loadHistory(): MatchHistoryState {
   if (typeof window === 'undefined') return { records: [] };
@@ -93,11 +95,84 @@ export const bestStreak = derived(matchHistoryStore, $s => {
   return best;
 });
 
-export function addMatchRecord(record: Omit<MatchRecord, 'id' | 'timestamp'>) {
-  matchHistoryStore.update(s => ({
-    records: [
-      { ...record, id: crypto.randomUUID(), timestamp: Date.now() },
-      ...s.records
-    ].slice(0, MAX_RECORDS)
+function mapApiMatch(row: ApiMatchRecord): MatchRecord {
+  return {
+    id: row.id,
+    matchN: Number(row.matchN),
+    timestamp: Number(row.createdAt),
+    win: Boolean(row.win),
+    lp: Number(row.lp ?? 0),
+    score: Number(row.score ?? 0),
+    streak: Number(row.streak ?? 0),
+    agents: Array.isArray(row.agents) ? row.agents : [],
+    agentVotes: Array.isArray(row.agentVotes) ? row.agentVotes : [],
+    hypothesis: row.hypothesis ?? null,
+    battleResult: row.battleResult ?? null,
+    consensusType: row.consensusType ?? null,
+    lpMult: Number(row.lpMult ?? 1),
+    signals: Array.isArray(row.signals) ? row.signals : [],
+  };
+}
+
+function mergeServerAndLocalRecords(serverRecords: MatchRecord[], localRecords: MatchRecord[]): MatchRecord[] {
+  const serverIds = new Set(serverRecords.map((r) => r.id));
+  const unsyncedLocal = localRecords.filter((r) => !serverIds.has(r.id));
+  return [...serverRecords, ...unsyncedLocal]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, MAX_RECORDS);
+}
+
+export async function hydrateMatchHistory(force = false): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (_matchHistoryHydrated && !force) return;
+
+  const records = await fetchMatchesApi({ limit: MAX_RECORDS, offset: 0 });
+  if (!records) return;
+
+  matchHistoryStore.update((s) => ({
+    records: mergeServerAndLocalRecords(records.map(mapApiMatch), s.records)
   }));
+
+  _matchHistoryHydrated = true;
+}
+
+function replaceLocalMatchRecord(localId: string, record: MatchRecord) {
+  matchHistoryStore.update((s) => ({
+    records: s.records.map((r) => (r.id === localId ? record : r))
+  }));
+}
+
+export function addMatchRecord(record: Omit<MatchRecord, 'id' | 'timestamp'>, sync: boolean = true) {
+  const localId = crypto.randomUUID();
+  const localRecord: MatchRecord = { ...record, id: localId, timestamp: Date.now() };
+
+  matchHistoryStore.update(s => ({
+    records: [localRecord, ...s.records].slice(0, MAX_RECORDS)
+  }));
+
+  if (sync && typeof window !== 'undefined') {
+    void createMatchApi({
+      matchN: localRecord.matchN,
+      win: localRecord.win,
+      lp: localRecord.lp,
+      score: localRecord.score,
+      streak: localRecord.streak,
+      agents: localRecord.agents,
+      agentVotes: localRecord.agentVotes,
+      hypothesis: localRecord.hypothesis,
+      battleResult: localRecord.battleResult,
+      consensusType: localRecord.consensusType,
+      lpMult: localRecord.lpMult,
+      signals: localRecord.signals,
+    }).then((serverRecord) => {
+      if (!serverRecord) return;
+      replaceLocalMatchRecord(localId, mapApiMatch(serverRecord));
+    });
+  }
+
+  return localId;
+}
+
+if (typeof window !== 'undefined') {
+  void hydrateMatchHistory();
 }

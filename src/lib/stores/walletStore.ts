@@ -5,6 +5,10 @@
 
 import { writable, derived } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
+import {
+  createSimulatedSignature,
+  createSimulatedWalletConnection
+} from '$lib/wallet/simulatedWallet';
 
 export type UserTier = 'guest' | 'registered' | 'connected' | 'verified';
 
@@ -125,30 +129,23 @@ export function completeDemoView() {
 
 // Wallet connection (now first step before email)
 export function connectWallet(provider: string = 'MetaMask', addressOverride?: string) {
-  // Keep fallback generation for non-EVM demo providers.
-  const fallbackAddr = '0x' + Array.from({ length: 40 }, () =>
-    '0123456789abcdef'[Math.floor(Math.random() * 16)]
-  ).join('');
-  const address = addressOverride || fallbackAddr;
+  const connection = createSimulatedWalletConnection(provider, addressOverride);
 
   walletStore.update(w => ({
     ...w,
     connected: true,
-    address,
-    shortAddr: address.slice(0, 6) + '...' + address.slice(-4),
-    balance: +(Math.random() * 10000 + 500).toFixed(2),
-    chain: 'ARB',
-    provider,
+    address: connection.address,
+    shortAddr: connection.shortAddr,
+    balance: connection.balance,
+    chain: connection.chain,
+    provider: connection.provider,
     walletModalStep: 'sign-message' // New: go to sign step
   }));
 }
 
 // Sign message to verify ownership
 export function signMessage(signatureOverride?: string) {
-  const fallbackSig = '0x' + Array.from({ length: 130 }, () =>
-    '0123456789abcdef'[Math.floor(Math.random() * 16)]
-  ).join('');
-  const signature = signatureOverride || fallbackSig;
+  const signature = createSimulatedSignature(signatureOverride);
 
   walletStore.update(w => ({
     ...w,

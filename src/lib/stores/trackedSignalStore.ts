@@ -7,7 +7,7 @@
 import { writable, derived } from 'svelte/store';
 import { openQuickTrade, replaceQuickTradeId, type TradeDirection } from './quickTradeStore';
 import { STORAGE_KEYS } from './storageKeys';
-import { convertSignalApi, trackSignalApi, untrackSignalApi } from '$lib/api/tradingApi';
+import { convertSignalApi, fetchTrackedSignalsApi, trackSignalApi, type ApiTrackedSignal, untrackSignalApi } from '$lib/api/tradingApi';
 
 export type SignalStatus = 'tracking' | 'expired' | 'converted';
 
@@ -33,6 +33,7 @@ interface TrackedSignalState {
 const STORAGE_KEY = STORAGE_KEYS.trackedSignals;
 const MAX_SIGNALS = 50;
 const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24 hours
+let _trackedSignalsHydrated = false;
 
 function loadState(): TrackedSignalState {
   if (typeof window === 'undefined') return { signals: [] };
@@ -83,6 +84,45 @@ export const convertedSignals = derived(trackedSignalStore, $s =>
 export const activeSignalCount = derived(trackedSignalStore, $s =>
   $s.signals.filter(s => s.status === 'tracking').length
 );
+
+function mapApiTrackedSignal(row: ApiTrackedSignal): TrackedSignal {
+  return {
+    id: row.id,
+    pair: row.pair,
+    dir: row.dir,
+    source: row.source || 'manual',
+    confidence: Number(row.confidence ?? 0),
+    trackedAt: Number(row.trackedAt),
+    currentPrice: Number(row.currentPrice),
+    entryPrice: Number(row.entryPrice),
+    pnlPercent: Number(row.pnlPercent ?? 0),
+    status: row.status,
+    expiresAt: Number(row.expiresAt),
+    note: row.note || '',
+  };
+}
+
+function mergeServerAndLocalSignals(serverSignals: TrackedSignal[], localSignals: TrackedSignal[]): TrackedSignal[] {
+  const serverIds = new Set(serverSignals.map((s) => s.id));
+  const unsyncedLocal = localSignals.filter((s) => !serverIds.has(s.id));
+  return [...serverSignals, ...unsyncedLocal]
+    .sort((a, b) => b.trackedAt - a.trackedAt)
+    .slice(0, MAX_SIGNALS);
+}
+
+export async function hydrateTrackedSignals(force = false): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (_trackedSignalsHydrated && !force) return;
+
+  const records = await fetchTrackedSignalsApi({ limit: MAX_SIGNALS, offset: 0 });
+  if (!records) return;
+
+  trackedSignalStore.update((s) => ({
+    signals: mergeServerAndLocalSignals(records.map(mapApiTrackedSignal), s.signals)
+  }));
+
+  _trackedSignalsHydrated = true;
+}
 
 // ═══ Actions ═══
 
@@ -241,4 +281,8 @@ export function clearExpired() {
 
 export function clearAll() {
   trackedSignalStore.update(() => ({ signals: [] }));
+}
+
+if (typeof window !== 'undefined') {
+  void hydrateTrackedSignals();
 }

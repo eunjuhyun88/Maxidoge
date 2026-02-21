@@ -7,8 +7,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { getAuthUserFromCookies } from '$lib/server/authGuard';
 
 interface MatchRow {
   id: string;
@@ -63,23 +62,17 @@ function mapMatch(row: MatchRow) {
   };
 }
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ cookies, url }) => {
   const limit = normalizeLimit(url.searchParams.get('limit'));
   const offset = normalizeOffset(url.searchParams.get('offset'));
-  const userId = url.searchParams.get('userId');
-
-  if (userId && !UUID_RE.test(userId)) {
-    return json({ error: 'Invalid userId format' }, { status: 400 });
-  }
 
   try {
-    const whereClause = userId ? 'WHERE user_id = $1' : '';
-    const countParams = userId ? [userId] : [];
-    const dataParams = userId ? [userId, limit, offset] : [limit, offset];
+    const user = await getAuthUserFromCookies(cookies);
+    if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
     const totalResult = await query<{ total: string }>(
-      `SELECT count(*)::text AS total FROM matches ${whereClause}`,
-      countParams
+      `SELECT count(*)::text AS total FROM matches WHERE user_id = $1`,
+      [user.id]
     );
     const total = Number(totalResult.rows[0]?.total ?? '0');
 
@@ -102,12 +95,12 @@ export const GET: RequestHandler = async ({ url }) => {
           signals,
           created_at
         FROM matches
-        ${whereClause}
+        WHERE user_id = $1
         ORDER BY created_at DESC
-        LIMIT $${userId ? 2 : 1}
-        OFFSET $${userId ? 3 : 2}
+        LIMIT $2
+        OFFSET $3
       `,
-      dataParams
+      [user.id, limit, offset]
     );
 
     return json({
@@ -129,8 +122,11 @@ export const GET: RequestHandler = async ({ url }) => {
   }
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ cookies, request }) => {
   try {
+    const user = await getAuthUserFromCookies(cookies);
+    if (!user) return json({ error: 'Authentication required' }, { status: 401 });
+
     const body = await request.json();
     const {
       matchN,
@@ -145,7 +141,6 @@ export const POST: RequestHandler = async ({ request }) => {
       consensusType,
       lpMult,
       signals,
-      userId,
     } = body;
 
     if (matchN === undefined || typeof win !== 'boolean') {
@@ -154,10 +149,6 @@ export const POST: RequestHandler = async ({ request }) => {
     if (!Number.isFinite(matchN) || Math.trunc(matchN) < 0) {
       return json({ error: 'matchN must be a non-negative number' }, { status: 400 });
     }
-    if (userId && !UUID_RE.test(userId)) {
-      return json({ error: 'Invalid userId format' }, { status: 400 });
-    }
-
     const parsedLp = Number.isFinite(lp) ? Number(lp) : 0;
     const parsedScore = Number.isFinite(score) ? Math.trunc(score) : 0;
     const parsedStreak = Number.isFinite(streak) ? Math.trunc(streak) : 0;
@@ -200,7 +191,7 @@ export const POST: RequestHandler = async ({ request }) => {
           created_at
       `,
       [
-        userId || null,
+        user.id,
         Math.trunc(matchN),
         win,
         parsedLp,

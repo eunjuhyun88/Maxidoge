@@ -8,8 +8,10 @@ import { writable, derived } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
 import {
   closeQuickTradeApi,
+  fetchQuickTradesApi,
   openQuickTradeApi,
   updateQuickTradePricesApi,
+  type ApiQuickTrade,
 } from '$lib/api/tradingApi';
 
 export type TradeDirection = 'LONG' | 'SHORT';
@@ -40,6 +42,7 @@ interface QuickTradeState {
 const STORAGE_KEY = STORAGE_KEYS.quickTrades;
 const MAX_TRADES = 200;
 const PRICE_SYNC_DEBOUNCE_MS = 1200;
+let _quickTradesHydrated = false;
 
 function loadState(): QuickTradeState {
   if (typeof window === 'undefined') return { trades: [], showPanel: false };
@@ -83,6 +86,48 @@ export const totalQuickPnL = derived(quickTradeStore, $s =>
 export const openTradeCount = derived(quickTradeStore, $s =>
   $s.trades.filter(t => t.status === 'open').length
 );
+
+function mapApiQuickTrade(row: ApiQuickTrade): QuickTrade {
+  return {
+    id: row.id,
+    pair: row.pair,
+    dir: row.dir,
+    entry: Number(row.entry),
+    tp: row.tp == null ? null : Number(row.tp),
+    sl: row.sl == null ? null : Number(row.sl),
+    currentPrice: Number(row.currentPrice),
+    pnlPercent: Number(row.pnlPercent ?? 0),
+    status: row.status,
+    openedAt: Number(row.openedAt),
+    closedAt: row.closedAt == null ? null : Number(row.closedAt),
+    closePnl: row.closePnl == null ? null : Number(row.closePnl),
+    source: row.source || 'manual',
+    note: row.note || '',
+  };
+}
+
+function mergeServerAndLocalTrades(serverTrades: QuickTrade[], localTrades: QuickTrade[]): QuickTrade[] {
+  const serverIds = new Set(serverTrades.map((t) => t.id));
+  const unsyncedLocal = localTrades.filter((t) => !serverIds.has(t.id));
+  return [...serverTrades, ...unsyncedLocal]
+    .sort((a, b) => b.openedAt - a.openedAt)
+    .slice(0, MAX_TRADES);
+}
+
+export async function hydrateQuickTrades(force = false): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (_quickTradesHydrated && !force) return;
+
+  const records = await fetchQuickTradesApi({ limit: MAX_TRADES, offset: 0 });
+  if (!records) return;
+
+  quickTradeStore.update((s) => ({
+    ...s,
+    trades: mergeServerAndLocalTrades(records.map(mapApiQuickTrade), s.trades),
+  }));
+
+  _quickTradesHydrated = true;
+}
 
 // ═══ Actions ═══
 
@@ -250,4 +295,8 @@ export function clearClosedTrades() {
     ...s,
     trades: s.trades.filter(t => t.status === 'open')
   }));
+}
+
+if (typeof window !== 'undefined') {
+  void hydrateQuickTrades();
 }
