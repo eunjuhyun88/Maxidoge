@@ -20,9 +20,9 @@
   const NAV_ITEMS = [
     { path: '/terminal', label: 'TERMINAL', icon: '📊' },
     { path: '/arena', label: '🐕 ARENA', icon: '', accent: true },
-    { path: '/passport', label: 'PASSPORT', icon: '📋' },
-    { path: '/oracle', label: 'ORACLE', icon: '🔮' },
     { path: '/signals', label: 'COMMUNITY', icon: '💡' },
+    { path: '/oracle', label: 'ORACLE', icon: '🔮' },
+    { path: '/passport', label: 'HOLDING', icon: '📋' },
   ];
 
   onMount(async () => {
