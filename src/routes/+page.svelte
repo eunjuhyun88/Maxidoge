@@ -22,11 +22,25 @@
   function enterTerminal() { goto('/terminal'); }
 
   const FEATURES = [
-    { label: 'WAR ROOM', sub: 'TERMINAL', img: '/blockparty/f5-doge-chart.png', path: '/terminal' },
-    { label: 'BOSS FIGHT', sub: 'ARENA', img: '/blockparty/f5-doge-muscle.png', path: '/arena' },
-    { label: 'AI SIGNALS', sub: 'SIGNALS', img: '/blockparty/f5-doge-fire.png', path: '/signals' },
-    { label: 'COMMUNITY', sub: 'HUB', img: '/blockparty/f5-doge-excited.png', path: '/signals' },
+    { label: 'WAR ROOM', sub: 'TERMINAL', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
+      detail: 'REAL-TIME CHARTS, ORDER FLOW, AND AI-POWERED MARKET ANALYSIS. YOUR COMMAND CENTER FOR DOMINATING THE MARKET.',
+      stats: [{ k: 'LIVE FEEDS', v: '24/7' }, { k: 'AI AGENTS', v: '7' }, { k: 'PAIRS', v: '200+' }] },
+    { label: 'BOSS FIGHT', sub: 'ARENA', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
+      detail: '11-PHASE TRADING ARENA WHERE YOU BATTLE AI DOGS. PREDICT, COMPETE, AND CLIMB THE LEADERBOARD.',
+      stats: [{ k: 'PHASES', v: '11' }, { k: 'OPPONENTS', v: '7 AI' }, { k: 'REWARDS', v: 'XP+RANK' }] },
+    { label: 'AI SIGNALS', sub: 'SIGNALS', img: '/blockparty/f5-doge-fire.png', path: '/signals',
+      detail: 'AI-GENERATED TRADE SIGNALS WITH CONFIDENCE SCORES. TRACK, FOLLOW, AND BUILD YOUR PORTFOLIO.',
+      stats: [{ k: 'ACCURACY', v: '85%+' }, { k: 'DAILY', v: '50+' }, { k: 'LATENCY', v: '<1s' }] },
+    { label: 'COMMUNITY', sub: 'HUB', img: '/blockparty/f5-doge-excited.png', path: '/signals',
+      detail: 'SHARE STRATEGIES, DISCUSS MARKETS, AND CONNECT WITH FELLOW DEGENS IN THE PACK.',
+      stats: [{ k: 'MEMBERS', v: '10K+' }, { k: 'POSTS', v: '1K/DAY' }, { k: 'VIBES', v: 'MAX' }] },
   ];
+
+  let selectedFeature: number | null = null;
+
+  function selectFeature(i: number) {
+    selectedFeature = selectedFeature === i ? null : i;
+  }
 
   const FLOW_STEPS = [
     { num: '01', title: 'CONNECT', desc: 'LINK WALLET & CREATE PROFILE', img: '/blockparty/f5-doge-excited.png', pct: 100 },
@@ -94,29 +108,53 @@
        ═══════════════════════════════════════ -->
   <section class="hero" class:hero-go={heroReady}>
     <div class="hero-left">
-      <div class="hero-stack">
-        <span class="htag ha" style="--ha-d:0s">//MAXI⚡DOGE PRESENTS</span>
-        <span class="hl hl-sm ha" style="--ha-d:0.12s">A NEW</span>
-        <span class="hl hl-pk ha" style="--ha-d:0.24s">DOGE</span>
-        <span class="hl hl-xl ha" style="--ha-d:0.36s">RUN</span>
-        <div class="hl-row ha" style="--ha-d:0.48s">
-          <span class="hl hl-sm">GAME</span>
-          <div class="ht hero-doge-wrap">
-            <img src="/blockparty/f5-doge-bull.png" alt="doge" class="hero-doge" />
+      {#if selectedFeature !== null}
+        <!-- Feature detail view -->
+        <div class="feat-detail">
+          <button class="feat-back" on:click={() => selectedFeature = null}>← BACK</button>
+          <span class="htag">//{FEATURES[selectedFeature].sub}</span>
+          <div class="ht feat-detail-img">
+            <img src={FEATURES[selectedFeature].img} alt="" />
+          </div>
+          <h2 class="feat-detail-title">{FEATURES[selectedFeature].label}</h2>
+          <p class="feat-detail-desc">{FEATURES[selectedFeature].detail}</p>
+          <div class="feat-detail-stats">
+            {#each FEATURES[selectedFeature].stats as s}
+              <div class="fds">
+                <span class="fds-v">{s.v}</span>
+                <span class="fds-k">{s.k}</span>
+              </div>
+            {/each}
+          </div>
+          <button class="feat-detail-cta" on:click={() => goto(FEATURES[selectedFeature ?? 0].path)}>
+            ENTER {FEATURES[selectedFeature].sub} →
+          </button>
+        </div>
+      {:else}
+        <!-- Default hero content -->
+        <div class="hero-stack">
+          <span class="htag ha" style="--ha-d:0s">//MAXI⚡DOGE PRESENTS</span>
+          <span class="hl hl-sm ha" style="--ha-d:0.12s">A NEW</span>
+          <span class="hl hl-pk ha" style="--ha-d:0.24s">DOGE</span>
+          <span class="hl hl-xl ha" style="--ha-d:0.36s">RUN</span>
+          <div class="hl-row ha" style="--ha-d:0.48s">
+            <span class="hl hl-sm">GAME</span>
+            <div class="ht hero-doge-wrap">
+              <img src="/blockparty/f5-doge-bull.png" alt="doge" class="hero-doge" />
+            </div>
           </div>
         </div>
-      </div>
-      <!-- Review badges -->
-      <div class="rbadges ha" style="--ha-d:0.6s">
-        <div class="rbdg rbdg-l">
-          <span class="rbdg-stars">★★★★★</span>
-          <span class="rbdg-src">— DEGENS</span>
+        <div class="rbadges ha" style="--ha-d:0.6s">
+          <div class="rbdg rbdg-l">
+            <span class="rbdg-stars">★★★★★</span>
+            <span class="rbdg-src">— DEGENS</span>
+          </div>
+          <div class="rbdg rbdg-r">
+            <span class="rbdg-label">BEST AI DOGS</span>
+            <span class="rbdg-src">— CRYPTO TWITTER</span>
+          </div>
         </div>
-        <div class="rbdg rbdg-r">
-          <span class="rbdg-label">BEST AI DOGS</span>
-          <span class="rbdg-src">— CRYPTO TWITTER</span>
-        </div>
-      </div>
+      {/if}
     </div>
 
     <div class="hero-div">
@@ -125,7 +163,12 @@
 
     <div class="hero-right">
       {#each FEATURES as feat, i}
-        <button class="fc ha ha-r" style="--ha-d:{0.2 + i * 0.12}s" on:click={() => goto(feat.path)}>
+        <button
+          class="fc ha ha-r"
+          class:fc-active={selectedFeature === i}
+          style="--ha-d:{0.2 + i * 0.12}s"
+          on:click={() => selectFeature(i)}
+        >
           <div class="fc-img"><div class="ht"><img src={feat.img} alt="" /></div></div>
           <div class="fc-txt">
             <span class="fc-sub">{feat.sub}</span>
@@ -538,7 +581,7 @@
     white-space: nowrap; padding: 8px 0;
   }
 
-  /* Feature cards (right column) — independent scroll */
+  /* Feature cards (right column) — independent scroll within hero */
   .hero-right {
     width: 400px; max-width: 38%;
     background: var(--sp-bg2);
@@ -591,6 +634,69 @@
   }
   .fc-all:hover { color: var(--sp-pk); }
   .fc-arr { font-size: 16px; }
+
+  /* Active card highlight */
+  .fc-active { background: rgba(232,150,125,0.08); border-left: 3px solid var(--sp-pk); }
+  .fc-active .fc-lbl { text-shadow: 0 0 15px var(--sp-pk), 0 0 40px var(--sp-glow); }
+
+  /* ═══ FEATURE DETAIL (left panel) ═══ */
+  .feat-detail {
+    display: flex; flex-direction: column; align-items: flex-start;
+    gap: 16px; position: relative; z-index: 3;
+    animation: fadeSlideIn 0.35s cubic-bezier(.16,1,.3,1);
+  }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .feat-back {
+    font-family: var(--fp); font-size: 8px;
+    color: var(--sp-dim); letter-spacing: 2px;
+    background: none; border: 1px solid rgba(232,150,125,0.15);
+    padding: 6px 14px; cursor: pointer; border-radius: 4px;
+    transition: all .15s;
+  }
+  .feat-back:hover { color: var(--sp-pk); border-color: var(--sp-pk); }
+  .feat-detail-img { width: clamp(100px, 18vw, 200px); }
+  .feat-detail-img img { width: 100%; object-fit: contain; }
+  .feat-detail-title {
+    font-family: var(--fp); font-size: clamp(28px, 5vw, 52px);
+    color: var(--sp-pk); letter-spacing: 4px; line-height: 1;
+    text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
+  }
+  .feat-detail-desc {
+    font-family: var(--fp); font-size: 9px;
+    color: var(--sp-w); letter-spacing: 1px; line-height: 1.8;
+    max-width: 400px; opacity: 0.8;
+  }
+  .feat-detail-stats {
+    display: flex; gap: 20px; margin-top: 8px;
+  }
+  .fds {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 16px;
+    background: rgba(232,150,125,0.06);
+    border: 1px solid rgba(232,150,125,0.15);
+    border-radius: 8px;
+  }
+  .fds-v {
+    font-family: var(--fp); font-size: 16px;
+    color: var(--sp-pk); letter-spacing: 1px;
+    text-shadow: 0 0 8px var(--sp-glow);
+  }
+  .fds-k {
+    font-family: var(--fp); font-size: 6px;
+    color: var(--sp-dim); letter-spacing: 2px;
+  }
+  .feat-detail-cta {
+    font-family: var(--fp); font-size: 9px; letter-spacing: 2px;
+    color: var(--sp-bg); background: var(--sp-pk);
+    border: none; border-radius: 6px;
+    padding: 12px 24px; cursor: pointer; margin-top: 8px;
+    transition: all .2s;
+    box-shadow: 0 0 15px var(--sp-glow);
+  }
+  .feat-detail-cta:hover { transform: translateY(-2px); box-shadow: 0 0 25px var(--sp-pk); }
 
   /* ═══ FLOW — MISSION STAGES ═══ */
   .flow {
@@ -932,7 +1038,9 @@
     .hero-left { padding: 50px 24px 80px; position: relative; height: auto; }
     .hero-div { width: 100%; height: 30px; flex-direction: row; border-left: none; border-right: none; border-top: 1px solid rgba(232,150,125,0.12); border-bottom: 1px solid rgba(232,150,125,0.12); }
     .vt { writing-mode: horizontal-tb; text-orientation: initial; padding: 0 8px; }
-    .hero-right { width: 100%; max-width: 100%; position: relative; max-height: none; }
+    .hero-right { width: 100%; max-width: 100%; }
+    .feat-detail-stats { flex-wrap: wrap; gap: 10px; }
+    .feat-detail-title { font-size: 28px; }
     .about-inner { flex-direction: column; align-items: center; }
     .about { padding: 40px 24px 30px; }
     .flow { padding: 50px 24px; }
