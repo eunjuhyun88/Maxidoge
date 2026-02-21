@@ -22,24 +22,56 @@
   function enterTerminal() { goto('/terminal'); }
 
   const FEATURES = [
-    { label: 'WAR ROOM', sub: 'TERMINAL', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
+    { label: 'WAR ROOM', sub: 'TERMINAL', brief: 'LIVE CHARTS + AI MARKET ANALYSIS', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
       detail: 'REAL-TIME CHARTS, ORDER FLOW, AND AI-POWERED MARKET ANALYSIS. YOUR COMMAND CENTER FOR DOMINATING THE MARKET.',
       stats: [{ k: 'LIVE FEEDS', v: '24/7' }, { k: 'AI AGENTS', v: '7' }, { k: 'PAIRS', v: '200+' }] },
-    { label: 'BOSS FIGHT', sub: 'ARENA', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
+    { label: 'BOSS FIGHT', sub: 'ARENA', brief: 'BATTLE 7 AI DOGS IN 11 PHASES', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
       detail: '11-PHASE TRADING ARENA WHERE YOU BATTLE AI DOGS. PREDICT, COMPETE, AND CLIMB THE LEADERBOARD.',
       stats: [{ k: 'PHASES', v: '11' }, { k: 'OPPONENTS', v: '7 AI' }, { k: 'REWARDS', v: 'XP+RANK' }] },
-    { label: 'AI SIGNALS', sub: 'SIGNALS', img: '/blockparty/f5-doge-fire.png', path: '/signals',
+    { label: 'AI SIGNALS', sub: 'SIGNALS', brief: 'AI-GENERATED TRADE SIGNALS 24/7', img: '/blockparty/f5-doge-fire.png', path: '/signals',
       detail: 'AI-GENERATED TRADE SIGNALS WITH CONFIDENCE SCORES. TRACK, FOLLOW, AND BUILD YOUR PORTFOLIO.',
       stats: [{ k: 'ACCURACY', v: '85%+' }, { k: 'DAILY', v: '50+' }, { k: 'LATENCY', v: '<1s' }] },
-    { label: 'COMMUNITY', sub: 'HUB', img: '/blockparty/f5-doge-excited.png', path: '/signals',
+    { label: 'COMMUNITY', sub: 'HUB', brief: 'SHARE STRATEGIES WITH THE PACK', img: '/blockparty/f5-doge-excited.png', path: '/signals',
       detail: 'SHARE STRATEGIES, DISCUSS MARKETS, AND CONNECT WITH FELLOW DEGENS IN THE PACK.',
       stats: [{ k: 'MEMBERS', v: '10K+' }, { k: 'POSTS', v: '1K/DAY' }, { k: 'VIBES', v: 'MAX' }] },
   ];
 
   let selectedFeature: number | null = null;
+  let heroRightEl: HTMLDivElement;
 
   function selectFeature(i: number) {
     selectedFeature = selectedFeature === i ? null : i;
+  }
+
+  /** Scroll hijacking: right panel scrolls first, then page.
+   *  Captured on window so we intercept BEFORE native scroll. */
+  function onWheel(e: WheelEvent) {
+    if (!heroRightEl || window.innerWidth <= 900) return;
+
+    // Only when hero section occupies viewport
+    const heroSection = document.querySelector('.hero');
+    if (!heroSection) return;
+    const rect = heroSection.getBoundingClientRect();
+    // Hero must be mostly visible (top half still on screen)
+    if (rect.bottom <= 100 || rect.top >= window.innerHeight - 100) return;
+
+    const el = heroRightEl;
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    if (maxScroll <= 0) return; // nothing to scroll
+
+    const canScrollDown = el.scrollTop < maxScroll - 2;
+    const canScrollUp = el.scrollTop > 2;
+
+    if (e.deltaY > 0 && canScrollDown) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.scrollTop = Math.min(el.scrollTop + e.deltaY, maxScroll);
+    } else if (e.deltaY < 0 && canScrollUp) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.scrollTop = Math.max(el.scrollTop + e.deltaY, 0);
+    }
+    // At boundary → don't prevent → page scrolls naturally
   }
 
   const FLOW_STEPS = [
@@ -72,6 +104,9 @@
       if (heroEl) heroEl.classList.add('hero-go');
     }, 300);
 
+    // Scroll hijack on window capture phase (intercepts before any element)
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
+
     // Setup scroll & observer
     if (!homeEl) return;
     homeEl.addEventListener('scroll', onScroll, { passive: true });
@@ -93,6 +128,7 @@
     });
 
     return () => {
+      window.removeEventListener('wheel', onWheel, { capture: true });
       homeEl.removeEventListener('scroll', onScroll);
       obs.disconnect();
     };
@@ -114,7 +150,7 @@
         <div class="feat-detail">
           <button class="feat-back" on:click={() => selectedFeature = null}>← BACK</button>
           <span class="htag">//{FEATURES[selectedFeature].sub}</span>
-          <div class="ht feat-detail-img">
+          <div class="ht feat-detail-img" style="--ht-img:url({FEATURES[selectedFeature].img})">
             <img src={FEATURES[selectedFeature].img} alt="" />
           </div>
           <h2 class="feat-detail-title">{FEATURES[selectedFeature].label}</h2>
@@ -134,18 +170,31 @@
       {:else}
         <!-- Default hero content -->
         <div class="hero-stack">
-          <span class="htag ha" style="--ha-d:0s">//MAXI⚡DOGE PRESENTS</span>
-          <span class="hl hl-sm ha" style="--ha-d:0.12s">A NEW</span>
-          <span class="hl hl-pk ha" style="--ha-d:0.24s">DOGE</span>
-          <span class="hl hl-xl ha" style="--ha-d:0.36s">RUN</span>
-          <div class="hl-row ha" style="--ha-d:0.48s">
+          <span class="htag ha" style="--ha-d:0s">//MAXI⚡DOGE</span>
+          <span class="hl hl-pk ha" style="--ha-d:0.12s">DOGE</span>
+          <span class="hl hl-xl ha" style="--ha-d:0.24s">RUN</span>
+          <div class="hl-row ha" style="--ha-d:0.36s">
             <span class="hl hl-sm">GAME</span>
-            <div class="ht hero-doge-wrap">
+            <div class="ht hero-doge-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)">
               <img src="/blockparty/f5-doge-bull.png" alt="doge" class="hero-doge" />
             </div>
           </div>
         </div>
-        <div class="rbadges ha" style="--ha-d:0.6s">
+        <p class="hero-sub ha" style="--ha-d:0.44s">AI-POWERED CRYPTO TRADING ARENA</p>
+        <div class="hero-props ha" style="--ha-d:0.52s">
+          <div class="hp"><span class="hp-icon">⚡</span><span class="hp-txt">7 AI AGENTS ANALYZE MARKETS IN REAL-TIME</span></div>
+          <div class="hp"><span class="hp-icon">⚔</span><span class="hp-txt">BATTLE AI DOGS & CLIMB THE LEADERBOARD</span></div>
+          <div class="hp"><span class="hp-icon">📡</span><span class="hp-txt">AI TRADE SIGNALS WITH 85%+ ACCURACY</span></div>
+        </div>
+        <div class="hero-ctas ha" style="--ha-d:0.6s">
+          <button class="hero-btn hero-btn-primary" on:click={enterTerminal}>ENTER WAR ROOM →</button>
+          {#if !connected}
+            <button class="hero-btn hero-btn-secondary" on:click={openWalletModal}>CONNECT WALLET</button>
+          {:else}
+            <button class="hero-btn hero-btn-secondary" on:click={enterArena}>ENTER ARENA →</button>
+          {/if}
+        </div>
+        <div class="rbadges ha" style="--ha-d:0.7s">
           <div class="rbdg rbdg-l">
             <span class="rbdg-stars">★★★★★</span>
             <span class="rbdg-src">— DEGENS</span>
@@ -159,10 +208,12 @@
     </div>
 
     <div class="hero-div">
-      {#each Array(8) as _}<span class="vt">FEATURES</span>{/each}
+      <div class="vt-track">
+        {#each Array(12) as _}<span class="vt">FEATURES</span>{/each}
+      </div>
     </div>
 
-    <div class="hero-right">
+    <div class="hero-right" bind:this={heroRightEl}>
       {#each FEATURES as feat, i}
         <button
           class="fc ha ha-r"
@@ -170,10 +221,11 @@
           style="--ha-d:{0.2 + i * 0.12}s"
           on:click={() => selectFeature(i)}
         >
-          <div class="fc-img"><div class="ht"><img src={feat.img} alt="" /></div></div>
+          <div class="fc-img"><div class="ht" style="--ht-img:url({feat.img})"><img src={feat.img} alt="" /></div></div>
           <div class="fc-txt">
             <span class="fc-sub">{feat.sub}</span>
             <h3 class="fc-lbl">{feat.label}</h3>
+            <p class="fc-brief">{feat.brief}</p>
           </div>
         </button>
       {/each}
@@ -208,7 +260,7 @@
             <p class="fstep-desc">{step.desc}</p>
             <div class="fstep-bar"><div class="fstep-fill" style="width:{step.pct}%"></div></div>
           </div>
-          <div class="ht fstep-imgwrap"><img src={step.img} alt="" class="fstep-img" /></div>
+          <div class="ht fstep-imgwrap" style="--ht-img:url({step.img})"><img src={step.img} alt="" class="fstep-img" /></div>
         </div>
       {/each}
     </div>
@@ -224,7 +276,7 @@
           <defs><path id="cp" d="M100,100 m-75,0 a75,75 0 1,1 150,0 a75,75 0 1,1 -150,0"/></defs>
           <text><textPath href="#cp" class="badge-txt">MUCH WOW ✦ MUCH WOW ✦ MUCH WOW ✦ MUCH WOW ✦</textPath></text>
         </svg>
-        <div class="ht badge-face-wrap"><img src="/blockparty/f5-doge-face.png" alt="" class="badge-face" /></div>
+        <div class="ht badge-face-wrap" style="--ht-img:url(/blockparty/f5-doge-face.png)"><img src="/blockparty/f5-doge-face.png" alt="" class="badge-face" /></div>
       </div>
 
       <div class="about-text sr sr-r" style="--d:0.15s">
@@ -268,7 +320,7 @@
       <div class="sq-grid">
         {#each AGDEFS as ag, i}
           <div class="sq-card sr sr-r" style="--ac:{ag.color};--d:{i * 0.07}s">
-            <div class="ht sq-av-wrap"><img src={ag.img.def} alt={ag.name} class="sq-av" /></div>
+            <div class="ht sq-av-wrap" style="--ht-img:url({ag.img.def})"><img src={ag.img.def} alt={ag.name} class="sq-av" /></div>
             <div class="sq-info">
               <span class="sq-nm" style="color:var(--ac)">{ag.name}</span>
               <span class="sq-rl">{ag.role}</span>
@@ -288,18 +340,18 @@
     <div class="feed-l">
       <span class="fd-line fd-w sr sl">IN YOUR</span>
       <span class="fd-line fd-pk sr sl" style="--d:0.15s">FEED</span>
-      <div class="ht feed-doge-wrap sr sl" style="--d:0.3s"><img src="/blockparty/f5-doge-fire.png" alt="" class="feed-doge" /></div>
+      <div class="ht feed-doge-wrap sr sl" style="--d:0.3s;--ht-img:url(/blockparty/f5-doge-fire.png)"><img src="/blockparty/f5-doge-fire.png" alt="" class="feed-doge" /></div>
     </div>
     <div class="feed-r">
       <button class="arena sr sr-r" on:click={enterArena}>
         <div class="arena-row">
-          <div class="ht arena-img-wrap"><img src="/blockparty/f5-doge-muscle.png" alt="" class="arena-img" /></div>
+          <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-muscle.png)"><img src="/blockparty/f5-doge-muscle.png" alt="" class="arena-img" /></div>
           <div class="arena-mid">
             <span class="arena-tag">BOSS FIGHT</span>
             <h3 class="arena-name">ARENA</h3>
             <p class="arena-sub">7 AI DOGS vs YOU</p>
           </div>
-          <div class="ht arena-img-wrap"><img src="/blockparty/f5-doge-bull.png" alt="" class="arena-img" /></div>
+          <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)"><img src="/blockparty/f5-doge-bull.png" alt="" class="arena-img" /></div>
         </div>
         <div class="arena-ft"><span>11-PHASE</span><span>7 AGENTS</span><span>RANKING</span></div>
       </button>
@@ -336,7 +388,7 @@
       </div>
     </div>
     <div class="cta-r">
-      <div class="ht cta-doge-wrap sr sr-r"><img src="/blockparty/f5-doge-excited.png" alt="" class="cta-doge" /></div>
+      <div class="ht cta-doge-wrap sr sr-r" style="--ht-img:url(/blockparty/f5-doge-excited.png)"><img src="/blockparty/f5-doge-excited.png" alt="" class="cta-doge" /></div>
       {#if !connected}
         <button class="cta-btn sr sr-r" style="--d:0.15s" on:click={openWalletModal}>⚡ CONNECT WALLET</button>
       {:else}
@@ -396,6 +448,7 @@
     display: flex; flex-direction: column;
     position: relative;
   }
+  .home > * { flex-shrink: 0; }
   .home::-webkit-scrollbar { width: 4px; }
   .home::-webkit-scrollbar-thumb { background: var(--sp-pk); border-radius: 4px; }
 
@@ -447,6 +500,14 @@
     background-size: 4px 4px;
     mix-blend-mode: multiply;
     pointer-events: none;
+    -webkit-mask-image: var(--ht-img);
+    mask-image: var(--ht-img);
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
   }
 
   /* ── PERSPECTIVE GRID FLOOR ── */
@@ -506,10 +567,11 @@
 
   .hero-left {
     flex: 1.1;
-    display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
-    padding: 60px 40px 120px;
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: safe center;
+    padding: 16px 40px 24px;
     position: sticky; top: 36px; /* stick below header */
     height: calc(100vh - 36px);
+    overflow-y: auto;
     z-index: 3;
   }
 
@@ -528,9 +590,9 @@
     text-shadow: 0 0 10px rgba(240,237,228,0.3);
   }
   .hl-sm { font-size: clamp(18px, 3vw, 32px); margin-bottom: 8px; }
-  .hl-xl { font-size: clamp(48px, 9vw, 100px); letter-spacing: 6px; }
+  .hl-xl { font-size: clamp(40px, 7vw, 80px); letter-spacing: 6px; }
   .hl-pk {
-    font-size: clamp(52px, 10vw, 120px); letter-spacing: 4px;
+    font-size: clamp(44px, 8vw, 90px); letter-spacing: 4px;
     color: var(--sp-pk);
     text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow), 0 0 120px rgba(232,150,125,0.15);
   }
@@ -567,22 +629,65 @@
     color: var(--sp-w); letter-spacing: 2px; opacity: 0.6;
   }
 
-  /* Vertical divider */
+  /* Hero subtitle + value props + CTAs */
+  .hero-sub {
+    font-family: var(--fp); font-size: 9px;
+    color: var(--sp-pk); letter-spacing: 3px; margin-top: 16px;
+    text-shadow: 0 0 12px var(--sp-glow);
+  }
+  .hero-props { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .hp { display: flex; align-items: center; gap: 10px; }
+  .hp-icon { font-size: 14px; flex-shrink: 0; }
+  .hp-txt {
+    font-family: var(--fp); font-size: 7px;
+    color: var(--sp-w); letter-spacing: 1px; opacity: 0.8; line-height: 1.6;
+  }
+  .hero-ctas { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+  .hero-btn {
+    font-family: var(--fp); font-size: 8px; letter-spacing: 2px;
+    border: none; border-radius: 6px; padding: 12px 20px;
+    cursor: pointer; transition: all .2s;
+  }
+  .hero-btn-primary {
+    color: var(--sp-bg); background: var(--sp-pk);
+    box-shadow: 0 0 15px var(--sp-glow);
+  }
+  .hero-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 25px var(--sp-pk); }
+  .hero-btn-secondary {
+    color: var(--sp-pk); background: transparent;
+    border: 1px solid rgba(232,150,125,0.3);
+  }
+  .hero-btn-secondary:hover { background: rgba(232,150,125,0.08); border-color: var(--sp-pk); }
+
+  /* Vertical divider with marquee */
   .hero-div {
     width: 40px;
     border-left: 1px solid rgba(232,150,125,0.15);
     border-right: 1px solid rgba(232,150,125,0.15);
     display: flex; flex-direction: column; align-items: center;
     overflow: hidden; flex-shrink: 0; z-index: 3;
+    position: sticky; top: 36px;
+    height: calc(100vh - 36px);
+  }
+  .vt-track {
+    display: flex; flex-direction: column; align-items: center;
+    animation: vt-scroll 20s linear infinite;
+  }
+  @keyframes vt-scroll {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-50%); }
   }
   .vt {
     font-family: var(--fp); font-size: 7px;
     color: rgba(232,150,125,0.2);
     writing-mode: vertical-rl; text-orientation: mixed;
     white-space: nowrap; padding: 8px 0;
+    transition: color 0.3s;
   }
+  .hero-div:hover .vt { color: rgba(232,150,125,0.5); }
+  .hero-div:hover .vt-track { animation-play-state: paused; }
 
-  /* Feature cards (right column) — independent scroll within hero */
+  /* Feature cards (right column) — sticky panel with internal scroll */
   .hero-right {
     width: 400px; max-width: 38%;
     background: var(--sp-bg2);
@@ -590,12 +695,12 @@
     display: flex; flex-direction: column;
     flex-shrink: 0;
     position: sticky; top: 36px;
-    z-index: 3;
+    height: calc(100vh - 36px);
     overflow-y: auto;
-    max-height: calc(100vh - 36px);
+    z-index: 3;
   }
   .hero-right::-webkit-scrollbar { width: 3px; }
-  .hero-right::-webkit-scrollbar-thumb { background: var(--sp-pk); }
+  .hero-right::-webkit-scrollbar-thumb { background: var(--sp-pk); border-radius: 3px; }
 
   .fc {
     display: flex; flex-direction: column; background: transparent;
@@ -625,6 +730,10 @@
     font-family: var(--fp); font-size: 12px;
     color: var(--sp-pk); letter-spacing: 1px; line-height: 1.4; margin-top: 4px;
     text-shadow: 0 0 10px var(--sp-glow);
+  }
+  .fc-brief {
+    font-family: var(--fp); font-size: 6px;
+    color: var(--sp-dim); letter-spacing: 1px; line-height: 1.6; margin-top: 4px;
   }
   .fc-all {
     display: flex; align-items: center; justify-content: space-between;
@@ -872,6 +981,7 @@
   }
   .sq-card:hover { transform: translateY(-3px); box-shadow: 0 4px 20px rgba(232,150,125,0.12); }
   .sq-av-wrap { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; flex-shrink: 0; border: 2px solid var(--ac); }
+  .sq-av-wrap::after { -webkit-mask-size: cover; mask-size: cover; }
   .sq-av { width: 100%; height: 100%; object-fit: cover; }
   .sq-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
   .sq-nm { font-family: var(--fp); font-size: 7px; letter-spacing: 1px; }
@@ -1046,14 +1156,12 @@
     }
     .hero-left {
       max-width: min(760px, 57vw);
-      padding: 52px clamp(14px, 2vw, 30px) 84px;
+      padding: 16px clamp(14px, 2vw, 30px) 24px;
     }
     .hero-div { width: 30px; }
     .hero-right {
       width: clamp(320px, 30vw, 420px);
       max-width: none;
-      overscroll-behavior: contain;
-      scrollbar-gutter: stable;
     }
     .fc-txt { padding: 12px 16px 14px; }
     .fc-lbl { font-size: 11px; }
@@ -1104,10 +1212,10 @@
 
   @media (max-width: 900px) {
     .hero { flex-direction: column; min-height: auto; }
-    .hero-left { padding: 50px 24px 80px; position: relative; height: auto; }
+    .hero-left { padding: 30px 24px 40px; position: relative; height: auto; overflow-y: visible; }
     .hero-div { width: 100%; height: 30px; flex-direction: row; border-left: none; border-right: none; border-top: 1px solid rgba(232,150,125,0.12); border-bottom: 1px solid rgba(232,150,125,0.12); }
     .vt { writing-mode: horizontal-tb; text-orientation: initial; padding: 0 8px; }
-    .hero-right { width: 100%; max-width: 100%; }
+    .hero-right { width: 100%; max-width: 100%; position: static; height: auto; overflow-y: visible; }
     .feat-detail-stats { flex-wrap: wrap; gap: 10px; }
     .feat-detail-title { font-size: 28px; }
     .about-inner { flex-direction: column; align-items: center; }
