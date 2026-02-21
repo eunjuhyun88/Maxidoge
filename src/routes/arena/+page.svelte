@@ -7,6 +7,7 @@
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, startGameLoop, resetPhaseInit } from '$lib/engine/gameLoop';
   import { calculateLP, determineConsensus } from '$lib/engine/scoring';
   import Lobby from '../../components/arena/Lobby.svelte';
+  import LivePage from '../live/+page.svelte';
   import ChartPanel from '../../components/arena/ChartPanel.svelte';
   import HypothesisPanel from '../../components/arena/HypothesisPanel.svelte';
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
@@ -44,6 +45,7 @@
   let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = [];
   let historyOpen = false;
   let matchHistoryOpen = false;
+  let arenaMode: 'battle' | 'live' = 'battle';
 
   // Squad Config handlers
   function onSquadDeploy(e: CustomEvent<{ config: import('$lib/stores/gameState').SquadConfig }>) {
@@ -62,6 +64,10 @@
   function onSquadBack() {
     // Go back to lobby
     gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'standby' }));
+  }
+
+  function switchArenaMode(mode: 'battle' | 'live') {
+    arenaMode = mode;
   }
 
   // ═══════ HYPOTHESIS STATE ═══════
@@ -934,33 +940,47 @@
 </script>
 
 <div class="arena-page">
-  <!-- Wallet Gate Overlay -->
-  {#if !walletOk}
-    <div class="wallet-gate">
-      <div class="wg-card">
-        <div class="wg-icon">🔗</div>
-        <div class="wg-title">CONNECT WALLET</div>
-        <div class="wg-sub">Connect your wallet to access the Arena and start trading battles</div>
-        <button class="wg-btn" on:click={connectWallet}>
-          <span>⚡</span> CONNECT WALLET
-        </button>
-        <div class="wg-hint">Supported: MetaMask · WalletConnect · Coinbase</div>
-      </div>
-    </div>
-  {/if}
-
-  {#if state.inLobby}
-    <Lobby />
-  {:else if state.phase === 'config'}
-    <SquadConfig selectedAgents={state.selectedAgents} on:deploy={onSquadDeploy} on:back={onSquadBack} />
-  {:else}
-    <!-- Match History Toggle -->
-    <button class="mh-toggle" on:click={() => matchHistoryOpen = !matchHistoryOpen}>
-      📋 {state.wins}W-{state.losses}L
+  <div class="arena-live-switch">
+    <button class="als-btn" class:active={arenaMode === 'battle'} on:click={() => switchArenaMode('battle')}>
+      ⚔️ ARENA
     </button>
-    <MatchHistory visible={matchHistoryOpen} on:close={() => matchHistoryOpen = false} />
+    <button class="als-btn" class:active={arenaMode === 'live'} on:click={() => switchArenaMode('live')}>
+      📡 LIVE
+    </button>
+  </div>
 
-    <div class="battle-layout">
+  {#if arenaMode === 'live'}
+    <div class="merged-live-shell">
+      <LivePage />
+    </div>
+  {:else}
+    <!-- Wallet Gate Overlay -->
+    {#if !walletOk}
+      <div class="wallet-gate">
+        <div class="wg-card">
+          <div class="wg-icon">🔗</div>
+          <div class="wg-title">CONNECT WALLET</div>
+          <div class="wg-sub">Connect your wallet to access the Arena and start trading battles</div>
+          <button class="wg-btn" on:click={connectWallet}>
+            <span>⚡</span> CONNECT WALLET
+          </button>
+          <div class="wg-hint">Supported: MetaMask · WalletConnect · Coinbase</div>
+        </div>
+      </div>
+    {/if}
+
+    {#if state.inLobby}
+      <Lobby />
+    {:else if state.phase === 'config'}
+      <SquadConfig selectedAgents={state.selectedAgents} on:deploy={onSquadDeploy} on:back={onSquadBack} />
+    {:else}
+      <!-- Match History Toggle -->
+      <button class="mh-toggle" on:click={() => matchHistoryOpen = !matchHistoryOpen}>
+        📋 {state.wins}W-{state.losses}L
+      </button>
+      <MatchHistory visible={matchHistoryOpen} on:close={() => matchHistoryOpen = false} />
+
+      <div class="battle-layout">
       <!-- ═══════ LEFT: CHART ═══════ -->
       <div class="chart-side">
         <ChartPanel
@@ -1357,11 +1377,46 @@
         {/if}
       </div>
     </div>
+    {/if}
   {/if}
 </div>
 
 <style>
   .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; }
+  .arena-live-switch {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    z-index: 40;
+    display: inline-flex;
+    gap: 4px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid #000;
+    border-radius: 10px;
+    padding: 4px;
+  }
+  .als-btn {
+    border: 2px solid #000;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .als-btn.active {
+    background: #ffe600;
+    color: #000;
+  }
+  .merged-live-shell {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background: #04070f;
+  }
   .battle-layout { display: grid; grid-template-columns: 45% 1fr; height: 100%; overflow: hidden; }
 
   /* Match History Toggle */
