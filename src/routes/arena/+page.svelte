@@ -1068,15 +1068,25 @@
         <div class="halftone"></div>
         <div class="ground"></div>
 
+        <!-- Rainbow Swirl Decorations (corners) -->
+        <div class="rainbow-swirl tl"></div>
+        <div class="rainbow-swirl br"></div>
+
         <!-- Comic Bursts -->
-        <div class="comic-burst boom" style="left:5%;top:12%">BOOM!</div>
-        <div class="comic-burst pow" style="left:75%;top:55%">POW!</div>
-        <div class="comic-burst wow" style="left:40%;top:6%">WOW!</div>
+        <div class="comic-burst boom" style="left:3%;top:8%">BOOM!</div>
+        <div class="comic-burst pow" style="left:72%;top:50%">POW!</div>
+        <div class="comic-burst wow" style="left:35%;top:3%">WOW!</div>
+        <div class="comic-burst zap" style="left:85%;top:10%">ZAP!</div>
 
         <!-- Floating sticker emojis -->
-        {#each ['🐕','⭐','💰','🔥','💎','🚀'] as emoji, i}
-          <div class="sticker" style="left:{10+i*15}%;top:{8+Math.sin(i)*20}%;animation-delay:{i*0.7}s;font-size:{14+Math.random()*10}px">{emoji}</div>
+        {#each ['🐕','⭐','💰','🔥','💎','🚀','⚡','🎯'] as emoji, i}
+          <div class="sticker" style="left:{8+i*12}%;top:{6+Math.sin(i)*18}%;animation-delay:{i*0.5}s;font-size:{18+Math.random()*12}px">{emoji}</div>
         {/each}
+
+        <!-- Floating crypto coins -->
+        <div class="crypto-coin" style="left:15%;top:20%;animation-delay:0s">₿</div>
+        <div class="crypto-coin" style="left:80%;top:25%;animation-delay:1.2s">Ξ</div>
+        <div class="crypto-coin" style="left:55%;top:12%;animation-delay:2.5s">◎</div>
 
         <!-- Data Sources -->
         {#each SOURCES as src}
@@ -1372,7 +1382,7 @@
   }
   .mh-toggle:hover { background: #ffe600; }
   .chart-side { display: flex; flex-direction: column; background: #0a0a1a; overflow: hidden; border-right: 4px solid #000; position: relative; }
-  .arena-side { position: relative; overflow: hidden; background: #ffe600; }
+  .arena-side { position: relative; overflow: hidden; background: radial-gradient(ellipse at center, #fff2a0 0%, #ffe600 40%, #ffcc00 80%, #ffaa00 100%); }
 
   /* ═══════ HYPOTHESIS SIDEBAR ═══════ */
   .hypo-sidebar {
@@ -1417,35 +1427,96 @@
   .mbtn { padding: 6px 16px; border-radius: 16px; background: #ffe600; border: 3px solid #000; color: #000; font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
   .mbtn:hover { background: #ffcc00; }
 
-  /* Arena Background */
-  .sunburst { position: absolute; inset: -50%; z-index: 0; pointer-events: none; background: repeating-conic-gradient(transparent 0deg 8deg, rgba(255,180,0,.08) 8deg 16deg); animation: sunSpin 60s linear infinite; will-change: transform; contain: strict; }
+  /* Arena Background — Pop Art / Comic */
+  .sunburst {
+    position: absolute; inset: -80%; z-index: 0; pointer-events: none;
+    background: repeating-conic-gradient(
+      #ffe600 0deg 6deg, #ffcc00 6deg 12deg, #ffdd33 12deg 18deg, #ffd000 18deg 24deg
+    );
+    animation: sunSpin 90s linear infinite;
+    will-change: transform; contain: strict;
+    opacity: .35;
+  }
   @keyframes sunSpin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
-  .halftone { position: absolute; inset: 0; z-index: 1; pointer-events: none; background-image: radial-gradient(circle, rgba(255,140,0,.12) 1.5px, transparent 1.5px); background-size: 10px 10px; }
-  .ground { position: absolute; bottom: 0; left: 0; right: 0; height: 12%; z-index: 2; pointer-events: none; background: #00cc44; border-top: 4px solid #000; box-shadow: inset 0 4px 0 rgba(255,255,255,.15); }
+  .halftone {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background-image: radial-gradient(circle, rgba(0,0,0,.06) 2px, transparent 2px);
+    background-size: 12px 12px;
+  }
+  /* Stage platform where agents stand */
+  .ground {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 15%; z-index: 2; pointer-events: none;
+    background: linear-gradient(180deg, #ff8c00 0%, #e67300 40%, #cc5500 100%);
+    border-top: 5px solid #000;
+    box-shadow: inset 0 6px 0 rgba(255,255,255,.2), inset 0 -4px 12px rgba(0,0,0,.15);
+  }
+  .ground::before {
+    content: 'MAXI⚡DOGE  ARENA';
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    font-family: var(--fc); font-size: 11px; font-weight: 900; letter-spacing: 6px;
+    color: rgba(255,255,255,.5); text-shadow: 2px 2px 0 rgba(0,0,0,.2);
+    white-space: nowrap;
+  }
 
-  /* Comic Bursts */
+  /* Comic Bursts — BOLD POP ART */
   .comic-burst {
     position: absolute; z-index: 3; pointer-events: none;
     font-family: var(--fc); font-weight: 900; font-style: italic;
-    color: #000; opacity: .12;
+    color: #fff; opacity: .85;
     transform: rotate(var(--rot, -5deg));
     animation: burstPop 3s ease-in-out infinite;
+    -webkit-text-stroke: 3px #000;
+    text-shadow: 4px 4px 0 #000, 0 0 20px rgba(255,200,0,.5);
+    filter: drop-shadow(3px 3px 0 rgba(0,0,0,.4));
   }
-  .boom { font-size: 32px; --rot: -8deg; }
-  .pow { font-size: 26px; --rot: 5deg; }
-  .wow { font-size: 28px; --rot: -3deg; }
-  @keyframes burstPop { 0%,100% { transform: rotate(var(--rot, 0)) scale(1) } 50% { transform: rotate(var(--rot, 0)) scale(1.08) } }
+  .boom { font-size: 52px; --rot: -8deg; color: #ff3d5c; }
+  .pow { font-size: 44px; --rot: 5deg; color: #00ff88; }
+  .wow { font-size: 48px; --rot: -3deg; color: #ffe600; }
+  @keyframes burstPop { 0%,100% { transform: rotate(var(--rot, 0)) scale(1) } 50% { transform: rotate(var(--rot, 0)) scale(1.15) } }
 
-  /* Stickers */
-  .sticker { position: absolute; z-index: 2; pointer-events: none; opacity: .12; animation: stickerFloat 8s ease-in-out infinite; filter: drop-shadow(2px 2px 0 rgba(0,0,0,.2)); will-change: transform; contain: layout style; }
-  @keyframes stickerFloat { 0%,100% { transform: translateY(0) rotate(-5deg) } 50% { transform: translateY(-12px) rotate(5deg) } }
+  /* Stickers — more visible */
+  .sticker { position: absolute; z-index: 2; pointer-events: none; opacity: .5; animation: stickerFloat 6s ease-in-out infinite; filter: drop-shadow(3px 3px 0 rgba(0,0,0,.3)); will-change: transform; contain: layout style; }
+  @keyframes stickerFloat { 0%,100% { transform: translateY(0) rotate(-8deg) scale(1) } 50% { transform: translateY(-18px) rotate(8deg) scale(1.1) } }
+
+  /* Rainbow Swirl Decorations */
+  .rainbow-swirl {
+    position: absolute; z-index: 2; pointer-events: none;
+    width: 140px; height: 140px;
+    border-radius: 50%;
+    background: conic-gradient(
+      #ff3d5c, #ff8c3b, #ffe600, #00ff88, #00d4ff, #a855f7, #ff3d5c
+    );
+    opacity: .35;
+    animation: swirlSpin 8s linear infinite;
+    filter: blur(3px);
+  }
+  .rainbow-swirl.tl { top: -30px; left: -30px; }
+  .rainbow-swirl.br { bottom: 12%; right: -30px; animation-direction: reverse; }
+  @keyframes swirlSpin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+
+  /* Crypto coin float */
+  .crypto-coin {
+    position: absolute; z-index: 3; pointer-events: none;
+    font-size: 28px; font-weight: 900;
+    color: #fff;
+    text-shadow: 2px 2px 0 #000, 0 0 10px rgba(255,230,0,.6);
+    -webkit-text-stroke: 1.5px #000;
+    animation: coinFloat 5s ease-in-out infinite;
+    opacity: .6;
+  }
+  @keyframes coinFloat {
+    0%,100% { transform: translateY(0) rotate(-10deg) scale(1); }
+    50% { transform: translateY(-20px) rotate(10deg) scale(1.1); }
+  }
+
+  .zap { font-size: 36px; --rot: 8deg; color: #a855f7; }
 
   /* Data Sources */
   .dsrc { position: absolute; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; transform: translate(-50%, -50%); }
   .dp { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: transparent; border: 2px solid rgba(0,0,0,.08); animation: dpPulse 2s ease infinite; will-change: transform, opacity; contain: strict; }
   @keyframes dpPulse { 0%,100% { transform: scale(1); opacity: .3 } 50% { transform: scale(1.3); opacity: 0 } }
-  .di { width: 38px; height: 38px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #fff; border: 3px solid; box-shadow: 3px 3px 0 #000; }
-  .dl { font-size: 6px; color: #000; letter-spacing: 1.5px; font-family: var(--fd); font-weight: 900; background: rgba(255,255,255,.85); padding: 1px 4px; border-radius: 6px; }
+  .di { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: #fff; border: 3px solid; box-shadow: 4px 4px 0 #000; }
+  .dl { font-size: 7px; color: #000; letter-spacing: 2px; font-family: var(--fd); font-weight: 900; background: #fff; padding: 2px 6px; border-radius: 8px; border: 1px solid rgba(0,0,0,.2); }
 
   /* Council Table */
   .ctable { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90px; height: 55px; border-radius: 50%; border: 3px dashed rgba(0,0,0,.15); background: rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; z-index: 4; transition: all .3s; }
@@ -1455,7 +1526,7 @@
 
   /* Agent Sprites */
   .ag {
-    position: absolute; z-index: 10; width: 90px; text-align: center;
+    position: absolute; z-index: 10; width: 110px; text-align: center;
     transform: translate(-50%, -50%);
     cursor: pointer;
     transition: left .6s cubic-bezier(.4,0,.2,1), top .6s cubic-bezier(.4,0,.2,1);
@@ -1606,13 +1677,26 @@
   .vb.short { background: #ff2d55; color: #fff; }
   .vb.neutral { background: #ffaa00; color: #000; }
 
-  .agent-sprite { width: 58px; height: 58px; border-radius: 16px; border: 4px solid; display: flex; align-items: center; justify-content: center; background: #fff; box-shadow: 4px 4px 0 #000; transition: all .15s; overflow: hidden; }
-  .sprite-icon { font-size: 26px; }
-  .sprite-img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
-  .ag .rbadge { position: absolute; top: -4px; right: -4px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; border: 2px solid #000; z-index: 3; text-shadow: 0 1px 0 #000; }
-  .ag .react { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); font-size: 14px; z-index: 15; }
-  .ag .nm { font-size: 7px; font-weight: 900; letter-spacing: 1.5px; margin-top: 3px; font-family: var(--fd); background: rgba(255,255,255,.9); padding: 1px 5px; border-radius: 6px; border: 1px solid #000; }
-  .ag .ebar { width: 46px; height: 5px; margin: 2px auto 0; border-radius: 4px; background: #ddd; overflow: hidden; border: 2px solid #000; position: relative; }
+  .agent-sprite {
+    width: 80px; height: 80px; border-radius: 20px; border: 4px solid;
+    display: flex; align-items: center; justify-content: center;
+    background: #fff; box-shadow: 5px 5px 0 #000; transition: all .15s; overflow: hidden;
+  }
+  .sprite-icon { font-size: 34px; }
+  .sprite-img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
+  .ag .rbadge {
+    position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 11px;
+    border: 3px solid #000; z-index: 3; text-shadow: 0 1px 0 #000;
+    box-shadow: 2px 2px 0 #000;
+  }
+  .ag .react { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 18px; z-index: 15; filter: drop-shadow(1px 1px 0 #000); }
+  .ag .nm {
+    font-size: 8px; font-weight: 900; letter-spacing: 2px; margin-top: 4px;
+    font-family: var(--fd); background: #fff; padding: 2px 8px; border-radius: 8px;
+    border: 2px solid #000; box-shadow: 2px 2px 0 #000;
+  }
+  .ag .ebar { width: 60px; height: 6px; margin: 3px auto 0; border-radius: 4px; background: #ddd; overflow: hidden; border: 2px solid #000; position: relative; }
   .ag .efill { height: 100%; border-radius: 2px; transition: width .3s; }
 
   /* Phase Display */
