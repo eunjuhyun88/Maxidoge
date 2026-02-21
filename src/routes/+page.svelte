@@ -51,7 +51,6 @@
 
   /* ── Animation system ── */
   let homeEl: HTMLDivElement;
-  let heroRightEl: HTMLDivElement;
   let heroReady = false;
 
   function onScroll() {
@@ -77,36 +76,6 @@
     if (!homeEl) return;
     homeEl.addEventListener('scroll', onScroll, { passive: true });
 
-    // Scroll hijack: trap scroll in hero-right until it's fully scrolled
-    const onWheel = (e: WheelEvent) => {
-      if (!heroRightEl) return;
-      const heroRect = heroRightEl.getBoundingClientRect();
-      const inView = heroRect.top < window.innerHeight && heroRect.bottom > 0;
-      if (!inView) return;
-
-      const { scrollTop, scrollHeight, clientHeight } = heroRightEl;
-      const atTop = scrollTop <= 0;
-      const atBottom = scrollTop + clientHeight >= scrollHeight - 2;
-
-      // Ease down near edges: slower as you approach bottom/top
-      const remaining = e.deltaY > 0
-        ? scrollHeight - clientHeight - scrollTop
-        : scrollTop;
-      const ratio = Math.min(remaining / 150, 1); // 150px fade zone
-      const speed = 0.4 * (0.15 + 0.85 * ratio); // min 15% speed near edge
-
-      // scrolling down but right panel not at bottom → trap
-      if (e.deltaY > 0 && !atBottom) {
-        e.preventDefault();
-        heroRightEl.scrollTop += e.deltaY * speed;
-      }
-      // scrolling up but right panel not at top → trap
-      else if (e.deltaY < 0 && !atTop) {
-        e.preventDefault();
-        heroRightEl.scrollTop += e.deltaY * speed;
-      }
-    };
-    homeEl.addEventListener('wheel', onWheel, { passive: false });
     const obs = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
@@ -125,7 +94,6 @@
 
     return () => {
       homeEl.removeEventListener('scroll', onScroll);
-      homeEl.removeEventListener('wheel', onWheel);
       obs.disconnect();
     };
   });
@@ -194,7 +162,7 @@
       {#each Array(8) as _}<span class="vt">FEATURES</span>{/each}
     </div>
 
-    <div class="hero-right" bind:this={heroRightEl}>
+    <div class="hero-right">
       {#each FEATURES as feat, i}
         <button
           class="fc ha ha-r"
@@ -1066,6 +1034,74 @@
   .foot-tag { font-family: var(--fv); font-size: 14px; color: rgba(232,150,125,0.3); }
 
   /* ═══ RESPONSIVE ═══ */
+  @media (min-width: 901px) {
+    .home {
+      scroll-padding-top: 48px;
+    }
+
+    .hero {
+      min-height: calc(100vh - 36px);
+      gap: clamp(14px, 1.8vw, 26px);
+      padding-inline: clamp(18px, 2.6vw, 40px);
+    }
+    .hero-left {
+      max-width: min(760px, 57vw);
+      padding: 52px clamp(14px, 2vw, 30px) 84px;
+    }
+    .hero-div { width: 30px; }
+    .hero-right {
+      width: clamp(320px, 30vw, 420px);
+      max-width: none;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+    .fc-txt { padding: 12px 16px 14px; }
+    .fc-lbl { font-size: 11px; }
+
+    .rbadges { gap: 14px; margin-top: 24px; }
+    .rbdg {
+      padding: 8px 10px;
+      border: 1px solid rgba(232,150,125,0.12);
+      border-radius: 10px;
+      background: rgba(232,150,125,0.03);
+    }
+
+    .flow,
+    .about,
+    .squad,
+    .feed,
+    .cta {
+      min-height: auto;
+    }
+
+    .flow { padding: 78px clamp(24px, 4vw, 64px); }
+    .flow-steps { max-width: 980px; gap: 10px; }
+    .fstep {
+      padding: 24px 20px;
+      border: 1px solid rgba(232,150,125,0.14);
+      border-radius: 12px;
+      background: rgba(232,150,125,0.03);
+    }
+    .fstep:last-child { border-bottom: 1px solid rgba(232,150,125,0.14); }
+
+    .about { padding: 84px clamp(24px, 4vw, 64px) 64px; }
+    .about-inner { max-width: 1140px; gap: 48px; }
+    .about-text p { text-align: left; font-size: clamp(24px, 2.3vw, 34px); }
+    .about-tag { max-width: 1080px; text-align: left; }
+
+    .squad { padding: 74px clamp(24px, 4vw, 64px); }
+    .sq-frame { max-width: 1080px; padding: 22px; }
+    .sq-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+    .feed { align-items: stretch; }
+    .feed-l { flex: 0 0 38%; padding: 40px; }
+    .feed-r { padding: 24px 26px; overflow: visible; }
+
+    .cta { padding: 74px clamp(24px, 4vw, 64px) 100px; gap: 34px; }
+
+    .foot { padding: 28px clamp(24px, 4vw, 64px) 20px; }
+  }
+
   @media (max-width: 900px) {
     .hero { flex-direction: column; min-height: auto; }
     .hero-left { padding: 50px 24px 80px; position: relative; height: auto; }
