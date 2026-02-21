@@ -6,8 +6,9 @@
   import { openTradeCount, totalQuickPnL } from '$lib/stores/quickTradeStore';
   import { activeSignalCount } from '$lib/stores/trackedSignalStore';
   import { matchHistoryStore, winRate } from '$lib/stores/matchHistoryStore';
-  import { userProfileStore, profileTier } from '$lib/stores/userProfileStore';
+  import { userProfileStore, profileTier, hydrateUserProfile } from '$lib/stores/userProfileStore';
   import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
 
   // Current page context
   export let page: 'terminal' | 'arena' | 'passport' | 'oracle' | 'signals' | 'live' | 'home' = 'home';
@@ -84,6 +85,10 @@
 
     return all.filter(i => i.show).slice(0, 2);
   }
+
+  onMount(() => {
+    hydrateUserProfile();
+  });
 </script>
 
 {#if items.length > 0}

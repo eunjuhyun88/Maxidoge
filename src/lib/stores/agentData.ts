@@ -5,6 +5,7 @@
 import { writable } from 'svelte/store';
 import { AGDEFS } from '$lib/data/agents';
 import { STORAGE_KEYS } from './storageKeys';
+import { fetchAgentStatsApi, updateAgentStatApi } from '$lib/api/agentStatsApi';
 
 export interface AgentStats {
   level: number;
@@ -57,12 +58,101 @@ export const agentStats = writable<Record<string, AgentStats>>(loadAgentData());
 
 // Auto-save (debounced to avoid blocking main thread)
 let _agentSaveTimer: ReturnType<typeof setTimeout>;
+let _agentSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let _lastServerHash = '';
+
+function buildServerPayload(data: Record<string, AgentStats>) {
+  return Object.entries(data).map(([agentId, s]) => ({
+    agentId,
+    level: s.level,
+    xp: s.xp,
+    xpMax: s.xpMax,
+    wins: s.wins,
+    losses: s.losses,
+    bestStreak: s.bestStreak,
+    curStreak: s.curStreak,
+    avgConf: s.avgConf,
+    bestConf: s.bestConf,
+    stamps: s.stamps
+  }));
+}
+
+async function syncAgentStatsToServer(data: Record<string, AgentStats>) {
+  const payload = buildServerPayload(data);
+  const hash = JSON.stringify(payload);
+  if (hash === _lastServerHash) return;
+  _lastServerHash = hash;
+
+  await Promise.all(
+    payload.map((item) =>
+      updateAgentStatApi(item.agentId, {
+        level: item.level,
+        xp: item.xp,
+        xpMax: item.xpMax,
+        wins: item.wins,
+        losses: item.losses,
+        bestStreak: item.bestStreak,
+        curStreak: item.curStreak,
+        avgConf: item.avgConf,
+        bestConf: item.bestConf,
+        stamps: item.stamps,
+      })
+    )
+  );
+}
+
+let _agentHydrated = false;
+export async function hydrateAgentStats(force = false) {
+  if (typeof window === 'undefined') return;
+  if (_agentHydrated && !force) return;
+
+  const rows = await fetchAgentStatsApi();
+  if (!rows) return;
+  if (rows.length === 0) {
+    _agentHydrated = true;
+    return;
+  }
+
+  const next = createDefaultStats();
+  for (const row of rows) {
+    if (!next[row.agentId]) continue;
+    next[row.agentId] = {
+      ...next[row.agentId],
+      level: Number(row.level ?? next[row.agentId].level),
+      xp: Number(row.xp ?? next[row.agentId].xp),
+      xpMax: Number(row.xpMax ?? next[row.agentId].xpMax),
+      wins: Number(row.wins ?? next[row.agentId].wins),
+      losses: Number(row.losses ?? next[row.agentId].losses),
+      bestStreak: Number(row.bestStreak ?? next[row.agentId].bestStreak),
+      curStreak: Number(row.curStreak ?? next[row.agentId].curStreak),
+      avgConf: Number(row.avgConf ?? next[row.agentId].avgConf),
+      bestConf: Number(row.bestConf ?? next[row.agentId].bestConf),
+      stamps: {
+        ...next[row.agentId].stamps,
+        ...(row.stamps || {}),
+      },
+    };
+  }
+
+  _agentHydrated = true;
+  agentStats.set(next);
+}
+
+if (typeof window !== 'undefined') {
+  void hydrateAgentStats();
+}
+
 agentStats.subscribe(data => {
   if (typeof window === 'undefined') return;
   clearTimeout(_agentSaveTimer);
   _agentSaveTimer = setTimeout(() => {
     localStorage.setItem(STORAGE_KEYS.agents, JSON.stringify(data));
   }, 500);
+
+  if (_agentSyncTimer) clearTimeout(_agentSyncTimer);
+  _agentSyncTimer = setTimeout(() => {
+    void syncAgentStatsToServer(data);
+  }, 900);
 });
 
 // Helpers

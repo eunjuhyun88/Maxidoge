@@ -9,6 +9,7 @@ import { walletStore } from './walletStore';
 import { matchHistoryStore, winRate, bestStreak } from './matchHistoryStore';
 import { totalQuickPnL, openTradeCount } from './quickTradeStore';
 import { STORAGE_KEYS } from './storageKeys';
+import { fetchPassportApi, fetchProfileApi, updateProfileApi } from '$lib/api/profileApi';
 
 export type ProfileTier = 'bronze' | 'silver' | 'gold' | 'diamond';
 
@@ -120,6 +121,70 @@ walletStore.subscribe(w => {
     return p;
   });
 });
+
+function normalizeDisplayTier(value: unknown): ProfileTier {
+  const tier = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (tier === 'diamond' || tier === 'gold' || tier === 'silver') return tier;
+  return 'bronze';
+}
+
+function mergeBadges(existing: Badge[], remoteBadges: unknown[]): Badge[] {
+  if (!Array.isArray(remoteBadges) || remoteBadges.length === 0) return existing;
+
+  const unlocked = new Set<string>();
+  for (const item of remoteBadges) {
+    if (typeof item === 'string') unlocked.add(item);
+    if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
+      unlocked.add(String((item as { id: string }).id));
+    }
+  }
+
+  return existing.map((badge) =>
+    unlocked.has(badge.id) ? { ...badge, earnedAt: badge.earnedAt || Date.now() } : badge
+  );
+}
+
+let _profileHydrated = false;
+export async function hydrateUserProfile(force = false) {
+  if (typeof window === 'undefined') return;
+  if (_profileHydrated && !force) return;
+
+  const [profile, passport] = await Promise.all([fetchProfileApi(), fetchPassportApi()]);
+  if (!profile && !passport) return;
+
+  userProfileStore.update((p) => {
+    const nextStats = {
+      ...p.stats,
+      winRate: Number(passport?.winRate ?? p.stats.winRate),
+      totalMatches: Number(passport?.totalMatches ?? profile?.stats?.totalMatches ?? p.stats.totalMatches),
+      totalPnL: Number(passport?.totalPnl ?? profile?.stats?.totalPnl ?? p.stats.totalPnL),
+      streak: Number(passport?.streak ?? profile?.stats?.streak ?? p.stats.streak),
+      bestStreak: Number(passport?.bestStreak ?? profile?.stats?.bestStreak ?? p.stats.bestStreak),
+      trackedSignals: Number(passport?.trackedSignals ?? p.stats.trackedSignals),
+      directionAccuracy: Number(passport?.winRate ?? p.stats.directionAccuracy),
+    };
+
+    const nextTier = normalizeDisplayTier(passport?.tier || profile?.stats?.displayTier || p.tier);
+    const nextProfile: UserProfile = {
+      ...p,
+      address: profile?.walletAddress ?? p.address,
+      username: profile?.nickname || p.username,
+      tier: nextTier,
+      avatar: profile?.avatar || p.avatar,
+      stats: nextStats,
+      joinedAt: Number(profile?.createdAt ?? p.joinedAt),
+    };
+
+    nextProfile.badges = mergeBadges(nextProfile.badges, passport?.badges ?? profile?.stats?.badges ?? []);
+    return nextProfile;
+  });
+
+  _profileHydrated = true;
+}
+
+if (typeof window !== 'undefined') {
+  void hydrateUserProfile();
+}
 
 // ═══ Auto-sync from matchHistoryStore ═══
 matchHistoryStore.subscribe($mh => {
@@ -234,12 +299,20 @@ export function incrementTrackedSignals() {
   });
 }
 
-export function setAvatar(path: string) {
+export async function setAvatar(path: string) {
+  const prev = get(userProfileStore).avatar;
   userProfileStore.update(p => ({ ...p, avatar: path }));
+  const ok = await updateProfileApi({ avatar: path });
+  if (!ok) userProfileStore.update(p => ({ ...p, avatar: prev }));
 }
 
-export function setUsername(name: string) {
-  userProfileStore.update(p => ({ ...p, username: name }));
+export async function setUsername(name: string) {
+  const next = name.trim();
+  if (next.length < 2) return;
+  const prev = get(userProfileStore).username;
+  userProfileStore.update(p => ({ ...p, username: next }));
+  const ok = await updateProfileApi({ nickname: next });
+  if (!ok) userProfileStore.update(p => ({ ...p, username: prev }));
 }
 
 export function adjustBalance(delta: number) {

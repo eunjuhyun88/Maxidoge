@@ -4,6 +4,7 @@
   import { openTrades, closeQuickTrade } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
   import { predictMarkets, loadPolymarkets } from '$lib/stores/predictStore';
+  import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import { parseOutcomePrices } from '$lib/api/polymarket';
   import { createEventDispatcher, onMount } from 'svelte';
 
@@ -16,6 +17,7 @@
   let activeTab = 'intel';
   let innerTab = 'headlines';
   let tabCollapsed = false;
+  let _uiStateSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 
   // Chat input (local)
@@ -28,9 +30,20 @@
     } else {
       activeTab = tab;
       tabCollapsed = false;
+      queueUiStateSave({ terminalActiveTab: activeTab });
     }
   }
-  function setInnerTab(tab: string) { innerTab = tab; }
+  function setInnerTab(tab: string) {
+    innerTab = tab;
+    queueUiStateSave({ terminalInnerTab: innerTab });
+  }
+
+  function queueUiStateSave(partial: Record<string, unknown>) {
+    if (_uiStateSaveTimer) clearTimeout(_uiStateSaveTimer);
+    _uiStateSaveTimer = setTimeout(() => {
+      void updateUiStateApi(partial);
+    }, 260);
+  }
 
   function handleClosePos(id: string) {
     const trade = opens.find(t => t.id === id);
@@ -88,6 +101,15 @@
   onMount(() => {
     loadPolymarkets();
     hydrateCommunityPosts();
+    void (async () => {
+      const ui = await fetchUiStateApi();
+      if (ui?.terminalActiveTab && ['intel', 'community', 'positions'].includes(ui.terminalActiveTab)) {
+        activeTab = ui.terminalActiveTab;
+      }
+      if (ui?.terminalInnerTab && ['headlines', 'events', 'flow'].includes(ui.terminalInnerTab)) {
+        innerTab = ui.terminalInnerTab;
+      }
+    })();
   });
 </script>
 

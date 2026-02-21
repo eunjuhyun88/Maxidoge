@@ -1,13 +1,15 @@
 <script lang="ts">
-  import { userProfileStore, earnedBadges, lockedBadges, profileTier, profileStats, setAvatar, setUsername } from '$lib/stores/userProfileStore';
+  import { onMount } from 'svelte';
+  import { userProfileStore, earnedBadges, lockedBadges, profileTier, profileStats, setAvatar, setUsername, hydrateUserProfile } from '$lib/stores/userProfileStore';
   import { activeSignalCount, activeSignals, expiredSignals } from '$lib/stores/trackedSignalStore';
   import { openTradeCount, totalQuickPnL, openTrades, closedTrades } from '$lib/stores/quickTradeStore';
   import { matchHistoryStore, winRate, bestStreak } from '$lib/stores/matchHistoryStore';
   import { walletStore, openWalletModal } from '$lib/stores/walletStore';
-  import { agentStats } from '$lib/stores/agentData';
+  import { agentStats, hydrateAgentStats } from '$lib/stores/agentData';
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
   import { HOLDINGS_DATA, calcTotal, calcPnL } from '$lib/data/holdings';
   import { gameState } from '$lib/stores/gameState';
+  import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import EmptyState from '../../components/shared/EmptyState.svelte';
 
   $: profile = $userProfileStore;
@@ -91,6 +93,26 @@
     if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
     return `${Math.floor(sec / 86400)}d ago`;
   }
+
+  function isPassportTab(value: string): value is TabType {
+    return value === 'profile' || value === 'wallet' || value === 'positions' || value === 'arena';
+  }
+
+  function setActiveTab(tab: TabType) {
+    activeTab = tab;
+    void updateUiStateApi({ passportActiveTab: tab });
+  }
+
+  onMount(() => {
+    hydrateUserProfile();
+    hydrateAgentStats();
+    void (async () => {
+      const ui = await fetchUiStateApi();
+      if (ui?.passportActiveTab && isPassportTab(ui.passportActiveTab)) {
+        activeTab = ui.passportActiveTab;
+      }
+    })();
+  });
 </script>
 
 <div class="passport-page">
@@ -188,7 +210,7 @@
           <button
             class="tab-btn"
             class:active={activeTab === tab.id}
-            on:click={() => activeTab = tab.id}
+            on:click={() => setActiveTab(tab.id)}
           >
             <span class="tab-icon">{tab.icon}</span>
             <span class="tab-label">{tab.label}</span>

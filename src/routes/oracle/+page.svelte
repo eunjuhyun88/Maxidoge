@@ -1,9 +1,10 @@
 <script lang="ts">
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
-  import { agentStats } from '$lib/stores/agentData';
+  import { agentStats, hydrateAgentStats } from '$lib/stores/agentData';
   import { gameState } from '$lib/stores/gameState';
   import { matchHistoryStore } from '$lib/stores/matchHistoryStore';
   import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
   import EmptyState from '../../components/shared/EmptyState.svelte';
   import ContextBanner from '../../components/shared/ContextBanner.svelte';
 
@@ -81,6 +82,10 @@
     if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
     return `${Math.floor(sec / 86400)}d ago`;
   }
+
+  onMount(() => {
+    hydrateAgentStats();
+  });
 </script>
 
 <div class="oracle-page">
