@@ -25,8 +25,8 @@
     { label: 'WAR ROOM', sub: 'TERMINAL', brief: 'YOU MISSED THE PUMP BECAUSE YOU WERE SLEEPING. NEVER AGAIN.', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
       detail: '7 AI AGENTS RUN 24/7 — SCANNING CHARTS, TRACKING WHALES, READING DERIVATIVES, AND MONITORING SOCIAL SENTIMENT ACROSS 200+ PAIRS. YOU OPEN YOUR EYES. THE INTEL IS ALREADY THERE.',
       stats: [{ k: 'AI AGENTS', v: '7' }, { k: 'PAIRS', v: '200+' }, { k: 'SCAN PATTERNS', v: '28' }] },
-    { label: 'BOSS FIGHT', sub: 'ARENA', brief: '"ETH TO $5K" — PROVE IT OR GET REKT BY AI.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
-      detail: 'DROP YOUR CALL. LONG ETH WITH TP AND SL. 7 AI AGENTS VOTE, DEBATE, AND EXPOSE EVERY FLAW IN YOUR THESIS — ACROSS 11 BATTLE PHASES. SURVIVE? YOU EARN RANK. GET DESTROYED? YOU LEARN WHY.',
+    { label: 'AI vs YOU', sub: 'ARENA', brief: 'SUBMIT YOUR CALL. 7 AI AGENTS CHALLENGE EVERY ANGLE.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
+      detail: 'THINK YOU FOUND THE TRADE? SUBMIT IT. 7 AI AGENTS WILL ANALYZE YOUR ENTRY, TP, SL, AND R:R FROM EVERY ANGLE — STRUCTURE, FLOW, DERIVATIVES, SENTIMENT. IF YOUR THESIS SURVIVES 11 PHASES, IT MIGHT ACTUALLY WORK.',
       stats: [{ k: 'PHASES', v: '11' }, { k: 'AI JUDGES', v: '7' }, { k: 'REWARDS', v: 'XP+RANK' }] },
     { label: 'AI SCANNER', sub: 'SIGNALS', brief: 'THE MARKET WHISPERS BEFORE IT SCREAMS. WE HEAR IT FIRST.', img: '/blockparty/f5-doge-fire.png', path: '/signals',
       detail: '28 ANOMALY PATTERNS CATCH WHAT HUMANS MISS — OI COMPRESSION BEFORE THE SQUEEZE, WHALE DEPOSITS BEFORE THE DUMP, LIQUIDATION CLUSTERS BEFORE THE CASCADE. SCORE 70+ = ALERT. SCORE 85+ = DROP EVERYTHING.',
@@ -385,9 +385,9 @@
         <div class="arena-row">
           <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-muscle.png)"><img src="/blockparty/f5-doge-muscle.png" alt="" class="arena-img" /></div>
           <div class="arena-mid">
-            <span class="arena-tag">BOSS FIGHT</span>
+            <span class="arena-tag">AI vs YOU</span>
             <h3 class="arena-name">ARENA</h3>
-            <p class="arena-sub">7 AI DOGS vs YOU</p>
+            <p class="arena-sub">YOUR THESIS vs 7 AI AGENTS</p>
           </div>
           <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)"><img src="/blockparty/f5-doge-bull.png" alt="" class="arena-img" /></div>
         </div>

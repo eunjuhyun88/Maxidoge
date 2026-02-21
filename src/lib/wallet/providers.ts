@@ -1,3 +1,9 @@
+import {
+  PUBLIC_EVM_CHAIN_ID,
+  PUBLIC_EVM_RPC_URL,
+  PUBLIC_WALLETCONNECT_PROJECT_ID,
+} from '$env/static/public';
+
 export type WalletProviderKey = 'metamask' | 'coinbase' | 'walletconnect' | 'phantom';
 
 export const WALLET_PROVIDER_LABEL: Record<WalletProviderKey, string> = {
@@ -89,13 +95,9 @@ let _walletConnectProvider: Eip1193Provider | null = null;
 let _coinbaseProvider: Eip1193Provider | null = null;
 
 function getWalletConnectProjectId(): string {
-  const fromPublic = (import.meta as any)?.env?.PUBLIC_WALLETCONNECT_PROJECT_ID;
-  const fromVite = (import.meta as any)?.env?.VITE_WALLETCONNECT_PROJECT_ID;
-  const projectId = typeof fromPublic === 'string' && fromPublic.trim()
-    ? fromPublic.trim()
-    : typeof fromVite === 'string' && fromVite.trim()
-      ? fromVite.trim()
-      : '';
+  const projectId = PUBLIC_WALLETCONNECT_PROJECT_ID
+    || import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
+    || '';
   if (!projectId) {
     throw new Error('WalletConnect project id is missing. Set PUBLIC_WALLETCONNECT_PROJECT_ID.');
   }
@@ -103,24 +105,17 @@ function getWalletConnectProjectId(): string {
 }
 
 function getPreferredChainId(): number {
-  const rawPublic = (import.meta as any)?.env?.PUBLIC_EVM_CHAIN_ID;
-  const rawVite = (import.meta as any)?.env?.VITE_EVM_CHAIN_ID;
-  const value = typeof rawPublic === 'string' && rawPublic.trim()
-    ? Number(rawPublic)
-    : typeof rawVite === 'string' && rawVite.trim()
-      ? Number(rawVite)
-      : 42161;
+  const raw = PUBLIC_EVM_CHAIN_ID
+    || import.meta.env.VITE_EVM_CHAIN_ID
+    || '';
+  const value = raw ? Number(raw) : 42161;
   return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 42161;
 }
 
 function getPreferredRpcUrl(chainId: number): string {
-  const rawPublic = (import.meta as any)?.env?.PUBLIC_EVM_RPC_URL;
-  const rawVite = (import.meta as any)?.env?.VITE_EVM_RPC_URL;
-  const envUrl = typeof rawPublic === 'string' && rawPublic.trim()
-    ? rawPublic.trim()
-    : typeof rawVite === 'string' && rawVite.trim()
-      ? rawVite.trim()
-      : '';
+  const envUrl = PUBLIC_EVM_RPC_URL
+    || import.meta.env.VITE_EVM_RPC_URL
+    || '';
   if (envUrl) return envUrl;
 
   if (chainId === 42161) return 'https://arb1.arbitrum.io/rpc';
