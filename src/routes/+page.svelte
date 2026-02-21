@@ -1244,14 +1244,15 @@
     .hero {
       min-height: calc(100vh - 36px);
       gap: clamp(14px, 1.8vw, 26px);
-      padding-inline: clamp(18px, 2.6vw, 40px);
+      padding-left: clamp(18px, 2.6vw, 40px);
+      padding-right: 0;
     }
     .hero-left {
       max-width: min(760px, 57vw);
       padding: 16px clamp(14px, 2vw, 30px) 24px;
     }
     .hero-right {
-      width: clamp(320px, 30vw, 420px);
+      width: clamp(320px, 32vw, 460px);
       max-width: none;
     }
     .fc-txt { padding: 12px 16px 14px; }

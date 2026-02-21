@@ -179,17 +179,34 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
     throw new Error('Coinbase Wallet SDK is not installed. Add @coinbase/wallet-sdk.');
   }
 
-  const CoinbaseWalletSDK = mod?.default ?? mod?.CoinbaseWalletSDK ?? mod;
-  if (!CoinbaseWalletSDK) {
+  const chainId = getPreferredChainId();
+  const rpcUrl = getPreferredRpcUrl(chainId);
+
+  let provider: unknown;
+  const CoinbaseWalletSDK = mod?.default ?? mod?.CoinbaseWalletSDK;
+
+  if (typeof CoinbaseWalletSDK === 'function') {
+    const sdk = new CoinbaseWalletSDK({
+      appName: 'MAXI DOGE',
+    });
+    provider = typeof sdk?.makeWeb3Provider === 'function'
+      ? sdk.makeWeb3Provider(rpcUrl, chainId)
+      : typeof sdk?.getProvider === 'function'
+        ? sdk.getProvider()
+        : null;
+  } else if (typeof mod?.createCoinbaseWalletSDK === 'function') {
+    const sdk = mod.createCoinbaseWalletSDK({
+      appName: 'MAXI DOGE',
+    });
+    provider = typeof sdk?.makeWeb3Provider === 'function'
+      ? sdk.makeWeb3Provider(rpcUrl, chainId)
+      : typeof sdk?.getProvider === 'function'
+        ? sdk.getProvider()
+        : null;
+  } else {
     throw new Error('Coinbase Wallet SDK initialization failed.');
   }
 
-  const chainId = getPreferredChainId();
-  const rpcUrl = getPreferredRpcUrl(chainId);
-  const sdk = new CoinbaseWalletSDK({
-    appName: 'MAXI DOGE',
-  });
-  const provider = sdk.makeWeb3Provider(rpcUrl, chainId);
   if (!provider || typeof provider.request !== 'function') {
     throw new Error('Coinbase Wallet provider could not be created.');
   }
@@ -206,8 +223,14 @@ async function resolveEvmProvider(key: WalletProviderKey): Promise<Eip1193Provid
   if (key === 'coinbase') {
     try {
       return await getCoinbaseProvider();
-    } catch {
-      return resolveInjectedEvmProvider(key);
+    } catch (error) {
+      const injected = resolveInjectedEvmProvider(key);
+      if (injected) return injected;
+
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Coinbase Wallet provider could not be initialized.');
     }
   }
 
