@@ -6,6 +6,7 @@
     connectWallet, signMessage, skipWalletConnection,
     disconnectWallet
   } from '$lib/stores/walletStore';
+  import { registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
 
   $: state = $walletStore;
   $: step = state.walletModalStep;
@@ -14,33 +15,122 @@
   let emailInput = '';
   let nicknameInput = '';
   let emailError = '';
+  let actionError = '';
   let connectingProvider = '';
-
-  function handleSignup() {
-    emailError = '';
-    if (!emailInput.includes('@')) { emailError = 'Valid email required'; return; }
-    if (nicknameInput.trim().length < 2) { emailError = 'Nickname: 2+ chars'; return; }
-    registerUser(emailInput.trim(), nicknameInput.trim());
-  }
-
-  function handleConnect(provider: string) {
-    connectingProvider = provider;
-    setWalletModalStep('connecting');
-    // Simulate connection delay
-    setTimeout(() => {
-      connectWallet(provider);
-      connectingProvider = '';
-    }, 1500);
-  }
-
   let signingMessage = false;
 
-  function handleSignMessage() {
+  type EthereumRequestArgs = {
+    method: string;
+    params?: unknown[] | Record<string, unknown>;
+  };
+
+  type EthereumProvider = {
+    request: (args: EthereumRequestArgs) => Promise<unknown>;
+  };
+
+  function getEthereumProvider(): EthereumProvider | null {
+    if (typeof window === 'undefined') return null;
+    const provider = (window as Window & { ethereum?: EthereumProvider }).ethereum;
+    if (!provider || typeof provider.request !== 'function') return null;
+    return provider;
+  }
+
+  async function handleSignup() {
+    emailError = '';
+    actionError = '';
+    if (!emailInput.includes('@')) { emailError = 'Valid email required'; return; }
+    if (nicknameInput.trim().length < 2) { emailError = 'Nickname: 2+ chars'; return; }
+
+    try {
+      await registerAuth({
+        email: emailInput.trim(),
+        nickname: nicknameInput.trim(),
+        walletAddress: state.connected ? state.address || undefined : undefined,
+        walletSignature: state.connected ? state.signature || undefined : undefined,
+      });
+      registerUser(emailInput.trim(), nicknameInput.trim());
+    } catch (error) {
+      emailError = error instanceof Error ? error.message : 'Failed to register account';
+    }
+  }
+
+  async function handleConnect(provider: string) {
+    actionError = '';
+    connectingProvider = provider;
+    setWalletModalStep('connecting');
+
+    try {
+      if (provider === 'metamask') {
+        const ethereum = getEthereumProvider();
+        if (!ethereum) {
+          throw new Error('MetaMask is not detected. Install the extension and retry.');
+        }
+
+        const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+        const walletAddress = Array.isArray(accounts) ? accounts[0] : null;
+        if (typeof walletAddress !== 'string' || !walletAddress.startsWith('0x')) {
+          throw new Error('Failed to read wallet address from MetaMask');
+        }
+        connectWallet(provider, walletAddress);
+      } else {
+        // Keep demo fallback for non-EVM providers.
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        connectWallet(provider);
+      }
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : 'Failed to connect wallet';
+      setWalletModalStep('wallet-select');
+    } finally {
+      connectingProvider = '';
+    }
+  }
+
+  async function handleSignMessage() {
     signingMessage = true;
-    setTimeout(() => {
-      signMessage();
+    actionError = '';
+
+    try {
+      if (!state.address) {
+        throw new Error('Wallet address is missing');
+      }
+
+      if (state.provider === 'metamask') {
+        const ethereum = getEthereumProvider();
+        if (!ethereum) {
+          throw new Error('MetaMask provider is unavailable');
+        }
+
+        const noncePayload = await requestWalletNonce({
+          address: state.address,
+          provider: state.provider,
+        });
+
+        const signatureRaw = await ethereum.request({
+          method: 'personal_sign',
+          params: [noncePayload.message, state.address],
+        });
+        const signature = typeof signatureRaw === 'string' ? signatureRaw : '';
+        if (!signature) {
+          throw new Error('MetaMask returned an empty signature');
+        }
+
+        await verifyWalletSignature({
+          address: state.address,
+          message: noncePayload.message,
+          signature,
+          provider: state.provider || 'metamask',
+        });
+
+        signMessage(signature);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        signMessage();
+      }
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : 'Failed to sign wallet message';
+    } finally {
       signingMessage = false;
-    }, 1200);
+    }
   }
 
   function handleSkip() {
@@ -89,6 +179,10 @@
       </span>
       <button class="whc" on:click={handleClose}>✕</button>
     </div>
+
+    {#if actionError}
+      <div class="global-error">{actionError}</div>
+    {/if}
 
     <!-- ═══ STEP: WELCOME (P0 - No wallet forced) ═══ -->
     {#if step === 'welcome'}
@@ -506,9 +600,13 @@
   .form-input:focus { border-color: var(--yel); }
   .form-input::placeholder { color: #444; }
   .form-hint { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.25); text-align: right; margin-top: 2px; }
+  .global-error,
   .form-error {
     font-family: var(--fm); font-size: 9px; color: var(--red);
     padding: 4px 8px; background: rgba(255,45,85,.1); border-radius: 4px; margin-bottom: 8px;
+  }
+  .global-error {
+    margin: 8px 12px 0;
   }
 
   /* ═══ DEMO STEP ═══ */

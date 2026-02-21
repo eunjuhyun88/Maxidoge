@@ -124,17 +124,18 @@ export function completeDemoView() {
 }
 
 // Wallet connection (now first step before email)
-export function connectWallet(provider: string = 'MetaMask') {
-  // Simulate wallet connection (replace with real Web3 later)
-  const fakeAddr = '0x' + Array.from({ length: 40 }, () =>
+export function connectWallet(provider: string = 'MetaMask', addressOverride?: string) {
+  // Keep fallback generation for non-EVM demo providers.
+  const fallbackAddr = '0x' + Array.from({ length: 40 }, () =>
     '0123456789abcdef'[Math.floor(Math.random() * 16)]
   ).join('');
+  const address = addressOverride || fallbackAddr;
 
   walletStore.update(w => ({
     ...w,
     connected: true,
-    address: fakeAddr,
-    shortAddr: fakeAddr.slice(0, 6) + '...' + fakeAddr.slice(-4),
+    address,
+    shortAddr: address.slice(0, 6) + '...' + address.slice(-4),
     balance: +(Math.random() * 10000 + 500).toFixed(2),
     chain: 'ARB',
     provider,
@@ -143,16 +144,16 @@ export function connectWallet(provider: string = 'MetaMask') {
 }
 
 // Sign message to verify ownership
-export function signMessage() {
-  // Simulate message signing (replace with ethers.js signMessage later)
-  const fakeSig = '0x' + Array.from({ length: 130 }, () =>
+export function signMessage(signatureOverride?: string) {
+  const fallbackSig = '0x' + Array.from({ length: 130 }, () =>
     '0123456789abcdef'[Math.floor(Math.random() * 16)]
   ).join('');
+  const signature = signatureOverride || fallbackSig;
 
   walletStore.update(w => ({
     ...w,
     tier: w.email ? 'connected' : 'guest',
-    signature: fakeSig,
+    signature,
     phase: Math.max(w.phase, 2),
     walletModalStep: 'connected'
   }));

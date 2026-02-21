@@ -13,6 +13,7 @@ export interface CreateAuthUserInput {
   email: string;
   nickname: string;
   walletAddress: string | null;
+  walletSignature: string | null;
 }
 
 export async function findAuthUserConflict(email: string, nickname: string): Promise<{
@@ -39,16 +40,20 @@ export async function findAuthUserConflict(email: string, nickname: string): Pro
 }
 
 export async function createAuthUser(input: CreateAuthUserInput): Promise<AuthUserRow> {
-  const tier: AuthUserRow['tier'] = input.walletAddress ? 'connected' : 'registered';
+  const tier: AuthUserRow['tier'] = input.walletAddress
+    ? input.walletSignature
+      ? 'verified'
+      : 'connected'
+    : 'registered';
   const phase = input.walletAddress ? 2 : 1;
 
   const result = await query<AuthUserRow>(
     `
       INSERT INTO users (email, nickname, tier, phase, wallet_address, wallet_signature)
-      VALUES ($1, $2, $3, $4, $5, null)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id, email, nickname, tier, phase, wallet_address
     `,
-    [input.email, input.nickname, tier, phase, input.walletAddress]
+    [input.email, input.nickname, tier, phase, input.walletAddress, input.walletSignature]
   );
   return result.rows[0];
 }

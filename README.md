@@ -123,8 +123,13 @@ src/
 ### Auth
 
 - `POST /api/auth/register`
-  - body: `{ email, nickname, walletAddress? }`
+  - body: `{ email, nickname, walletAddress?, walletSignature? }`
 - `GET /api/auth/session`
+- `POST /api/auth/logout`
+- `POST /api/auth/nonce`
+  - body: `{ address, provider? }`
+- `POST /api/auth/verify-wallet`
+  - body: `{ address, message, signature, provider? }`
 - `POST /api/auth/wallet`
   - body: `{ address, signature?, provider }`
 

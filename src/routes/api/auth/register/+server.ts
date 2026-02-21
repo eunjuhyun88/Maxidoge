@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // MAXI⚡DOGE — User Registration API (PostgreSQL backed)
 // POST /api/auth/register
-// Body: { email: string, nickname: string, walletAddress?: string }
+// Body: { email: string, nickname: string, walletAddress?: string, walletSignature?: string }
 // ═══════════════════════════════════════════════════════════════
 
 import { json } from '@sveltejs/kit';
@@ -15,6 +15,7 @@ import {
 } from '$lib/server/session';
 
 const GENERIC_WALLET_RE = /^0x[0-9a-fA-F]{40}$|^[A-Za-z0-9]{20,64}$/;
+const ETH_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
   try {
@@ -22,7 +23,9 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     const email = typeof body?.email === 'string' ? body.email.trim() : '';
     const nickname = typeof body?.nickname === 'string' ? body.nickname.trim() : '';
     const walletAddressRaw = typeof body?.walletAddress === 'string' ? body.walletAddress.trim() : '';
+    const walletSignatureRaw = typeof body?.walletSignature === 'string' ? body.walletSignature.trim() : '';
     const walletAddress = walletAddressRaw || null;
+    const walletSignature = walletSignatureRaw || null;
 
     // Validate
     if (!email || !email.includes('@')) {
@@ -33,6 +36,12 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     }
     if (walletAddress && !GENERIC_WALLET_RE.test(walletAddress)) {
       return json({ error: 'Invalid wallet address format' }, { status: 400 });
+    }
+    if (walletSignature && !ETH_SIGNATURE_RE.test(walletSignature)) {
+      return json({ error: 'Invalid wallet signature format' }, { status: 400 });
+    }
+    if (walletSignature && !walletAddress) {
+      return json({ error: 'walletAddress is required when walletSignature is provided' }, { status: 400 });
     }
 
     const conflict = await findAuthUserConflict(email, nickname);
@@ -48,6 +57,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       email,
       nickname,
       walletAddress,
+      walletSignature,
     });
 
     // Create session
@@ -72,6 +82,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
         email,
         nickname,
         walletAddress,
+        walletVerified: Boolean(walletAddress && walletSignature),
         tier: user.tier,
         phase: user.phase,
         createdAt: new Date(createdAt).toISOString()

@@ -22,6 +22,10 @@ Primary code references:
 - Runtime server code currently uses `users`, `sessions`, `matches` directly.
 - Most user actions are still localStorage/in-memory (stores), not API-backed.
 - Existing docs/migrations still describe `app_users` / `auth_sessions` naming.
+- Supabase live check (2026-02-21, REST/service-role):
+  - `users/sessions` and compatibility `app_users/auth_sessions` 모두 노출됨
+  - 클릭 반응용 확장 테이블(`user_preferences`, `user_ui_state`, `activity_events`, `signal_actions` 등)은 생성됨
+  - `auth_nonces`만 누락되어 MetaMask nonce-verify 플로우가 완전하지 않음
 
 Conclusion: `users/sessions` and `app_users/auth_sessions` are a naming split. Keep one canonical physical model.
 
