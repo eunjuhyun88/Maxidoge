@@ -104,8 +104,10 @@
 </script>
 
 <nav id="nav">
-  <!-- Back Button -->
-  <button class="nav-back" on:click={handleBack}>←</button>
+  <!-- Back Button (hidden on home) -->
+  {#if activePath !== '/'}
+    <button class="nav-back" on:click={handleBack}>←</button>
+  {/if}
 
   <!-- Logo -->
   <button class="nav-logo" on:click={() => nav('/')}>

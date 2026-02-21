@@ -115,7 +115,7 @@
     </div>
   </section>
 
-  <!-- ═══ STATS STRIP (separate from hero) ═══ -->
+  <!-- ═══ STATS STRIP ═══ -->
   {#if profile.stats.totalMatches > 0}
     <section class="stats-strip">
       <div class="ss-item">
@@ -142,123 +142,84 @@
     </section>
   {/if}
 
-  <!-- ═══ FLOW: HOW IT WORKS ═══ -->
+  <!-- ═══ 3-STEP FLOW (Horizontal, Compact Pop-Art) ═══ -->
   <section class="flow-section">
-    <h3 class="flow-title">HOW IT WORKS</h3>
-    <div class="flow-steps">
-      <!-- STEP 1: WAR ROOM -->
-      <button class="flow-card fc-1" on:click={enterTerminal}>
-        <div class="fc-step">STEP 1</div>
-        <div class="fc-icon-row">
-          <img src="/doge/trade-actions.png" alt="" class="fc-img" />
-          <div class="fc-live-dot"></div>
-        </div>
-        <h2 class="fc-name fc-n1">WAR ROOM</h2>
-        <p class="fc-desc">7 AI 에이전트가 실시간으로 시장을 분석</p>
-        <div class="fc-detail">
-          <span>📈 차트 · 온체인 · 파생상품</span>
-          <span>🧠 감성 · 리스크 · 컨센서스</span>
-        </div>
+    <h3 class="flow-title">⚡ HOW IT WORKS ⚡</h3>
+    <div class="flow-grid">
+      <button class="fc fc-1" on:click={enterTerminal}>
+        <div class="fc-num">01</div>
+        <img src="/blockparty/f5-doge-cross.png" alt="" class="fc-doge" />
+        <h2 class="fc-name">WAR ROOM</h2>
+        <p class="fc-desc">7 AI 에이전트 실시간 시장 분석</p>
         <div class="fc-agents">
           {#each AGDEFS.slice(0, 5) as ag}
-            <div class="fc-ag" style="border-color:{ag.color}">
-              <img src={ag.img.def} alt="" class="fc-ag-img" />
-              <span class="fc-ag-vote" style="color:{ag.dir === 'LONG' ? 'var(--grn)' : ag.dir === 'SHORT' ? 'var(--red)' : 'rgba(255,255,255,.3)'}">{ag.dir === 'LONG' ? '▲' : ag.dir === 'SHORT' ? '▼' : '—'}</span>
-            </div>
+            <img src={ag.img.def} alt="" class="fc-ag" style="border-color:{ag.color}" />
           {/each}
         </div>
-        <div class="fc-cta fc-cta1">ENTER WAR ROOM →</div>
+        <div class="fc-cta" style="background:var(--cyan);color:#000">ENTER →</div>
       </button>
 
-      <div class="flow-arrow">
-        <span class="fa-line"></span>
-        <span class="fa-label">시그널 자동 생성</span>
-        <span class="fa-icon">⚡</span>
+      <div class="flow-connector">
+        <span class="fc-arrow">→</span>
+        <span class="fc-arrow-label">시그널 생성</span>
       </div>
 
-      <!-- STEP 2: SIGNAL ROOM -->
-      <button class="flow-card fc-2" on:click={() => goto('/signals')}>
-        <div class="fc-step">STEP 2</div>
-        <div class="fc-icon-row">
-          <img src="/doge/trade-surge.png" alt="" class="fc-img" />
-          <div class="fc-signal-badge">📡 LIVE</div>
-        </div>
-        <h2 class="fc-name fc-n2">SIGNAL ROOM</h2>
-        <p class="fc-desc">에이전트 분석 기반 트레이딩 시그널</p>
-        <div class="fc-detail">
-          <span>📡 실시간 시그널 피드</span>
-          <span>🎯 Entry / TP / SL 자동 설정</span>
-        </div>
-        <div class="fc-signal-preview">
-          <div class="fc-sig-row">
-            <span class="fc-sig-dir long">▲ LONG</span>
-            <span class="fc-sig-pair">BTC/USDT</span>
-            <span class="fc-sig-conf">82%</span>
-          </div>
-          <div class="fc-sig-row">
-            <span class="fc-sig-dir short">▼ SHORT</span>
-            <span class="fc-sig-pair">ETH/USDT</span>
-            <span class="fc-sig-conf">75%</span>
-          </div>
+      <button class="fc fc-2" on:click={() => goto('/signals')}>
+        <div class="fc-num">02</div>
+        <img src="/blockparty/f5-doge-chart.png" alt="" class="fc-doge" />
+        <h2 class="fc-name">SIGNALS</h2>
+        <p class="fc-desc">AI 분석 기반 트레이딩 시그널</p>
+        <div class="fc-preview">
+          <span class="fp-long">▲ LONG BTC 82%</span>
+          <span class="fp-short">▼ SHORT ETH 75%</span>
         </div>
         {#if trackedSigs > 0}
-          <div class="fc-tracked-badge">📌 {trackedSigs} TRACKED</div>
+          <div class="fc-badge">📌 {trackedSigs} TRACKED</div>
         {/if}
-        <div class="fc-cta fc-cta2">SIGNAL ROOM →</div>
+        <div class="fc-cta" style="background:var(--pk);color:#fff">SIGNALS →</div>
       </button>
 
-      <div class="flow-arrow">
-        <span class="fa-line"></span>
-        <span class="fa-label">원클릭 카피트레이드</span>
-        <span class="fa-icon">🚀</span>
+      <div class="flow-connector">
+        <span class="fc-arrow">→</span>
+        <span class="fc-arrow-label">카피트레이드</span>
       </div>
 
-      <!-- STEP 3: COPY TRADE -->
-      <button class="flow-card fc-3" on:click={enterTerminal}>
-        <div class="fc-step">STEP 3</div>
-        <div class="fc-icon-row">
-          <img src="/doge/action-victory.png" alt="" class="fc-img" />
-        </div>
-        <h2 class="fc-name fc-n3">COPY TRADE</h2>
-        <p class="fc-desc">시그널 기반 원클릭 포지션 오픈</p>
-        <div class="fc-detail">
-          <span>⚡ Quick Long / Short</span>
-          <span>📊 실시간 PnL 추적</span>
-        </div>
+      <button class="fc fc-3" on:click={enterTerminal}>
+        <div class="fc-num">03</div>
+        <img src="/blockparty/f5-doge-fire.png" alt="" class="fc-doge" />
+        <h2 class="fc-name">COPY TRADE</h2>
+        <p class="fc-desc">원클릭 포지션 오픈 & PnL 추적</p>
         {#if openPositions > 0}
-          <div class="fc-open-badge">{openPositions} OPEN POSITIONS</div>
+          <div class="fc-badge fc-badge-grn">{openPositions} OPEN</div>
         {/if}
-        <div class="fc-cta fc-cta3">START TRADING →</div>
+        <div class="fc-cta" style="background:var(--grn);color:#000">TRADE →</div>
       </button>
     </div>
   </section>
 
-  <!-- ═══ ARENA CARD ═══ -->
+  <!-- ═══ ARENA BANNER (Comic Panel) ═══ -->
   <section class="arena-section">
-    <button class="arena-entry" on:click={enterArena}>
-      <img src="/doge/action-charge.png" alt="" class="arena-bg-img" />
-      <div class="arena-content">
-        <span class="arena-tag">AI BATTLE MODE</span>
+    <button class="arena-card" on:click={enterArena}>
+      <img src="/blockparty/f5-doge-muscle.png" alt="" class="arena-doge-l" />
+      <div class="arena-center">
+        <span class="arena-tag">⚔️ AI BATTLE MODE</span>
         <h2 class="arena-title">ARENA</h2>
-        <p class="arena-desc">AI 에이전트 스쿼드와 11-Phase 배틀에 참전</p>
+        <p class="arena-desc">7 AI 에이전트와 11-Phase 배틀 참전</p>
         <div class="arena-feats">
-          <span>⚔️ 11-Phase Battle</span>
-          <span>🐕 7 AI Agents</span>
-          <span>📊 Consensus</span>
-          <span>🏆 LP Ranking</span>
+          <span>⚔️ 11-Phase</span>
+          <span>🐕 7 Agents</span>
+          <span>🏆 Ranking</span>
         </div>
         <div class="arena-cta">ENTER ARENA →</div>
       </div>
+      <img src="/blockparty/f5-doge-bull.png" alt="" class="arena-doge-r" />
     </button>
   </section>
 
-  <!-- ═══ AGENT SQUAD ═══ -->
+  <!-- ═══ AGENT SQUAD (Comic Cards) ═══ -->
   <section class="squad-section">
-    <div class="squad-header">
-      <h3 class="sq-title">⚡ AGENT SQUAD</h3>
-      <span class="sq-sub">7 AI 분석가가 대기 중</span>
-    </div>
-    <div class="squad-scroll">
+    <h3 class="sq-title">🐕 AGENT SQUAD</h3>
+    <div class="squad-grid">
       {#each AGDEFS as ag}
         <div class="sq-card" style="--ac:{ag.color}">
           <img src={ag.img.def} alt={ag.name} class="sq-avatar" />
@@ -270,29 +231,23 @@
     </div>
   </section>
 
-  <!-- ═══ QUICK NAV ═══ -->
+  <!-- ═══ QUICK NAV (Retro Game Menu) ═══ -->
   <section class="quick-nav">
-    <button class="qn-btn" on:click={() => goto('/passport')}>
-      <span class="qn-icon">📋</span>
-      <span class="qn-label">PASSPORT</span>
-      <span class="qn-tier">{profile.tier.toUpperCase()}</span>
+    <button class="qn" on:click={() => goto('/terminal')}>
+      <span class="qn-icon">📊</span><span>TERMINAL</span>
     </button>
-    <button class="qn-btn" on:click={() => goto('/oracle')}>
-      <span class="qn-icon">🔮</span>
-      <span class="qn-label">ORACLE</span>
+    <button class="qn" on:click={() => goto('/passport')}>
+      <span class="qn-icon">📋</span><span>PASSPORT</span>
     </button>
-    <button class="qn-btn" on:click={() => goto('/signals')}>
-      <span class="qn-icon">🔔</span>
-      <span class="qn-label">SIGNALS</span>
+    <button class="qn" on:click={() => goto('/oracle')}>
+      <span class="qn-icon">🔮</span><span>ORACLE</span>
+    </button>
+    <button class="qn" on:click={() => goto('/signals')}>
+      <span class="qn-icon">🔔</span><span>SIGNALS</span>
       {#if trackedSigs > 0}<span class="qn-badge">{trackedSigs}</span>{/if}
     </button>
-    <button class="qn-btn" on:click={() => goto('/passport')}>
-      <span class="qn-icon">💰</span>
-      <span class="qn-label">PORTFOLIO</span>
-    </button>
-    <button class="qn-btn" on:click={() => goto('/live')}>
-      <span class="qn-icon">👀</span>
-      <span class="qn-label">LIVE</span>
+    <button class="qn" on:click={() => goto('/live')}>
+      <span class="qn-icon">👀</span><span>LIVE</span>
     </button>
   </section>
 
@@ -300,7 +255,7 @@
   <section class="wallet-cta">
     {#if !connected}
       <button class="wc-btn" on:click={openWalletModal}>
-        <span class="wc-bolt">⚡</span> CONNECT WALLET TO START <span class="wc-bolt">⚡</span>
+        <span class="wc-bolt">⚡</span> CONNECT WALLET <span class="wc-bolt">⚡</span>
       </button>
     {:else}
       <div class="wc-connected">
@@ -471,357 +426,306 @@
 
   /* ═══ STATS STRIP ═══ */
   .stats-strip {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
-    padding: 12px 24px;
-    background: #000;
-    border-bottom: 3px solid var(--yel);
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; padding: 12px 24px;
+    background: #000; border-bottom: 4px solid var(--yel);
   }
-  .ss-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: 0 24px;
-  }
-  .ss-sep {
-    width: 1px;
-    height: 28px;
-    background: rgba(255,255,255,.12);
-    flex-shrink: 0;
-  }
-  .ss-v {
-    font-family: var(--fd);
-    font-size: 20px;
-    font-weight: 900;
-    color: #fff;
-    letter-spacing: 1px;
-  }
+  .ss-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 24px; }
+  .ss-sep { width: 1px; height: 28px; background: rgba(255,255,255,.12); flex-shrink: 0; }
+  .ss-v { font-family: var(--fd); font-size: 20px; font-weight: 900; color: #fff; letter-spacing: 1px; }
   .ss-streak { color: var(--ora); }
-  .ss-l {
-    font-family: var(--fm);
-    font-size: 7px;
-    font-weight: 700;
-    color: rgba(255,255,255,.35);
-    letter-spacing: 2px;
-  }
+  .ss-l { font-family: var(--fm); font-size: 7px; font-weight: 700; color: rgba(255,255,255,.35); letter-spacing: 2px; }
 
-  /* ═══ FLOW SECTION ═══ */
+  /* ═══ 3-STEP FLOW (Pop-Art Horizontal Grid) ═══ */
   .flow-section {
-    padding: 20px 18px;
-    background: linear-gradient(180deg, #1a0a2e 0%, #0c0c1e 100%);
+    padding: 24px 18px 20px;
+    background: linear-gradient(180deg, #1a0520 0%, #0e0818 100%);
+    background-image:
+      radial-gradient(circle, rgba(255,105,180,.06) 1px, transparent 1px);
+    background-size: 20px 20px;
   }
   .flow-title {
-    font-family: var(--fd); font-size: 12px; font-weight: 900;
-    letter-spacing: 4px; color: var(--yel); text-align: center;
-    margin-bottom: 16px;
-    text-shadow: 0 0 12px rgba(255,230,0,.3);
+    font-family: var(--fd); font-size: 14px; font-weight: 900;
+    letter-spacing: 6px; color: var(--yel); text-align: center;
+    margin-bottom: 18px;
+    text-shadow: 0 0 20px rgba(255,230,0,.3);
   }
-  .flow-steps {
-    display: flex; flex-direction: column; align-items: center; gap: 0;
-  }
-
-  /* Flow Card */
-  .flow-card {
-    width: 100%; max-width: 520px;
-    border: 3px solid #000;
-    border-radius: 16px;
-    padding: 18px 18px 14px;
-    cursor: pointer;
-    transition: all .15s;
-    text-align: left;
-    display: flex; flex-direction: column; gap: 6px;
-    box-shadow: 5px 5px 0 #000;
-    position: relative;
-    overflow: hidden;
-  }
-  .flow-card:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 #000; }
-  .flow-card:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
-  .fc-1 { background: linear-gradient(135deg, #0a1628 0%, #0d2240 100%); }
-  .fc-2 { background: linear-gradient(135deg, #1a0a1e 0%, #2a0a38 100%); }
-  .fc-3 { background: linear-gradient(135deg, #0a1e0a 0%, #0a2818 100%); }
-
-  .fc-step {
-    font-family: var(--fm); font-size: 7px; font-weight: 900;
-    letter-spacing: 3px; color: #000;
-    background: var(--yel); padding: 2px 10px; border-radius: 10px;
-    display: inline-block; width: fit-content;
-    border: 2px solid #000;
+  .flow-grid {
+    display: flex; align-items: stretch; justify-content: center;
+    gap: 0; max-width: 900px; margin: 0 auto;
   }
 
-  .fc-icon-row {
-    display: flex; align-items: center; gap: 8px;
+  .fc {
+    flex: 1; min-width: 0;
+    border: 3px solid #000; border-radius: 16px;
+    padding: 16px 14px 14px; cursor: pointer;
+    transition: all .15s; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    box-shadow: 5px 5px 0 #000; position: relative; overflow: hidden;
   }
-  .fc-img { width: 48px; height: 48px; object-fit: contain; }
-  .fc-live-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--grn); box-shadow: 0 0 8px var(--grn);
-    animation: blink .9s infinite;
-  }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
-  .fc-signal-badge {
-    font-family: var(--fm); font-size: 7px; font-weight: 900;
-    letter-spacing: 1px; color: var(--pk); background: rgba(255,45,155,.1);
-    border: 1.5px solid rgba(255,45,155,.4); padding: 2px 8px; border-radius: 6px;
-  }
+  .fc:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 #000; }
+  .fc:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
+  .fc-1 { background: linear-gradient(135deg, #0a1628, #0d2240); }
+  .fc-2 { background: linear-gradient(135deg, #1a0a1e, #2a0a38); }
+  .fc-3 { background: linear-gradient(135deg, #0a1e0a, #0a2818); }
 
+  .fc-num {
+    font-family: var(--fd); font-size: 32px; font-weight: 900;
+    color: rgba(255,255,255,.06); position: absolute; top: 4px; right: 10px;
+    letter-spacing: -2px; line-height: 1;
+  }
+  .fc-doge { width: 80px; height: 80px; object-fit: contain; filter: drop-shadow(2px 2px 4px rgba(0,0,0,.4)); }
   .fc-name {
-    font-family: var(--fd); font-size: 22px; font-weight: 900;
-    letter-spacing: 4px; line-height: 1;
+    font-family: var(--fd); font-size: 16px; font-weight: 900;
+    letter-spacing: 3px; line-height: 1; color: #fff;
+    text-shadow: 2px 2px 0 #000;
   }
-  .fc-n1 { color: var(--cyan); text-shadow: 2px 2px 0 #000; }
-  .fc-n2 { color: var(--pk); text-shadow: 2px 2px 0 #000; }
-  .fc-n3 { color: var(--grn); text-shadow: 2px 2px 0 #000; }
+  .fc-desc { font-family: var(--fb); font-size: 10px; color: rgba(255,255,255,.5); line-height: 1.3; }
 
-  .fc-desc { font-family: var(--fb); font-size: 11px; color: rgba(255,255,255,.6); line-height: 1.4; }
-
-  .fc-detail { display: flex; flex-direction: column; gap: 2px; }
-  .fc-detail span {
-    font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.4); letter-spacing: .5px;
-  }
-
-  /* Agent avatars in flow card */
-  .fc-agents {
-    display: flex; gap: 6px; margin-top: 4px;
-  }
+  .fc-agents { display: flex; gap: 4px; justify-content: center; }
   .fc-ag {
-    display: flex; align-items: center; gap: 2px;
-    border: 1.5px solid; border-radius: 20px;
-    padding: 2px 6px 2px 2px; background: rgba(255,255,255,.03);
+    width: 26px; height: 26px; border-radius: 50%; object-fit: cover;
+    border: 2px solid; box-shadow: 0 0 6px rgba(255,255,255,.15);
   }
-  .fc-ag-img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
-  .fc-ag-vote { font-family: var(--fm); font-size: 9px; font-weight: 900; }
 
-  /* Signal preview rows */
-  .fc-signal-preview {
-    display: flex; flex-direction: column; gap: 3px;
-    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
-    border-radius: 6px; padding: 6px 8px; margin-top: 2px;
-  }
-  .fc-sig-row {
-    display: flex; align-items: center; gap: 8px;
-  }
-  .fc-sig-dir {
+  .fc-preview { display: flex; flex-direction: column; gap: 2px; }
+  .fp-long {
     font-family: var(--fm); font-size: 8px; font-weight: 900;
-    padding: 1px 5px; border: 1px solid; border-radius: 3px;
+    color: var(--grn); background: rgba(0,255,136,.08);
+    border: 1px solid rgba(0,255,136,.3); padding: 2px 8px; border-radius: 4px;
   }
-  .fc-sig-dir.long { color: var(--grn); border-color: rgba(0,255,136,.4); background: rgba(0,255,136,.08); }
-  .fc-sig-dir.short { color: var(--red); border-color: rgba(255,45,85,.4); background: rgba(255,45,85,.08); }
-  .fc-sig-pair { font-family: var(--fd); font-size: 10px; font-weight: 900; color: #fff; }
-  .fc-sig-conf { font-family: var(--fm); font-size: 8px; color: var(--yel); margin-left: auto; }
+  .fp-short {
+    font-family: var(--fm); font-size: 8px; font-weight: 900;
+    color: var(--red); background: rgba(255,45,85,.08);
+    border: 1px solid rgba(255,45,85,.3); padding: 2px 8px; border-radius: 4px;
+  }
 
-  .fc-tracked-badge {
+  .fc-badge {
     font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 1px;
-    color: var(--ora); background: rgba(255,140,59,.08);
-    border: 1px solid rgba(255,140,59,.3); padding: 3px 8px;
-    border-radius: 6px; width: fit-content;
+    color: var(--ora); background: rgba(255,140,59,.1);
+    border: 1px solid rgba(255,140,59,.3); padding: 2px 8px; border-radius: 6px;
   }
-  .fc-open-badge {
-    font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 1px;
-    color: #000; background: var(--grn);
-    border: 2px solid #000; padding: 3px 8px;
-    border-radius: 6px; width: fit-content;
-  }
+  .fc-badge-grn { color: #000; background: var(--grn); border-color: #000; }
 
   .fc-cta {
-    margin-top: 4px;
+    margin-top: auto; width: 100%;
     font-family: var(--fd); font-size: 10px; font-weight: 900;
-    letter-spacing: 2px; padding: 10px 16px; border-radius: 8px;
+    letter-spacing: 2px; padding: 8px 12px; border-radius: 8px;
     border: 3px solid #000; box-shadow: 3px 3px 0 #000;
     text-align: center; transition: all .12s;
   }
-  .fc-cta1 { background: var(--cyan); color: #000; }
-  .fc-cta2 { background: var(--pk); color: #fff; }
-  .fc-cta3 { background: var(--grn); color: #000; }
-  .flow-card:hover .fc-cta { box-shadow: 4px 4px 0 #000; }
+  .fc:hover .fc-cta { box-shadow: 4px 4px 0 #000; }
 
-  /* Flow Arrow */
-  .flow-arrow {
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-    padding: 6px 0;
+  .flow-connector {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 0 6px; flex-shrink: 0;
   }
-  .fa-line {
-    width: 2px; height: 16px;
-    background: linear-gradient(180deg, var(--yel), rgba(255,230,0,.2));
+  .fc-arrow {
+    font-family: var(--fd); font-size: 20px; font-weight: 900; color: var(--yel);
+    text-shadow: 0 0 10px rgba(255,230,0,.4);
   }
-  .fa-label {
-    font-family: var(--fm); font-size: 7px; font-weight: 900;
-    letter-spacing: 2px; color: var(--yel);
-    background: rgba(255,230,0,.06); border: 1px solid rgba(255,230,0,.2);
-    padding: 2px 10px; border-radius: 10px;
+  .fc-arrow-label {
+    font-family: var(--fm); font-size: 6px; font-weight: 900;
+    letter-spacing: 1px; color: rgba(255,230,0,.5); white-space: nowrap;
   }
-  .fa-icon { font-size: 14px; }
 
-  /* ═══ ARENA SECTION ═══ */
-  .arena-section {
-    padding: 0 18px 14px;
-    background: #0c0c1e;
+  /* ═══ ARENA (Comic Panel) ═══ */
+  .arena-section { padding: 0 18px 16px; background: #0e0818; }
+  .arena-card {
+    width: 100%; display: flex; align-items: center; gap: 0;
+    border: 4px solid #000; border-radius: 18px;
+    box-shadow: 6px 6px 0 #000; cursor: pointer; transition: all .15s;
+    background: linear-gradient(135deg, #2d0a3e 0%, #4a0a5e 50%, #1e0a28 100%);
+    overflow: hidden; position: relative;
   }
-  .arena-entry {
-    width: 100%;
-    position: relative; overflow: hidden;
-    border: 3px solid #000; border-radius: 16px;
-    box-shadow: 5px 5px 0 #000;
-    cursor: pointer; transition: all .15s;
-    background: linear-gradient(135deg, #1e0a28 0%, #2d0a3e 100%);
-  }
-  .arena-entry:hover { transform: translate(-2px,-2px); box-shadow: 7px 7px 0 #000; }
-  .arena-entry:active { transform: translate(1px,1px); box-shadow: 2px 2px 0 #000; }
-  .arena-bg-img {
-    position: absolute; right: -10px; bottom: -10px;
-    width: 120px; height: 120px; object-fit: contain;
-    opacity: .15; pointer-events: none;
-  }
-  .arena-content { position: relative; padding: 16px 18px; }
+  .arena-card:hover { transform: translate(-2px,-2px); box-shadow: 8px 8px 0 #000; }
+  .arena-card:active { transform: translate(1px,1px); box-shadow: 3px 3px 0 #000; }
+  .arena-doge-l { width: 130px; height: 130px; object-fit: contain; flex-shrink: 0; transform: scaleX(-1); margin-left: -10px; }
+  .arena-doge-r { width: 130px; height: 130px; object-fit: contain; flex-shrink: 0; margin-right: -10px; }
+  .arena-center { flex: 1; text-align: center; padding: 14px 8px; }
   .arena-tag {
-    font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 2px;
-    color: var(--pk); background: rgba(255,45,155,.1);
-    border: 1.5px solid rgba(255,45,155,.4);
-    padding: 2px 8px; border-radius: 8px;
+    font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 2px;
+    color: var(--yel); background: rgba(255,230,0,.1);
+    border: 2px solid rgba(255,230,0,.3);
+    padding: 3px 10px; border-radius: 10px; display: inline-block;
   }
   .arena-title {
-    font-family: var(--fd); font-size: 24px; font-weight: 900;
-    letter-spacing: 4px; color: var(--pk); text-shadow: 2px 2px 0 #000;
-    margin-top: 6px; line-height: 1;
+    font-family: var(--fd); font-size: 36px; font-weight: 900;
+    letter-spacing: 8px; color: var(--pk);
+    -webkit-text-stroke: 2px #000; paint-order: stroke fill;
+    text-shadow: 3px 3px 0 #000, 0 0 20px rgba(255,45,155,.4);
+    margin-top: 4px; line-height: 1;
   }
   .arena-desc {
-    font-family: var(--fb); font-size: 11px; color: rgba(255,255,255,.6);
-    margin-top: 4px; line-height: 1.4;
+    font-family: var(--fb); font-size: 10px; color: rgba(255,255,255,.5);
+    margin-top: 4px;
   }
   .arena-feats {
-    display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;
+    display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; margin-top: 6px;
   }
   .arena-feats span {
-    font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.5);
-    background: rgba(255,255,255,.06); padding: 3px 7px; border-radius: 4px;
-    border: 1px solid rgba(255,255,255,.08);
+    font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.6);
+    background: rgba(255,255,255,.08); padding: 3px 8px; border-radius: 6px;
+    border: 1px solid rgba(255,255,255,.1);
   }
   .arena-cta {
-    margin-top: 10px;
-    font-family: var(--fd); font-size: 10px; font-weight: 900;
-    letter-spacing: 2px; padding: 10px 16px; border-radius: 8px;
+    margin-top: 8px; display: inline-block;
+    font-family: var(--fd); font-size: 11px; font-weight: 900;
+    letter-spacing: 3px; padding: 8px 24px; border-radius: 10px;
     border: 3px solid #000; box-shadow: 3px 3px 0 #000;
-    background: var(--pk); color: #fff; text-align: center;
-    transition: all .12s;
+    background: var(--pk); color: #fff; transition: all .12s;
   }
-  .arena-entry:hover .arena-cta { box-shadow: 4px 4px 0 #000; }
+  .arena-card:hover .arena-cta { box-shadow: 4px 4px 0 #000; }
 
-  /* ═══ SQUAD ═══ */
-  .squad-section { padding: 14px 18px; background: #0c0c1e; }
-  .squad-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .sq-title { font-family: var(--fd); font-size: 11px; font-weight: 900; letter-spacing: 3px; color: var(--yel); }
-  .sq-sub { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.3); letter-spacing: 1px; }
-
-  .squad-scroll {
-    display: flex; gap: 8px;
-    overflow-x: auto; padding-bottom: 6px;
-    scrollbar-width: none;
+  /* ═══ SQUAD (Pop-Art Grid) ═══ */
+  .squad-section { padding: 16px 18px; background: #0e0818; }
+  .sq-title {
+    font-family: var(--fd); font-size: 13px; font-weight: 900;
+    letter-spacing: 4px; color: var(--yel); text-align: center;
+    margin-bottom: 12px; text-shadow: 0 0 12px rgba(255,230,0,.3);
   }
-  .squad-scroll::-webkit-scrollbar { display: none; }
-
+  .squad-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 8px; max-width: 700px; margin: 0 auto;
+  }
   .sq-card {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    background: #111130;
-    border: 2px solid rgba(255,255,255,.08);
-    border-radius: 12px;
-    padding: 12px 14px 10px;
-    min-width: 88px;
-    transition: all .15s;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background: rgba(255,255,255,.03);
+    border: 2.5px solid rgba(255,255,255,.08); border-radius: 14px;
+    padding: 12px 8px 10px; transition: all .15s; cursor: default;
   }
-  .sq-card:hover { border-color: var(--ac); box-shadow: 0 0 16px color-mix(in srgb, var(--ac) 25%, transparent); transform: translateY(-2px); }
+  .sq-card:hover {
+    border-color: var(--ac);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--ac) 25%, transparent), 4px 4px 0 #000;
+    transform: translateY(-3px);
+  }
   .sq-avatar {
-    width: 40px; height: 40px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid var(--ac);
+    width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
+    border: 2.5px solid var(--ac);
     box-shadow: 0 0 10px color-mix(in srgb, var(--ac) 30%, transparent);
   }
-  .sq-name { font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 1px; }
+  .sq-name { font-family: var(--fd); font-size: 9px; font-weight: 900; letter-spacing: 1px; }
   .sq-role { font-family: var(--fm); font-size: 6px; color: rgba(255,255,255,.3); letter-spacing: .5px; text-align: center; }
-  .sq-conf { font-family: var(--fd); font-size: 10px; font-weight: 900; color: rgba(255,255,255,.45); }
+  .sq-conf { font-family: var(--fd); font-size: 11px; font-weight: 900; color: rgba(255,255,255,.5); }
 
-  /* ═══ QUICK NAV ═══ */
+  /* ═══ QUICK NAV (Retro Game Buttons) ═══ */
   .quick-nav {
-    display: flex; gap: 6px; padding: 10px 18px;
-    overflow-x: auto; justify-content: center; flex-wrap: wrap;
-    background: #0c0c1e;
+    display: flex; gap: 8px; padding: 12px 18px;
+    justify-content: center; flex-wrap: wrap;
+    background: #0e0818;
   }
-  .qn-btn {
-    display: flex; align-items: center; gap: 5px;
-    font-family: var(--fm); font-size: 8px; font-weight: 700;
-    letter-spacing: 1px; color: rgba(255,255,255,.5);
-    background: rgba(255,255,255,.03); border: 1.5px solid rgba(255,255,255,.08);
-    padding: 7px 14px; border-radius: 8px; cursor: pointer;
-    transition: all .15s; white-space: nowrap;
+  .qn {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--fd); font-size: 9px; font-weight: 900;
+    letter-spacing: 2px; color: #fff;
+    background: rgba(255,255,255,.05);
+    border: 3px solid rgba(255,255,255,.12);
+    box-shadow: 3px 3px 0 rgba(0,0,0,.5);
+    padding: 8px 16px; border-radius: 10px; cursor: pointer;
+    transition: all .12s; white-space: nowrap;
   }
-  .qn-btn:hover { color: var(--yel); border-color: rgba(255,230,0,.3); background: rgba(255,230,0,.04); transform: translateY(-1px); }
-  .qn-icon { font-size: 13px; }
-  .qn-label { letter-spacing: 1.5px; }
-  .qn-tier { font-size: 7px; color: var(--gold); background: rgba(255,200,0,.1); padding: 1px 5px; border-radius: 4px; }
+  .qn:hover {
+    color: var(--yel); border-color: var(--yel);
+    box-shadow: 4px 4px 0 rgba(0,0,0,.6);
+    transform: translate(-1px, -1px);
+    background: rgba(255,230,0,.06);
+  }
+  .qn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 #000; }
+  .qn-icon { font-size: 14px; }
   .qn-badge {
-    font-size: 7px; font-weight: 900;
+    font-size: 8px; font-weight: 900;
     background: var(--cyan); color: #000;
-    padding: 1px 5px; border-radius: 6px; min-width: 14px; text-align: center;
+    padding: 1px 6px; border-radius: 6px;
   }
 
   /* ═══ WALLET CTA ═══ */
-  .wallet-cta { padding: 14px 18px 32px; text-align: center; background: #0c0c1e; }
+  .wallet-cta { padding: 16px 18px 40px; text-align: center; background: #0e0818; }
   .wc-btn {
-    font-family: var(--fd); font-size: 12px; font-weight: 900; letter-spacing: 3px;
+    font-family: var(--fd); font-size: 13px; font-weight: 900; letter-spacing: 4px;
     color: #000; background: var(--yel);
-    border: 3px solid #000; box-shadow: 5px 5px 0 #000;
-    padding: 16px 32px; border-radius: 14px; cursor: pointer;
+    border: 4px solid #000; box-shadow: 6px 6px 0 #000;
+    padding: 16px 36px; border-radius: 16px; cursor: pointer;
     transition: all .15s; width: 100%; max-width: 420px;
     animation: ctaPulse 3s ease infinite;
   }
-  .wc-btn:hover { transform: translate(-2px,-2px); box-shadow: 7px 7px 0 #000; }
+  .wc-btn:hover { transform: translate(-2px,-2px); box-shadow: 8px 8px 0 #000; }
   @keyframes ctaPulse {
-    0%,100% { box-shadow: 5px 5px 0 #000; }
-    50% { box-shadow: 5px 5px 0 #000, 0 0 30px rgba(255,230,0,.25); }
+    0%,100% { box-shadow: 6px 6px 0 #000; }
+    50% { box-shadow: 6px 6px 0 #000, 0 0 30px rgba(255,230,0,.3); }
+  }
+  @keyframes boltFlash {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .85; transform: scale(1.15); }
   }
   .wc-bolt { display: inline-block; animation: boltFlash 1.5s ease infinite; }
-
   .wc-connected {
     display: inline-flex; align-items: center; gap: 8px;
     font-family: var(--fm); font-size: 10px; font-weight: 700;
     color: var(--grn); letter-spacing: 1.5px;
-    background: rgba(0,255,136,.05); border: 1.5px solid rgba(0,255,136,.2);
+    background: rgba(0,255,136,.05); border: 2px solid rgba(0,255,136,.2);
     padding: 10px 18px; border-radius: 12px;
   }
   .wc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--grn); box-shadow: 0 0 10px var(--grn); }
   .wc-tier {
     font-size: 7px; background: rgba(255,200,0,.15);
-    color: var(--gold); padding: 2px 6px; border-radius: 4px;
-    letter-spacing: 1px;
+    color: var(--gold); padding: 2px 6px; border-radius: 4px; letter-spacing: 1px;
   }
 
   /* ═══ RESPONSIVE ═══ */
+
+  /* Tablet / medium */
+  @media (max-width: 900px) {
+    .flow-grid { flex-direction: column; align-items: center; gap: 0; }
+    .fc { max-width: 400px; width: 100%; }
+    .flow-connector { flex-direction: row; padding: 6px 0; }
+    .fc-arrow { transform: rotate(90deg); }
+    .arena-doge-l, .arena-doge-r { width: 100px; height: 100px; }
+    .arena-title { font-size: 28px; letter-spacing: 5px; }
+  }
+
+  /* Mobile */
   @media (max-width: 640px) {
-    .hero { min-height: 400px; padding: 20px 8px; }
-    .title-line { font-size: 70px !important; letter-spacing: 6px !important; -webkit-text-stroke: 3px #000 !important; }
-    .hero-badge { font-size: 7px; padding: 4px 12px; }
-    .hero-ticker { padding: 6px 14px; gap: 8px; }
+    .hero { min-height: 380px; padding: 16px 8px; }
+    .title-line { font-size: 64px !important; letter-spacing: 5px !important; -webkit-text-stroke: 3px #000 !important; }
+    .hero-badge { font-size: 7px; padding: 4px 10px; }
+    .hero-ticker { padding: 6px 14px; gap: 6px; }
     .tick-price { font-size: 12px; }
     .tick-label { font-size: 7px; }
-    /* Scale down deco */
+    /* Scale hero decorations */
     .d-burst-tl, .d-burst-tr, .d-burst-bl { width: 200px !important; }
     .d-cloud-l, .d-cloud-r { width: 180px !important; }
     .d-halftone { width: 160px !important; }
-    /* Scale down blockparty doges */
-    .dg { transform: scale(.6) !important; }
-    /* Scale down stickers */
-    .s { transform: scale(.55) !important; }
+    .dg { transform: scale(.55) !important; }
+    .s { transform: scale(.5) !important; }
+    /* Stats */
     .stats-strip { padding: 10px 12px; }
-    .ss-item { padding: 0 14px; }
+    .ss-item { padding: 0 12px; }
     .ss-v { font-size: 16px; }
-    .flow-section { padding: 14px; }
-    .flow-card { padding: 14px 14px 12px; }
-    .fc-name { font-size: 18px; letter-spacing: 2px; }
+    /* Flow */
+    .flow-section { padding: 16px 12px; }
+    .fc { padding: 12px 10px 10px; }
+    .fc-doge { width: 60px; height: 60px; }
+    .fc-name { font-size: 14px; letter-spacing: 2px; }
+    /* Arena */
+    .arena-section { padding: 0 12px 12px; }
+    .arena-doge-l, .arena-doge-r { width: 80px; height: 80px; }
+    .arena-title { font-size: 24px; letter-spacing: 4px; }
+    .arena-cta { font-size: 9px; padding: 7px 16px; }
+    /* Squad */
+    .squad-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .sq-avatar { width: 36px; height: 36px; }
+    /* Quick Nav */
+    .quick-nav { gap: 6px; padding: 10px 12px; }
+    .qn { font-size: 8px; padding: 6px 12px; }
+    /* Wallet */
+    .wc-btn { font-size: 11px; padding: 14px 20px; letter-spacing: 2px; }
+  }
+
+  /* Small mobile */
+  @media (max-width: 400px) {
+    .title-line { font-size: 48px !important; letter-spacing: 3px !important; }
+    .squad-grid { grid-template-columns: repeat(2, 1fr); }
+    .arena-doge-l { display: none; }
+    .arena-doge-r { display: none; }
   }
 </style>

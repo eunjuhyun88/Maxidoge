@@ -11,6 +11,11 @@ export interface ApiPredictionPosition {
   createdAt: number;
 }
 
+interface PredictionListResponse {
+  success: boolean;
+  records: ApiPredictionPosition[];
+}
+
 async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: {
@@ -40,9 +45,9 @@ function canUseBrowserFetch(): boolean {
 
 export async function votePredictionApi(payload: {
   marketId: string;
-  marketTitle: string;
+  marketTitle?: string;
   direction: 'YES' | 'NO';
-  entryOdds: number;
+  entryOdds?: number;
 }): Promise<boolean> {
   if (!canUseBrowserFetch()) return false;
   try {
@@ -53,6 +58,29 @@ export async function votePredictionApi(payload: {
     return true;
   } catch {
     return false;
+  }
+}
+
+export async function fetchPredictionPositionsApi(params?: {
+  limit?: number;
+  offset?: number;
+  settled?: boolean;
+}): Promise<ApiPredictionPosition[] | null> {
+  if (!canUseBrowserFetch()) return null;
+  try {
+    const search = new URLSearchParams();
+    if (params?.limit != null) search.set('limit', String(params.limit));
+    if (params?.offset != null) search.set('offset', String(params.offset));
+    if (params?.settled != null) search.set('settled', String(params.settled));
+
+    const query = search.toString();
+    const url = query ? `/api/predictions?${query}` : '/api/predictions';
+    const result = await requestJson<PredictionListResponse>(url, {
+      method: 'GET',
+    });
+    return Array.isArray(result.records) ? result.records : [];
+  } catch {
+    return null;
   }
 }
 
