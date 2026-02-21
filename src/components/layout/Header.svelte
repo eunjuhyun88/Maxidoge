@@ -22,8 +22,7 @@
     { path: '/arena', label: '🐕 ARENA', icon: '', accent: true },
     { path: '/passport', label: 'PASSPORT', icon: '📋' },
     { path: '/oracle', label: 'ORACLE', icon: '🔮' },
-    { path: '/live', label: 'LIVE', icon: '👀' },
-    { path: '/signals', label: 'SIGNALS', icon: '🔔' },
+    { path: '/signals', label: 'COMMUNITY', icon: '💡' },
   ];
 
   onMount(async () => {

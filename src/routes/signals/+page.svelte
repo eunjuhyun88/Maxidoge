@@ -6,8 +6,10 @@
   import { activeSignals, trackSignal } from '$lib/stores/trackedSignalStore';
   import { incrementTrackedSignals } from '$lib/stores/userProfileStore';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { notifySignalTracked } from '$lib/stores/notificationStore';
+  import LivePanel from '../../components/live/LivePanel.svelte';
   import EmptyState from '../../components/shared/EmptyState.svelte';
   import ContextBanner from '../../components/shared/ContextBanner.svelte';
 
@@ -34,6 +36,15 @@
   }
 
   let filter: string = 'all';
+  let signalsView: 'community' | 'signals' | 'live' = 'community';
+  let communityFilter: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked' = 'all';
+  const COMMUNITY_FILTERS: Array<{ key: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked'; label: string }> = [
+    { key: 'all', label: 'All' },
+    { key: 'crypto', label: 'Crypto' },
+    { key: 'arena', label: 'Arena' },
+    { key: 'trade', label: 'Trade' },
+    { key: 'tracked', label: 'Tracked' }
+  ];
 
   // Build signals from real data sources
   $: arenaSignals = buildArenaSignals(records);
@@ -47,6 +58,46 @@
     : filter === 'trade' ? tradeSignals
     : filter === 'tracked' ? trackedSignals
     : allSignals.filter(s => s.priority === filter);
+
+  interface CommunityIdea {
+    id: string;
+    signal: Signal;
+    timeframe: '5m' | '15m' | '30m' | '1H' | '4H' | '1D';
+    strategy: string;
+    subscribers: number;
+    category: 'crypto' | 'arena' | 'trade' | 'tracked';
+  }
+
+  const TF_ROTATION: CommunityIdea['timeframe'][] = ['4H', '1D', '1H', '15m', '30m', '5m'];
+
+  function toCommunityCategory(sig: Signal): CommunityIdea['category'] {
+    if (sig.source === 'arena') return 'arena';
+    if (sig.source === 'trade') return 'trade';
+    if (sig.source === 'tracked') return 'tracked';
+    return 'crypto';
+  }
+
+  function toStrategyTitle(sig: Signal): string {
+    const base = sig.reason.split('·')[0]?.trim() || sig.reason;
+    if (base.length > 26) return `${base.slice(0, 26)}...`;
+    return base;
+  }
+
+  function toSubscribers(sig: Signal, idx: number): number {
+    return 36000 + sig.conf * 120 + idx * 170;
+  }
+
+  $: communityIdeas = filteredSignals
+    .map((sig, idx) => ({
+      id: `idea-${sig.id}`,
+      signal: sig,
+      timeframe: TF_ROTATION[idx % TF_ROTATION.length],
+      strategy: toStrategyTitle(sig),
+      subscribers: toSubscribers(sig, idx),
+      category: toCommunityCategory(sig)
+    }))
+    .filter((idea) => communityFilter === 'all' || idea.category === communityFilter)
+    .slice(0, 12);
 
   function buildArenaSignals(recs: typeof records): Signal[] {
     return recs.slice(0, 10).flatMap(r => {
@@ -181,6 +232,27 @@
   function sourceColor(s: string): string {
     return s === 'arena' ? '#ff2d9b' : s === 'trade' ? '#3b9eff' : s === 'tracked' ? '#ff8c3b' : '#8b5cf6';
   }
+
+  function setSignalsView(next: 'community' | 'signals' | 'live') {
+    signalsView = next;
+    const query = new URLSearchParams($page.url.searchParams);
+    if (next === 'community') query.delete('view');
+    else query.set('view', next);
+    const qs = query.toString();
+    goto(`/signals${qs ? `?${qs}` : ''}`, {
+      replaceState: true,
+      noScroll: true,
+      keepFocus: true,
+      invalidateAll: false
+    });
+  }
+
+  onMount(() => {
+    const v = $page.url.searchParams.get('view');
+    if (v === 'signals' || v === 'live' || v === 'community') {
+      signalsView = v;
+    }
+  });
 </script>
 
 <div class="signals-page">
@@ -209,74 +281,125 @@
     </div>
   </div>
 
-  <div class="filter-bar">
-    {#each [['all', 'ALL'], ['active', 'ACTIVE'], ['arena', '⚔️ ARENA'], ['trade', '📊 TRADE'], ['tracked', '📌 TRACKED'], ['CRITICAL', '🔴 CRITICAL'], ['HIGH', '🟠 HIGH']] as [key, label]}
-      <button class="filter-btn" class:active={filter === key} on:click={() => filter = key}>{label}</button>
-    {/each}
+  <div class="view-switch">
+    <button class="vs-btn" class:active={signalsView === 'community'} on:click={() => setSignalsView('community')}>
+      💡 COMMUNITY IDEAS
+    </button>
+    <button class="vs-btn" class:active={signalsView === 'signals'} on:click={() => setSignalsView('signals')}>
+      📡 SIGNAL LIST
+    </button>
+    <button class="vs-btn" class:active={signalsView === 'live'} on:click={() => setSignalsView('live')}>
+      ⚡ LIVE FEED
+    </button>
   </div>
 
-  <div class="signal-list">
-    {#if filteredSignals.length === 0}
-      <EmptyState
-        image={CHARACTER_ART.tradeSurge}
-        title="NO SIGNALS YET"
-        subtitle="Start an Arena battle or open trades to generate signals"
-        ctaText="⚔️ GO TO ARENA"
-        ctaHref="/arena"
-        icon="🔍"
-        variant="orange"
-      />
-    {:else}
-      {#each filteredSignals as sig (sig.id)}
-        <div class="signal-card" class:inactive={!sig.active}>
-          <div class="sig-strip" style="background:{priorityColor(sig.priority)}"></div>
-          <div class="sig-body">
-            <div class="sig-top">
-              <span class="sig-source" style="color:{sourceColor(sig.source)};border-color:{sourceColor(sig.source)}">{sourceLabel(sig.source)}</span>
-              {#if sig.agent}
-                <div class="sig-agent">
-                  {#if sig.agent.img?.def}
-                    <img src={sig.agent.img.def} alt={sig.agent.name} class="sig-agent-img" />
+  {#if signalsView === 'community'}
+    <div class="community-ideas">
+      <div class="ci-head">
+        <div class="ci-title">Community Ideas</div>
+        <div class="ci-explore">Explore {allSignals.length.toLocaleString()}+ Signals →</div>
+      </div>
+      <div class="ci-filters">
+        {#each COMMUNITY_FILTERS as item}
+          <button class="ci-chip" class:active={communityFilter === item.key} on:click={() => communityFilter = item.key}>{item.label}</button>
+        {/each}
+      </div>
+
+      <div class="ci-grid">
+        {#each communityIdeas as idea (idea.id)}
+          <article class="ci-card">
+            <div class="ci-tf">{idea.timeframe}</div>
+            <div class="ci-strategy">{idea.strategy}</div>
+            <div class="ci-subs">★ {idea.subscribers.toLocaleString()} subscribers</div>
+            <div class="ci-bottom">
+              <div class="ci-asset">
+                <div class="ci-pair">{idea.signal.pair}</div>
+                <div class="ci-dir" class:long={idea.signal.dir === 'LONG'} class:short={idea.signal.dir === 'SHORT'}>
+                  {idea.signal.dir} · {idea.signal.conf}%
+                </div>
+              </div>
+              <button class="ci-view" on:click={() => handleTrade(idea.signal)}>✦ View</button>
+            </div>
+          </article>
+        {/each}
+      </div>
+    </div>
+
+  {:else if signalsView === 'live'}
+    <div class="signals-live-shell">
+      <LivePanel embedded={true} />
+    </div>
+
+  {:else}
+    <div class="filter-bar">
+      {#each [['all', 'ALL'], ['active', 'ACTIVE'], ['arena', '⚔️ ARENA'], ['trade', '📊 TRADE'], ['tracked', '📌 TRACKED'], ['CRITICAL', '🔴 CRITICAL'], ['HIGH', '🟠 HIGH']] as [key, label]}
+        <button class="filter-btn" class:active={filter === key} on:click={() => filter = key}>{label}</button>
+      {/each}
+    </div>
+
+    <div class="signal-list">
+      {#if filteredSignals.length === 0}
+        <EmptyState
+          image={CHARACTER_ART.tradeSurge}
+          title="NO SIGNALS YET"
+          subtitle="Start an Arena battle or open trades to generate signals"
+          ctaText="⚔️ GO TO ARENA"
+          ctaHref="/arena"
+          icon="🔍"
+          variant="orange"
+        />
+      {:else}
+        {#each filteredSignals as sig (sig.id)}
+          <div class="signal-card" class:inactive={!sig.active}>
+            <div class="sig-strip" style="background:{priorityColor(sig.priority)}"></div>
+            <div class="sig-body">
+              <div class="sig-top">
+                <span class="sig-source" style="color:{sourceColor(sig.source)};border-color:{sourceColor(sig.source)}">{sourceLabel(sig.source)}</span>
+                {#if sig.agent}
+                  <div class="sig-agent">
+                    {#if sig.agent.img?.def}
+                      <img src={sig.agent.img.def} alt={sig.agent.name} class="sig-agent-img" />
+                    {/if}
+                    <span class="sig-agent-name" style="color:{sig.agent.color}">{sig.agent.name}</span>
+                  </div>
+                {/if}
+                <span class="sig-pair">{sig.pair}</span>
+                <span class="sig-priority" style="color:{priorityColor(sig.priority)};border-color:{priorityColor(sig.priority)}">{sig.priority}</span>
+                <span class="sig-time">{sig.time}</span>
+              </div>
+
+              <div class="sig-direction">
+                <span class="sig-dir-badge" class:long={sig.dir === 'LONG'} class:short={sig.dir === 'SHORT'}>
+                  {sig.dir === 'LONG' ? '▲' : '▼'} {sig.dir}
+                </span>
+                <span class="sig-conf">{sig.conf}% CONF</span>
+                <span class="sig-rr">R:R {sig.rr}</span>
+              </div>
+
+              <div class="sig-levels">
+                <div class="sig-level"><span class="sl-label">ENTRY</span><span class="sl-val entry">${sig.entry.toLocaleString()}</span></div>
+                <div class="sig-level"><span class="sl-label">TP</span><span class="sl-val tp">${sig.tp.toLocaleString()}</span></div>
+                <div class="sig-level"><span class="sl-label">SL</span><span class="sl-val sl">${sig.sl.toLocaleString()}</span></div>
+              </div>
+
+              <div class="sig-reason">{sig.reason}</div>
+
+              {#if sig.active}
+                <div class="sig-actions">
+                  {#if sig.source !== 'tracked'}
+                    <button class="sig-btn track" on:click={() => handleTrack(sig)}>📌 TRACK</button>
                   {/if}
-                  <span class="sig-agent-name" style="color:{sig.agent.color}">{sig.agent.name}</span>
+                  <button class="sig-btn copy-trade" on:click={() => handleTrade(sig)}>
+                    🚀 COPY TRADE
+                  </button>
                 </div>
               {/if}
-              <span class="sig-pair">{sig.pair}</span>
-              <span class="sig-priority" style="color:{priorityColor(sig.priority)};border-color:{priorityColor(sig.priority)}">{sig.priority}</span>
-              <span class="sig-time">{sig.time}</span>
             </div>
-
-            <div class="sig-direction">
-              <span class="sig-dir-badge" class:long={sig.dir === 'LONG'} class:short={sig.dir === 'SHORT'}>
-                {sig.dir === 'LONG' ? '▲' : '▼'} {sig.dir}
-              </span>
-              <span class="sig-conf">{sig.conf}% CONF</span>
-              <span class="sig-rr">R:R {sig.rr}</span>
-            </div>
-
-            <div class="sig-levels">
-              <div class="sig-level"><span class="sl-label">ENTRY</span><span class="sl-val entry">${sig.entry.toLocaleString()}</span></div>
-              <div class="sig-level"><span class="sl-label">TP</span><span class="sl-val tp">${sig.tp.toLocaleString()}</span></div>
-              <div class="sig-level"><span class="sl-label">SL</span><span class="sl-val sl">${sig.sl.toLocaleString()}</span></div>
-            </div>
-
-            <div class="sig-reason">{sig.reason}</div>
-
-            {#if sig.active}
-              <div class="sig-actions">
-                {#if sig.source !== 'tracked'}
-                  <button class="sig-btn track" on:click={() => handleTrack(sig)}>📌 TRACK</button>
-                {/if}
-                <button class="sig-btn copy-trade" on:click={() => handleTrade(sig)}>
-                  🚀 COPY TRADE
-                </button>
-              </div>
-            {/if}
           </div>
-        </div>
-      {/each}
-    {/if}
-  </div>
+        {/each}
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -284,6 +407,162 @@
     height: 100%;
     overflow-y: auto;
     background: linear-gradient(180deg, #1a1a0a, #0a0a1a);
+  }
+
+  .view-switch {
+    display: flex;
+    gap: 6px;
+    padding: 10px 16px 6px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    background: rgba(0,0,0,.25);
+    position: sticky;
+    top: 0;
+    z-index: 4;
+  }
+  .vs-btn {
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.04);
+    color: rgba(255,255,255,.55);
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .vs-btn.active {
+    background: linear-gradient(135deg, #b8c9e6, #9ab2d8);
+    color: #111;
+    border-color: rgba(255,255,255,.65);
+  }
+
+  .community-ideas {
+    padding: 12px 16px 18px;
+    background: linear-gradient(180deg, #c8d3e8 0%, #b9c8e2 100%);
+  }
+  .ci-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .ci-title {
+    font-family: var(--fd);
+    font-size: 28px;
+    color: #151a22;
+    letter-spacing: .5px;
+  }
+  .ci-explore {
+    font-family: var(--fm);
+    font-size: 14px;
+    font-weight: 700;
+    color: #1b2538;
+    white-space: nowrap;
+  }
+  .ci-filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .ci-chip {
+    font-family: var(--fm);
+    font-size: 18px;
+    border-radius: 999px;
+    border: none;
+    padding: 8px 16px;
+    cursor: pointer;
+    background: rgba(255,255,255,.82);
+    color: #202634;
+  }
+  .ci-chip.active {
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(14, 26, 44, .15);
+  }
+  .ci-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+  }
+  .ci-card {
+    background: rgba(239, 243, 250, .86);
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.6);
+    min-height: 220px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .ci-tf {
+    align-self: flex-start;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-family: var(--fm);
+    font-size: 28px;
+    color: #fff;
+    background: #5852ef;
+    box-shadow: 0 2px 8px rgba(57, 60, 170, .3);
+  }
+  .ci-strategy {
+    align-self: flex-start;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-family: var(--fm);
+    font-size: 20px;
+    color: #555;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(27, 38, 58, .1);
+    max-width: 100%;
+  }
+  .ci-subs {
+    align-self: flex-start;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-family: var(--fm);
+    font-size: 18px;
+    color: #646b78;
+    background: #f5f7fc;
+  }
+  .ci-bottom {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .ci-pair {
+    font-family: var(--fd);
+    font-size: 26px;
+    color: #1a1f2a;
+  }
+  .ci-dir {
+    font-family: var(--fm);
+    font-size: 16px;
+    margin-top: 2px;
+  }
+  .ci-dir.long { color: #0d9f59; }
+  .ci-dir.short { color: #d64866; }
+  .ci-view {
+    border: none;
+    border-radius: 999px;
+    padding: 10px 18px;
+    font-family: var(--fm);
+    font-size: 20px;
+    font-weight: 800;
+    color: #fff;
+    background: linear-gradient(135deg, #6778ff, #6b5fe9);
+    cursor: pointer;
+  }
+
+  .signals-live-shell {
+    height: calc(100% - 54px);
+    min-height: 520px;
+    overflow: auto;
+    background: #06111f;
   }
 
   .sig-header {
