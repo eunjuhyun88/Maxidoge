@@ -22,18 +22,28 @@
   function enterTerminal() { goto('/terminal'); }
 
   const FEATURES = [
-    { label: 'WAR ROOM', sub: 'TERMINAL', brief: 'LIVE CHARTS + AI MARKET ANALYSIS', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
-      detail: 'REAL-TIME CHARTS, ORDER FLOW, AND AI-POWERED MARKET ANALYSIS. YOUR COMMAND CENTER FOR DOMINATING THE MARKET.',
-      stats: [{ k: 'LIVE FEEDS', v: '24/7' }, { k: 'AI AGENTS', v: '7' }, { k: 'PAIRS', v: '200+' }] },
-    { label: 'BOSS FIGHT', sub: 'ARENA', brief: 'BATTLE 7 AI DOGS IN 11 PHASES', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
-      detail: '11-PHASE TRADING ARENA WHERE YOU BATTLE AI DOGS. PREDICT, COMPETE, AND CLIMB THE LEADERBOARD.',
-      stats: [{ k: 'PHASES', v: '11' }, { k: 'OPPONENTS', v: '7 AI' }, { k: 'REWARDS', v: 'XP+RANK' }] },
-    { label: 'AI SIGNALS', sub: 'SIGNALS', brief: 'AI-GENERATED TRADE SIGNALS 24/7', img: '/blockparty/f5-doge-fire.png', path: '/signals',
-      detail: 'AI-GENERATED TRADE SIGNALS WITH CONFIDENCE SCORES. TRACK, FOLLOW, AND BUILD YOUR PORTFOLIO.',
-      stats: [{ k: 'ACCURACY', v: '85%+' }, { k: 'DAILY', v: '50+' }, { k: 'LATENCY', v: '<1s' }] },
-    { label: 'COMMUNITY', sub: 'HUB', brief: 'SHARE STRATEGIES WITH THE PACK', img: '/blockparty/f5-doge-excited.png', path: '/signals',
-      detail: 'SHARE STRATEGIES, DISCUSS MARKETS, AND CONNECT WITH FELLOW DEGENS IN THE PACK.',
-      stats: [{ k: 'MEMBERS', v: '10K+' }, { k: 'POSTS', v: '1K/DAY' }, { k: 'VIBES', v: 'MAX' }] },
+    { label: 'WAR ROOM', sub: 'TERMINAL', brief: '7 AI DOGS SCAN 200+ PAIRS SO YOU DON\'T HAVE TO', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
+      detail: 'YOUR AI COMMAND CENTER. 7 SPECIALIZED AGENTS ANALYZE CHARTS, WHALE FLOWS, DERIVATIVES, AND SENTIMENT IN REAL-TIME. TYPE CONDITIONS IN PLAIN ENGLISH — THE SCANNER HANDLES THE REST.',
+      stats: [{ k: 'AI AGENTS', v: '7' }, { k: 'PAIRS', v: '200+' }, { k: 'SCAN PATTERNS', v: '28' }] },
+    { label: 'BOSS FIGHT', sub: 'ARENA', brief: 'SUBMIT YOUR THESIS — 7 AI DOGS WILL CHALLENGE IT', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
+      detail: 'THINK YOU FOUND THE NEXT 10X? PROVE IT. SUBMIT YOUR LONG/SHORT HYPOTHESIS WITH TP AND SL — THEN WATCH 7 AI AGENTS VOTE, DEBATE, AND JUDGE YOUR CALL ACROSS 11 BATTLE PHASES.',
+      stats: [{ k: 'PHASES', v: '11' }, { k: 'AI JUDGES', v: '7' }, { k: 'REWARDS', v: 'XP+RANK' }] },
+    { label: 'AI SCANNER', sub: 'SIGNALS', brief: 'ANOMALY ALERTS: OI SPIKES, WHALE MOVES, VOLUME SURGES', img: '/blockparty/f5-doge-fire.png', path: '/signals',
+      detail: '28 ANOMALY DETECTION PATTERNS MONITOR OI COMPRESSION, WHALE EXCHANGE DEPOSITS, LIQUIDATION CLUSTERS, FUNDING EXTREMES, AND SOCIAL EXPLOSIONS. SCORE 70+ = ALERT. SCORE 85+ = CRITICAL. DRAFT ORDERS AUTO-GENERATE WITH TP/SL.',
+      stats: [{ k: 'PATTERNS', v: '28' }, { k: 'SCAN CYCLE', v: '15 MIN' }, { k: 'ALERTS', v: 'REAL-TIME' }] },
+    { label: 'COPY TRADE', sub: 'COMMUNITY', brief: 'ONE-CLICK COPY FROM AI AGENTS OR TOP DEGENS', img: '/blockparty/f5-doge-excited.png', path: '/signals',
+      detail: 'SELECT AI SIGNALS YOU TRUST. HIT COPY TRADE. THE WIZARD BUILDS YOUR ORDER WITH ENTRY, TP, SL, AND R:R — ALL PRE-CALCULATED. APPROVE OR REJECT. YOUR MONEY, YOUR CALL.',
+      stats: [{ k: 'COPY WIZARD', v: '4-STEP' }, { k: 'R:R CALC', v: 'AUTO' }, { k: 'APPROVAL', v: 'YOU' }] },
+  ];
+
+  const SCAN_CATS = [
+    { id: 'A', icon: '📊', label: 'OI + PRICE', desc: 'OI COMPRESSION, SHORT SQUEEZE, LONG LIQUIDATION TRAPS', count: 5 },
+    { id: 'B', icon: '📈', label: 'VOLUME', desc: 'VOLUME SPIKES ON FLAT PRICE, PANIC SELLS, DEAD VOLUME', count: 4 },
+    { id: 'C', icon: '⚡', label: 'FUNDING + LIQ', desc: 'EXTREME FUNDING RATES, LIQUIDATION CLUSTERS, L/S RATIOS', count: 4 },
+    { id: 'D', icon: '🐋', label: 'ON-CHAIN', desc: 'WHALE EXCHANGE DEPOSITS, WITHDRAWALS, BLOCK ACCUMULATION', count: 4 },
+    { id: 'E', icon: '💬', label: 'SOCIAL', desc: 'SOCIAL EXPLOSIONS, SENTIMENT DEPARTURE, FEAR & GREED', count: 3 },
+    { id: 'F', icon: '🔗', label: 'COMPOSITE', desc: 'MULTI-WARNING CONVERGENCE, BOTTOM CONFIRMATION, BTC DECOUPLING', count: 4 },
+    { id: 'G', icon: '🎯', label: 'DIRECT QUERY', desc: '"IS ETH SAFE TO BUY?" — ASK IN PLAIN ENGLISH, GET AI ANALYSIS', count: 4 },
   ];
 
   let selectedFeature: number | null = null;
@@ -75,10 +85,10 @@
   }
 
   const FLOW_STEPS = [
-    { num: '01', title: 'CONNECT', desc: 'LINK WALLET & CREATE PROFILE', img: '/blockparty/f5-doge-excited.png', pct: 100 },
-    { num: '02', title: 'ANALYZE', desc: 'AI AGENTS SCAN MARKETS LIVE', img: '/blockparty/f5-doge-chart.png', pct: 85 },
-    { num: '03', title: 'BATTLE', desc: 'COMPETE VS AI IN THE ARENA', img: '/blockparty/f5-doge-muscle.png', pct: 70 },
-    { num: '04', title: 'EARN', desc: 'RANK UP & CLAIM REWARDS', img: '/blockparty/f5-doge-bull.png', pct: 95 },
+    { num: '01', title: 'CONNECT', desc: 'LINK WALLET IN 30 SECONDS. NO KYC. START FREE.', img: '/blockparty/f5-doge-excited.png', pct: 100 },
+    { num: '02', title: 'SET CONDITIONS', desc: 'TYPE "OI COMPRESSION" OR "WHALE DEPOSIT" — SCANNER DOES THE REST.', img: '/blockparty/f5-doge-chart.png', pct: 85 },
+    { num: '03', title: 'GET ALERTS', desc: 'SCORE 70+ = TOAST ALERT. SCORE 85+ = CRITICAL. AUTO DRAFT ORDERS.', img: '/blockparty/f5-doge-fire.png', pct: 90 },
+    { num: '04', title: 'ACT', desc: 'APPROVE THE AI\'S DRAFT ORDER, BATTLE IN THE ARENA, OR COPY TRADE.', img: '/blockparty/f5-doge-muscle.png', pct: 95 },
   ];
 
   /* ── Animation system ── */
@@ -180,11 +190,11 @@
             </div>
           </div>
         </div>
-        <p class="hero-sub ha" style="--ha-d:0.44s">AI-POWERED CRYPTO TRADING ARENA</p>
+        <p class="hero-sub ha" style="--ha-d:0.44s">AI AGENTS THAT WATCH THE MARKET WHILE YOU SLEEP</p>
         <div class="hero-props ha" style="--ha-d:0.52s">
-          <div class="hp"><span class="hp-icon">⚡</span><span class="hp-txt">7 AI AGENTS ANALYZE MARKETS IN REAL-TIME</span></div>
-          <div class="hp"><span class="hp-icon">⚔</span><span class="hp-txt">BATTLE AI DOGS & CLIMB THE LEADERBOARD</span></div>
-          <div class="hp"><span class="hp-icon">📡</span><span class="hp-txt">AI TRADE SIGNALS WITH 85%+ ACCURACY</span></div>
+          <div class="hp"><span class="hp-icon">🔍</span><span class="hp-txt">28 ANOMALY PATTERNS SCAN 200+ PAIRS EVERY 15 MIN</span></div>
+          <div class="hp"><span class="hp-icon">🐋</span><span class="hp-txt">WHALE MOVES, OI SPIKES, LIQUIDATION CLUSTERS — AUTO-DETECTED</span></div>
+          <div class="hp"><span class="hp-icon">📋</span><span class="hp-txt">DRAFT ORDERS WITH TP/SL/R:R WHEN SCORE HITS 70+</span></div>
         </div>
         <div class="hero-ctas ha" style="--ha-d:0.6s">
           <button class="hero-btn hero-btn-primary" on:click={enterTerminal}>ENTER WAR ROOM →</button>
@@ -281,28 +291,27 @@
 
       <div class="about-text sr sr-r" style="--d:0.15s">
         <p>
-          <strong class="ab">FOR</strong>
-          <em class="ai">every</em>
-          <strong class="ab abg">DEGEN,</strong>
-          <span class="ar">WE'VE BEEN</span>
-          <strong class="ab abg">BUILDING,</strong>
-          <em class="ai">training</em>
-          <strong class="ab abg">AI DOGS,</strong>
-          <span class="ar">SCANNING</span>
-          <strong class="ab abg">MARKETS,</strong>
-          <span class="as">GENERATING</span>
-          <strong class="ab abg">SIGNALS,</strong>
-          <span class="ar">AND</span>
-          <strong class="ab abg">CRAFTING</strong>
-          <em class="ai">relatable</em>
-          <span class="ar">MEMES FOR</span>
-          <strong class="ab abx">BIG</strong>
-          <span class="as">(AND TINY)</span>
-          <strong class="ab abx">GAINS.</strong>
+          <strong class="ab abg">7 AI DOGS</strong>
+          <span class="ar">WATCHING</span>
+          <strong class="ab abg">200+ PAIRS,</strong>
+          <em class="ai">scanning</em>
+          <strong class="ab abg">28 PATTERNS,</strong>
+          <span class="ar">DETECTING</span>
+          <strong class="ab abg">WHALE MOVES,</strong>
+          <span class="as">OI COMPRESSION,</span>
+          <strong class="ab abg">LIQUIDATION</strong>
+          <em class="ai">clusters,</em>
+          <span class="ar">FUNDING EXTREMES,</span>
+          <strong class="ab abg">VOLUME SPIKES</strong>
+          <span class="as">AND SOCIAL EXPLOSIONS</span>
+          <span class="ar">SO YOU</span>
+          <strong class="ab abx">NEVER</strong>
+          <span class="ar">MISS</span>
+          <strong class="ab abx">AGAIN.</strong>
         </p>
       </div>
     </div>
-    <div class="about-tag sr su" style="--d:0.3s">WE AIN'T NO ORDINARY DOGS.</div>
+    <div class="about-tag sr su" style="--d:0.3s">YOUR AI PACK. ALWAYS ON. ALWAYS WATCHING.</div>
   </section>
 
   <!-- ═══════════════════════════════════════
@@ -334,7 +343,40 @@
   </section>
 
   <!-- ═══════════════════════════════════════
-       SECTION 5: FEED
+       SECTION 5: SCANNER — WHAT WE DETECT
+       ═══════════════════════════════════════ -->
+  <section class="detect">
+    <div class="detect-header">
+      <span class="detect-tag sr sr-r">//ANOMALY DETECTION</span>
+      <h2 class="detect-title sr sr-r" style="--d:0.08s">
+        <span class="dt-w">WHAT WE</span>
+        <span class="dt-pk">DETECT</span>
+      </h2>
+      <p class="detect-sub sr sr-r" style="--d:0.18s">28 PATTERNS ACROSS 7 CATEGORIES — RUNNING 24/7</p>
+    </div>
+
+    <div class="detect-grid">
+      {#each SCAN_CATS as cat, i}
+        <div class="dcat sr sr-r" style="--d:{0.1 + i * 0.06}s">
+          <div class="dcat-head">
+            <span class="dcat-id">{cat.id}</span>
+            <span class="dcat-icon">{cat.icon}</span>
+            <span class="dcat-label">{cat.label}</span>
+            <span class="dcat-count">{cat.count}</span>
+          </div>
+          <p class="dcat-desc">{cat.desc}</p>
+        </div>
+      {/each}
+    </div>
+
+    <div class="detect-cta sr su" style="--d:0.5s">
+      <p class="detect-example">"OI가 4봉 연속 올랐는데 가격이 안 움직이는 코인 찾아줘" → SCANNER HANDLES IT</p>
+      <button class="hero-btn hero-btn-primary" on:click={enterTerminal}>TRY SCANNER NOW →</button>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       SECTION 6: FEED
        ═══════════════════════════════════════ -->
   <section class="feed">
     <div class="feed-l">
@@ -990,6 +1032,85 @@
   .sq-fill { height: 100%; border-radius: 2px; box-shadow: 0 0 4px var(--sp-glow); }
   .sq-pct { font-family: var(--fp); font-size: 10px; color: var(--sp-pk); opacity: .6; margin-left: auto; }
 
+  /* ═══ DETECT — SCANNER SHOWCASE ═══ */
+  .detect {
+    background: var(--sp-bg);
+    padding: 80px 40px;
+    border-bottom: 2px solid rgba(232,150,125,0.15);
+    position: relative; overflow: hidden; z-index: 2;
+  }
+  .detect-header { text-align: center; margin-bottom: 40px; }
+  .detect-tag {
+    font-family: var(--fp); font-size: 9px;
+    color: var(--sp-pk); letter-spacing: 2px;
+    display: block; margin-bottom: 12px;
+    text-shadow: 0 0 10px var(--sp-glow);
+  }
+  .detect-title { font-family: var(--fp); line-height: 1.4; }
+  .dt-w { font-size: clamp(20px, 4vw, 36px); color: var(--sp-w); display: block; }
+  .dt-pk {
+    font-size: clamp(28px, 6vw, 56px); color: var(--sp-pk); display: block;
+    text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
+  }
+  .detect-sub {
+    font-family: var(--fp); font-size: 8px;
+    color: var(--sp-dim); letter-spacing: 3px; margin-top: 12px;
+  }
+
+  .detect-grid {
+    max-width: 900px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+  }
+  .dcat {
+    background: var(--sp-bg2);
+    border: 1px solid rgba(232,150,125,0.12);
+    border-radius: 10px;
+    padding: 16px 18px;
+    transition: transform .2s, box-shadow .2s, border-color .2s;
+  }
+  .dcat:hover { transform: translateY(-3px); box-shadow: 0 4px 20px rgba(232,150,125,0.1); border-color: rgba(232,150,125,0.3); }
+  .dcat-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .dcat-id {
+    font-family: var(--fp); font-size: 10px; font-weight: 700;
+    color: var(--sp-bg); background: var(--sp-pk);
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; text-shadow: none;
+    box-shadow: 0 0 8px var(--sp-glow);
+  }
+  .dcat-icon { font-size: 14px; flex-shrink: 0; }
+  .dcat-label {
+    font-family: var(--fp); font-size: 9px;
+    color: var(--sp-pk); letter-spacing: 1px;
+    text-shadow: 0 0 8px var(--sp-glow);
+  }
+  .dcat-count {
+    font-family: var(--fp); font-size: 7px;
+    color: var(--sp-dim); margin-left: auto;
+    background: rgba(232,150,125,0.06);
+    border: 1px solid rgba(232,150,125,0.15);
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .dcat-desc {
+    font-family: var(--fp); font-size: 6px;
+    color: var(--sp-dim); letter-spacing: 1px; line-height: 1.8;
+  }
+
+  .detect-cta {
+    text-align: center; margin-top: 40px;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .detect-example {
+    font-family: var(--fp); font-size: 7px;
+    color: var(--sp-pk); letter-spacing: 1px;
+    background: rgba(232,150,125,0.04);
+    border: 1px solid rgba(232,150,125,0.12);
+    padding: 12px 20px; border-radius: 8px;
+    max-width: 600px; line-height: 1.8;
+    text-shadow: 0 0 8px var(--sp-glow);
+  }
+
   /* ═══ FEED ═══ */
   .feed {
     display: flex; background: var(--sp-bg);
@@ -1177,6 +1298,7 @@
     .flow,
     .about,
     .squad,
+    .detect,
     .feed,
     .cta {
       min-height: auto;
@@ -1198,6 +1320,8 @@
     .about-tag { max-width: 1080px; text-align: left; }
 
     .squad { padding: 74px clamp(24px, 4vw, 64px); }
+    .detect { padding: 78px clamp(24px, 4vw, 64px); }
+    .detect-grid { max-width: 980px; }
     .sq-frame { max-width: 1080px; padding: 22px; }
     .sq-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 
@@ -1221,6 +1345,9 @@
     .about-inner { flex-direction: column; align-items: center; }
     .about { padding: 40px 24px 30px; }
     .flow { padding: 50px 24px; }
+    .detect { padding: 50px 24px; }
+    .detect-grid { grid-template-columns: 1fr; }
+    .detect-example { font-size: 6px; padding: 10px 14px; }
     .feed { flex-direction: column; }
     .feed-l { padding: 30px 24px; }
     .cta { padding: 30px 24px 80px; }
