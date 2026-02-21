@@ -6,6 +6,11 @@
 
 import { writable, derived } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
+import {
+  closeQuickTradeApi,
+  openQuickTradeApi,
+  updateQuickTradePricesApi,
+} from '$lib/api/tradingApi';
 
 export type TradeDirection = 'LONG' | 'SHORT';
 export type TradeStatus = 'open' | 'closed' | 'stopped';
@@ -34,6 +39,7 @@ interface QuickTradeState {
 
 const STORAGE_KEY = STORAGE_KEYS.quickTrades;
 const MAX_TRADES = 200;
+const PRICE_SYNC_DEBOUNCE_MS = 1200;
 
 function loadState(): QuickTradeState {
   if (typeof window === 'undefined') return { trades: [], showPanel: false };
@@ -80,6 +86,13 @@ export const openTradeCount = derived(quickTradeStore, $s =>
 
 // ═══ Actions ═══
 
+export function replaceQuickTradeId(localId: string, nextId: string, patch: Partial<QuickTrade> = {}) {
+  quickTradeStore.update(s => ({
+    ...s,
+    trades: s.trades.map(t => (t.id === localId ? { ...t, id: nextId, ...patch } : t))
+  }));
+}
+
 export function openQuickTrade(
   pair: string,
   dir: TradeDirection,
@@ -87,10 +100,12 @@ export function openQuickTrade(
   tp: number | null = null,
   sl: number | null = null,
   source: string = 'manual',
-  note: string = ''
+  note: string = '',
+  sync: boolean = true
 ) {
+  const localId = crypto.randomUUID();
   const trade: QuickTrade = {
-    id: crypto.randomUUID(),
+    id: localId,
     pair,
     dir,
     entry,
@@ -111,6 +126,27 @@ export function openQuickTrade(
     trades: [trade, ...s.trades].slice(0, MAX_TRADES),
     showPanel: true
   }));
+
+  if (sync && typeof window !== 'undefined') {
+    void openQuickTradeApi({
+      pair: trade.pair,
+      dir: trade.dir,
+      entry: trade.entry,
+      tp: trade.tp,
+      sl: trade.sl,
+      currentPrice: trade.currentPrice,
+      source: trade.source,
+      note: trade.note,
+    }).then((serverTrade) => {
+      if (!serverTrade || !serverTrade.id) return;
+      replaceQuickTradeId(localId, serverTrade.id, {
+        currentPrice: serverTrade.currentPrice,
+        pnlPercent: serverTrade.pnlPercent,
+        status: serverTrade.status,
+        openedAt: serverTrade.openedAt,
+      });
+    });
+  }
 
   return trade.id;
 }
@@ -133,6 +169,27 @@ export function closeQuickTrade(tradeId: string, exitPrice: number) {
       };
     })
   }));
+
+  if (typeof window !== 'undefined') {
+    void closeQuickTradeApi(tradeId, { closePrice: exitPrice, status: 'closed' }).then((serverTrade) => {
+      if (!serverTrade) return;
+      quickTradeStore.update(s => ({
+        ...s,
+        trades: s.trades.map(t => {
+          if (t.id !== tradeId && t.id !== serverTrade.id) return t;
+          return {
+            ...t,
+            id: serverTrade.id,
+            currentPrice: serverTrade.currentPrice,
+            pnlPercent: serverTrade.pnlPercent,
+            status: serverTrade.status,
+            closedAt: serverTrade.closedAt,
+            closePnl: serverTrade.closePnl,
+          };
+        }),
+      }));
+    });
+  }
 }
 
 export function updateTradePrice(tradeId: string, currentPrice: number) {
@@ -149,6 +206,7 @@ export function updateTradePrice(tradeId: string, currentPrice: number) {
 }
 
 let _lastPriceSnapshot = '';
+let _priceSyncTimer: ReturnType<typeof setTimeout> | null = null;
 export function updateAllPrices(prices: Record<string, number>) {
   // Skip if prices haven't changed
   const snap = JSON.stringify(prices);
@@ -174,6 +232,13 @@ export function updateAllPrices(prices: Record<string, number>) {
     });
     return changed ? { ...s, trades } : s;
   });
+
+  if (typeof window !== 'undefined') {
+    if (_priceSyncTimer) clearTimeout(_priceSyncTimer);
+    _priceSyncTimer = setTimeout(() => {
+      void updateQuickTradePricesApi({ prices });
+    }, PRICE_SYNC_DEBOUNCE_MS);
+  }
 }
 
 export function toggleTradePanel() {
