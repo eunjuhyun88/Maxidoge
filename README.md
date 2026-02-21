@@ -109,14 +109,14 @@ src/
 - 외부 API CORS 우회를 위해 프록시 라우트 사용
   - `/api/coinalyze`
   - `/api/polymarket/*`
-- 인증/매치 API는 현재 **in-memory 저장소**를 일부 사용합니다.
+- 주요 도메인 액션(트레이드/시그널/프로필/알림/커뮤니티)은 PostgreSQL API 라우트로 기록됩니다.
 
 ## 7) Data Flow (요약)
 
-1. `WarRoom`에서 pair/timeframe 기준 파생 데이터(Coinalyze) 조회
-2. `ChartPanel`이 Binance kline + websocket으로 가격/지표 반영
-3. 유저 액션(시그널 추적/퀵트레이드/아레나 결과)이 각 store에 반영
-4. store 상태가 localStorage로 persisted
+1. `WarRoom`/`ChartPanel`이 가격 데이터(Binance + proxy API)를 조회/구독
+2. 유저 액션(트레이드/시그널/복제/알림/프로필)이 API 라우트로 저장
+3. store는 UI 반응성과 오프라인 복원을 위해 localStorage를 캐시로 유지
+4. 세션 기반 유저 컨텍스트로 DB 상태를 재조회해 화면을 복원
 
 ## 8) API Endpoints
 
@@ -138,6 +138,64 @@ src/
 - `GET /api/matches?limit=50&offset=0&userId=...`
 - `POST /api/matches`
 
+### Quick Trades
+
+- `GET /api/quick-trades?limit=50&offset=0&status=open`
+- `POST /api/quick-trades/open`
+- `POST /api/quick-trades/{id}/close`
+- `PATCH /api/quick-trades/prices`
+
+### Signals / Actions
+
+- `GET /api/signals?limit=50&offset=0&status=tracking`
+- `POST /api/signals/track`
+- `POST /api/signals/{id}/convert`
+- `DELETE /api/signals/{id}`
+- `GET /api/signal-actions?limit=50&offset=0`
+- `POST /api/signal-actions`
+
+### Copy Trades
+
+- `GET /api/copy-trades/runs?limit=50&offset=0`
+- `GET /api/copy-trades/runs/{id}`
+- `POST /api/copy-trades/publish`
+
+### PnL / Predictions / Agents
+
+- `GET /api/pnl?limit=50&offset=0`
+- `POST /api/pnl`
+- `GET /api/pnl/summary`
+- `GET /api/predictions?limit=50&offset=0`
+- `POST /api/predictions/vote`
+- `POST /api/predictions/positions/open`
+- `POST /api/predictions/positions/{id}/close`
+- `GET /api/agents/stats`
+- `PATCH /api/agents/stats/{agentId}`
+
+### Profile / Preferences / UI State
+
+- `GET /api/profile`
+- `PATCH /api/profile`
+- `GET /api/profile/passport`
+- `GET /api/preferences`
+- `PUT /api/preferences`
+- `GET /api/ui-state`
+- `PUT /api/ui-state`
+
+### Community / Notifications / Activity / Chat
+
+- `GET /api/community/posts?limit=50&offset=0`
+- `POST /api/community/posts`
+- `POST /api/community/posts/{id}/react`
+- `DELETE /api/community/posts/{id}/react`
+- `GET /api/notifications?limit=50&offset=0&unreadOnly=true`
+- `POST /api/notifications/read`
+- `DELETE /api/notifications/{id}`
+- `GET /api/activity?limit=50&offset=0`
+- `POST /api/activity/reaction`
+- `GET /api/chat/messages?channel=terminal&limit=50&offset=0`
+- `POST /api/chat/messages`
+
 ### External Proxy
 
 - `GET /api/coinalyze?endpoint=<allowed>&...params`
@@ -151,8 +209,8 @@ src/
 
 ## 10) Known Issues (현재 기준)
 
-- 세션 체크 API가 쿠키 형식 위주로 판단하는 구간이 있음
-- `register/matches` API 일부 데이터가 서버 메모리 기반이라 재시작 시 유실됨
+- `auth_nonces` 마이그레이션(`003`) 미적용 환경에서는 wallet verify API가 실패합니다.
+- store는 DB와 localStorage를 병행(dual-write/dual-read)하므로 완전 서버 단일화 전까지 동기화 이슈 여지가 있습니다.
 - localStorage reset 시 일부 키 불일치 가능성
 - 대형 컴포넌트(`ChartPanel`, `arena/+page`)에 책임이 집중되어 디버깅 난이도 상승
 
