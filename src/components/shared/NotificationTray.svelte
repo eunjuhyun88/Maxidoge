@@ -10,8 +10,10 @@
   $: count = $unreadCount;
 
   onMount(() => {
-    notifications.hydrate();
-    seedNotifications();
+    void (async () => {
+      await notifications.hydrate();
+      seedNotifications();
+    })();
   });
 
   function toggle() {
