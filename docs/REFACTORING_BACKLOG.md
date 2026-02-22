@@ -1,7 +1,7 @@
 # MAXI⚡DOGE v3 Refactoring Backlog
 
 Created: 2026-02-22
-Updated: 2026-02-22 (user-confirmed final)
+Updated: 2026-02-23 (Arena v3 PvP/Tournament split 반영)
 Doc index: `docs/README.md`
 Rule: **Contract → BE → FE**, never mixed in one PR
 
@@ -18,6 +18,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **S-03** | Price 계약 단일화 | `livePrice` 단일 스토어/이벤트 규약 정의 (심볼, 타임스탬프, source) | ⬜ |
 | **S-04** | Arena DraftSelection 계약 고정 | `{ agentId, specId, weight }[]` + 합계 100 검증 규칙 확정 | ⬜ |
 | **S-05** | Terminal Persistence Migration | `005_terminal_persistence.sql` (scan_runs/scan_signals/agent_chat_messages) | ⬜ |
+| **S-06** | Arena Competitive Contract | Arena `mode(PVE/PVP/TOURNAMENT)`, PvP pool 상태, Tournament Ban/Pick payload 계약 확정 | ⬜ |
 
 ### S-01 상세: Agent 브릿지 단일화
 - **변경 파일**: `src/lib/data/agents.ts`
@@ -52,6 +53,18 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 - constants.ts: `DRAFT_AGENT_COUNT=3`, `DRAFT_TOTAL_WEIGHT=100`, `DRAFT_MIN_WEIGHT=10`, `DRAFT_MAX_WEIGHT=80` 이미 존재
 - **branch**: `codex/contract-draft`
 
+### S-06 상세: Arena Competitive Contract
+- 계약 범위:
+  - Arena mode enum: `PVE | PVP | TOURNAMENT`
+  - PvP pool status enum: `WAITING | MATCHED | EXPIRED | CANCELLED`
+  - Tournament status enum: `REG_OPEN | REG_CLOSED | IN_PROGRESS | COMPLETED | CANCELLED`
+  - Tournament Ban/Pick payload: `POST /api/tournaments/:id/ban`, `POST /api/tournaments/:id/draft`
+  - Arena result settlement 확장: `lpDelta`, `eloDelta`, `fbs`
+- 산출물:
+  - `docs/API_CONTRACT.md` §2 업데이트
+  - `docs/PERSISTENCE_DESIGN.md` migration 006 및 데이터 플로우 업데이트
+- **branch**: `codex/contract-arena-competitive`
+
 ---
 
 ## BE 트랙
@@ -71,7 +84,10 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **B-08** | 하위호환 어댑터 | 기존 `/api/matches`를 신규 arena API 내부 호출로 연결 | B-01 | ⬜ |
 | **B-09** | Terminal Scan API | `POST /api/terminal/scan` (warroomScan.ts 로직 서버 이전) | B-02, S-05 | ⬜ |
 | **B-10** | Terminal Chat API | 기존 `/api/chat/messages` 확장 (meta.mentionedAgent → 에이전트 응답 생성) | B-09 | ⬜ |
-| **B-11** | Market Data API | 뉴스(RSS)/이벤트(온체인)/플로우(스마트머니) 수집 API | — | ⬜ |
+| **B-11** | Market Data API | 뉴스(RSS)/이벤트(온체인)/플로우(스마트머니) + DexScreener(boost/ads/takeover/search) 프록시 | — | ⬜ |
+| **B-12** | PvP Matching Pool API | `/api/pvp/pool/create`, `/available`, `/:id/accept` + 4h 만료 watchdog | B-01, S-06 | ⬜ |
+| **B-13** | Tournament API | `/api/tournaments/active`, `/register`, `/bracket`, `/ban`, `/draft` | B-01, S-06 | ⬜ |
+| **B-14** | Competitive Settlement Engine | mode별 LP/ELO/FBS 정산 + `arena_matches`/`lp_transactions` 반영 | B-03, B-12, B-13 | ⬜ |
 
 ---
 
@@ -94,6 +110,9 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **F-10** | 하드코딩 제거 | LIVE FEED/HEADLINES/EVENTS/FLOW → API fetch, chat 응답 → 스캔 컨텍스트 | B-09, B-10, B-11 | ⬜ |
 | **F-11** | 영속성 검증 | 새로고침/다른기기/오프라인 시 데이터 복원 확인 | F-09, F-10 | ⬜ |
 | **F-12** | Oracle 모달 정합성 | Oracle 프로필 모달의 `TIER: CONNECTED`, `PHASE P1` 구형 표기를 v3 계약 값으로 교체 | F-02 | ⬜ |
+| **F-13** | Lobby Hub v3 | 모드 카드(PvE/PvP/Tournament) + 진행중 매치 + 주간 토너 위젯 구성 | S-06, B-12, B-13 | ⬜ |
+| **F-14** | PvP Pool UI | AUTO/BROWSE/CREATE 플로우 + 대기열/수락 + 만료 처리 | F-13, B-12 | ⬜ |
+| **F-15** | Tournament UI | 등록/대진표/Ban-Pick/라운드 전환 UI + 배지/보상 노출 | F-13, B-13, B-14 | ⬜ |
 
 ---
 
@@ -101,7 +120,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 
 ```
 Phase 1: 계약 확정
-  S-01 → S-02 → S-03 → S-04 → S-05
+  S-01 → S-02 → S-03 → S-04 → S-05 → S-06
 
 Phase 2: 병렬 시작
   BE: B-01 + B-02 + B-09 (Terminal Scan)
@@ -114,6 +133,10 @@ Phase 3: 크리티컬 패스
 Phase 4: 마무리
   BE: B-05 + B-06 + B-07 + B-08
   FE: F-07 + F-08 + F-09 (Store 전환) + F-10 (하드코딩 제거) + F-11 (영속성 검증) + F-12 (Oracle 모달)
+
+Phase 5: 경쟁모드 확장 (Arena v3)
+  BE: B-12 (PvP Pool) + B-13 (Tournament) + B-14 (Settlement)
+  FE: F-13 (Lobby Hub) + F-14 (PvP Pool UI) + F-15 (Tournament UI)
 ```
 
 ---

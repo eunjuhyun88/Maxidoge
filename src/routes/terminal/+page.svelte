@@ -7,7 +7,11 @@
   import { TICKER_DATA } from '$lib/data/warroom';
   import { AGDEFS } from '$lib/data/agents';
 
-  const TICKER_STR = `${TICKER_DATA}  \u00a0|\u00a0  ${TICKER_DATA}`;
+  let liveTickerStr = '';
+  let tickerLoaded = false;
+  $: TICKER_STR = tickerLoaded && liveTickerStr
+    ? `${liveTickerStr}  \u00a0|\u00a0  ${liveTickerStr}`
+    : `${TICKER_DATA}  \u00a0|\u00a0  ${TICKER_DATA}`;
   import { gameState } from '$lib/stores/gameState';
   import { updateAllPrices } from '$lib/stores/quickTradeStore';
   import { updateTrackedPrices } from '$lib/stores/trackedSignalStore';
@@ -147,6 +151,41 @@
     windowWidth = window.innerWidth;
   }
 
+  async function fetchLiveTicker() {
+    try {
+      const [fgRes, cgRes] = await Promise.all([
+        fetch('/api/feargreed?limit=1').then(r => r.json()).catch(() => null),
+        fetch('/api/coingecko/global').then(r => r.json()).catch(() => null),
+      ]);
+
+      const parts: string[] = [];
+      if (cgRes?.ok && cgRes.data?.global) {
+        const g = cgRes.data.global;
+        if (g.btcDominance) parts.push(`BTC_DOM: ${g.btcDominance.toFixed(1)}%`);
+        if (g.totalVolumeUsd) parts.push(`VOL_24H: $${(g.totalVolumeUsd / 1e9).toFixed(1)}B`);
+        if (g.totalMarketCapUsd) parts.push(`MCAP: $${(g.totalMarketCapUsd / 1e12).toFixed(2)}T`);
+        if (g.ethDominance) parts.push(`ETH_DOM: ${g.ethDominance.toFixed(1)}%`);
+        if (g.marketCapChange24hPct != null) parts.push(`MCAP_24H: ${g.marketCapChange24hPct >= 0 ? '+' : ''}${g.marketCapChange24hPct.toFixed(2)}%`);
+      }
+      if (fgRes?.ok && fgRes.data?.current) {
+        const fg = fgRes.data.current;
+        parts.push(`FEAR_GREED: ${fg.value} (${fg.classification})`);
+      }
+      if (cgRes?.ok && cgRes.data?.stablecoin) {
+        const s = cgRes.data.stablecoin;
+        if (s.totalMcapUsd) parts.push(`STABLE_MCAP: $${(s.totalMcapUsd / 1e9).toFixed(1)}B`);
+      }
+
+      if (parts.length > 0) {
+        parts.push('SYSTEM_STABILITY: 99.98%');
+        liveTickerStr = parts.join(' | ');
+        tickerLoaded = true;
+      }
+    } catch (e) {
+      console.warn('[Terminal] Live ticker fetch failed, using fallback');
+    }
+  }
+
   // Fast local updates + slower server persistence (keeps UI snappy without hammering DB)
   let priceUiSync: ReturnType<typeof setInterval> | null = null;
   let pricePersistSync: ReturnType<typeof setInterval> | null = null;
@@ -154,6 +193,10 @@
   onMount(() => {
     windowWidth = window.innerWidth;
     window.addEventListener('resize', handleResize);
+
+    // ── Load live ticker data ──
+    fetchLiveTicker();
+
     // 1) Near real-time local UI refresh
     priceUiSync = setInterval(() => {
       const s = $gameState;

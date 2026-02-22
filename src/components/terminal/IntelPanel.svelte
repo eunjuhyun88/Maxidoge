@@ -1,5 +1,6 @@
 <script lang="ts">
   import { HEADLINES, EVENTS, COMMUNITY } from '$lib/data/warroom';
+  import type { Headline, EventData } from '$lib/data/warroom';
   import { communityPosts, hydrateCommunityPosts, likeCommunityPost } from '$lib/stores/communityStore';
   import { openTrades, closeQuickTrade } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
@@ -38,6 +39,11 @@
   let tabCollapsed = false;
   let _uiStateSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // ═══ Live data from API (replaces hardcoded) ═══
+  let liveHeadlines: Headline[] = [];
+  let liveEvents: Array<{ id: string; tag: string; level: string; text: string; source: string; createdAt: number }> = [];
+  let liveFlows: Array<{ id: string; label: string; addr: string; amt: string; isBuy: boolean }> = [];
+  let dataLoaded = { headlines: false, events: false, flow: false };
 
   // Chat input (local)
   let chatInput = '';
@@ -96,14 +102,110 @@
   // ═══ Filter headlines by current chart ticker ═══
   $: currentToken = $gameState.pair.split('/')[0] || 'BTC';
   $: tokenAliases = getTokenAliases(currentToken);
-  $: filteredHeadlines = HEADLINES.filter(hl =>
+  $: headlineSource = dataLoaded.headlines ? liveHeadlines : HEADLINES;
+  $: filteredHeadlines = headlineSource.filter(hl =>
     tokenAliases.some(alias => hl.text.toLowerCase().includes(alias)) ||
     hl.text.toLowerCase().includes('crypto') ||
     hl.text.toLowerCase().includes('exchange') ||
     hl.text.toLowerCase().includes('market')
   );
   // Show all if no matches
-  $: displayHeadlines = filteredHeadlines.length >= 2 ? filteredHeadlines : HEADLINES;
+  $: displayHeadlines = filteredHeadlines.length >= 2 ? filteredHeadlines : headlineSource;
+
+  async function fetchLiveHeadlines() {
+    try {
+      const res = await fetch('/api/market/news?limit=10');
+      const json = await res.json();
+      if (json.ok && json.data?.records?.length > 0) {
+        liveHeadlines = json.data.records.map((r: any) => ({
+          icon: r.sentiment === 'bullish' ? '📈' : r.sentiment === 'bearish' ? '📉' : '📊',
+          time: formatRelativeTime(r.publishedAt),
+          text: r.title || r.summary,
+          bull: r.sentiment === 'bullish',
+        }));
+        dataLoaded.headlines = true;
+        dataLoaded = dataLoaded;
+      }
+    } catch (e) {
+      console.warn('[IntelPanel] Headlines API unavailable, using fallback');
+    }
+  }
+
+  async function fetchLiveEvents() {
+    try {
+      const pair = $gameState.pair || 'BTC/USDT';
+      const res = await fetch(`/api/market/events?pair=${encodeURIComponent(pair)}`);
+      const json = await res.json();
+      if (json.ok && json.data?.records?.length > 0) {
+        liveEvents = json.data.records;
+        dataLoaded.events = true;
+        dataLoaded = dataLoaded;
+      }
+    } catch (e) {
+      console.warn('[IntelPanel] Events API unavailable, using fallback');
+    }
+  }
+
+  async function fetchLiveFlow() {
+    try {
+      const pair = $gameState.pair || 'BTC/USDT';
+      const res = await fetch(`/api/market/flow?pair=${encodeURIComponent(pair)}`);
+      const json = await res.json();
+      if (json.ok && json.data) {
+        const snap = json.data.snapshot || {};
+        const flows: typeof liveFlows = [];
+        if (snap.funding != null) {
+          flows.push({
+            id: 'funding',
+            label: `Funding Rate ${snap.funding > 0 ? '↑' : '↓'}`,
+            addr: json.data.pair,
+            amt: `${(snap.funding * 100).toFixed(4)}%`,
+            isBuy: snap.funding < 0
+          });
+        }
+        if (snap.liqLong24h || snap.liqShort24h) {
+          flows.push({
+            id: 'liq-long',
+            label: '↙ Liquidations LONG 24h',
+            addr: json.data.pair,
+            amt: `$${Math.round(snap.liqLong24h || 0).toLocaleString()}`,
+            isBuy: false
+          });
+          flows.push({
+            id: 'liq-short',
+            label: '↗ Liquidations SHORT 24h',
+            addr: json.data.pair,
+            amt: `$${Math.round(snap.liqShort24h || 0).toLocaleString()}`,
+            isBuy: true
+          });
+        }
+        if (snap.quoteVolume24h) {
+          flows.push({
+            id: 'volume',
+            label: '↔ 24h Quote Volume',
+            addr: json.data.pair,
+            amt: `$${(snap.quoteVolume24h / 1e9).toFixed(2)}B`,
+            isBuy: (snap.priceChangePct || 0) >= 0
+          });
+        }
+        if (flows.length > 0) {
+          liveFlows = flows;
+          dataLoaded.flow = true;
+          dataLoaded = dataLoaded;
+        }
+      }
+    } catch (e) {
+      console.warn('[IntelPanel] Flow API unavailable, using fallback');
+    }
+  }
+
+  function formatRelativeTime(ts: number): string {
+    const mins = Math.round((Date.now() - ts) / 60000);
+    if (mins < 1) return 'now';
+    if (mins < 60) return `${mins}m`;
+    if (mins < 1440) return `${Math.round(mins / 60)}h`;
+    return `${Math.round(mins / 1440)}d`;
+  }
 
   function getTokenAliases(token: string): string[] {
     const map: Record<string, string[]> = {
@@ -139,6 +241,11 @@
         tabCollapsed = false;
       }
     })();
+
+    // ── Load live market data ──
+    fetchLiveHeadlines();
+    fetchLiveEvents();
+    fetchLiveFlow();
   });
 </script>
 
@@ -248,14 +355,14 @@
 
           {:else if innerTab === 'events'}
             <div class="ev-list">
-              {#each EVENTS as ev}
-                <div class="ev-card" style="border-left-color:{ev.borderColor}">
+              {#each dataLoaded.events ? liveEvents : EVENTS as ev}
+                <div class="ev-card" style="border-left-color:{dataLoaded.events ? (ev.level === 'warning' ? '#ff8c3b' : '#3b9eff') : ev.borderColor}">
                   <div class="ev-head">
-                    <span class="ev-tag" style="background:{ev.tagColor};color:#000">{ev.tag}</span>
-                    <span class="ev-etime">{ev.time}</span>
+                    <span class="ev-tag" style="background:{dataLoaded.events ? (ev.tag === 'DERIV' ? '#ff8c3b' : ev.tag === 'ON-CHAIN' ? '#00e68a' : ev.tag === 'SOCIAL' ? '#8b5cf6' : '#3b9eff') : ev.tagColor};color:#000">{ev.tag}</span>
+                    <span class="ev-etime">{dataLoaded.events ? formatRelativeTime(ev.createdAt) : ev.time}</span>
                   </div>
                   <div class="ev-body">{ev.text}</div>
-                  <span class="ev-src">{ev.src}</span>
+                  <span class="ev-src">{dataLoaded.events ? ev.source : ev.src}</span>
                 </div>
               {/each}
             </div>
@@ -263,14 +370,14 @@
           {:else if innerTab === 'flow'}
             <div class="flow-list">
               <div class="flow-section-lbl">SMART MONEY FLOWS (24H)</div>
-              {#each [['↗ Binance → Cold', '0x1a...4f2', '+2,140 BTC', true], ['↙ OKX ← Whale', '0x8c...3a1', '-850 BTC', false], ['↗ Coinbase → DeFi', '0x3e...9d5', '+12,500 ETH', true]] as [label, addr, amt, isBuy]}
+              {#each dataLoaded.flow ? liveFlows : [{id:'f1',label:'↗ Binance → Cold',addr:'0x1a...4f2',amt:'+2,140 BTC',isBuy:true},{id:'f2',label:'↙ OKX ← Whale',addr:'0x8c...3a1',amt:'-850 BTC',isBuy:false},{id:'f3',label:'↗ Coinbase → DeFi',addr:'0x3e...9d5',amt:'+12,500 ETH',isBuy:true}] as flow (flow.id)}
                 <div class="flow-row">
-                  <div class="flow-dir" class:buy={isBuy} class:sell={!isBuy}>{isBuy ? '↑' : '↓'}</div>
+                  <div class="flow-dir" class:buy={flow.isBuy} class:sell={!flow.isBuy}>{flow.isBuy ? '↑' : '↓'}</div>
                   <div class="flow-info">
-                    <div class="flow-lbl">{label}</div>
-                    <div class="flow-addr">{addr}</div>
+                    <div class="flow-lbl">{flow.label}</div>
+                    <div class="flow-addr">{flow.addr}</div>
                   </div>
-                  <div class="flow-amt" class:buy={isBuy} class:sell={!isBuy}>{amt}</div>
+                  <div class="flow-amt" class:buy={flow.isBuy} class:sell={!flow.isBuy}>{flow.amt}</div>
                 </div>
               {/each}
             </div>

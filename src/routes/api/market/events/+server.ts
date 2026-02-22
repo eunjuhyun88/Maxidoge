@@ -2,13 +2,22 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { EVENTS } from '$lib/data/warroom';
 import { fetchDerivatives, normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
+import {
+  fetchDexAdsLatest,
+  fetchDexCommunityTakeoversLatest,
+  fetchDexTokenBoostsLatest,
+} from '$lib/server/dexscreener';
 
 export const GET: RequestHandler = async ({ fetch, url }) => {
   try {
     const pair = normalizePair(url.searchParams.get('pair'));
     const timeframe = normalizeTimeframe(url.searchParams.get('timeframe'));
-
-    const deriv = await fetchDerivatives(fetch, pair, timeframe).catch(() => null);
+    const [deriv, takeovers, boosts, ads] = await Promise.all([
+      fetchDerivatives(fetch, pair, timeframe).catch(() => null),
+      fetchDexCommunityTakeoversLatest(4).catch(() => []),
+      fetchDexTokenBoostsLatest(4).catch(() => []),
+      fetchDexAdsLatest(4).catch(() => []),
+    ]);
 
     const dynamic = deriv
       ? [
@@ -35,13 +44,42 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
       createdAt: Date.now() - (idx + 1) * 300_000,
     }));
 
+    const mappedTakeovers = takeovers.map((row, idx) => ({
+      id: `dex-takeover-${row.chainId}-${row.tokenAddress}-${idx}`.slice(0, 80),
+      tag: 'TAKEOVER',
+      level: 'warning',
+      text: `${row.chainId}:${row.tokenAddress.slice(0, 10)}... 커뮤니티 takeover 감지`,
+      source: 'DEXSCREENER',
+      createdAt: Date.parse(row.claimDate ?? '') || Date.now() - idx * 60_000,
+    }));
+
+    const mappedBoosts = boosts.map((row, idx) => ({
+      id: `dex-boost-${row.chainId}-${row.tokenAddress}-${idx}`.slice(0, 80),
+      tag: 'BOOST',
+      level: 'info',
+      text: `${row.chainId}:${row.tokenAddress.slice(0, 10)}... 토큰 부스트 활동`,
+      source: 'DEXSCREENER',
+      createdAt: Date.now() - idx * 45_000,
+    }));
+
+    const mappedAds = ads.map((row, idx) => ({
+      id: `dex-ad-${row.chainId}-${row.tokenAddress}-${idx}`.slice(0, 80),
+      tag: 'ADS',
+      level: 'info',
+      text:
+        `${row.chainId}:${row.tokenAddress.slice(0, 10)}... ` +
+        `광고 캠페인 ${row.type ?? 'unknown'}${row.impressions ? ` · imp ${Math.round(row.impressions).toLocaleString()}` : ''}`,
+      source: 'DEXSCREENER',
+      createdAt: Date.parse(row.date ?? '') || Date.now() - idx * 30_000,
+    }));
+
     return json(
       {
         ok: true,
         data: {
           pair,
           timeframe,
-          records: [...dynamic, ...mappedStatic],
+          records: [...dynamic, ...mappedTakeovers, ...mappedBoosts, ...mappedAds, ...mappedStatic].slice(0, 24),
         },
       },
       {
@@ -61,4 +99,3 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
     return json({ error: 'Failed to load market events' }, { status: 500 });
   }
 };
-
