@@ -33,10 +33,11 @@ const DEFAULT_SYMBOLS = ['BTC', 'ETH', 'SOL'] as const;
 
 function createDefaults(): PriceMap {
   const now = Date.now();
+  // 초기값 0 — REST/WS에서 실제 가격 들어올 때까지 "로딩" 상태
   return {
-    BTC: { price: 97420, ts: now, source: 'simulation' },
-    ETH: { price: 3481,  ts: now, source: 'simulation' },
-    SOL: { price: 198.46, ts: now, source: 'simulation' },
+    BTC: { price: 0, ts: now, source: 'rest' },
+    ETH: { price: 0, ts: now, source: 'rest' },
+    SOL: { price: 0, ts: now, source: 'rest' },
   };
 }
 
