@@ -254,7 +254,7 @@
             <span class="ctb-live"><span class="ctb-dot"></span>LIVE</span>
           </div>
           <div class="mob-chart-area">
-            <ChartPanel />
+            <ChartPanel advancedMode enableTradeLineEntry />
           </div>
         </div>
       {:else if mobileTab === 'intel'}
@@ -278,7 +278,7 @@
       </div>
       <div class="tab-center">
         <div class="tab-chart-area">
-          <ChartPanel />
+          <ChartPanel advancedMode enableTradeLineEntry />
         </div>
       </div>
     </div>
@@ -326,7 +326,7 @@
     <!-- Center: Chart -->
     <div class="tc">
       <div class="chart-area chart-area-full">
-        <ChartPanel />
+        <ChartPanel advancedMode enableTradeLineEntry />
       </div>
     </div>
 
