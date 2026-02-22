@@ -273,5 +273,261 @@ UI 변경:
 ## 6. 구현 전 체크리스트
 
 1. 이 문서 기준으로 FE 이벤트 단위 테스트 케이스 작성
-2. API 계약 문서(`v3-api-contract.md`)와 핸들러 이름 1:1 매핑
-3. FE state map(`v3-fe-state-map.md`)과 store 책임 충돌 여부 확인
+2. API 계약 문서(`API_CONTRACT.md`)와 핸들러 이름 1:1 매핑
+3. FE state map(`FE_STATE_MAP.md`)과 store 책임 충돌 여부 확인
+
+## 7. Passport 화면 클릭 맵
+
+## 7.1 상단 탭(Profile/Wallet/Positions/Arena)
+
+트리거:
+1. Passport 카드 내 탭 버튼 클릭
+
+호출 체인:
+1. `setActiveTab(tab)`
+2. `activeTab` 변경
+3. `updateUiStateApi({ passportActiveTab: tab })`
+
+상태 변경:
+1. local `activeTab`
+2. 서버 UI preference
+
+UI 변경:
+1. 해당 탭 콘텐츠로 즉시 전환
+2. 재진입 시 마지막 탭 복원
+
+## 7.2 아바타/이름 편집
+
+트리거:
+1. 아바타 클릭
+2. 이름 클릭 후 저장 버튼
+
+호출 체인:
+1. 아바타: `showAvatarPicker` 토글 -> `pickAvatar(path)` -> `setAvatar(path)`
+2. 이름: `startEditName()` -> `saveName()` -> `setUsername(name)`
+
+상태 변경:
+1. `userProfileStore.avatar`
+2. `userProfileStore.username`
+
+UI 변경:
+1. 아바타 선택 패널 열림/닫힘
+2. 이름 인라인 편집 반영
+
+## 7.3 지갑 연결 CTA
+
+트리거:
+1. Passport 내 `CONNECT WALLET` 버튼
+
+호출 체인:
+1. `openWalletModal()`
+
+상태 변경:
+1. `walletStore.showWalletModal = true`
+
+UI 변경:
+1. WalletModal 오버레이 표시
+
+## 8. Oracle 화면 클릭 맵
+
+## 8.1 기간/정렬 버튼
+
+트리거:
+1. `7D/30D/ALL`
+2. `WILSON/ACCURACY/SAMPLE/CALIBRATION`
+
+호출 체인:
+1. `period = key`
+2. `sortBy = key`
+3. reactive `filteredRecords`, `oracleData` 재계산
+
+상태 변경:
+1. local `period`
+2. local `sortBy`
+
+UI 변경:
+1. 랭킹 테이블 값/순서 변경
+
+## 8.2 에이전트 행 상세 오버레이
+
+트리거:
+1. Oracle 테이블 row 클릭
+
+호출 체인:
+1. `selectAgent(ag)` -> `selectedAgent = ag`
+2. 상세 오버레이 내 `DEPLOY TO ARENA` -> `goto('/arena')`
+
+상태 변경:
+1. local `selectedAgent`
+
+UI 변경:
+1. 상세 오버레이 열림/닫힘
+2. Arena 페이지 이동
+
+## 9. Signals/Community 화면 클릭 맵
+
+## 9.1 Community Hub <-> Signal List 전환
+
+트리거:
+1. 상단 뷰 스위치 버튼
+
+호출 체인:
+1. `setSignalsView(next)`
+2. `signalsView` 변경
+3. `goto('/signals?...', replaceState)`로 query 동기화
+
+상태 변경:
+1. local `signalsView`
+2. URL query `view`
+
+UI 변경:
+1. 커뮤니티 레이아웃/시그널 리스트 전환
+
+## 9.2 Track / View / Copy Trade
+
+트리거:
+1. Community card `Track`
+2. Community card `View`
+3. Signal card `TRACK`, `COPY TRADE`
+
+호출 체인:
+1. Track: `handleTrack(sig)` -> `trackSignal(...)` + `incrementTrackedSignals()` + `notifySignalTracked(...)`
+2. View/Copy: `handleTrade(sig)` -> `goto('/terminal?copyTrade=1&...')`
+
+상태 변경:
+1. tracked signal store
+2. user profile tracked count
+3. terminal 초기 query state
+
+UI 변경:
+1. tracked 카운트 반영
+2. Terminal 이동 + copy-trade 진입
+
+## 10. WalletModal 단계 전이 맵
+
+## 10.1 핵심 단계
+
+1. `welcome -> wallet-select`
+- 클릭: `GET STARTED`
+- 호출: `setWalletModalStep('wallet-select')`
+
+2. `wallet-select -> connecting -> sign-message -> connected`
+- 클릭: MetaMask/Phantom/WalletConnect/Coinbase
+- 호출: `handleConnect(provider)` -> `connectWallet(...)` -> `setWalletModalStep('sign-message')`
+- 이후 `SIGN MESSAGE` 클릭: `handleSignMessage()` -> `verifyWalletSignature(...)` -> `signMessage(signature)`
+
+3. `connected -> signup`
+- 클릭: `CREATE ACCOUNT`
+- 호출: `setWalletModalStep('signup')`
+
+4. `signup 완료`
+- 클릭: `CREATE ACCOUNT ->`
+- 호출: `handleSignup()` -> `registerAuth(...)` -> `registerUser(...)`
+
+5. `profile -> passport`
+- 클릭: `VIEW FULL PASSPORT`
+- 호출: link `/passport` + `handleClose()`
+
+## 10.2 상태 변경 핵심
+
+1. `walletStore.connected/address/provider/signature`
+2. `walletStore.email/nickname/tier/phase`
+3. `walletStore.walletModalStep`
+
+## 11. Terminal 우측(INTEL/COMMUNITY/POSITIONS) 클릭 맵
+
+## 11.1 메인 탭 전환
+
+트리거:
+1. `INTEL`, `COMMUNITY`, `POSITIONS`
+
+호출 체인:
+1. `setTab(tab)`
+2. `queueUiStateSave({ terminalActiveTab: tab })`
+
+상태 변경:
+1. local `activeTab`
+2. 서버 UI preference
+
+UI 변경:
+1. 우측 패널 콘텐츠 전환
+
+## 11.2 Intel 내부 탭 전환
+
+트리거:
+1. `CHAT`, `HEADLINES`, `EVENTS`, `FLOW`
+
+호출 체인:
+1. `setInnerTab(tab)`
+2. `queueUiStateSave({ terminalInnerTab: tab })`
+
+상태 변경:
+1. local `innerTab`
+2. 서버 UI preference
+
+UI 변경:
+1. 채팅/뉴스/이벤트/플로우 콘텐츠 전환
+
+## 11.3 Positions 탭 CLOSE
+
+트리거:
+1. 포지션 row의 `CLOSE`
+
+호출 체인:
+1. `handleClosePos(id)` -> `closeQuickTrade(id, price)`
+
+상태 변경:
+1. quickTrade store (open -> closed)
+
+UI 변경:
+1. 포지션 목록과 손익 즉시 갱신
+
+## 12. 상단 헤더 네비게이션 클릭 맵
+
+트리거:
+1. `TERMINAL/ARENA/COMMUNITY/ORACLE/HOLDING`
+2. 로고 클릭
+3. 뒤로가기
+4. 지갑 버튼
+
+호출 체인:
+1. 네비/로고: `nav(path)` -> `goto(path)`
+2. 뒤로: `handleBack()` -> `history.back()` 또는 `goto('/')`
+3. 지갑 버튼: `openWalletModal()`
+
+상태 변경:
+1. route pathname
+2. wallet modal open state
+
+UI 변경:
+1. 활성 탭 하이라이트
+2. 페이지 라우트 전환
+3. wallet modal 표시
+
+## 13. 스크린샷 커버리지 결론
+
+올려주신 화면 기준 현재 설계 커버:
+
+1. Terminal 메인(좌 WarRoom + 중앙 차트 + 우 Intel): 포함
+2. Terminal 우측 INTEL/COMMUNITY/POSITIONS 전환: 포함
+3. Arena Lobby/Configure/Battle: 포함
+4. Passport 탭(Profile/Wallet/Positions/Arena): 포함
+5. Oracle 정렬/행 클릭/오버레이/Arena 진입: 포함
+6. Wallet 모달(Create Account, View Full Passport): 포함
+7. Signals(Community Hub/Signal List/Track/View/Open Terminal): 포함
+
+## 14. Scan 1회 기준 상세 흐름 (Trader E2E)
+
+관련 상세 문서:
+1. `TERMINAL_SCAN_E2E_SPEC.md`
+
+핵심:
+1. 차트 pair/timeframe 변경 -> `gameState` 갱신
+2. `SCAN` 클릭 -> `runAgentScan()` 실행 -> `runWarRoomScan()` 분석
+3. 좌측: `scanTabs` 누적(현재 localStorage, 타겟 서버 저장)
+4. 우측: `latestScan` + 채팅 요약 반영
+5. 액션: `TRACK/QUICK TRADE/COPY TRADE`로 이어지고 다른 페이지 수치와 동기화
+
+CURRENT vs TARGET:
+1. CURRENT: 스캔 히스토리 브라우저 저장 중심, 채팅은 로컬 응답 중심
+2. TARGET: 스캔/채팅/첨부/액션을 API+DB로 영속화하여 디바이스 간 연속성 확보

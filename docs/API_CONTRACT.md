@@ -369,3 +369,183 @@ SSE 이벤트:
 3. spec unlock 검증
 4. phase mismatch 시 409 반환
 5. legacy `/api/matches` 경로 정상 응답
+
+## 9. Terminal Scan / Intel / Chat Contract
+
+## 9.1 CURRENT: Chat Message API
+
+### GET `/api/chat/messages?channel=terminal&limit=50&offset=0`
+
+응답:
+
+```json
+{
+  "success": true,
+  "total": 12,
+  "records": [
+    {
+      "id": "uuid",
+      "userId": "uuid",
+      "channel": "terminal",
+      "senderKind": "user",
+      "senderId": null,
+      "senderName": "YOU",
+      "message": "scan summary?",
+      "meta": {},
+      "createdAt": 1760000000000
+    }
+  ],
+  "pagination": { "limit": 50, "offset": 0 }
+}
+```
+
+### POST `/api/chat/messages`
+
+요청:
+
+```json
+{
+  "channel": "terminal",
+  "senderKind": "user",
+  "senderId": null,
+  "senderName": "YOU",
+  "message": "@STRUCTURE 지금 근거 뭐야?",
+  "meta": {
+    "pair": "BTC/USDT",
+    "timeframe": "4h"
+  }
+}
+```
+
+응답:
+
+```json
+{
+  "success": true,
+  "message": {
+    "id": "uuid",
+    "channel": "terminal",
+    "senderKind": "user",
+    "senderName": "YOU",
+    "message": "@STRUCTURE 지금 근거 뭐야?",
+    "meta": { "pair": "BTC/USDT", "timeframe": "4h" },
+    "createdAt": 1760000000000
+  }
+}
+```
+
+## 9.2 TARGET: Terminal Scan Run API
+
+### POST `/api/terminal/scan`
+
+요청:
+
+```json
+{
+  "pair": "BTC/USDT",
+  "timeframe": "4h",
+  "source": "chart-button"
+}
+```
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "scanId": "uuid",
+    "pair": "BTC/USDT",
+    "timeframe": "4h",
+    "token": "BTC",
+    "createdAt": 1760000000000,
+    "label": "18:09",
+    "consensus": "long",
+    "avgConfidence": 67,
+    "summary": "3/5 long consensus with moderate derivative stress.",
+    "highlights": [
+      { "agent": "STRUCTURE", "vote": "long", "conf": 71, "note": "EMA alignment bullish." }
+    ],
+    "signals": [
+      {
+        "id": "uuid",
+        "agentId": "structure",
+        "pair": "BTC/USDT",
+        "vote": "long",
+        "conf": 71,
+        "entry": 68100.2,
+        "tp": 69150.0,
+        "sl": 67520.5
+      }
+    ]
+  }
+}
+```
+
+### GET `/api/terminal/scan/history?pair=BTC/USDT&timeframe=4h&limit=20`
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "records": [
+      {
+        "scanId": "uuid",
+        "pair": "BTC/USDT",
+        "timeframe": "4h",
+        "createdAt": 1760000000000,
+        "consensus": "long",
+        "avgConfidence": 67,
+        "summary": "3/5 long consensus"
+      }
+    ],
+    "pagination": { "limit": 20, "offset": 0, "total": 183 }
+  }
+}
+```
+
+## 9.3 TARGET: Multimodal Chat Upload API
+
+### POST `/api/chat/uploads`
+
+요청:
+
+```json
+{
+  "channel": "terminal",
+  "files": [
+    { "name": "chart.png", "mime": "image/png", "size": 184233 }
+  ]
+}
+```
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "uploads": [
+      {
+        "uploadId": "uuid",
+        "signedUrl": "https://...",
+        "publicUrl": "https://...",
+        "mime": "image/png"
+      }
+    ]
+  }
+}
+```
+
+전송 규칙:
+1. 업로드 완료 후 `POST /api/chat/messages`의 `meta.attachments[]`에 `uploadId/publicUrl`을 포함한다.
+2. `meta.context`에 `pair/timeframe/scanId`를 포함한다.
+
+## 9.4 Terminal 전용 테스트 체크
+
+1. 동일 pair/timeframe 재스캔 시 history 레코드가 누락 없이 append 된다.
+2. scan 결과가 좌측 history/우측 intel/chat에 동시에 반영된다.
+3. chat 메시지에 `scanId` 컨텍스트를 넣어도 조회가 일관된다.
+4. attachments가 포함된 chat 메시지가 저장/조회 모두 가능하다.

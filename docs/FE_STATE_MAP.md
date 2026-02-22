@@ -195,3 +195,41 @@ phase별 UI:
 3. 차트/헤더/터미널 가격이 동일하다.
 4. Agent/Spec/Progression 수치가 페이지마다 일치한다.
 5. 모바일에서 스캔/차트/입력이 막히지 않는다.
+
+## 9. Terminal Scan + Intel State (세부)
+
+## 9.1 Scan History State
+
+CURRENT:
+1. `WarRoom.scanTabs[]`가 스캔 히스토리 원본
+2. `activeScanId`로 활성 히스토리 선택
+3. `localStorage(maxidoge.warroom.scanstate.v1)`로 복원
+
+TARGET:
+1. `scanHistoryStore`를 분리하고 서버 동기화 상태를 포함
+2. 상태 필드: `records[]`, `activeScanId`, `isHydrating`, `syncError`
+3. optimistic append 후 서버 응답 ID로 reconcile
+
+## 9.2 Intel Result State
+
+CURRENT:
+1. `/terminal/+page.svelte`의 `latestScan`이 단일 소스
+2. `IntelPanel`은 `latestScan`을 표시만 수행
+
+TARGET:
+1. `intelStore.latestBrief` + `intelStore.history[]` 분리
+2. `scanId` 기준으로 동일 스캔을 다시 열어도 동일 브리프 복원
+3. `consensus/risk/setup/derivatives/flow` 블록을 구조화 데이터로 관리
+
+## 9.3 Agent Chat State
+
+CURRENT:
+1. `chatMessages[]`는 page local
+2. 텍스트 입력만 처리
+
+TARGET:
+1. `chatStore.messages[]`를 채널(`terminal`) 단위로 관리
+2. 입력 payload: `text`, `mentions[]`, `attachments[]`, `context{pair,timeframe,scanId}`
+3. 전송 상태: `pending/sent/failed`와 재시도 큐 보유
+
+상세 플로우는 `TERMINAL_SCAN_E2E_SPEC.md`를 따른다.
