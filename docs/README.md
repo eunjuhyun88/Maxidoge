@@ -73,11 +73,15 @@ DB/영속성/캐시/마이그레이션
 - `USER_OVERRIDE`
 5. Terminal scan agent 범위 (현재): 5개
 - `STRUCTURE`, `FLOW`, `DERIV`, `SENTI`, `MACRO`
+ - 역할: 시장 데이터 수집/요약/초기 시나리오 제안
 6. Arena는 8 Agent Pool 전체 기준
-7. Chat 저장소 호환:
+7. 최종 의사결정 규칙:
+- Terminal scan `consensus`는 추천 신호이며 자동 집행 결정이 아니다.
+- 최종 진입 방향/리스크 결정은 트레이더가 수행한다. (Arena에서는 `HYPOTHESIS` 입력이 최종 결정)
+8. Chat 저장소 호환:
 - 마이그레이션 기간에 `/api/chat/messages`는 내부적으로 `chat_messages` 또는 `agent_chat_messages` adapter 허용
 - 외부 JSON 계약은 유지
-8. Backlog 번호 기준:
+9. Backlog 번호 기준:
 - `B-08` = legacy `/api/matches` adapter
 - Terminal 관련 신규는 `B-09~B-11`, `F-09~F-11`
 
@@ -186,8 +190,9 @@ docs: align terminal scan/chat contracts across core docs
 
 1. Terminal scan은 현재 5-agent 엔진을 유지한다.
 2. 8-agent 확장은 Arena 중심이며, Terminal 8-agent 확장은 별도 결정 후 진행한다.
-3. Oracle 프로필 모달의 구형 표기(`TIER: CONNECTED`, `PHASE P1`)는 backlog `F-12`에서 정리한다.
-4. `battleRuntime` 타입은 `FE_STATE_MAP.md`에 정의된 구조를 사용한다.
+3. Terminal scan 결과는 추천/보조 신호이며, 자동 매매 결정으로 간주하지 않는다.
+4. Oracle 프로필 모달의 구형 표기(`TIER: CONNECTED`, `PHASE P1`)는 backlog `F-12`에서 정리한다.
+5. `battleRuntime` 타입은 `FE_STATE_MAP.md`에 정의된 구조를 사용한다.
 
 ---
 

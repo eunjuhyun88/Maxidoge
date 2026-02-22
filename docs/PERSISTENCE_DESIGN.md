@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS terminal_scan_runs (
   -- 합산 결과
   consensus   text NOT NULL CHECK (consensus IN ('long','short','neutral')),
   avg_confidence numeric(5,2) NOT NULL,
-  summary     text NOT NULL,           -- "Consensus LONG · Avg CONF 72% · RSI 58.3"
+  summary     text NOT NULL,           -- "Consensus LONG · Avg CONF 72% · RSI 58.3" (보조 신호 요약)
 
   -- 하이라이트 (에이전트별 요약)
   highlights  jsonb NOT NULL DEFAULT '[]',
@@ -83,6 +83,7 @@ CREATE INDEX IF NOT EXISTS idx_scan_runs_pair
 ```
 
 v3 변경: 현재 scanTabs는 same pair+tf면 탭 업데이트. Supabase에서는 **매 스캔을 별도 row로 저장**하고, FE에서 pair+tf 기준 그룹핑하여 탭 표시.
+참고: `consensus`는 스캔의 보조 추천값이며 자동 매매 최종결정을 의미하지 않는다.
 
 ### 3.2 `terminal_scan_signals` — 스캔 내 개별 시그널
 
@@ -195,6 +196,7 @@ v3 변경: 현재 하드코딩 랜덤 응답 → v3에서는 **실제 스캔 데
   │  ├─ BE: 5 에이전트 스코어링 (indicators.ts + trend.ts)
   │  │   ※ Terminal 스캔은 5개 에이전트만 사용 (Arena는 8개 전체)
   │  │   ※ VPA/ICT/VALUATION은 Arena Draft에서만 선택 가능
+  │  │   ※ 결과는 추천/보조 신호이며 최종 집행 결정은 트레이더가 수행
   │  │   ├─ STRUCTURE: SMA 20/60/120 + RSI + 24h변동
   │  │   ├─ FLOW: 볼륨비 + quoteVolume + momentum
   │  │   ├─ DERIV: funding + predFR + lsRatio + liqBias

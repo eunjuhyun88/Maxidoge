@@ -66,6 +66,7 @@ UI 변경:
 CURRENT:
 1. Terminal 스캔은 5개 에이전트 사용
 2. 대상: `STRUCTURE`, `FLOW`, `DERIV`, `SENTI`, `MACRO`
+3. 역할: 데이터 수집/요약/추천 시나리오 생성
 
 ARENA와 구분:
 1. Arena Draft/분석은 8개 에이전트 풀 기준
@@ -75,6 +76,11 @@ TARGET 옵션:
 1. 옵션 A: Terminal은 5개 유지 (속도/가독성 우선)
 2. 옵션 B: Terminal도 8개 확장 (심화 분석 우선)
 3. 최종 결정 전까지 본 문서와 `ARCHITECTURE_DESIGN.md`는 5개 기준을 정본으로 유지
+
+의사결정 경계:
+1. Terminal `consensus`는 트레이더 보조 신호다.
+2. Terminal 스캔만으로 자동 포지션 집행을 하지 않는다.
+3. 최종 진입/리스크 결정은 사용자가 수행한다.
 
 ## 3. 좌측 히스토리 누적 구조
 
@@ -145,7 +151,7 @@ UI 정책:
 필드 정의:
 | 필드 | 의미 | 트레이더 의사결정 |
 |---|---|---|
-| consensusDirection | 에이전트 집계 방향 | LONG/SHORT 최종 방향 결정 |
+| consensusDirection | 에이전트 집계 방향 | 참고 방향(최종 결정은 트레이더가 수행) |
 | consensusConfidence | 집계 신뢰도(0-100) | 진입 강도/분할 여부 |
 | disagreementScore | 에이전트 불일치 정도 | 확신 낮으면 보수적 진입 |
 | entry/sl/tp | 추천 진입/손절/익절 | 주문 파라미터 즉시 적용 |
