@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { AGENT_SIGNALS } from '$lib/data/warroom';
 import { fetch24hr, pairToSymbol } from '$lib/api/binance';
 import { fetchDerivatives, normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
+import { fetchCoinMarketCapQuote, hasCoinMarketCapApiKey } from '$lib/server/coinmarketcap';
 
 function pickBias(funding: number | null, lsRatio: number | null, liqLong: number, liqShort: number): 'LONG' | 'SHORT' | 'NEUTRAL' {
   let score = 0;
@@ -20,13 +21,15 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
     const timeframe = normalizeTimeframe(url.searchParams.get('timeframe'));
     const token = pair.split('/')[0];
 
-    const [tickerRes, derivRes] = await Promise.allSettled([
+    const [tickerRes, derivRes, cmcRes] = await Promise.allSettled([
       fetch24hr(pairToSymbol(pair)),
       fetchDerivatives(fetch, pair, timeframe),
+      fetchCoinMarketCapQuote(token),
     ]);
 
     const ticker = tickerRes.status === 'fulfilled' ? tickerRes.value : null;
     const deriv = derivRes.status === 'fulfilled' ? derivRes.value : null;
+    const cmc = cmcRes.status === 'fulfilled' ? cmcRes.value : null;
 
     const records = AGENT_SIGNALS.filter((s) => s.pair === pair && (s.agentId === 'flow' || s.agentId === 'deriv')).map(
       (s) => ({
@@ -59,12 +62,23 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
           token,
           bias,
           snapshot: {
+            source: {
+              binance: Boolean(ticker),
+              coinalyze: Boolean(deriv),
+              coinmarketcap: Boolean(cmc),
+            },
             priceChangePct: ticker ? Number(ticker.priceChangePercent) : null,
             quoteVolume24h: ticker ? Number(ticker.quoteVolume) : null,
             funding: deriv?.funding ?? null,
             lsRatio: deriv?.lsRatio ?? null,
             liqLong24h: deriv?.liqLong24h ?? null,
             liqShort24h: deriv?.liqShort24h ?? null,
+            cmcPrice: cmc?.price ?? null,
+            cmcMarketCap: cmc?.marketCap ?? null,
+            cmcVolume24hUsd: cmc?.volume24h ?? null,
+            cmcChange24hPct: cmc?.change24hPct ?? null,
+            cmcUpdatedAt: cmc?.updatedAt ?? null,
+            cmcKeyConfigured: hasCoinMarketCapApiKey(),
           },
           records,
         },
@@ -86,4 +100,3 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
     return json({ error: 'Failed to load flow data' }, { status: 500 });
   }
 };
-
