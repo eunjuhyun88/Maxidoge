@@ -5,6 +5,11 @@ import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt, UUID_RE } from '$lib/server/apiValidation';
 import { isPersistenceUnavailableError } from '$lib/services/scanService';
+import {
+  callLLM, isLLMAvailable,
+  buildAgentSystemPrompt, buildOrchestratorSystemPrompt,
+  type LLMMessage,
+} from '$lib/server/llmService';
 
 const SENDER_KINDS = new Set(['user', 'agent', 'system']);
 
@@ -220,9 +225,10 @@ async function loadScanContext(
   }
 }
 
-function buildAgentReply(
+/** Template fallback (LLM 불가 시 사용) */
+function buildAgentReplyFallback(
   agentId: string,
-  message: string,
+  _message: string,
   context: ScanContext | null,
   meta: Record<string, unknown>
 ): AgentReply {
@@ -282,6 +288,83 @@ function buildAgentReply(
       `ENTRY ${formatPrice(toNum(target.entry_price, 0))} / TP ${formatPrice(toNum(target.tp_price, 0))} / ` +
       `SL ${formatPrice(toNum(target.sl_price, 0))}. ${target.analysis_text}`,
   };
+}
+
+/** LLM 기반 에이전트 응답 생성 (실패 시 template fallback) */
+async function buildAgentReply(
+  agentId: string,
+  message: string,
+  context: ScanContext | null,
+  meta: Record<string, unknown>
+): Promise<AgentReply> {
+  // LLM 사용 불가 → 기존 template fallback
+  if (!isLLMAvailable()) {
+    return buildAgentReplyFallback(agentId, message, context, meta);
+  }
+
+  const fallbackPair = typeof meta.pair === 'string' && meta.pair ? meta.pair : 'BTC/USDT';
+  const fallbackTf = typeof meta.timeframe === 'string' && meta.timeframe ? meta.timeframe : '4h';
+
+  // Scan context → LLM signal data 변환
+  const scanSignals = context?.signals?.map(s => ({
+    agentName: s.agent_name,
+    vote: s.vote,
+    confidence: Math.round(toNum(s.confidence, 0)),
+    analysisText: s.analysis_text || '',
+    entryPrice: toNum(s.entry_price, 0),
+    tpPrice: toNum(s.tp_price, 0),
+    slPrice: toNum(s.sl_price, 0),
+  })) ?? [];
+
+  const scanSummary = context
+    ? `${context.pair} ${context.timeframe.toUpperCase()} ${String(context.consensus || 'neutral').toUpperCase()} (${context.avgConfidence ?? 0}%). ${context.summary || ''}`
+    : null;
+
+  // 시스템 프롬프트 빌드
+  const agentDef = AGENT_POOL[agentId as keyof typeof AGENT_POOL];
+  let systemPrompt: string;
+
+  if (agentId === 'ORCHESTRATOR' || !agentDef) {
+    systemPrompt = buildOrchestratorSystemPrompt({
+      pair: fallbackPair,
+      timeframe: fallbackTf,
+      scanSummary,
+      scanSignals,
+    });
+  } else {
+    systemPrompt = buildAgentSystemPrompt({
+      agentId,
+      agentDescription: agentDef.description,
+      pair: fallbackPair,
+      timeframe: fallbackTf,
+      scanSummary,
+      scanSignals,
+    });
+  }
+
+  const messages: LLMMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: message },
+  ];
+
+  try {
+    const result = await callLLM({
+      messages,
+      maxTokens: 300,
+      temperature: 0.7,
+      timeoutMs: 12000,
+    });
+
+    return {
+      agentId,
+      scanId: context?.scanId ?? null,
+      source: context?.signals?.length ? 'scan_context' : 'fallback',
+      text: result.text,
+    };
+  } catch (err: any) {
+    console.warn(`[chat/messages] LLM call failed for ${agentId}, using template fallback:`, err.message);
+    return buildAgentReplyFallback(agentId, message, context, meta);
+  }
 }
 
 export const GET: RequestHandler = async ({ cookies, url }) => {
@@ -373,7 +456,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       const mentionedAgent = detectMentionedAgent(message, meta);
       if (mentionedAgent) {
         const context = await loadScanContext(user.id, meta);
-        const reply = buildAgentReply(mentionedAgent, message, context, meta);
+        const reply = await buildAgentReply(mentionedAgent, message, context, meta);
         const replyMeta = {
           ...meta,
           mentionedAgent,

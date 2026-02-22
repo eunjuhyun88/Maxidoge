@@ -197,13 +197,13 @@
     // ── Load live ticker data ──
     fetchLiveTicker();
 
-    // 1) Near real-time local UI refresh
+    // 1) Local UI refresh — 3초 간격 (WS가 실시간 가격 담당, 여기는 보조 동기화)
     priceUiSync = setInterval(() => {
       const s = $gameState;
       const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
       updateAllPrices(prices, { syncServer: false });
       updateTrackedPrices(prices);
-    }, 1000);
+    }, 3000);
 
     // 2) Periodic server persistence (batched in store debounce)
     pricePersistSync = setInterval(() => {
@@ -338,65 +338,124 @@
   };
 
   let chatMessages: ChatMsg[] = [
-    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'MAXI⚡DOGE Orchestrator v8 online. Type @AGENT to query.', time: '—', isUser: false, isSystem: true },
+    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'MAXI⚡DOGE Orchestrator v8 online. 7 agents standing by.', time: '—', isUser: false, isSystem: true },
+    { from: 'ORCHESTRATOR', icon: '🧠', color: '#ff2d9b',
+      text: '💡 @STRUCTURE @VPA @ICT @DERIV @FLOW @SENTI @MACRO — Tag an agent below for targeted analysis. Or just ask me anything.',
+      time: '—', isUser: false },
   ];
   let isTyping = false;
   let latestScan: ScanIntelDetail | null = null;
 
-  const agentResponses: Record<string, string[]> = {
-    ORCHESTRATOR: ['Analyzing across 7 agents...', 'Running backtest... 68% win rate detected.', 'Consensus updated — SHORT bias.'],
-    STRUCTURE: ['CHoCH on 4H confirmed. OB zone at $95,400.', 'BOS above $97,800. Bullish structure intact.'],
-    VPA: ['CVD rising with bullish absorption at POC.', 'Volume climax detected — potential reversal signal.'],
-    ICT: ['Liquidity pool swept below $96,200. FVG at $97,400.', 'Bullish OB reaction with displacement confirmation.'],
-    DERIV: ['OI +4.2% with positive delta. Longs building.', 'FR at +0.082% — extreme. Liquidation cluster near $96.8K.'],
-    VALUATION: ['MVRV at 1.8 — mid-range healthy zone.', 'NUPL rising, supply in profit stable at 72%.'],
-    FLOW: ['Net flow: -$128M accumulation. Whales increasing positions.', 'Exchange outflows rising — bullish signal.'],
-    SENTI: ['Fear & Greed: 42 (Fear). Social sentiment shifting bearish.', 'Whale wallets accumulating despite price drop.'],
-    MACRO: ['DXY weakening — risk-on environment.', 'SPX rally + yield drop favoring BTC correlation.'],
-  };
+  // 에이전트 정보 맵 (아이콘/컬러 lookup)
+  const AGENT_META: Record<string, { icon: string; color: string }> = {};
+  for (const ag of AGDEFS) AGENT_META[ag.name] = { icon: ag.icon, color: ag.color };
+  AGENT_META['ORCHESTRATOR'] = { icon: '🧠', color: '#ff2d9b' };
 
-  function handleSendChat(e: CustomEvent<{ text: string }>) {
+  async function handleSendChat(e: CustomEvent<{ text: string }>) {
     const text = e.detail.text;
     if (!text.trim()) return;
     const now = new Date();
     const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // 유저 메시지 즉시 표시
     chatMessages = [...chatMessages, { from: 'YOU', icon: '🐕', color: '#ffe600', text, time, isUser: true }];
     isTyping = true;
 
+    // 멘션된 에이전트 감지
     const agent = AGDEFS.find(ag => text.toLowerCase().includes(`@${ag.name.toLowerCase()}`));
-    setTimeout(() => {
+    const mentionedAgent = agent?.name || undefined;
+
+    try {
+      const res = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: 'terminal',
+          senderKind: 'user',
+          senderName: 'YOU',
+          message: text,
+          meta: {
+            pair: $gameState.pair || 'BTC/USDT',
+            timeframe: $gameState.timeframe || '4h',
+            mentionedAgent,
+            scanId: latestScan ? undefined : undefined, // scanId는 서버에서 최신 조회
+          },
+        }),
+      });
+
       isTyping = false;
-      const pool = agent ? (agentResponses[agent.name] || agentResponses.ORCHESTRATOR) : agentResponses.ORCHESTRATOR;
-      const resp = pool[Math.floor(Math.random() * pool.length)];
+
+      if (res.ok) {
+        const data = await res.json();
+        // 에이전트 응답이 있으면 표시
+        if (data.agentResponse) {
+          const r = data.agentResponse;
+          const meta = AGENT_META[r.senderName] || AGENT_META['ORCHESTRATOR'];
+          chatMessages = [...chatMessages, {
+            from: r.senderName,
+            icon: meta.icon,
+            color: meta.color,
+            text: r.message,
+            time,
+            isUser: false,
+          }];
+        } else {
+          // 에이전트 응답 없음 (멘션 안 했을 때) → 오케스트레이터가 기본 응답
+          // 멘션 없이 일반 질문한 경우: @없이도 오케스트레이터가 답하도록 재시도
+          const retryRes = await fetch('/api/chat/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              channel: 'terminal',
+              senderKind: 'user',
+              senderName: 'YOU',
+              message: `@ORCHESTRATOR ${text}`,
+              meta: {
+                pair: $gameState.pair || 'BTC/USDT',
+                timeframe: $gameState.timeframe || '4h',
+                mentionedAgent: 'ORCHESTRATOR',
+              },
+            }),
+          });
+          if (retryRes.ok) {
+            const retryData = await retryRes.json();
+            if (retryData.agentResponse) {
+              const r = retryData.agentResponse;
+              const meta = AGENT_META[r.senderName] || AGENT_META['ORCHESTRATOR'];
+              chatMessages = [...chatMessages, {
+                from: r.senderName,
+                icon: meta.icon,
+                color: meta.color,
+                text: r.message,
+                time,
+                isUser: false,
+              }];
+            }
+          }
+        }
+      } else {
+        // API 실패 시 에러 메시지
+        isTyping = false;
+        chatMessages = [...chatMessages, {
+          from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
+          text: 'Connection error. Try again or check server status.',
+          time, isUser: false, isSystem: true
+        }];
+      }
+    } catch (err) {
+      isTyping = false;
       chatMessages = [...chatMessages, {
-        from: agent?.name || 'ORCHESTRATOR',
-        icon: agent?.icon || '🧠',
-        color: agent?.color || '#ff2d9b',
-        text: resp, time, isUser: false
+        from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
+        text: 'Network error. Please check your connection.',
+        time, isUser: false, isSystem: true
       }];
-    }, 600 + Math.random() * 500);
+    }
   }
 
   function handleScanComplete(e: CustomEvent<ScanIntelDetail>) {
-    const detail = e.detail;
-    latestScan = detail;
-    const stamp = new Date(detail.createdAt);
-    const time = `${stamp.getHours()}:${String(stamp.getMinutes()).padStart(2, '0')}`;
-    const highlights = detail.highlights
-      .slice(0, 3)
-      .map((h) => `${h.agent} ${h.vote.toUpperCase()} ${h.conf}%`)
-      .join(' · ');
-    chatMessages = [
-      ...chatMessages,
-      {
-        from: 'ORCHESTRATOR',
-        icon: '📡',
-        color: '#5ecbff',
-        text: `${detail.token} ${detail.timeframe.toUpperCase()} scan done. ${detail.summary}${highlights ? ` · ${highlights}` : ''}`,
-        time,
-        isUser: false
-      }
-    ];
+    // 스캔 컨텍스트만 저장 (채팅에 LLM이 참조할 수 있도록)
+    // 스캔 결과를 채팅에 직접 표시하지 않음
+    latestScan = e.detail;
   }
 </script>
 

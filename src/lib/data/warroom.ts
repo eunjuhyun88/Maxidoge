@@ -143,6 +143,7 @@ export interface Headline {
   time: string;
   text: string;
   bull: boolean;
+  link?: string;
 }
 
 export const HEADLINES: Headline[] = [

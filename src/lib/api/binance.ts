@@ -183,9 +183,18 @@ export function subscribeKlines(
 }
 
 // ─── WebSocket for Real-time Mini Ticker (with auto-reconnect) ─
+export interface MiniTickerUpdate {
+  price: number;
+  change24h: number;   // (close - open) / open * 100
+  high24h: number;
+  low24h: number;
+  volume24h: number;   // quote volume
+}
+
 export function subscribeMiniTicker(
   symbols: string[],
-  onUpdate: (prices: Record<string, number>) => void
+  onUpdate: (prices: Record<string, number>) => void,
+  onUpdateFull?: (updates: Record<string, MiniTickerUpdate>) => void
 ): () => void {
   const streams = symbols.map(s => `${s.toLowerCase()}@miniTicker`).join('/');
   const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;
@@ -204,7 +213,23 @@ export function subscribeMiniTicker(
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.data && msg.data.e === '24hrMiniTicker') {
-        onUpdate({ [msg.data.s]: parseFloat(msg.data.c) });
+        const d = msg.data;
+        const close = parseFloat(d.c);
+        const open = parseFloat(d.o);
+        // 레거시 콜백 (가격만)
+        onUpdate({ [d.s]: close });
+        // 풀 콜백 (24h 통계 포함)
+        if (onUpdateFull && Number.isFinite(open) && open > 0) {
+          onUpdateFull({
+            [d.s]: {
+              price: close,
+              change24h: ((close - open) / open) * 100,
+              high24h: parseFloat(d.h),
+              low24h: parseFloat(d.l),
+              volume24h: parseFloat(d.q),  // quote volume
+            },
+          });
+        }
       }
     };
 

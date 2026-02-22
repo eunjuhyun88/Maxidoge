@@ -1,4 +1,5 @@
 <script lang="ts">
+  import '$lib/styles/arena-tone.css';
   import { gameState } from '$lib/stores/gameState';
   import { recordAgentMatch } from '$lib/stores/agentData';
   import { AGDEFS, SOURCES } from '$lib/data/agents';
@@ -55,7 +56,7 @@
     clearFeed();
     pushFeedItem({
       agentId: 'system', agentName: 'SYSTEM', agentIcon: '🐕',
-      agentColor: '#ffe600',
+      agentColor: '#E8967D',
       text: `Squad configured! Risk: ${e.detail.config.riskLevel.toUpperCase()} · TF: ${formatTimeframeLabel(e.detail.config.timeframe)} · Analysis starting...`,
       phase: 'DRAFT'
     });
@@ -107,7 +108,7 @@
     // Close history panel
     historyOpen = false;
 
-    addFeed('🎬', 'REPLAY', '#c840ff', `Replaying Match #${record.matchN}...`);
+    addFeed('🎬', 'REPLAY', '#66CCE6', `Replaying Match #${record.matchN}...`);
     executeReplayStep(0);
   }
 
@@ -115,7 +116,7 @@
     if (stepIdx >= replaySteps.length || !replayState.active) {
       // Replay finished
       replayState = { ...replayState, active: false };
-      addFeed('🎬', 'REPLAY', '#c840ff', 'Replay complete!');
+      addFeed('🎬', 'REPLAY', '#66CCE6', 'Replay complete!');
       return;
     }
 
@@ -125,11 +126,11 @@
 
     switch (step.type) {
       case 'deploy':
-        addFeed('🐕', 'REPLAY', '#c840ff', `Agents deployed: ${step.agents.length} agents`);
+        addFeed('🐕', 'REPLAY', '#66CCE6', `Agents deployed: ${step.agents.length} agents`);
         break;
       case 'hypothesis':
         if (step.hypothesis) {
-          addFeed('🐕', 'REPLAY', '#c840ff', `Your call: ${step.hypothesis.dir} · R:R 1:${step.hypothesis.rr.toFixed(1)}`);
+          addFeed('🐕', 'REPLAY', '#66CCE6', `Your call: ${step.hypothesis.dir} · R:R 1:${step.hypothesis.rr.toFixed(1)}`);
         }
         break;
       case 'scout':
@@ -140,16 +141,16 @@
         });
         break;
       case 'council':
-        addFeed('🗳', 'REPLAY', '#c840ff', 'Council deliberation...');
+        addFeed('🗳', 'REPLAY', '#66CCE6', 'Council deliberation...');
         break;
       case 'verdict':
-        addFeed('★', 'REPLAY', '#c840ff', `Consensus: ${step.consensusType?.toUpperCase() || 'UNKNOWN'}`);
+        addFeed('★', 'REPLAY', '#66CCE6', `Consensus: ${step.consensusType?.toUpperCase() || 'UNKNOWN'}`);
         break;
       case 'battle':
-        addFeed('⚔', 'REPLAY', '#c840ff', `Battle result: ${step.battleResult?.toUpperCase() || 'UNKNOWN'}`);
+        addFeed('⚔', 'REPLAY', '#66CCE6', `Battle result: ${step.battleResult?.toUpperCase() || 'UNKNOWN'}`);
         break;
       case 'result':
-        addFeed(step.win ? '🏆' : '😢', 'REPLAY', step.win ? '#00cc66' : '#ff2d55',
+        addFeed(step.win ? '🏆' : '😢', 'REPLAY', step.win ? '#00CC88' : '#FF5E7A',
           `${step.win ? 'WIN' : 'LOSS'} · ${step.lp > 0 ? '+' : ''}${step.lp} LP`);
         break;
     }
@@ -373,7 +374,7 @@
   }
 
   function dogeFloat() {
-    const colors = ['#ff2d55', '#ff2d9b', '#00d4ff', '#00ff88', '#c840ff', '#ffe600'];
+    const colors = ['#FF5E7A', '#E8967D', '#66CCE6', '#00CC88', '#DCB970', '#F0EDE4'];
     const n = 3 + Math.floor(Math.random() * 3);
     for (let i = 0; i < n; i++) {
       setTimeout(() => {
@@ -430,7 +431,7 @@
     chartPosSl = h.sl;
     chartPosDir = h.dir;
 
-    addFeed('🐕', 'YOU', '#ffe600', `${h.dir} · TP $${h.tp.toLocaleString()} · SL $${h.sl.toLocaleString()} · R:R 1:${h.rr}`, h.dir);
+    addFeed('🐕', 'YOU', '#E8967D', `${h.dir} · TP $${h.tp.toLocaleString()} · SL $${h.sl.toLocaleString()} · R:R 1:${h.rr}`, h.dir);
     sfx.vote();
 
     // ── Server sync: submit hypothesis ──
@@ -513,7 +514,7 @@
     initAgentStates();
     sfx.enter();
     dogeFloat();
-    addFeed('🐕', 'ARENA', '#ff2d9b', 'Draft locked. Preparing analysis...');
+    addFeed('🐕', 'ARENA', '#E8967D', 'Draft locked. Preparing analysis...');
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
         setAgentState(ag.id, 'alert');
@@ -526,7 +527,7 @@
     initScout();
     initGather();
     initCouncil();
-    addFeed('🔍', 'ANALYSIS', '#cc6600', '5-agent analysis pipeline running...');
+    addFeed('🔍', 'ANALYSIS', '#66CCE6', '5-agent analysis pipeline running...');
 
     // ── Server sync: run analysis in background ──
     if (serverMatchId) {
@@ -580,12 +581,12 @@
         chartPosTp = price * 1.02;
         chartPosSl = price * 0.985;
         chartPosDir = 'NEUTRAL';
-        addFeed('⏰', 'TIMEOUT', '#888', 'Time expired — auto-skip');
+        addFeed('⏰', 'TIMEOUT', '#93A699', 'Time expired — auto-skip');
         advancePhase();
       }
     }, 1000);
 
-    addFeed('🐕', 'ARENA', '#9900cc', 'HYPOTHESIS: pick direction and set TP/SL.');
+    addFeed('🐕', 'ARENA', '#66CCE6', 'HYPOTHESIS: pick direction and set TP/SL.');
 
     // Agents go into think state
     activeAgents.forEach((ag, i) => {
@@ -599,7 +600,7 @@
   function initPreview() {
     previewVisible = true;
     const h = state.hypothesis;
-    addFeed('👁', 'PREVIEW', '#ff6600', `Position: ${h?.dir || 'NEUTRAL'} · Entry $${(h?.entry || 0).toLocaleString()} · R:R 1:${(h?.rr || 1).toFixed(1)}`);
+    addFeed('👁', 'PREVIEW', '#DCB970', `Position: ${h?.dir || 'NEUTRAL'} · Entry $${(h?.entry || 0).toLocaleString()} · R:R 1:${(h?.rr || 1).toFixed(1)}`);
 
     // Agents look at the position
     activeAgents.forEach((ag, i) => {
@@ -620,12 +621,12 @@
     if (previewAutoTimer) { clearTimeout(previewAutoTimer); previewAutoTimer = null; }
     previewVisible = false;
     sfx.charge();
-    addFeed('✅', 'CONFIRMED', '#00cc66', 'Position confirmed — scouting begins!');
+    addFeed('✅', 'CONFIRMED', '#00CC88', 'Position confirmed — scouting begins!');
     advancePhase();
   }
 
   function initScout() {
-    addFeed('🔍', 'SCOUT', '#cc6600', 'Agents scouting data sources...');
+    addFeed('🔍', 'SCOUT', '#66CCE6', 'Agents scouting data sources...');
     // Generate chart annotations from active agents
     generateAnnotations();
     // Generate agent signal markers on chart
@@ -700,7 +701,7 @@
 
   function initGather() {
     councilActive = true;
-    addFeed('📊', 'GATHER', '#cc6600', 'Gathering analysis data...');
+    addFeed('📊', 'GATHER', '#66CCE6', 'Gathering analysis data...');
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
         setAgentState(ag.id, 'vote');
@@ -710,7 +711,7 @@
   }
 
   function initCouncil() {
-    addFeed('🗳', 'COUNCIL', '#cc0066', 'Agents voting on direction...');
+    addFeed('🗳', 'COUNCIL', '#E8967D', 'Agents voting on direction...');
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
         const dir = ag.dir;
@@ -754,7 +755,7 @@
 
     sfx.verdict();
     dogeFloat();
-    addFeed('⭐', 'VERDICT', '#cc0066', `Agent verdict: ${agentDir} · Score ${score} · ${bullish}/${activeAgents.length} agree`, agentDir);
+    addFeed('⭐', 'VERDICT', '#E8967D', `Agent verdict: ${agentDir} · Score ${score} · ${bullish}/${activeAgents.length} agree`, agentDir);
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
         setAgentState(ag.id, 'jump');
@@ -796,7 +797,7 @@
       hypothesis: s.hypothesis ? { ...s.hypothesis, consensusType: consensus.type, lpMult: consensus.lpMult } : s.hypothesis
     }));
 
-    addFeed('⚔️', 'COMPARE', '#ff6600', `${consensus.badge} — You: ${userDir} vs Agents: ${agentDir}`);
+    addFeed('⚔️', 'COMPARE', '#DCB970', `${consensus.badge} — You: ${userDir} vs Agents: ${agentDir}`);
     sfx.charge();
 
     // Auto-advance after compare display
@@ -810,7 +811,7 @@
   function initBattle() {
     verdictVisible = false;
     compareVisible = false;
-    addFeed('⚔', 'BATTLE', '#cc0033', 'Battle in progress!');
+    addFeed('⚔', 'BATTLE', '#FF5E7A', 'Battle in progress!');
     activeAgents.forEach((ag, i) => {
       setAgentState(ag.id, 'alert');
       setSpeech(ag.id, DOGE_BATTLE[i % DOGE_BATTLE.length], 400);
@@ -955,7 +956,7 @@
       activeAgents.forEach(ag => { setAgentState(ag.id, 'sad'); setSpeech(ag.id, DOGE_LOSE[Math.floor(Math.random() * DOGE_LOSE.length)], 800); });
     }
 
-    addFeed(win ? '🏆' : '💀', 'RESULT', win ? '#00aa44' : '#ff2d55',
+    addFeed(win ? '🏆' : '💀', 'RESULT', win ? '#00CC88' : '#FF5E7A',
       win ? `WIN! +${lpChange} LP [${resultTag}]` : `LOSE [${resultTag}] ${lpChange} LP`);
 
     setTimeout(() => { pvpVisible = true; }, 1500);
@@ -1134,13 +1135,13 @@
           <div class="sr">
             <svg viewBox="0 0 44 44">
               <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="3"/>
-              <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00ff88' : '#ff2d55'} stroke-width="3"
+              <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00CC88' : '#FF5E7A'} stroke-width="3"
                 stroke-dasharray="{state.score * 1.13} 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
             </svg>
             <span class="n">{state.score}</span>
           </div>
           <div>
-            <div class="sdir" style="color:{state.score >= 60 ? '#00ff88' : '#ff2d55'}">{state.score >= 60 ? 'LONG' : 'SHORT'}</div>
+            <div class="sdir" style="color:{state.score >= 60 ? '#00CC88' : '#FF5E7A'}">{state.score >= 60 ? 'LONG' : 'SHORT'}</div>
             <div class="smeta">{activeAgents.length} agents · M{state.matchN}</div>
           </div>
           <div class="score-stats">
@@ -1321,7 +1322,7 @@
 
               <!-- LP Multiplier -->
               <div class="compare-mult">
-                LP MULTIPLIER: <span class="mult-val" style="color:{compareData.consensus.lpMult >= 1.5 ? '#00ff88' : compareData.consensus.lpMult >= 1 ? '#ffe600' : '#ff2d55'}">x{compareData.consensus.lpMult}</span>
+                LP MULTIPLIER: <span class="mult-val" style="color:{compareData.consensus.lpMult >= 1.5 ? '#00CC88' : compareData.consensus.lpMult >= 1 ? '#DCB970' : '#FF5E7A'}">x{compareData.consensus.lpMult}</span>
               </div>
             </div>
           </div>
@@ -1334,7 +1335,7 @@
               <div class="verdict-score">
                 <svg viewBox="0 0 44 44">
                   <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(0,0,0,.1)" stroke-width="3"/>
-                  <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00cc66' : '#ff2d55'} stroke-width="3"
+                  <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00CC88' : '#FF5E7A'} stroke-width="3"
                     stroke-dasharray="{state.score * 1.13} 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
                 </svg>
                 <span class="vs-num">{Math.round(state.score)}</span>

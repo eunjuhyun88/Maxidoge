@@ -53,6 +53,15 @@ export const livePrices = derived(priceStore, ($p) => {
   return result;
 });
 
+// 24h 변동률 derived (심볼 → %)
+export const priceChanges = derived(priceStore, ($p) => {
+  const result: Record<string, number> = {};
+  for (const [sym, entry] of Object.entries($p)) {
+    result[sym] = entry.change24h ?? 0;
+  }
+  return result;
+});
+
 // 개별 심볼 derived
 export const btcPrice = derived(priceStore, ($p) => $p.BTC?.price ?? 0);
 export const ethPrice = derived(priceStore, ($p) => $p.ETH?.price ?? 0);

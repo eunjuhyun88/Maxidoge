@@ -122,6 +122,7 @@
           time: formatRelativeTime(r.publishedAt),
           text: r.title || r.summary,
           bull: r.sentiment === 'bullish',
+          link: r.link || '',
         }));
         dataLoaded.headlines = true;
         dataLoaded = dataLoaded;
@@ -284,30 +285,7 @@
               <div class="ac-header">
                 <span class="ac-title">🤖 AGENT CHAT</span>
               </div>
-              {#if latestScan}
-                <div class="scan-brief">
-                  <div class="scan-brief-head">
-                    <span class="scan-brief-badge">SCAN</span>
-                    <span class="scan-brief-market">{latestScan.token} · {latestScan.timeframe.toUpperCase()}</span>
-                    <span class="scan-brief-time">{latestScanTime}</span>
-                  </div>
-                  <div class="scan-brief-summary">{latestScan.summary}</div>
-                  <div class="scan-brief-tags">
-                    {#each latestScan.highlights.slice(0, 3) as item}
-                      <span class="scan-brief-tag {item.vote}">
-                        {item.agent} {item.vote.toUpperCase()} {item.conf}%
-                      </span>
-                    {/each}
-                  </div>
-                  <div class="scan-brief-notes">
-                    {#each latestScan.highlights.slice(0, 2) as item}
-                      <div class="scan-brief-note">
-                        <span>{item.agent}:</span> {item.note}
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
+              <!-- scan-brief 제거: 스캔 데이터는 채팅 패널에 표시하지 않음 -->
               <div class="ac-msgs" bind:this={chatEl}>
                 {#each chatMessages as msg}
                   {#if msg.isSystem}
@@ -345,11 +323,20 @@
             <div class="hl-ticker-badge">{currentToken} NEWS</div>
             <div class="hl-list">
               {#each displayHeadlines as hl}
-                <div class="hl-row">
-                  <span class="hl-icon">{hl.icon}</span>
-                  <span class="hl-time">{hl.time}</span>
-                  <span class="hl-txt" class:bull={hl.bull}>{hl.text}</span>
-                </div>
+                {#if hl.link}
+                  <a class="hl-row hl-linked" href={hl.link} target="_blank" rel="noopener noreferrer">
+                    <span class="hl-icon">{hl.icon}</span>
+                    <span class="hl-time">{hl.time}</span>
+                    <span class="hl-txt" class:bull={hl.bull}>{hl.text}</span>
+                    <span class="hl-ext">&#8599;</span>
+                  </a>
+                {:else}
+                  <div class="hl-row">
+                    <span class="hl-icon">{hl.icon}</span>
+                    <span class="hl-time">{hl.time}</span>
+                    <span class="hl-txt" class:bull={hl.bull}>{hl.text}</span>
+                  </div>
+                {/if}
               {/each}
             </div>
 
@@ -439,7 +426,7 @@
               <div class="pp-scroll">
                 {#each cryptoMarkets as market}
                   {@const outcome = parseOutcomePrices(market.outcomePrices)}
-                  <div class="pp-card">
+                  <a class="pp-card pp-linked" href="https://polymarket.com/event/{market.slug}" target="_blank" rel="noopener noreferrer">
                     <div class="pp-q">{market.question.length > 70 ? market.question.slice(0, 70) + '…' : market.question}</div>
                     <div class="pp-bar-wrap">
                       <div class="pp-bar-yes" style="width:{outcome.yes}%"></div>
@@ -448,7 +435,8 @@
                       <span class="pp-yes">YES {outcome.yes}¢</span>
                       <span class="pp-no">NO {outcome.no}¢</span>
                     </div>
-                  </div>
+                    <span class="pp-ext">&#8599; Polymarket</span>
+                  </a>
                 {/each}
               </div>
               <div class="pp-hint">← swipe →</div>
@@ -547,6 +535,10 @@
   .hl-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58); width: 34px; flex-shrink: 0; }
   .hl-txt { font-family: var(--fm); font-size: 10px; line-height: 1.45; color: rgba(255,255,255,.82); }
   .hl-txt.bull { color: var(--grn); }
+  a.hl-linked { text-decoration: none; color: inherit; }
+  .hl-linked:hover .hl-txt { text-decoration: underline; }
+  .hl-ext { font-size: 10px; opacity: 0; transition: opacity .15s; flex-shrink: 0; color: rgba(255,230,0,.6); }
+  .hl-linked:hover .hl-ext { opacity: 1; }
 
   /* ── Events ── */
   .ev-list { display: flex; flex-direction: column; gap: 5px; }
@@ -682,6 +674,27 @@
     border: 1px solid rgba(139,92,246,.2);
     border-radius: 4px;
   }
+  .pp-linked {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .pp-linked:hover {
+    border-color: rgba(139,92,246,.45);
+    background: rgba(139,92,246,.12);
+  }
+  .pp-linked:hover .pp-q { text-decoration: underline; }
+  .pp-ext {
+    display: block;
+    margin-top: 4px;
+    font-family: var(--fm); font-size: 7px; font-weight: 700;
+    letter-spacing: .5px;
+    color: rgba(139,92,246,.5);
+    text-align: right;
+  }
+  .pp-linked:hover .pp-ext { color: rgba(139,92,246,.85); }
   .pp-q {
     font-family: var(--fm); font-size: 10px; font-weight: 700;
     color: rgba(255,255,255,.84); line-height: 1.35;
@@ -803,7 +816,7 @@
   .ac-bub-user { background: rgba(255,230,0,.12); border: 1px solid rgba(255,230,0,.2); margin-left: auto; }
   .ac-bub-agent { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
   .ac-name { font-family: var(--fm); font-size: 8px; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 1px; }
-  .ac-txt { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.84); line-height: 1.45; }
+  .ac-txt { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.84); line-height: 1.45; white-space: pre-line; }
   .ac-dots { display: flex; gap: 3px; padding: 4px 0; }
   .ac-dots span { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,.3); animation: dotBounce .6s infinite; }
   .ac-dots span:nth-child(2) { animation-delay: .15s; }
