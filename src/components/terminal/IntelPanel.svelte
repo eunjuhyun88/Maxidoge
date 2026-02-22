@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { HEADLINES, EVENTS, COMMUNITY } from '$lib/data/warroom';
-  import type { Headline, EventData } from '$lib/data/warroom';
+  import type { Headline } from '$lib/data/warroom';
   import { communityPosts, hydrateCommunityPosts, likeCommunityPost } from '$lib/stores/communityStore';
   import { openTrades, closeQuickTrade } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
@@ -83,12 +82,21 @@
     closeQuickTrade(id, price);
   }
 
+  let _isComposing = false;
+
   function sendChat() {
     if (!chatInput.trim()) return;
     dispatch('sendchat', { text: chatInput });
     chatInput = '';
   }
-  function chatKey(e: KeyboardEvent) { if (e.key === 'Enter') sendChat(); }
+  function chatKey(e: KeyboardEvent) {
+    // 한글 IME 조합 중에는 Enter 무시 (이중 전송 방지)
+    if (e.isComposing || _isComposing) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendChat();
+    }
+  }
 
   // Auto-scroll chat when messages change
   $: if (chatMessages.length && chatEl) {
@@ -102,7 +110,7 @@
   // ═══ Filter headlines by current chart ticker ═══
   $: currentToken = $gameState.pair.split('/')[0] || 'BTC';
   $: tokenAliases = getTokenAliases(currentToken);
-  $: headlineSource = dataLoaded.headlines ? liveHeadlines : HEADLINES;
+  $: headlineSource = liveHeadlines;
   $: filteredHeadlines = headlineSource.filter(hl =>
     tokenAliases.some(alias => hl.text.toLowerCase().includes(alias)) ||
     hl.text.toLowerCase().includes('crypto') ||
@@ -317,7 +325,7 @@
                 {/if}
               </div>
               <div class="ac-input">
-                <input type="text" bind:value={chatInput} on:keydown={chatKey} placeholder="@STRUCTURE @FLOW @DERIV ..." />
+                <input type="text" bind:value={chatInput} on:keydown={chatKey} on:compositionstart={() => _isComposing = true} on:compositionend={() => _isComposing = false} placeholder="@STRUCTURE @FLOW @DERIV ..." />
                 <button class="ac-send" on:click={sendChat} disabled={!chatInput.trim()}>⚡</button>
               </div>
             </div>
@@ -325,6 +333,9 @@
           {:else if innerTab === 'headlines'}
             <div class="hl-ticker-badge">{currentToken} NEWS</div>
             <div class="hl-list">
+              {#if displayHeadlines.length === 0}
+                <div class="flow-empty">Loading headlines...</div>
+              {/if}
               {#each displayHeadlines as hl}
                 {#if hl.link}
                   <a class="hl-row hl-linked" href={hl.link} target="_blank" rel="noopener noreferrer">
@@ -345,14 +356,17 @@
 
           {:else if innerTab === 'events'}
             <div class="ev-list">
-              {#each dataLoaded.events ? liveEvents : EVENTS as ev}
-                <div class="ev-card" style="border-left-color:{dataLoaded.events ? (ev.level === 'warning' ? '#ff8c3b' : '#3b9eff') : ev.borderColor}">
+              {#if liveEvents.length === 0}
+                <div class="flow-empty">Loading events...</div>
+              {/if}
+              {#each liveEvents as ev}
+                <div class="ev-card" style="border-left-color:{ev.level === 'warning' ? '#ff8c3b' : '#3b9eff'}">
                   <div class="ev-head">
-                    <span class="ev-tag" style="background:{dataLoaded.events ? (ev.tag === 'DERIV' ? '#ff8c3b' : ev.tag === 'ON-CHAIN' ? '#00e68a' : ev.tag === 'SOCIAL' ? '#8b5cf6' : '#3b9eff') : ev.tagColor};color:#000">{ev.tag}</span>
-                    <span class="ev-etime">{dataLoaded.events ? formatRelativeTime(ev.createdAt) : ev.time}</span>
+                    <span class="ev-tag" style="background:{ev.tag === 'DERIV' ? '#ff8c3b' : ev.tag === 'ON-CHAIN' ? '#00e68a' : ev.tag === 'SOCIAL' ? '#8b5cf6' : '#3b9eff'};color:#000">{ev.tag}</span>
+                    <span class="ev-etime">{formatRelativeTime(ev.createdAt)}</span>
                   </div>
                   <div class="ev-body">{ev.text}</div>
-                  <span class="ev-src">{dataLoaded.events ? ev.source : ev.src}</span>
+                  <span class="ev-src">{ev.source}</span>
                 </div>
               {/each}
             </div>
@@ -360,7 +374,10 @@
           {:else if innerTab === 'flow'}
             <div class="flow-list">
               <div class="flow-section-lbl">SMART MONEY FLOWS (24H)</div>
-              {#each dataLoaded.flow ? liveFlows : [{id:'f1',label:'↗ Binance → Cold',addr:'0x1a...4f2',amt:'+2,140 BTC',isBuy:true},{id:'f2',label:'↙ OKX ← Whale',addr:'0x8c...3a1',amt:'-850 BTC',isBuy:false},{id:'f3',label:'↗ Coinbase → DeFi',addr:'0x3e...9d5',amt:'+12,500 ETH',isBuy:true}] as flow (flow.id)}
+              {#if liveFlows.length === 0}
+                <div class="flow-empty">Loading flow data...</div>
+              {/if}
+              {#each liveFlows as flow (flow.id)}
                 <div class="flow-row">
                   <div class="flow-dir" class:buy={flow.isBuy} class:sell={!flow.isBuy}>{flow.isBuy ? '↑' : '↓'}</div>
                   <div class="flow-info">
@@ -395,24 +412,9 @@
             </div>
           {/each}
 
-          <!-- Static community posts -->
-          {#each COMMUNITY as post}
-            <div class="comm-post">
-              <div class="comm-head">
-                <div class="comm-avatar" style="background:{post.avatarColor}20;color:{post.avatarColor}">{post.avatar}</div>
-                <span class="comm-name">{post.name}</span>
-                <span class="comm-time">{post.time}</span>
-              </div>
-              <div class="comm-txt">{post.text}</div>
-              <div class="comm-actions">
-                {#if post.signal}
-                  <span class="comm-sig {post.signal}">{post.signal.toUpperCase()}</span>
-                {/if}
-                <button class="comm-react">👍</button>
-                <button class="comm-react">🔥</button>
-              </div>
-            </div>
-          {/each}
+          {#if $communityPosts.length === 0}
+            <div class="flow-empty">No community posts yet. Be the first to share your analysis!</div>
+          {/if}
         </div>
 
       {:else if activeTab === 'positions'}
@@ -554,6 +556,7 @@
 
   /* ── Flow ── */
   .flow-list { display: flex; flex-direction: column; gap: 4px; }
+  .flow-empty { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.4); text-align: center; padding: 16px 0; letter-spacing: .5px; }
   .flow-section-lbl { font-family: var(--fm); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: var(--grn); padding: 4px 0 5px; border-bottom: 1px solid rgba(255,255,255,.1); }
   .flow-row { display: flex; align-items: center; gap: 6px; padding: 5px 7px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); }
   .flow-dir { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
