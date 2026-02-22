@@ -208,6 +208,7 @@ docs: align terminal scan/chat contracts across core docs
 6. `feature-specification.md`
 7. `terminal-ia-reset-v1.md`
 8. `✅StockHoo_ The Complete Crypto Intelligence OS (3).md`
+9. `ARENA_SYSTEM_SPEC_V3_0.md` (Arena v3.0 확장 설계: PvE/PvP/토너먼트/상태머신)
 
 ---
 

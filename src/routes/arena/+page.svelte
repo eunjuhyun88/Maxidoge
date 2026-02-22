@@ -20,6 +20,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { isWalletConnected, connectWallet, recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
+  import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch } from '$lib/api/arenaApi';
+  import type { AnalyzeResponse } from '$lib/api/arenaApi';
 
   $: walletOk = $isWalletConnected;
 
@@ -42,8 +44,13 @@
   let historyOpen = false;
   let matchHistoryOpen = false;
 
+  // ═══════ SERVER SYNC STATE ═══════
+  let serverMatchId: string | null = null;
+  let serverAnalysis: AnalyzeResponse | null = null;
+  let apiError: string | null = null;
+
   // Squad Config handlers
-  function onSquadDeploy(e: CustomEvent<{ config: import('$lib/stores/gameState').SquadConfig }>) {
+  async function onSquadDeploy(e: CustomEvent<{ config: import('$lib/stores/gameState').SquadConfig }>) {
     gameState.update(s => ({ ...s, squadConfig: e.detail.config }));
     clearFeed();
     pushFeedItem({
@@ -52,6 +59,28 @@
       text: `Squad configured! Risk: ${e.detail.config.riskLevel.toUpperCase()} · TF: ${formatTimeframeLabel(e.detail.config.timeframe)} · Analysis starting...`,
       phase: 'DRAFT'
     });
+
+    // ── Server sync: create match + submit draft ──
+    const currentState = $gameState;
+    try {
+      apiError = null;
+      const matchRes = await createArenaMatch(currentState.pair, e.detail.config.timeframe);
+      serverMatchId = matchRes.matchId;
+
+      // Build draft from selected agents (equal weight for now)
+      const agentCount = currentState.selectedAgents.length;
+      const weight = Math.round(100 / agentCount);
+      const draft = currentState.selectedAgents.map((agentId, i) => ({
+        agentId,
+        specId: 'base',
+        weight: i === agentCount - 1 ? 100 - weight * (agentCount - 1) : weight,
+      }));
+      await submitArenaDraft(serverMatchId, draft);
+    } catch (err) {
+      console.warn('[Arena] Server sync failed (match continues locally):', err);
+      apiError = (err as Error).message;
+    }
+
     startAnalysisFromDraft();
   }
 
@@ -404,6 +433,13 @@
     addFeed('🐕', 'YOU', '#ffe600', `${h.dir} · TP $${h.tp.toLocaleString()} · SL $${h.sl.toLocaleString()} · R:R 1:${h.rr}`, h.dir);
     sfx.vote();
 
+    // ── Server sync: submit hypothesis ──
+    if (serverMatchId) {
+      const dirMap: Record<string, 'LONG' | 'SHORT' | 'NEUTRAL'> = { LONG: 'LONG', SHORT: 'SHORT', NEUTRAL: 'NEUTRAL' };
+      submitArenaHypothesis(serverMatchId, dirMap[h.dir] || 'NEUTRAL', h.conf)
+        .catch(err => console.warn('[Arena] Hypothesis sync failed:', err));
+    }
+
     // HYPOTHESIS -> BATTLE
     advancePhase();
   }
@@ -491,6 +527,18 @@
     initGather();
     initCouncil();
     addFeed('🔍', 'ANALYSIS', '#cc6600', '5-agent analysis pipeline running...');
+
+    // ── Server sync: run analysis in background ──
+    if (serverMatchId) {
+      runArenaAnalysis(serverMatchId)
+        .then(res => {
+          serverAnalysis = res;
+          console.log('[Arena] Server analysis complete:', res.meta);
+        })
+        .catch(err => {
+          console.warn('[Arena] Server analysis failed:', err);
+        });
+    }
   }
 
   function initHypothesis() {
@@ -880,6 +928,16 @@
       `${win ? 'WIN' : 'LOSS'} · M${state.matchN + 1} · ${state.hypothesis?.dir || 'NEUTRAL'} · ${consensus.type}`
     );
 
+    // ── Server sync: resolve match ──
+    if (serverMatchId) {
+      const exitP = state.prices.BTC;
+      resolveArenaMatch(serverMatchId, exitP)
+        .then(res => {
+          console.log('[Arena] Match resolved on server:', res.result);
+        })
+        .catch(err => console.warn('[Arena] Resolve sync failed:', err));
+    }
+
     resultData = {
       win,
       lp: lpChange,
@@ -919,6 +977,9 @@
   }
 
   function goLobby() {
+    serverMatchId = null;
+    serverAnalysis = null;
+    apiError = null;
     pvpVisible = false;
     resultVisible = false;
     verdictVisible = false;
@@ -932,6 +993,9 @@
   }
 
   function playAgain() {
+    serverMatchId = null;
+    serverAnalysis = null;
+    apiError = null;
     pvpVisible = false;
     resultVisible = false;
     verdictVisible = false;
@@ -972,6 +1036,13 @@
         <div class="wg-hint">Supported: MetaMask · WalletConnect · Coinbase</div>
       </div>
     </div>
+  {/if}
+
+  <!-- API Sync Status -->
+  {#if apiError}
+    <div class="api-status error">⚠️ Offline mode</div>
+  {:else if serverMatchId}
+    <div class="api-status synced">🟢 Synced</div>
   {/if}
 
   {#if state.inLobby}
@@ -2230,4 +2301,19 @@
     letter-spacing: .5px;
     position: relative; z-index: 1;
   }
+
+  /* ═══════ API SYNC STATUS ═══════ */
+  .api-status {
+    position: fixed;
+    bottom: 8px;
+    right: 8px;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    z-index: 100;
+    opacity: 0.7;
+    font-family: monospace;
+  }
+  .api-status.synced { background: rgba(0,170,68,0.2); color: #00aa44; }
+  .api-status.error { background: rgba(255,45,85,0.15); color: #ff6666; }
 </style>
