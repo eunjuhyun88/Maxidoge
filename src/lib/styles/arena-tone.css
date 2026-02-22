@@ -19,8 +19,8 @@
   --arena-bad: #ff5e7a;
   --arena-warn: #dcb970;
   --arena-text: #f0ede4;
-  --arena-text-dim: rgba(240, 237, 228, 0.7);
-  --arena-text-muted: rgba(240, 237, 228, 0.52);
+  --arena-text-dim: rgba(240, 237, 228, 0.84);
+  --arena-text-muted: rgba(240, 237, 228, 0.74);
   --arena-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
 }
 
@@ -59,7 +59,7 @@
 }
 
 .arena-page .battle-floor span {
-  color: rgba(240, 237, 228, 0.62) !important;
+  color: var(--arena-text-dim) !important;
 }
 
 .arena-page .score-bar {
@@ -564,3 +564,87 @@
 .battle-stage .fdir.long { background: rgba(0, 204, 136, 0.2) !important; color: var(--arena-good) !important; }
 .battle-stage .fdir.short { background: rgba(255, 94, 122, 0.2) !important; color: var(--arena-bad) !important; }
 .battle-stage .fdir.neutral { background: rgba(220, 185, 112, 0.18) !important; color: var(--arena-warn) !important; }
+
+/* Readability boost */
+.arena-page .compare-label,
+.arena-page .pvp-label,
+.arena-page .prev-lbl,
+.arena-page .verdict-meta,
+.arena-page .pvp-vs,
+.arena-page .pvp-hypo,
+.arena-page .cv-conf,
+.arena-page .compare-mult,
+.arena-page .preview-rr,
+.arena-page .preview-config,
+.arena-page .feed-text,
+.arena-page .agd-finding,
+.arena-page .phase-timer,
+.arena-page .hist-header,
+.arena-page .hist-close,
+.arena-page .hnum,
+.arena-page .hscore,
+.arena-page .hist-empty {
+  color: var(--arena-text-dim) !important;
+}
+
+.arena-page .compare-side,
+.arena-page .compare-vote,
+.arena-page .prev-row {
+  background: rgba(13, 28, 20, 0.78) !important;
+}
+
+.squad-config .rc-name,
+.squad-config .pl-text,
+.squad-config .pill-label,
+.squad-config .sc-count,
+.squad-config .sum-stat,
+.squad-config .sum-val {
+  color: var(--arena-text) !important;
+}
+
+.squad-config .rc-role,
+.squad-config .param-desc,
+.squad-config .sum-label,
+.squad-config .pill-sub,
+.squad-config .slider-min,
+.squad-config .slider-max {
+  color: var(--arena-text-dim) !important;
+}
+
+.hypo-panel .section-label,
+.hypo-panel .optional-tag,
+.hypo-panel .char-count,
+.hypo-panel .conf-label,
+.hypo-panel .level-tag,
+.hypo-panel .rr-label,
+.hypo-panel .drag-hint {
+  color: var(--arena-text-dim) !important;
+}
+
+.hypo-panel .reason-input::placeholder {
+  color: rgba(240, 237, 228, 0.58) !important;
+}
+
+.hypo-panel .reason-input,
+.hypo-panel .tf-btn,
+.hypo-panel .vmode-btn,
+.hypo-panel .tag-chip {
+  background: rgba(13, 28, 20, 0.86) !important;
+}
+
+.mh-panel .mh-id,
+.mh-panel .mh-time,
+.mh-panel .mh-arrow,
+.mh-panel .sum-label,
+.mh-panel .mhd-label,
+.mh-panel .mhd-vote-conf,
+.mh-panel .mh-empty {
+  color: var(--arena-text-dim) !important;
+}
+
+.mh-panel .mhd-levels,
+.mh-panel .mhd-vote-name,
+.mh-panel .mhd-result-tag,
+.mh-panel .mh-footer {
+  color: var(--arena-text-dim) !important;
+}

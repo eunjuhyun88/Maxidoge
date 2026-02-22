@@ -76,6 +76,17 @@
   let scanStateHydrated = false;
   let serverScanSynced = false;
 
+  // ── Scan Diff: 이전 스캔과 비교 ──
+  type SignalDiff = {
+    prevVote: AgentSignal['vote'] | null;
+    confDelta: number;         // +5, -3 등
+    voteChanged: boolean;
+    isNew: boolean;
+  };
+  let _prevSignalMap = new Map<string, { vote: AgentSignal['vote']; conf: number }>();
+  let signalDiffs = new Map<string, SignalDiff>();
+  let diffFreshUntil = 0;     // diff 하이라이트 유지 시간 (ms)
+
   // ── Derivatives Data (real-time from Coinalyze) ──
   let derivOI: number | null = null;
   let derivFunding: number | null = null;
@@ -332,6 +343,14 @@
 
     try {
       scanStep = 'COUNCIL · synthesizing outputs';
+
+      // ── 스캔 전 현재 시그널 스냅샷 저장 (diff 비교용) ──
+      const prevMap = new Map<string, { vote: AgentSignal['vote']; conf: number }>();
+      for (const sig of signalPool) {
+        const key = `${sig.agentId}:${sig.token}`;
+        prevMap.set(key, { vote: sig.vote, conf: sig.conf });
+      }
+
       const scan = await runWarRoomScan(pair, timeframe);
       const existingTab = scanTabs.find((tab) => tab.pair === scan.pair && tab.timeframe === scan.timeframe);
       const nextTab: ScanTab = existingTab
@@ -351,6 +370,27 @@
           label: scan.label,
           signals: scan.signals
         };
+
+      // ── Diff 계산: 이전 vs 새 시그널 비교 ──
+      const diffs = new Map<string, SignalDiff>();
+      for (const sig of scan.signals) {
+        const key = `${sig.agentId}:${sig.token}`;
+        const prev = prevMap.get(key);
+        if (!prev) {
+          diffs.set(sig.id, { prevVote: null, confDelta: 0, voteChanged: false, isNew: true });
+        } else {
+          const voteChanged = prev.vote !== sig.vote;
+          diffs.set(sig.id, {
+            prevVote: voteChanged ? prev.vote : null,
+            confDelta: sig.conf - prev.conf,
+            voteChanged,
+            isNew: false,
+          });
+        }
+      }
+      signalDiffs = diffs;
+      _prevSignalMap = prevMap;
+      diffFreshUntil = Date.now() + 30_000; // 30초 동안 diff 표시
 
       scanTabs = [nextTab, ...scanTabs.filter((tab) => tab.id !== nextTab.id)].slice(0, MAX_SCAN_TABS);
       activeScanId = nextTab.id;
@@ -610,9 +650,13 @@
   <div class="wr-msgs">
     {#each filteredSignals as sig (sig.id)}
       {@const isSelected = selectedIds.has(sig.id)}
+      {@const diff = diffFreshUntil > Date.now() ? signalDiffs.get(sig.id) : undefined}
+      {@const hasChange = diff && (diff.isNew || diff.voteChanged || Math.abs(diff.confDelta) >= 3)}
       <div
         class="wr-msg"
         class:selected={isSelected}
+        class:wr-msg-new={hasChange}
+        class:wr-msg-vote-flip={diff?.voteChanged}
         on:click={() => toggleSelect(sig.id)}
         role="button"
         tabindex="0"
@@ -631,7 +675,24 @@
             <span class="wr-msg-token">{sig.token}</span>
             <span class="wr-msg-vote {sig.vote}">{sig.vote.toUpperCase()}</span>
             <span class="wr-msg-conf">{sig.conf}%</span>
+            <!-- Diff indicators -->
+            {#if diff}
+              {#if diff.isNew}
+                <span class="wr-diff-badge wr-diff-new">NEW</span>
+              {:else if diff.voteChanged && diff.prevVote}
+                <span class="wr-diff-badge wr-diff-flip">{diff.prevVote.toUpperCase()}→{sig.vote.toUpperCase()}</span>
+              {/if}
+              {#if !diff.isNew && diff.confDelta !== 0}
+                <span class="wr-diff-delta" class:pos={diff.confDelta > 0} class:neg={diff.confDelta < 0}>
+                  {diff.confDelta > 0 ? '+' : ''}{diff.confDelta}%
+                </span>
+              {/if}
+            {/if}
             <span class="wr-msg-time">{sig.time}</span>
+          </div>
+          <!-- Confidence bar -->
+          <div class="wr-conf-bar">
+            <div class="wr-conf-fill {sig.vote}" style="width:{Math.min(sig.conf, 100)}%"></div>
           </div>
           <div class="wr-msg-text">{sig.text}</div>
           <div class="wr-msg-signal-row">
