@@ -21,6 +21,56 @@ export const DRAFT_TOTAL_WEIGHT = 100;
 export const DRAFT_MIN_WEIGHT = 10;
 export const DRAFT_MAX_WEIGHT = 80;
 
+// ─── Draft Validation (S-04) ────────────────────────────────
+
+import type { DraftSelection, DraftValidationResult, AgentId } from './types';
+import { AGENT_IDS } from './types';
+
+export function validateDraft(selections: DraftSelection[]): DraftValidationResult {
+  const errors: string[] = [];
+
+  // 1. 에이전트 수 정확히 3개
+  if (selections.length !== DRAFT_AGENT_COUNT) {
+    errors.push(`에이전트 ${DRAFT_AGENT_COUNT}개 필요 (현재 ${selections.length}개)`);
+  }
+
+  // 2. 중복 에이전트 없음
+  const ids = selections.map(s => s.agentId);
+  const unique = new Set(ids);
+  if (unique.size !== ids.length) {
+    errors.push('중복 에이전트 선택 불가');
+  }
+
+  // 3. 유효한 에이전트 ID
+  for (const s of selections) {
+    if (!AGENT_IDS.includes(s.agentId as AgentId)) {
+      errors.push(`유효하지 않은 에이전트: ${s.agentId}`);
+    }
+  }
+
+  // 4. weight 합계 = 100
+  const totalWeight = selections.reduce((sum, s) => sum + s.weight, 0);
+  if (totalWeight !== DRAFT_TOTAL_WEIGHT) {
+    errors.push(`가중치 합계 ${DRAFT_TOTAL_WEIGHT} 필요 (현재 ${totalWeight})`);
+  }
+
+  // 5. 개별 weight 범위
+  for (const s of selections) {
+    if (s.weight < DRAFT_MIN_WEIGHT || s.weight > DRAFT_MAX_WEIGHT) {
+      errors.push(`${s.agentId} 가중치 ${DRAFT_MIN_WEIGHT}-${DRAFT_MAX_WEIGHT} 범위 벗어남 (${s.weight})`);
+    }
+  }
+
+  // 6. specId 존재 확인 (빈 문자열 방지)
+  for (const s of selections) {
+    if (!s.specId || s.specId.trim() === '') {
+      errors.push(`${s.agentId} spec 미선택`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 // ─── Spec Unlock ─────────────────────────────────────────────
 
 export const SPEC_UNLOCK_A = 10;   // A + B 동시 해금
