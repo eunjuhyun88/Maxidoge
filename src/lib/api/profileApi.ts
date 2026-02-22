@@ -84,6 +84,7 @@ export async function updateProfileApi(payload: {
   nickname?: string;
   avatar?: string;
   displayTier?: string;
+  badges?: Array<{ id: string; name: string; icon: string; category: string; earnedAt: number | null }>;
 }): Promise<boolean> {
   if (!canUseBrowserFetch()) return false;
   try {
