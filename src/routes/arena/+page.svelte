@@ -1159,30 +1159,15 @@
 
       <!-- ═══════ RIGHT: BATTLE ARENA ═══════ -->
       <div class="arena-side">
-        <!-- Background Layers -->
-        <div class="sunburst"></div>
-        <div class="halftone"></div>
-        <div class="ground"></div>
-
-        <!-- Rainbow Swirl Decorations (corners) -->
-        <div class="rainbow-swirl tl"></div>
-        <div class="rainbow-swirl br"></div>
-
-        <!-- Comic Bursts -->
-        <div class="comic-burst boom" style="left:3%;top:8%">BOOM!</div>
-        <div class="comic-burst pow" style="left:72%;top:50%">POW!</div>
-        <div class="comic-burst wow" style="left:35%;top:3%">WOW!</div>
-        <div class="comic-burst zap" style="left:85%;top:10%">ZAP!</div>
-
-        <!-- Floating sticker emojis -->
-        {#each ['🐕','⭐','💰','🔥','💎','🚀','⚡','🎯'] as emoji, i}
-          <div class="sticker" style="left:{8+i*12}%;top:{6+Math.sin(i)*18}%;animation-delay:{i*0.5}s;font-size:{18+Math.random()*12}px">{emoji}</div>
-        {/each}
-
-        <!-- Floating crypto coins -->
-        <div class="crypto-coin" style="left:15%;top:20%;animation-delay:0s">₿</div>
-        <div class="crypto-coin" style="left:80%;top:25%;animation-delay:1.2s">Ξ</div>
-        <div class="crypto-coin" style="left:55%;top:12%;animation-delay:2.5s">◎</div>
+        <!-- Retro collage background -->
+        <div class="arena-texture arena-stars"></div>
+        <div class="arena-texture arena-rainbow"></div>
+        <div class="arena-texture arena-grid"></div>
+        <div class="arena-texture arena-doodle"></div>
+        <div class="arena-vignette"></div>
+        <div class="battle-floor">
+          <span>ARENA SIGNAL PLANE</span>
+        </div>
 
         <!-- Data Sources -->
         {#each SOURCES as src}
