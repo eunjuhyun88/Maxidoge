@@ -1,12 +1,92 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { AGENT_POOL } from '$lib/engine/agents';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
-import { toBoundedInt } from '$lib/server/apiValidation';
+import { toBoundedInt, UUID_RE } from '$lib/server/apiValidation';
+import { isPersistenceUnavailableError } from '$lib/services/scanService';
 
 const SENDER_KINDS = new Set(['user', 'agent', 'system']);
 
-function mapRow(row: any) {
+const AGENT_ALIASES = new Map<string, string>([
+  ['STRUCTURE', 'STRUCTURE'],
+  ['STR', 'STRUCTURE'],
+  ['VPA', 'VPA'],
+  ['ICT', 'ICT'],
+  ['DERIV', 'DERIV'],
+  ['VALUATION', 'VALUATION'],
+  ['VALUE', 'VALUATION'],
+  ['FLOW', 'FLOW'],
+  ['SENTI', 'SENTI'],
+  ['SENTIMENT', 'SENTI'],
+  ['MACRO', 'MACRO'],
+  ['GUARDIAN', 'ORCHESTRATOR'],
+  ['COMMANDER', 'ORCHESTRATOR'],
+  ['SCANNER', 'ORCHESTRATOR'],
+  ['AGENT', 'ORCHESTRATOR'],
+  ['ORCHESTRATOR', 'ORCHESTRATOR'],
+  ['SYSTEM', 'ORCHESTRATOR'],
+]);
+
+const AGENT_IDS = new Set(Object.keys(AGENT_POOL));
+
+type AgentChatRow = {
+  id: string;
+  user_id: string;
+  channel: string;
+  sender_kind: string;
+  sender_id: string | null;
+  sender_name: string;
+  message: string;
+  meta: any;
+  created_at: string;
+};
+
+type ScanRunContextRow = {
+  id: string;
+  pair: string;
+  timeframe: string;
+  consensus: 'long' | 'short' | 'neutral';
+  avg_confidence: number | string;
+  summary: string;
+  created_at: string;
+};
+
+type ScanSignalContextRow = {
+  agent_id: string;
+  agent_name: string;
+  vote: 'long' | 'short' | 'neutral';
+  confidence: number | string;
+  analysis_text: string;
+  data_source: string;
+  entry_price: number | string;
+  tp_price: number | string;
+  sl_price: number | string;
+};
+
+type ScanContext = {
+  scanId: string | null;
+  pair: string;
+  timeframe: string;
+  consensus: 'long' | 'short' | 'neutral' | null;
+  avgConfidence: number | null;
+  summary: string | null;
+  signals: ScanSignalContextRow[];
+};
+
+type AgentReply = {
+  agentId: string;
+  text: string;
+  source: 'scan_context' | 'fallback';
+  scanId: string | null;
+};
+
+function toNum(value: unknown, fallback = 0): number {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
+  return Number.isFinite(n) ? Number(n) : fallback;
+}
+
+function mapRow(row: AgentChatRow) {
   return {
     id: row.id,
     userId: row.user_id,
@@ -17,6 +97,190 @@ function mapRow(row: any) {
     message: row.message,
     meta: row.meta ?? {},
     createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function normalizeAgentName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw.toUpperCase().replace(/^@+/, '').replace(/[^A-Z0-9_]/g, '');
+  if (!cleaned) return null;
+  if (AGENT_ALIASES.has(cleaned)) return AGENT_ALIASES.get(cleaned)!;
+  if (AGENT_IDS.has(cleaned)) return cleaned;
+  return null;
+}
+
+function detectMentionedAgent(message: string, meta: Record<string, unknown>): string | null {
+  const metaAgent = normalizeAgentName(meta.mentionedAgent);
+  if (metaAgent) return metaAgent;
+
+  const mentionMatches = message.matchAll(/@([a-z0-9_]+)/gi);
+  for (const match of mentionMatches) {
+    const token = normalizeAgentName(match[1]);
+    if (token) return token;
+  }
+  return null;
+}
+
+function normalizeMeta(input: unknown): Record<string, unknown> {
+  return input && typeof input === 'object' ? { ...(input as Record<string, unknown>) } : {};
+}
+
+function formatPrice(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  if (Math.abs(value) >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (Math.abs(value) >= 100) return value.toFixed(2);
+  return value.toFixed(4);
+}
+
+async function loadScanContext(
+  userId: string,
+  meta: Record<string, unknown>
+): Promise<ScanContext | null> {
+  const requestedScanId = typeof meta.scanId === 'string' && UUID_RE.test(meta.scanId) ? meta.scanId : null;
+  const requestedPair = typeof meta.pair === 'string' ? meta.pair.trim().toUpperCase() : '';
+  const requestedTimeframe = typeof meta.timeframe === 'string' ? meta.timeframe.trim().toLowerCase() : '';
+
+  try {
+    let runRow: ScanRunContextRow | undefined;
+
+    if (requestedScanId) {
+      const run = await query<ScanRunContextRow>(
+        `
+          SELECT id, pair, timeframe, consensus, avg_confidence, summary, created_at
+          FROM terminal_scan_runs
+          WHERE id = $1 AND user_id = $2
+          LIMIT 1
+        `,
+        [requestedScanId, userId]
+      );
+      runRow = run.rows[0];
+    } else {
+      const filters = ['user_id = $1'];
+      const params: unknown[] = [userId];
+
+      if (requestedPair) {
+        params.push(requestedPair);
+        filters.push(`pair = $${params.length}`);
+      }
+      if (requestedTimeframe) {
+        params.push(requestedTimeframe);
+        filters.push(`timeframe = $${params.length}`);
+      }
+
+      const run = await query<ScanRunContextRow>(
+        `
+          SELECT id, pair, timeframe, consensus, avg_confidence, summary, created_at
+          FROM terminal_scan_runs
+          WHERE ${filters.join(' AND ')}
+          ORDER BY created_at DESC
+          LIMIT 1
+        `,
+        params
+      );
+      runRow = run.rows[0];
+    }
+
+    if (!runRow) {
+      return {
+        scanId: null,
+        pair: requestedPair || 'BTC/USDT',
+        timeframe: requestedTimeframe || '4h',
+        consensus: null,
+        avgConfidence: null,
+        summary: null,
+        signals: [],
+      };
+    }
+
+    const signals = await query<ScanSignalContextRow>(
+      `
+        SELECT
+          agent_id, agent_name, vote, confidence, analysis_text,
+          data_source, entry_price, tp_price, sl_price
+        FROM terminal_scan_signals
+        WHERE scan_id = $1 AND user_id = $2
+        ORDER BY confidence DESC, created_at DESC
+      `,
+      [runRow.id, userId]
+    );
+
+    return {
+      scanId: runRow.id,
+      pair: runRow.pair,
+      timeframe: runRow.timeframe,
+      consensus: runRow.consensus,
+      avgConfidence: Math.round(toNum(runRow.avg_confidence, 0)),
+      summary: runRow.summary,
+      signals: signals.rows,
+    };
+  } catch (error: any) {
+    if (isPersistenceUnavailableError(error)) return null;
+    console.warn('[chat/messages] failed to load scan context:', error);
+    return null;
+  }
+}
+
+function buildAgentReply(
+  agentId: string,
+  message: string,
+  context: ScanContext | null,
+  meta: Record<string, unknown>
+): AgentReply {
+  const fallbackPair = typeof meta.pair === 'string' && meta.pair ? meta.pair : 'BTC/USDT';
+  const fallbackTf = typeof meta.timeframe === 'string' && meta.timeframe ? meta.timeframe : '4h';
+
+  if (!context || context.signals.length === 0) {
+    return {
+      agentId,
+      scanId: context?.scanId ?? null,
+      source: 'fallback',
+      text:
+        `${agentId} response ready. Latest scan context is unavailable right now. ` +
+        `Re-run scan on ${fallbackPair} ${String(fallbackTf).toUpperCase()} and ask again.`,
+    };
+  }
+
+  if (agentId === 'ORCHESTRATOR') {
+    const top = context.signals
+      .slice(0, 3)
+      .map((s) => `${s.agent_name} ${s.vote.toUpperCase()} ${Math.round(toNum(s.confidence, 0))}%`)
+      .join(' · ');
+    return {
+      agentId,
+      scanId: context.scanId,
+      source: 'scan_context',
+      text:
+        `${context.pair} ${context.timeframe.toUpperCase()} consensus ${String(context.consensus || 'neutral').toUpperCase()} ` +
+        `(${context.avgConfidence ?? 0}%). ${context.summary || ''}${top ? ` Top: ${top}` : ''}`,
+    };
+  }
+
+  const target = context.signals.find((sig) => {
+    const byId = normalizeAgentName(sig.agent_id);
+    const byName = normalizeAgentName(sig.agent_name);
+    return byId === agentId || byName === agentId;
+  });
+
+  if (!target) {
+    return {
+      agentId,
+      scanId: context.scanId,
+      source: 'scan_context',
+      text:
+        `${agentId} has no direct factor row in this scan. ` +
+        `Current consensus is ${String(context.consensus || 'neutral').toUpperCase()} (${context.avgConfidence ?? 0}%).`,
+    };
+  }
+
+  const conf = Math.round(toNum(target.confidence, 0));
+  return {
+    agentId,
+    scanId: context.scanId,
+    source: 'scan_context',
+    text:
+      `${target.agent_name} ${target.vote.toUpperCase()} ${conf}% · ${context.pair} ${context.timeframe.toUpperCase()} ` +
+      `ENTRY ${formatPrice(toNum(target.entry_price, 0))} / TP ${formatPrice(toNum(target.tp_price, 0))} / ` +
+      `SL ${formatPrice(toNum(target.sl_price, 0))}. ${target.analysis_text}`,
   };
 }
 
@@ -37,7 +301,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
       params
     );
 
-    const rows = await query(
+    const rows = await query<AgentChatRow>(
       `
         SELECT
           id, user_id, channel, sender_kind, sender_id,
@@ -78,12 +342,12 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const senderId = typeof body?.senderId === 'string' ? body.senderId.trim() : null;
     const senderName = typeof body?.senderName === 'string' ? body.senderName.trim() : 'YOU';
     const message = typeof body?.message === 'string' ? body.message.trim() : '';
-    const meta = body?.meta && typeof body.meta === 'object' ? body.meta : {};
+    const meta = normalizeMeta(body?.meta);
 
     if (!message) return json({ error: 'message is required' }, { status: 400 });
     if (!SENDER_KINDS.has(senderKind)) return json({ error: 'senderKind must be user|agent|system' }, { status: 400 });
 
-    const insert = await query(
+    const insert = await query<AgentChatRow>(
       `
         INSERT INTO agent_chat_messages (
           user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
@@ -103,7 +367,61 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       [user.id, insert.rows[0].id, JSON.stringify({ channel, senderKind })]
     ).catch(() => undefined);
 
-    return json({ success: true, message: mapRow(insert.rows[0]) });
+    let agentResponse: ReturnType<typeof mapRow> | null = null;
+
+    if (channel === 'terminal' && senderKind === 'user') {
+      const mentionedAgent = detectMentionedAgent(message, meta);
+      if (mentionedAgent) {
+        const context = await loadScanContext(user.id, meta);
+        const reply = buildAgentReply(mentionedAgent, message, context, meta);
+        const replyMeta = {
+          ...meta,
+          mentionedAgent,
+          responseSource: reply.source,
+          scanId: reply.scanId,
+        };
+
+        try {
+          const replyInsert = await query<AgentChatRow>(
+            `
+              INSERT INTO agent_chat_messages (
+                user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
+              )
+              VALUES ($1, $2, 'agent', $3, $4, $5, $6::jsonb, now())
+              RETURNING
+                id, user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
+            `,
+            [user.id, channel, reply.agentId, reply.agentId, reply.text, JSON.stringify(replyMeta)]
+          );
+          agentResponse = mapRow(replyInsert.rows[0]);
+
+          await query(
+            `
+              INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
+              VALUES ($1, 'chat_sent', 'terminal', $2, 'info', $3::jsonb)
+            `,
+            [
+              user.id,
+              replyInsert.rows[0].id,
+              JSON.stringify({
+                channel,
+                senderKind: 'agent',
+                senderId: reply.agentId,
+                source: reply.source,
+              }),
+            ]
+          ).catch(() => undefined);
+        } catch (error) {
+          console.warn('[chat/messages/post] failed to persist agent response:', error);
+        }
+      }
+    }
+
+    return json({
+      success: true,
+      message: mapRow(insert.rows[0]),
+      agentResponse,
+    });
   } catch (error: any) {
     if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
@@ -113,3 +431,4 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     return json({ error: 'Failed to create chat message' }, { status: 500 });
   }
 };
+
