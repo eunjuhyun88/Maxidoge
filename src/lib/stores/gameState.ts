@@ -184,6 +184,10 @@ export function setView(view: ViewMode) {
   gameState.update(s => ({ ...s, currentView: view }));
 }
 
+/**
+ * @deprecated S-03: priceStore.simulatePriceJitter()를 사용할 것.
+ * 레거시 호환을 위해 유지하되, 실제 가격은 priceStore가 단일 소스.
+ */
 export function updatePrices() {
   gameState.update(s => {
     const jitter = () => 1 + (Math.random() - 0.5) * 0.0014;

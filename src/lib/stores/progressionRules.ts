@@ -7,7 +7,7 @@
 // constants.ts의 TIER_TABLE/getTierForLP와 완전 일치.
 
 import type { Tier } from '$lib/engine/types';
-import { TIER_TABLE, SPEC_UNLOCK_A, SPEC_UNLOCK_B, SPEC_UNLOCK_C } from '$lib/engine/constants';
+import { TIER_TABLE, SPEC_UNLOCK_A, SPEC_UNLOCK_B, SPEC_UNLOCK_C, getTierForLP } from '$lib/engine/constants';
 
 // ─── Progression State (계약 인터페이스) ─────────────────────
 export interface ProgressionState {
@@ -39,16 +39,10 @@ const TIER_PHASE_MAP: Record<Tier, number> = {
   MASTER: 5,
 };
 
-// ─── Core: LP → Tier (constants.ts와 동일) ───────────────────
+// ─── Core: LP → Tier ─────────────────────────────────────────
+// 단일 소스: constants.ts의 getTierForLP 사용. 래퍼만 유지 (호환).
 export function getTier(lp: number): { tier: Tier; level: number } {
-  const safeLp = Math.max(0, Math.floor(lp || 0));
-  if (safeLp >= 2200) return { tier: 'MASTER',  level: 1 };
-  if (safeLp >= 2000) return { tier: 'DIAMOND', level: 3 };
-  if (safeLp >= 1600) return { tier: 'DIAMOND', level: 2 };
-  if (safeLp >= 1200) return { tier: 'DIAMOND', level: 1 };
-  if (safeLp >= 600)  return { tier: 'GOLD',    level: 1 };
-  if (safeLp >= 200)  return { tier: 'SILVER',  level: 1 };
-  return { tier: 'BRONZE', level: 1 };
+  return getTierForLP(Math.max(0, Math.floor(lp || 0)));
 }
 
 // ─── Core: LP + matches → Phase (레거시 호환) ────────────────

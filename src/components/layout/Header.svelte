@@ -1,27 +1,19 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { gameState } from '$lib/stores/gameState';
   import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
   import { hydrateDomainStores } from '$lib/stores/hydration';
-  import { fetchPrices, subscribeMiniTicker } from '$lib/api/binance';
+  import { livePrices } from '$lib/stores/priceStore';
 
   $: state = $gameState;
   $: wallet = $walletStore;
   $: connected = $isWalletConnected;
+  $: liveP = $livePrices;
 
   // Derive active route from actual URL
   $: activePath = $page.url.pathname;
-
-  let wsCleanup: (() => void) | null = null;
-  function normalizePrice(price: number): number {
-    if (!Number.isFinite(price)) return 0;
-    const abs = Math.abs(price);
-    if (abs >= 1000) return Number(price.toFixed(2));
-    if (abs >= 1) return Number(price.toFixed(4));
-    return Number(price.toFixed(6));
-  }
 
   // Navigation items
   const NAV_ITEMS = [
@@ -32,57 +24,10 @@
     { path: '/passport', label: 'HOLDING', icon: '##' },
   ];
 
-  onMount(async () => {
+  onMount(() => {
     void hydrateDomainStores();
-
-    try {
-      const prices = await fetchPrices(['BTCUSDT', 'ETHUSDT', 'SOLUSDT']);
-      const btc = prices['BTCUSDT'] || state.prices.BTC;
-      const eth = prices['ETHUSDT'] || state.prices.ETH;
-      const sol = prices['SOLUSDT'] || state.prices.SOL;
-      gameState.update(s => ({
-        ...s,
-        prices: {
-          BTC: normalizePrice(btc),
-          ETH: normalizePrice(eth),
-          SOL: normalizePrice(sol)
-        },
-        bases: {
-          BTC: normalizePrice(btc),
-          ETH: normalizePrice(eth),
-          SOL: normalizePrice(sol)
-        }
-      }));
-    } catch (e) {
-      console.warn('[Header] Failed to fetch initial prices, using defaults');
-    }
-
-    try {
-      let _pendingPrices: Record<string, number> = {};
-      let _priceFlushTimer: ReturnType<typeof setTimeout> | null = null;
-      wsCleanup = subscribeMiniTicker(['BTCUSDT', 'ETHUSDT', 'SOLUSDT'], (update) => {
-        Object.assign(_pendingPrices, update);
-        if (_priceFlushTimer) return;
-        _priceFlushTimer = setTimeout(() => {
-          _priceFlushTimer = null;
-          const batch = _pendingPrices;
-          _pendingPrices = {};
-          gameState.update(s => {
-            const newPrices = { ...s.prices };
-            if (batch['BTCUSDT']) newPrices.BTC = normalizePrice(batch['BTCUSDT']);
-            if (batch['ETHUSDT']) newPrices.ETH = normalizePrice(batch['ETHUSDT']);
-            if (batch['SOLUSDT']) newPrices.SOL = normalizePrice(batch['SOLUSDT'] || s.prices.SOL);
-            return { ...s, prices: newPrices };
-          });
-        }, 350);
-      });
-    } catch (e) {
-      console.warn('[Header] WebSocket connection failed');
-    }
-  });
-
-  onDestroy(() => {
-    if (wsCleanup) wsCleanup();
+    // NOTE: WS 가격 구독은 +layout.svelte에서 전역으로 관리 (S-03)
+    // Header는 priceStore를 읽기만 함
   });
 
   function nav(path: string) {
@@ -113,7 +58,7 @@
   }
 
   $: selectedToken = state.pair.split('/')[0] || 'BTC';
-  $: selectedPrice = state.prices[selectedToken as keyof typeof state.prices] || state.prices.BTC;
+  $: selectedPrice = liveP[selectedToken] || liveP['BTC'] || state.prices.BTC;
   $: selectedBase = state.bases[selectedToken as keyof typeof state.bases] || state.bases.BTC;
   $: selectedPriceText = Number(selectedPrice || 0).toLocaleString('en-US', {
     minimumFractionDigits: selectedPrice >= 1000 ? 2 : 4,
