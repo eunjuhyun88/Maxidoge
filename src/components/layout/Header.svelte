@@ -6,6 +6,9 @@
   import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
   import { hydrateDomainStores } from '$lib/stores/hydration';
   import { livePrices } from '$lib/stores/priceStore';
+  import { updatePrice } from '$lib/stores/priceStore';
+  import { fetchPrice } from '$lib/api/binance';
+  import { TOKEN_MAP } from '$lib/data/tokens';
 
   $: state = $gameState;
   $: wallet = $walletStore;
@@ -24,10 +27,28 @@
     { path: '/passport', label: 'HOLDING', icon: '##' },
   ];
 
+  // ─── 페어 변경 시 priceStore에 없는 토큰 가격 자동 fetch ────
+  let _lastFetchedToken = '';
+  $: {
+    const token = state.pair.split('/')[0] || 'BTC';
+    if (token !== _lastFetchedToken && !(token in liveP)) {
+      _lastFetchedToken = token;
+      const tokDef = TOKEN_MAP.get(token);
+      if (tokDef) {
+        fetchPrice(tokDef.binanceSymbol).then(price => {
+          if (Number.isFinite(price) && price > 0) {
+            updatePrice(token, price, 'rest');
+          }
+        }).catch(() => {/* 실패 시 ChartPanel에서 kline 로드 후 업데이트됨 */});
+      }
+    }
+  }
+
   onMount(() => {
     void hydrateDomainStores();
     // NOTE: WS 가격 구독은 +layout.svelte에서 전역으로 관리 (S-03)
     // Header는 priceStore를 읽기만 함
+    // 페어 변경 시 위의 reactive block이 REST fetch 보완
   });
 
   function nav(path: string) {
@@ -58,12 +79,15 @@
   }
 
   $: selectedToken = state.pair.split('/')[0] || 'BTC';
-  $: selectedPrice = liveP[selectedToken] || liveP['BTC'] || state.prices.BTC;
+  // 선택된 토큰의 가격만 표시. 없으면 0 (BTC 가격으로 폴백하지 않음)
+  $: selectedPrice = liveP[selectedToken] || 0;
   $: selectedBase = state.bases[selectedToken as keyof typeof state.bases] || state.bases.BTC;
-  $: selectedPriceText = Number(selectedPrice || 0).toLocaleString('en-US', {
-    minimumFractionDigits: selectedPrice >= 1000 ? 2 : 4,
-    maximumFractionDigits: selectedPrice >= 1000 ? 2 : 4
-  });
+  $: selectedPriceText = selectedPrice > 0
+    ? Number(selectedPrice).toLocaleString('en-US', {
+        minimumFractionDigits: selectedPrice >= 1000 ? 2 : 4,
+        maximumFractionDigits: selectedPrice >= 1000 ? 2 : 4
+      })
+    : '---';
 </script>
 
 <nav id="nav">

@@ -982,6 +982,7 @@
 
   let _priceUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   let _pendingPrice: number | null = null;
+  let _pendingPairBase: string | null = null;
   function normalizeMarketPrice(price: number): number {
     if (!Number.isFinite(price)) return 0;
     const abs = Math.abs(price);
@@ -990,20 +991,32 @@
     return Number(price.toFixed(6));
   }
 
+  /** priceStore에 즉시 반영 (초기 로드 시 호출) */
+  function flushPriceUpdate(price: number, pairBase: string) {
+    const normalized = normalizeMarketPrice(price);
+    updatePrice(pairBase, normalized, 'rest');
+    gameState.update(s => ({
+      ...s,
+      prices: { ...s.prices, [pairBase]: normalized }
+    }));
+  }
+
+  /** WS 실시간 업데이트용 2초 스로틀 (pairBase도 함께 저장하여 클로저 버그 방지) */
   function throttledPriceUpdate(price: number, pairBase: string) {
     _pendingPrice = price;
+    _pendingPairBase = pairBase;
     if (_priceUpdateTimer) return;
     _priceUpdateTimer = setTimeout(() => {
-      if (_pendingPrice !== null) {
+      if (_pendingPrice !== null && _pendingPairBase !== null) {
         const normalized = normalizeMarketPrice(_pendingPrice!);
         // S-03: priceStore가 단일 소스, gameState는 레거시 호환
-        updatePrice(pairBase, normalized, 'ws');
+        updatePrice(_pendingPairBase!, normalized, 'ws');
         gameState.update(s => ({
           ...s,
-          prices: { ...s.prices, [pairBase]: normalized }
+          prices: { ...s.prices, [_pendingPairBase!]: normalized }
         }));
       }
-      _priceUpdateTimer = null; _pendingPrice = null;
+      _priceUpdateTimer = null; _pendingPrice = null; _pendingPairBase = null;
     }, 2000);
   }
 
@@ -1327,7 +1340,8 @@
         priceChange24h = ((lastKline.close - klines[len - 7].close) / klines[len - 7].close) * 100;
       }
 
-      throttledPriceUpdate(lastKline.close, pairBase);
+      // 초기 kline 로드 시 즉시 priceStore에 반영 (Header 즉시 업데이트)
+      flushPriceUpdate(lastKline.close, pairBase);
       dispatch('priceUpdate', { price: lastKline.close });
       chart.timeScale().fitContent();
 
