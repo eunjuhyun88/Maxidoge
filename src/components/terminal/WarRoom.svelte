@@ -16,6 +16,7 @@
     formatFunding
   } from '$lib/api/coinalyze';
   import { runWarRoomScan } from '$lib/engine/warroomScan';
+  import { runTerminalScan, getScanHistory } from '$lib/api/terminalApi';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import { createEventDispatcher } from 'svelte';
@@ -72,6 +73,7 @@
   let scanStep = '';
   let scanError = '';
   let scanStateHydrated = false;
+  let serverScanSynced = false;
 
   // ── Derivatives Data (real-time from Coinalyze) ──
   let derivOI: number | null = null;
@@ -365,6 +367,17 @@
       });
       scanError = '';
       scanStep = 'DONE';
+
+      // ── Server sync: persist scan results ──
+      serverScanSynced = false;
+      runTerminalScan(scan.pair, scan.timeframe)
+        .then(() => {
+          serverScanSynced = true;
+          console.log('[WarRoom] Scan persisted to server');
+        })
+        .catch(err => {
+          console.warn('[WarRoom] Server persistence failed (local scan still available):', err);
+        });
     } catch (err) {
       console.error('[WarRoom] Agent scan error:', err);
       scanError = err instanceof Error ? err.message : '스캔 중 오류가 발생했습니다.';
@@ -430,6 +443,17 @@
 
     fetchDerivativesData();
     derivRefreshTimer = setInterval(fetchDerivativesData, 30000);
+
+    // Load scan history from server
+    getScanHistory({ limit: 5 })
+      .then(res => {
+        if (res.records.length > 0) {
+          console.log(`[WarRoom] Loaded ${res.records.length} scan records from server`);
+        }
+      })
+      .catch(() => {
+        // Server history unavailable - that's fine, local scans still work
+      });
   });
 
   onDestroy(() => {
