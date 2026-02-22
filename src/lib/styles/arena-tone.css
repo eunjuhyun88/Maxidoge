@@ -648,3 +648,42 @@
 .mh-panel .mh-footer {
   color: var(--arena-text-dim) !important;
 }
+
+/* Chart footer */
+.arena-page .chart-footer {
+  border-top: 1px solid var(--arena-line-soft) !important;
+  background: linear-gradient(90deg, #0a1711, #09150f) !important;
+  color: var(--arena-text-dim) !important;
+}
+
+.arena-page .src-badge {
+  color: var(--arena-accent) !important;
+  font-weight: 800 !important;
+}
+
+.arena-page .src-ws {
+  color: var(--arena-good) !important;
+}
+
+.arena-page .footer-ind.vol {
+  color: #66cce6 !important;
+}
+
+.arena-page .footer-ind.rsi {
+  color: var(--arena-warn) !important;
+}
+
+/* Lobby footer */
+.arena-lobby-v3 .status-footer {
+  border-top: 1px solid var(--arena-line) !important;
+  background: rgba(8, 16, 12, 0.96) !important;
+  color: var(--arena-text-dim) !important;
+}
+
+.arena-lobby-v3 .online {
+  color: var(--arena-good) !important;
+}
+
+.arena-lobby-v3 .lat {
+  color: var(--arena-accent-2) !important;
+}

@@ -14,6 +14,7 @@
   $: phaseLabel = PHASE_LABELS[state.phase] || PHASE_LABELS.DRAFT;
   $: openPos = $openTradeCount;
   $: trackedSigs = $activeSignalCount;
+  $: finalDir = state.score >= 60 ? 'LONG' : 'SHORT';
 </script>
 
 <div id="bot">
@@ -50,13 +51,13 @@
     {/each}
     <span class="carrow" class:vis={state.running}>→</span>
     <div class="cscore" class:vis={state.running}>{state.score}</div>
-    <div class="cdir" class:vis={state.running}>LONG</div>
+    <div class="cdir" class:vis={state.running} class:long={finalDir === 'LONG'} class:short={finalDir === 'SHORT'}>{finalDir}</div>
   </div>
 
   <!-- Phase Badge + Feed -->
   {#if state.running}
     <div class="phase-badge" style="background:{phaseLabel.color}">
-      {phaseLabel.emoji} {phaseLabel.name}
+      {phaseLabel.name}
     </div>
     {#if feed.length > 0}
       <div class="feed-scroll">
@@ -86,15 +87,18 @@
   #bot {
     display: flex;
     align-items: center;
-    padding: 0 14px;
+    padding: 0 12px;
     gap: 6px;
-    border-top: 4px solid #000;
-    background: linear-gradient(90deg, #ffe600, #ffcc00);
+    border-top: 1px solid rgba(232, 150, 125, 0.34);
+    background:
+      radial-gradient(circle at 14% 120%, rgba(232, 150, 125, 0.12), transparent 38%),
+      radial-gradient(circle at 86% -20%, rgba(102, 204, 230, 0.08), transparent 36%),
+      linear-gradient(90deg, #0b1b13, #0a1711 48%, #09150f);
     z-index: 20;
     overflow: hidden;
-    color: #000;
-    box-shadow: 0 -3px 0 rgba(0,0,0,.2);
-    height: 54px;
+    color: #f0ede4;
+    box-shadow: 0 -8px 26px rgba(0, 0, 0, .35);
+    height: 52px;
     flex-shrink: 0;
   }
   /* Context badges */
@@ -111,21 +115,21 @@
     gap: 2px;
     padding: 3px 5px;
     border-radius: 6px;
-    border: 2px solid #000;
-    background: #fff;
+    border: 1px solid rgba(232, 150, 125, 0.34);
+    background: rgba(10, 22, 16, 0.86);
     font-family: var(--fm);
     font-size: 7px;
     font-weight: 900;
     cursor: pointer;
     transition: all .12s;
-    box-shadow: 1px 1px 0 #000;
-    color: #000;
+    box-shadow: none;
+    color: #f0ede4;
   }
   .ctx-badge:hover {
-    transform: translate(-1px, -1px);
-    box-shadow: 2px 2px 0 #000;
+    background: rgba(232, 150, 125, 0.16);
+    border-color: rgba(232, 150, 125, 0.52);
   }
-  .ctx-icon { font-size: 10px; }
+  .ctx-icon { font-size: 10px; opacity: .88; }
   .ctx-count {
     min-width: 12px;
     height: 12px;
@@ -135,52 +139,76 @@
     border-radius: 6px;
     font-size: 7px;
     font-weight: 900;
-    color: #fff;
+    color: #07130d;
     padding: 0 2px;
   }
-  .ctx-pos .ctx-count { background: #00aa44; }
-  .ctx-tracked .ctx-count { background: #ff8c3b; }
+  .ctx-pos .ctx-count { background: #00cc88; }
+  .ctx-tracked .ctx-count { background: #dcb970; }
 
   .chain { display: flex; align-items: center; gap: 3px; flex: 1; overflow: hidden; }
   .cslot {
     display: flex; align-items: center; gap: 3px; padding: 3px 6px; border-radius: 8px;
-    background: rgba(255,255,255,.4); border: 2px solid rgba(0,0,0,.1);
+    background: rgba(9, 20, 14, .86); border: 1px solid rgba(232, 150, 125, .22);
     font-size: 7px; font-family: var(--fm);
-    opacity: .4; transition: all .2s; white-space: nowrap; flex-shrink: 0;
+    opacity: .5; transition: all .2s; white-space: nowrap; flex-shrink: 0;
   }
-  .cslot.vis { opacity: 1; border-color: #000; background: #fff; box-shadow: 2px 2px 0 #000; }
+  .cslot.vis { opacity: 1; border-color: rgba(232, 150, 125, .44); background: rgba(11, 24, 17, .94); box-shadow: none; }
   .cslot .ci { font-size: 9px; }
-  .cslot .cn { font-weight: 900; letter-spacing: .5px; color: #000; }
+  .cslot .cn { font-weight: 900; letter-spacing: .5px; color: #f0ede4; }
   .cslot .cd { font-weight: 900; letter-spacing: .5px; margin-left: 2px; }
-  .cd.long { color: #00aa44; } .cd.short { color: #cc0033; }
-  .cslot .cc { font-size: 6px; color: #555; font-weight: 700; }
-  .carrow { color: #aaa; font-size: 9px; flex-shrink: 0; opacity: .3; transition: all .2s; }
-  .carrow.vis { opacity: 1; color: #000; font-weight: 900; }
+  .cd.long { color: #00cc88; } .cd.short { color: #ff5e7a; }
+  .cslot .cc { font-size: 6px; color: rgba(240, 237, 228, .74); font-weight: 700; }
+  .carrow { color: rgba(240, 237, 228, .45); font-size: 9px; flex-shrink: 0; opacity: .3; transition: all .2s; }
+  .carrow.vis { opacity: 1; color: rgba(240, 237, 228, .82); font-weight: 900; }
   .cscore {
     padding: 4px 8px; border-radius: 10px;
     font-family: var(--fd); font-size: 11px; font-weight: 900; letter-spacing: 1px;
     opacity: .3; transition: all .2s; flex-shrink: 0;
   }
-  .cscore.vis { opacity: 1; border: 2px solid #000; box-shadow: 2px 2px 0 #000; }
+  .cscore.vis {
+    opacity: 1;
+    color: #f0ede4;
+    border: 1px solid rgba(232, 150, 125, .42);
+    background: rgba(12, 27, 19, .92);
+    box-shadow: none;
+  }
   .cdir {
     padding: 3px 8px; border-radius: 10px;
     font-family: var(--fd); font-size: 9px; font-weight: 900; letter-spacing: 2px;
     opacity: .3; transition: all .2s; flex-shrink: 0;
   }
-  .cdir.vis { opacity: 1; border: 2px solid #000; box-shadow: 2px 2px 0 #000; }
-  .bstats { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 8px; font-family: var(--fm); color: #555; flex-shrink: 0; font-weight: 700; }
-  .bstats span { color: #000; font-weight: 900; }
+  .cdir.vis {
+    opacity: 1;
+    border: 1px solid rgba(232, 150, 125, .42);
+    box-shadow: none;
+  }
+  .cdir.long.vis { color: #00cc88; background: rgba(0, 204, 136, .12); border-color: rgba(0, 204, 136, .36); }
+  .cdir.short.vis { color: #ff5e7a; background: rgba(255, 94, 122, .14); border-color: rgba(255, 94, 122, .34); }
+  .bstats {
+    display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 8px;
+    font-family: var(--fm); color: rgba(240, 237, 228, .72); flex-shrink: 0; font-weight: 700;
+  }
+  .bstats span { color: #f0ede4; font-weight: 900; }
   .lpm { display: flex; align-items: center; gap: 4px; }
-  .lpt { width: 60px; height: 4px; border-radius: 3px; background: rgba(0,0,0,.1); border: 1px solid #000; }
-  .lpf { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #ff2d9b, #ff2d55); transition: width .5s; }
-  .lpv { font-size: 8px; color: #000; font-family: var(--fm); font-weight: 900; }
+  .lpt {
+    width: 60px; height: 4px; border-radius: 3px;
+    background: rgba(7, 15, 11, .9);
+    border: 1px solid rgba(232, 150, 125, .3);
+  }
+  .lpf {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #00cc88, #66cce6);
+    transition: width .5s;
+  }
+  .lpv { font-size: 8px; color: #e8967d; font-family: var(--fm); font-weight: 900; }
 
   /* Phase Badge */
   .phase-badge {
     padding: 3px 8px; border-radius: 6px;
     font-family: var(--fd); font-size: 7px; font-weight: 900;
-    letter-spacing: 1.5px; color: #fff;
-    border: 2px solid #000; box-shadow: 2px 2px 0 #000;
+    letter-spacing: 1.5px; color: #07130d;
+    border: 1px solid rgba(240, 237, 228, .32); box-shadow: none;
     white-space: nowrap; flex-shrink: 0;
     animation: phasePulse 3s ease infinite;
     will-change: opacity;
@@ -200,4 +228,24 @@
     animation: feedFadeIn .3s ease;
   }
   @keyframes feedFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  @media (max-width: 980px) {
+    #bot {
+      height: 50px;
+      padding: 0 10px;
+      gap: 5px;
+    }
+    .chain { display: none; }
+    .feed-scroll { max-width: 42vw; }
+  }
+
+  @media (max-width: 700px) {
+    .ctx-badges { gap: 2px; margin-right: 2px; }
+    .ctx-badge { padding: 2px 4px; }
+    .ctx-icon { font-size: 9px; }
+    .bstats { gap: 4px; font-size: 7px; }
+    .lpt { width: 46px; }
+    .phase-badge { font-size: 6px; letter-spacing: 1px; padding: 2px 6px; }
+    .feed-scroll { display: none; }
+  }
 </style>
