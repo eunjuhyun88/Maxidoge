@@ -1205,7 +1205,7 @@
             <div class="wr">
               <!-- State Reaction Emoji -->
               <div class="react">
-                {#if agState.state === 'walk'}🏃{:else if agState.state === 'think'}🤔{:else if agState.state === 'charge'}🔥{:else if agState.state === 'vote'}🗳️{:else if agState.state === 'jump'}💪{:else if agState.state === 'sad'}😢{:else if agState.state === 'alert'}⚡{/if}
+                {#if agState.state === 'walk'}SCOUT{:else if agState.state === 'think'}SYNC{:else if agState.state === 'charge'}PULSE{:else if agState.state === 'vote'}VOTE{:else if agState.state === 'jump'}BOOST{:else if agState.state === 'sad'}MISS{:else if agState.state === 'alert'}LOCK{/if}
               </div>
 
               <!-- Energy Aura (during charge/vote) -->
@@ -1256,7 +1256,7 @@
 
         <!-- Phase Display -->
         <div class="phase-display">
-          <div class="phase-emoji">{phaseLabel.emoji}</div>
+          <div class="phase-dot" style="background:{phaseLabel.color}"></div>
           <div class="phase-name" style="color:{phaseLabel.color}">{phaseLabel.name}</div>
           <div class="phase-timer">{state.timer > 0 ? Math.ceil(state.timer) + 's' : '--'}</div>
         </div>
@@ -1462,8 +1462,15 @@
     transition: all .15s;
   }
   .mh-toggle:hover { background: #ffe600; }
-  .chart-side { display: flex; flex-direction: column; background: #0a0a1a; overflow: hidden; border-right: 4px solid #000; position: relative; }
-  .arena-side { position: relative; overflow: hidden; background: radial-gradient(ellipse at center, #fff2a0 0%, #ffe600 40%, #ffcc00 80%, #ffaa00 100%); }
+  .chart-side { display: flex; flex-direction: column; background: #05060a; overflow: hidden; border-right: 2px solid #2f3f66; position: relative; }
+  .arena-side {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 45% 25%, rgba(122, 153, 255, .24), transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(255, 86, 149, .18), transparent 45%),
+      linear-gradient(180deg, #04070f 0%, #060b16 56%, #080f1b 100%);
+  }
 
   /* ═══════ HYPOTHESIS SIDEBAR ═══════ */
   .hypo-sidebar {
@@ -1508,102 +1515,110 @@
   .mbtn { padding: 6px 16px; border-radius: 16px; background: #ffe600; border: 3px solid #000; color: #000; font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
   .mbtn:hover { background: #ffcc00; }
 
-  /* Arena Background — Pop Art / Comic */
-  .sunburst {
-    position: absolute; inset: -80%; z-index: 0; pointer-events: none;
-    background: repeating-conic-gradient(
-      #ffe600 0deg 6deg, #ffcc00 6deg 12deg, #ffdd33 12deg 18deg, #ffd000 18deg 24deg
-    );
-    animation: sunSpin 90s linear infinite;
-    will-change: transform; contain: strict;
-    opacity: .35;
+  /* Arena Background — Retro Space + Collage */
+  .arena-texture {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    z-index: 0;
   }
-  @keyframes sunSpin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
-  .halftone {
-    position: absolute; inset: 0; z-index: 1; pointer-events: none;
-    background-image: radial-gradient(circle, rgba(0,0,0,.06) 2px, transparent 2px);
-    background-size: 12px 12px;
+  .arena-stars {
+    background-image: url('/arena/references/14-o.png');
+    opacity: .34;
+    mix-blend-mode: screen;
+    filter: saturate(1.1) contrast(1.12);
   }
-  /* Stage platform where agents stand */
-  .ground {
-    position: absolute; bottom: 0; left: 0; right: 0; height: 15%; z-index: 2; pointer-events: none;
-    background: linear-gradient(180deg, #ff8c00 0%, #e67300 40%, #cc5500 100%);
-    border-top: 5px solid #000;
-    box-shadow: inset 0 6px 0 rgba(255,255,255,.2), inset 0 -4px 12px rgba(0,0,0,.15);
+  .arena-rainbow {
+    background-image: url('/arena/references/03-o.png');
+    opacity: .44;
+    mix-blend-mode: screen;
+    filter: saturate(1.2) contrast(1.06);
   }
-  .ground::before {
-    content: 'MAXI⚡DOGE  ARENA';
-    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
-    font-family: var(--fc); font-size: 11px; font-weight: 900; letter-spacing: 6px;
-    color: rgba(255,255,255,.5); text-shadow: 2px 2px 0 rgba(0,0,0,.2);
+  .arena-grid {
+    background-image: url('/arena/references/02-o.png');
+    opacity: .16;
+    mix-blend-mode: lighten;
+    transform: scale(1.05);
+  }
+  .arena-doodle {
+    background-image: url('/arena/references/cs-robert-a1-o.png');
+    opacity: .18;
+    mix-blend-mode: soft-light;
+    filter: grayscale(.12) contrast(1.2);
+  }
+  .arena-vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background:
+      radial-gradient(circle at 50% 54%, transparent 18%, rgba(2, 7, 18, .4) 58%, rgba(1, 4, 12, .7) 100%),
+      linear-gradient(180deg, rgba(5, 8, 18, .04) 0%, rgba(1, 3, 11, .62) 100%);
+  }
+  .battle-floor {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    height: 14%;
+    border-top: 1px solid rgba(140, 176, 255, .34);
+    background:
+      linear-gradient(180deg, rgba(14, 18, 36, .2) 0%, rgba(7, 11, 24, .82) 35%, rgba(6, 10, 20, .95) 100%),
+      repeating-linear-gradient(90deg, rgba(106, 143, 255, .08) 0 1px, transparent 1px 46px);
+    backdrop-filter: blur(2px);
+  }
+  .battle-floor span {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--fd);
+    font-size: 8px;
+    letter-spacing: 4px;
+    color: rgba(177, 204, 255, .72);
+    text-transform: uppercase;
     white-space: nowrap;
   }
 
-  /* Comic Bursts — BOLD POP ART */
-  .comic-burst {
-    position: absolute; z-index: 3; pointer-events: none;
-    font-family: var(--fc); font-weight: 900; font-style: italic;
-    color: #fff; opacity: .85;
-    transform: rotate(var(--rot, -5deg));
-    animation: burstPop 3s ease-in-out infinite;
-    -webkit-text-stroke: 3px #000;
-    text-shadow: 4px 4px 0 #000, 0 0 20px rgba(255,200,0,.5);
-    filter: drop-shadow(3px 3px 0 rgba(0,0,0,.4));
-  }
-  .boom { font-size: 52px; --rot: -8deg; color: #ff3d5c; }
-  .pow { font-size: 44px; --rot: 5deg; color: #00ff88; }
-  .wow { font-size: 48px; --rot: -3deg; color: #ffe600; }
-  @keyframes burstPop { 0%,100% { transform: rotate(var(--rot, 0)) scale(1) } 50% { transform: rotate(var(--rot, 0)) scale(1.15) } }
-
-  /* Stickers — more visible */
-  .sticker { position: absolute; z-index: 2; pointer-events: none; opacity: .5; animation: stickerFloat 6s ease-in-out infinite; filter: drop-shadow(3px 3px 0 rgba(0,0,0,.3)); will-change: transform; contain: layout style; }
-  @keyframes stickerFloat { 0%,100% { transform: translateY(0) rotate(-8deg) scale(1) } 50% { transform: translateY(-18px) rotate(8deg) scale(1.1) } }
-
-  /* Rainbow Swirl Decorations */
-  .rainbow-swirl {
-    position: absolute; z-index: 2; pointer-events: none;
-    width: 140px; height: 140px;
-    border-radius: 50%;
-    background: conic-gradient(
-      #ff3d5c, #ff8c3b, #ffe600, #00ff88, #00d4ff, #a855f7, #ff3d5c
-    );
-    opacity: .35;
-    animation: swirlSpin 8s linear infinite;
-    filter: blur(3px);
-  }
-  .rainbow-swirl.tl { top: -30px; left: -30px; }
-  .rainbow-swirl.br { bottom: 12%; right: -30px; animation-direction: reverse; }
-  @keyframes swirlSpin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
-
-  /* Crypto coin float */
-  .crypto-coin {
-    position: absolute; z-index: 3; pointer-events: none;
-    font-size: 28px; font-weight: 900;
-    color: #fff;
-    text-shadow: 2px 2px 0 #000, 0 0 10px rgba(255,230,0,.6);
-    -webkit-text-stroke: 1.5px #000;
-    animation: coinFloat 5s ease-in-out infinite;
-    opacity: .6;
-  }
-  @keyframes coinFloat {
-    0%,100% { transform: translateY(0) rotate(-10deg) scale(1); }
-    50% { transform: translateY(-20px) rotate(10deg) scale(1.1); }
-  }
-
-  .zap { font-size: 36px; --rot: 8deg; color: #a855f7; }
-
   /* Data Sources */
   .dsrc { position: absolute; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; transform: translate(-50%, -50%); }
-  .dp { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: transparent; border: 2px solid rgba(0,0,0,.08); animation: dpPulse 2s ease infinite; will-change: transform, opacity; contain: strict; }
+  .dp { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: transparent; border: 1px solid rgba(146,181,255,.35); animation: dpPulse 2s ease infinite; will-change: transform, opacity; contain: strict; }
   @keyframes dpPulse { 0%,100% { transform: scale(1); opacity: .3 } 50% { transform: scale(1.3); opacity: 0 } }
-  .di { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: #fff; border: 3px solid; box-shadow: 4px 4px 0 #000; }
-  .dl { font-size: 7px; color: #000; letter-spacing: 2px; font-family: var(--fd); font-weight: 900; background: #fff; padding: 2px 6px; border-radius: 8px; border: 1px solid rgba(0,0,0,.2); }
+  .di {
+    width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px;
+    background: rgba(8,13,28,.86);
+    border: 2px solid;
+    box-shadow: 0 0 0 1px rgba(153,189,255,.28), 0 10px 18px rgba(0,0,0,.34);
+    backdrop-filter: blur(4px);
+  }
+  .dl {
+    font-size: 7px; color: #d7e9ff; letter-spacing: 2px; font-family: var(--fd); font-weight: 900;
+    background: rgba(7,12,26,.76); padding: 2px 6px; border-radius: 8px;
+    border: 1px solid rgba(152,188,255,.35);
+  }
 
   /* Council Table */
-  .ctable { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90px; height: 55px; border-radius: 50%; border: 3px dashed rgba(0,0,0,.15); background: rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; z-index: 4; transition: all .3s; }
-  .ctable.on { border-color: #000; border-style: solid; border-width: 4px; background: rgba(255,255,255,.2); box-shadow: 0 0 30px rgba(255,45,155,.2), 4px 4px 0 rgba(0,0,0,.3); }
-  .cl { font-size: 6px; color: rgba(0,0,0,.25); letter-spacing: 2px; font-family: var(--fd); font-weight: 900; }
-  .ctable.on .cl { color: #000; }
+  .ctable {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 108px; height: 58px; border-radius: 999px;
+    border: 1px dashed rgba(149,184,255,.45);
+    background: rgba(5,11,24,.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 4; transition: all .3s;
+    backdrop-filter: blur(3px);
+  }
+  .ctable.on {
+    border-color: rgba(152,193,255,.9);
+    border-style: solid;
+    background: rgba(7,13,28,.72);
+    box-shadow: 0 0 28px rgba(113, 160, 255, .35);
+  }
+  .cl { font-size: 7px; color: rgba(176, 201, 255, .56); letter-spacing: 3px; font-family: var(--fd); font-weight: 900; }
+  .ctable.on .cl { color: #dff1ff; }
 
   /* Agent Sprites */
   .ag {
@@ -1771,7 +1786,20 @@
     border: 3px solid #000; z-index: 3; text-shadow: 0 1px 0 #000;
     box-shadow: 2px 2px 0 #000;
   }
-  .ag .react { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 18px; z-index: 15; filter: drop-shadow(1px 1px 0 #000); }
+  .ag .react {
+    position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+    font-size: 6px; z-index: 15;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(130, 175, 255, .52);
+    background: rgba(4, 9, 20, .74);
+    color: #b8dbff;
+    letter-spacing: 1.5px;
+    font-family: var(--fd);
+    font-weight: 900;
+    text-transform: uppercase;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,.35));
+  }
   .ag .nm {
     font-size: 8px; font-weight: 900; letter-spacing: 2px; margin-top: 4px;
     font-family: var(--fd); background: #fff; padding: 2px 8px; border-radius: 8px;
@@ -1781,10 +1809,25 @@
   .ag .efill { height: 100%; border-radius: 2px; transition: width .3s; }
 
   /* Phase Display */
-  .phase-display { position: absolute; top: 8px; right: 8px; z-index: 15; background: #fff; border-radius: 12px; padding: 6px 14px; border: 3px solid #000; box-shadow: 3px 3px 0 #000; text-align: center; }
-  .phase-emoji { font-size: 14px; }
-  .phase-name { font-size: 11px; font-weight: 900; font-family: var(--fc); letter-spacing: 2px; }
-  .phase-timer { font-size: 9px; font-family: var(--fm); color: #666; font-weight: 700; }
+  .phase-display {
+    position: absolute; top: 8px; right: 8px; z-index: 15;
+    background: rgba(5, 10, 23, .82);
+    border-radius: 12px;
+    padding: 8px 14px;
+    border: 1px solid rgba(146,179,255,.58);
+    box-shadow: 0 10px 24px rgba(0,0,0,.4);
+    text-align: center;
+    backdrop-filter: blur(5px);
+  }
+  .phase-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    margin: 0 auto 6px;
+    box-shadow: 0 0 10px currentColor;
+  }
+  .phase-name { font-size: 10px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; text-transform: uppercase; }
+  .phase-timer { font-size: 9px; font-family: var(--fm); color: #8fb2ec; font-weight: 700; }
 
   /* Agent Decision Card (below sprite) */
   .ag-decision {
@@ -1823,10 +1866,18 @@
 
   /* Feed */
   .feed-panel { position: absolute; bottom: 14%; left: 8px; right: 8px; z-index: 14; max-height: 70px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
-  .feed-msg { display: flex; align-items: center; gap: 4px; font-size: 7px; font-family: var(--fm); background: rgba(255,255,255,.7); padding: 2px 6px; border-radius: 4px; backdrop-filter: blur(2px); }
+  .feed-msg {
+    display: flex; align-items: center; gap: 4px; font-size: 7px; font-family: var(--fm);
+    background: rgba(4, 9, 20, .74);
+    border: 1px solid rgba(141, 173, 255, .3);
+    color: #a9c8ff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    backdrop-filter: blur(5px);
+  }
   .feed-icon { font-size: 8px; }
   .feed-name { font-weight: 900; font-size: 7px; }
-  .feed-text { color: #333; flex: 1; }
+  .feed-text { color: #b9d4ff; flex: 1; }
   .feed-dir { font-size: 6px; padding: 1px 4px; border-radius: 4px; font-weight: 900; }
   .feed-dir.long { background: #00ff88; color: #000; }
   .feed-dir.short { background: #ff2d55; color: #fff; }
@@ -1980,8 +2031,24 @@
   @keyframes dogeUp { 0% { opacity: 1; transform: translateY(0) rotate(-5deg) scale(1); } 100% { opacity: 0; transform: translateY(-100px) rotate(15deg) scale(1.5); } }
 
   /* History */
-  .hist-btn { position: absolute; bottom: 14%; right: 8px; z-index: 16; padding: 4px 10px; border-radius: 8px; background: #fff; border: 2px solid #000; font-size: 8px; font-weight: 700; cursor: pointer; box-shadow: 2px 2px 0 #000; }
-  .hist-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 180px; z-index: 50; background: #fff; border-left: 4px solid #000; padding: 10px; overflow-y: auto; box-shadow: -4px 0 20px rgba(0,0,0,.2); }
+  .hist-btn {
+    position: absolute; bottom: 14%; right: 8px; z-index: 16;
+    padding: 4px 10px; border-radius: 8px;
+    background: rgba(5, 11, 24, .8);
+    border: 1px solid rgba(136, 171, 255, .5);
+    color: #bdd8ff;
+    font-size: 8px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 8px 18px rgba(0,0,0,.35);
+  }
+  .hist-panel {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 180px; z-index: 50;
+    background: rgba(6, 11, 24, .94);
+    border-left: 1px solid rgba(140, 174, 255, .42);
+    color: #d4e7ff;
+    padding: 10px; overflow-y: auto;
+    box-shadow: -6px 0 20px rgba(0,0,0,.4);
+    backdrop-filter: blur(4px);
+  }
   .hist-header { display: flex; align-items: center; justify-content: space-between; font-size: 9px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; margin-bottom: 8px; border-bottom: 2px solid #000; padding-bottom: 6px; }
   .hist-close { background: none; border: none; font-size: 14px; cursor: pointer; }
   .hitem { display: flex; align-items: center; gap: 4px; padding: 3px 0; border-bottom: 1px solid #eee; font-size: 8px; font-family: var(--fm); }
