@@ -9,6 +9,7 @@
     subscribeMiniTicker,
     type BinanceKline
   } from '$lib/api/binance';
+  import { updatePrice } from '$lib/stores/priceStore';
   import {
     CORE_TIMEFRAME_OPTIONS,
     normalizeTimeframe,
@@ -994,9 +995,12 @@
     if (_priceUpdateTimer) return;
     _priceUpdateTimer = setTimeout(() => {
       if (_pendingPrice !== null) {
+        const normalized = normalizeMarketPrice(_pendingPrice!);
+        // S-03: priceStore가 단일 소스, gameState는 레거시 호환
+        updatePrice(pairBase, normalized, 'ws');
         gameState.update(s => ({
           ...s,
-          prices: { ...s.prices, [pairBase]: normalizeMarketPrice(_pendingPrice!) }
+          prices: { ...s.prices, [pairBase]: normalized }
         }));
       }
       _priceUpdateTimer = null; _pendingPrice = null;
