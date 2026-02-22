@@ -220,7 +220,7 @@
         <div class="welcome-hero">
           <div class="welcome-doge">🐕</div>
           <div class="welcome-title">MAXI⚡DOGE</div>
-          <div class="welcome-sub">7 AI Agents. 1 Decision. Your Call.</div>
+          <div class="welcome-sub">8 AI Agents. 1 Decision. Your Call.</div>
         </div>
 
         <div class="welcome-features">
