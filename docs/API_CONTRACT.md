@@ -2,6 +2,7 @@
 
 작성일: 2026-02-22  
 목적: FE/BE 분리 개발을 위해 Arena/Live/Market API 계약을 고정한다.
+Doc index: `docs/README.md`
 
 ## 1. Conventions
 
@@ -161,12 +162,16 @@
 
 ## 2.4 POST `/api/arena/match/:id/hypothesis`
 
+`overrideMode` 정의:
+- `"AGENT_FOLLOW"`: 에이전트 합산 방향을 그대로 수용
+- `"USER_OVERRIDE"`: 유저가 에이전트와 다른 방향을 선택 (LP 보상에 영향 가능)
+
 요청:
 
 ```json
 {
   "direction": "LONG",
-  "overrideMode": "USER_OVERRIDE",
+  "overrideMode": "AGENT_FOLLOW",
   "entry": 68100.2,
   "tp": 69150.0,
   "sl": 67520.5,

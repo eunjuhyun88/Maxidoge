@@ -16,6 +16,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **S-02** | Progression 단일 규칙 확정 | `progressionStore` 신설 기준 계약 정의 (LP, matches, tier, unlockedSpecs) | ⬜ |
 | **S-03** | Price 계약 단일화 | `livePrice` 단일 스토어/이벤트 규약 정의 (심볼, 타임스탬프, source) | ⬜ |
 | **S-04** | Arena DraftSelection 계약 고정 | `{ agentId, specId, weight }[]` + 합계 100 검증 규칙 확정 | ⬜ |
+| **S-05** | Terminal Persistence Migration | `005_terminal_persistence.sql` (scan_runs/scan_signals/agent_chat_messages) | ⬜ |
 
 ### S-01 상세: Agent 브릿지 단일화
 - **변경 파일**: `src/lib/data/agents.ts`
@@ -67,6 +68,9 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **B-06** | progression 서버 반영 | 매치 결과 기준 LP/티어/해금 업데이트 일원화 | B-01, B-03 | ⬜ |
 | **B-07** | RAG memory | `memory.ts` + pgvector 검색/저장 연동 | B-03 | ⬜ |
 | **B-08** | 하위호환 어댑터 | 기존 `/api/matches`를 신규 arena API 내부 호출로 연결 | B-01 | ⬜ |
+| **B-09** | Terminal Scan API | `POST /api/terminal/scan` (warroomScan.ts 로직 서버 이전) | B-02, S-05 | ⬜ |
+| **B-10** | Terminal Chat API | 기존 `/api/chat/messages` 확장 (meta.mentionedAgent → 에이전트 응답 생성) | B-09 | ⬜ |
+| **B-11** | Market Data API | 뉴스(RSS)/이벤트(온체인)/플로우(스마트머니) 수집 API | — | ⬜ |
 
 ---
 
@@ -85,6 +89,9 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **F-06** | Arena 5-Phase 화면 정리 | ANALYSIS/HYPOTHESIS/BATTLE/RESULT를 agentPipeline 출력 기반으로 재구성 | F-04, B-03 | ⬜ |
 | **F-07** | WarRoom UI 분해 | WarRoom.svelte 렌더링 전용 축소 (현재 1142줄 → 목표 800 이하) | B-02 | ⬜ |
 | **F-08** | 가시성/UI 정리 | 인텔/채팅/지표바 접기·라벨·모바일 동선 최종 튜닝 | F-06, F-07 | ⬜ |
+| **F-09** | Store 전환 | localStorage primary → Supabase primary (quickTrade/tracked/scanTabs/chat) | B-09, B-10 | ⬜ |
+| **F-10** | 하드코딩 제거 | LIVE FEED/HEADLINES/EVENTS/FLOW → API fetch, chat 응답 → 스캔 컨텍스트 | B-09, B-10, B-11 | ⬜ |
+| **F-11** | 영속성 검증 | 새로고침/다른기기/오프라인 시 데이터 복원 확인 | F-09, F-10 | ⬜ |
 
 ---
 
@@ -92,19 +99,19 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 
 ```
 Phase 1: 계약 확정
-  S-01 → S-02 → S-03 → S-04
+  S-01 → S-02 → S-03 → S-04 → S-05
 
 Phase 2: 병렬 시작
-  BE: B-01 + B-02
+  BE: B-01 + B-02 + B-09 (Terminal Scan)
   FE: F-01 + F-03 (price display는 S-03 계약만 소비)
 
 Phase 3: 크리티컬 패스
-  BE: B-03 (pipeline)
+  BE: B-03 (pipeline) + B-10 (Chat) + B-11 (Market Data)
   FE: F-04 (Lobby) → F-05 (SquadConfig) → F-06 (Arena Phases)
 
 Phase 4: 마무리
   BE: B-05 + B-06 + B-07 + B-08
-  FE: F-07 + F-08
+  FE: F-07 + F-08 + F-09 (Store 전환) + F-10 (하드코딩 제거) + F-11 (영속성 검증)
 ```
 
 ---

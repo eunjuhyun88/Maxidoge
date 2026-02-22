@@ -2,6 +2,7 @@
 
 작성일: 2026-02-22  
 목표: 구현 전에 설계를 고정해 FE/BE 혼재 리팩토링을 방지한다.
+문서 진입점: `docs/README.md`
 
 ## 1. Scope
 
@@ -158,9 +159,9 @@
 ## 6. Branch and PR Policy
 
 브랜치:
-1. `codex/shared-*`
-2. `codex/be-*`
-3. `codex/fe-*`
+1. `codex/contract-*` — Shared 트랙
+2. `codex/be-*` — BE 트랙
+3. `codex/fe-*` — FE 트랙
 
 규칙:
 1. Shared 변경 먼저 merge

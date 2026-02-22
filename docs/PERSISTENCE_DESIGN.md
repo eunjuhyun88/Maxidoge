@@ -88,7 +88,7 @@ v3 변경: 현재 scanTabs는 same pair+tf면 탭 업데이트. Supabase에서�
 ```sql
 CREATE TABLE IF NOT EXISTS terminal_scan_signals (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  scan_id     uuid NOT NULL REFERENCES terminal_scan_runs(id) ON DELETE CASCADE ON DELETE CASCADE,
+  scan_id     uuid NOT NULL REFERENCES terminal_scan_runs(id) ON DELETE CASCADE,
   user_id     uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
 
   agent_id    text NOT NULL,           -- 'structure','flow','deriv','senti','macro'
@@ -127,6 +127,9 @@ CREATE TABLE IF NOT EXISTS agent_chat_messages (
   -- 스캔 연결 (스캔 완료 시 자동 생성된 메시지)
   scan_id     uuid REFERENCES terminal_scan_runs(id) ON DELETE SET NULL,
 
+  -- 응답 생성 소스 (에이전트 메시지만 해당)
+  response_source text CHECK (response_source IN ('scan_context', 'llm', 'fallback')),
+
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
@@ -135,6 +138,10 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_user
 ```
 
 v3 변경: 현재 하드코딩 랜덤 응답 → v3에서는 **실제 스캔 데이터 기반 응답** 또는 **LLM API 호출 응답**으로 전환. 응답 생성 소스(hardcoded/scan-based/llm)를 `response_source` 컬럼으로 추적 가능.
+
+> **주의**: 기존 `/api/chat/messages` 엔드포인트가 사용하는 `chat_messages` 테이블이 이미 존재할 수 있다.
+> `agent_chat_messages`는 **별도 테이블**로 생성하되, v3 전환 완료 후 기존 `chat_messages` 데이터를
+> 마이그레이션하거나 adapter로 연결한다. Migration 005에서 기존 테이블 존재 여부를 확인할 것.
 
 ### 3.4 기존 테이블 역할 확인 (이미 있는 것)
 
@@ -185,6 +192,8 @@ v3 변경: 현재 하드코딩 랜덤 응답 → v3에서는 **실제 스캔 데
   │  │   └─ fetchLiquidationHistory(pair)  → Coinalyze
   │  │
   │  ├─ BE: 5 에이전트 스코어링 (indicators.ts + trend.ts)
+  │  │   ※ Terminal 스캔은 5개 에이전트만 사용 (Arena는 8개 전체)
+  │  │   ※ VPA/ICT/VALUATION은 Arena Draft에서만 선택 가능
   │  │   ├─ STRUCTURE: SMA 20/60/120 + RSI + 24h변동
   │  │   ├─ FLOW: 볼륨비 + quoteVolume + momentum
   │  │   ├─ DERIV: funding + predFR + lsRatio + liqBias
@@ -211,9 +220,9 @@ v3 변경: 현재 하드코딩 랜덤 응답 → v3에서는 **실제 스캔 데
   │   └─ scanRunning = false
   │
   └─ 새로고침/다른기기:
-     ├─ GET /api/terminal/scans?limit=6  → 최근 6개 스캔 세션
-     ├─ GET /api/terminal/scans/:id/signals → 시그널 목록
-     └─ GET /api/terminal/chat?limit=100 → 최근 채팅 100개
+     ├─ GET /api/terminal/scan/history?limit=20  → 최근 스캔 히스토리
+     ├─ GET /api/terminal/scan/:id/signals → 시그널 목록
+     └─ GET /api/chat/messages?channel=terminal&limit=100 → 최근 채팅 100개
 ```
 
 ### 4.3 v3 에이전트 챗 플로우
@@ -228,8 +237,8 @@ v3:   @STRUCTURE 입력 → 서버 API → 실제 분석 기반 응답 → DB �
   │   chatMessages.push({ from:'YOU', text, isUser:true })
   │   isTyping = true
   │
-  ├─ API: POST /api/terminal/chat
-  │  │  Request: { text: "@STRUCTURE 현재 추세 어때?", mentionedAgent: "STRUCTURE" }
+  ├─ API: POST /api/chat/messages
+  │  │  Request: { channel: "terminal", senderKind: "user", message: "@STRUCTURE 현재 추세 어때?", meta: { mentionedAgent: "STRUCTURE", pair: "BTC/USDT", timeframe: "4h" } }
   │  │
   │  ├─ BE: 응답 생성
   │  │   ├─ Phase 1 (MVP): 스캔 컨텍스트 기반 템플릿 응답
@@ -346,10 +355,10 @@ v3:
   └─────────────────────────────────────────────────────┘
          │
          ▼ FE에서 조회 시
-  ┌─ API: GET /api/terminal/scans ──────────────────────┐
-  │ ?groupBy=pair,timeframe                              │
-  │ &limit=6 (최근 6개 pair+tf 그룹)                     │
-  │ &signalsPerGroup=60                                  │
+  ┌─ API: GET /api/terminal/scan/history ────────────────┐
+  │ ?pair=BTC/USDT&timeframe=4h                          │
+  │ &limit=20 (API_CONTRACT §9.2 기준)                   │
+  │                                                      │
   │                                                      │
   │ Response:                                            │
   │ [                                                    │
@@ -411,9 +420,9 @@ v3에서 바뀌는 것:
 | 데이터 | 현재 소스 | v3 소스 | API |
 |--------|----------|---------|-----|
 | 스캔 결과 | warroomScan.ts (FE) | POST /api/terminal/scan (BE) | 신규 |
-| 스캔 히스토리 | scanTabs localStorage | GET /api/terminal/scans | 신규 |
-| 채팅 메시지 | 세션변수 | GET /api/terminal/chat | 신규 |
-| 채팅 응답 | 하드코딩 랜덤 | POST /api/terminal/chat (스캔컨텍스트/LLM) | 신규 |
+| 스캔 히스토리 | scanTabs localStorage | GET /api/terminal/scan/history | 신규 |
+| 채팅 메시지 | 세션변수 | GET /api/chat/messages?channel=terminal | 기존 확장 |
+| 채팅 응답 | 하드코딩 랜덤 | POST /api/chat/messages (meta.mentionedAgent) | 기존 확장 |
 | 오픈 포지션 | quickTradeStore localStorage | GET /api/quick-trades | 기존 (primary 전환) |
 | 추적 시그널 | trackedSignalStore localStorage | GET /api/signals | 기존 (primary 전환) |
 | 뉴스 | HEADLINES 하드코딩 | GET /api/market/news | 신규 |
@@ -459,19 +468,25 @@ v3에서 바뀌는 것:
 ### 6.1 Terminal Scan API
 
 ```
-POST   /api/terminal/scan              ← 스캔 실행 (BE에서 계산)
-GET    /api/terminal/scans             ← 스캔 히스토리 (그룹핑)
-GET    /api/terminal/scans/:id         ← 단일 스캔 상세
-GET    /api/terminal/scans/:id/signals ← 스캔 내 시그널 목록
+POST   /api/terminal/scan                          ← 스캔 실행 (BE에서 계산)
+GET    /api/terminal/scan/history?pair=...&tf=...   ← 스캔 히스토리 (API_CONTRACT §9.2 기준)
+GET    /api/terminal/scan/:id                       ← 단일 스캔 상세
+GET    /api/terminal/scan/:id/signals               ← 스캔 내 시그널 목록
 ```
 
-### 6.2 Terminal Chat API
+> **경로 통일**: API_CONTRACT §9.2의 `/api/terminal/scan/history` 경로를 정본으로 사용한다.
+
+### 6.2 Terminal Chat API (기존 `/api/chat/messages` 확장)
 
 ```
-POST   /api/terminal/chat             ← 메시지 전송 + 응답 생성
-GET    /api/terminal/chat             ← 채팅 히스토리 (pagination)
-DELETE /api/terminal/chat             ← 채팅 초기화
+POST   /api/chat/messages             ← 메시지 전송 + 에이전트 응답 생성 (meta.mentionedAgent 포함 시)
+GET    /api/chat/messages?channel=terminal&limit=100  ← 채팅 히스토리 (pagination)
+DELETE /api/chat/messages?channel=terminal             ← 채팅 초기화
 ```
+
+> **통일 규칙**: API_CONTRACT §9.1의 기존 `/api/chat/messages` 엔드포인트를 그대로 사용한다.
+> v3 확장: POST 요청에 `meta.mentionedAgent`가 포함되면 서버가 에이전트 응답을 자동 생성하고,
+> 유저 메시지 + 에이전트 응답을 함께 `agent_chat_messages` 테이블에 저장한다.
 
 ### 6.3 Market Data API (하드코딩 대체)
 
@@ -553,12 +568,12 @@ async function sendChat(text: string) {
 Phase 1: 테이블 생성 (005_terminal_persistence.sql)
   → terminal_scan_runs, terminal_scan_signals, agent_chat_messages 생성
 
-Phase 2: API 구현 (B-08 ~ B-10)
+Phase 2: API 구현 (B-09 ~ B-11)
   → POST /api/terminal/scan (warroomScan.ts 로직을 서버로 이동)
-  → GET/POST /api/terminal/chat
-  → GET /api/terminal/scans
+  → POST /api/chat/messages 확장 (meta.mentionedAgent → 에이전트 응답 생성)
+  → GET /api/terminal/scan/history
 
-Phase 3: Store 전환 (F-08 ~ F-10)
+Phase 3: Store 전환 (F-09 ~ F-11)
   → quickTradeStore: localStorage primary → Supabase primary
   → trackedSignalStore: 동일 전환
   → scanTabs: 동일 전환
@@ -583,10 +598,10 @@ Phase 5: 정합성 검증
 
 | ID | Track | 작업 | 의존 |
 |----|-------|------|------|
-| B-08 | BE | Terminal Scan API (스캔 서버 이전) | B-02 (indicators) |
-| B-09 | BE | Terminal Chat API (컨텍스트 기반 응답) | B-08 |
-| B-10 | BE | Market Data API (뉴스/이벤트/플로우) | — |
-| F-08 | FE | Store 전환 (localStorage → Supabase primary) | B-08, B-09 |
-| F-09 | FE | 하드코딩 제거 (LIVE FEED, HEADLINES, chat 응답) | B-08, B-09, B-10 |
-| F-10 | FE | 영속성 검증 (새로고침/다른기기/오프라인) | F-08, F-09 |
 | S-05 | Shared | migration 005_terminal_persistence.sql | — |
+| B-09 | BE | Terminal Scan API (스캔 서버 이전) | B-02 (indicators), S-05 |
+| B-10 | BE | Terminal Chat API (기존 /api/chat/messages 확장, 컨텍스트 기반 응답) | B-09 |
+| B-11 | BE | Market Data API (뉴스/이벤트/플로우) | — |
+| F-09 | FE | Store 전환 (localStorage → Supabase primary) | B-09, B-10 |
+| F-10 | FE | 하드코딩 제거 (LIVE FEED, HEADLINES, chat 응답) | B-09, B-10, B-11 |
+| F-11 | FE | 영속성 검증 (새로고침/다른기기/오프라인) | F-09, F-10 |
