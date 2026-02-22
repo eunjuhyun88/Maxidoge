@@ -6,6 +6,7 @@ import { writable } from 'svelte/store';
 import { AGDEFS } from '$lib/data/agents';
 import { STORAGE_KEYS } from './storageKeys';
 import { fetchAgentStatsApi, updateAgentStatApi } from '$lib/api/agentStatsApi';
+import { resolveAgentLevelFromMatches } from './progressionRules';
 
 export interface AgentStats {
   level: number;
@@ -155,6 +156,46 @@ agentStats.subscribe(data => {
   }, 900);
 });
 
+function recalcFromMatches(ag: AgentStats) {
+  const count = Math.max(ag.matches.length, ag.wins + ag.losses);
+  const levelState = resolveAgentLevelFromMatches(count);
+  ag.level = levelState.level;
+  ag.xp = levelState.xp;
+  ag.xpMax = levelState.xpMax;
+
+  if (ag.matches.length > 0) {
+    const confSum = ag.matches.reduce((sum, m) => sum + Number(m.conf || 0), 0);
+    ag.avgConf = Math.round(confSum / ag.matches.length);
+    ag.bestConf = Math.max(ag.bestConf, ...ag.matches.map((m) => Number(m.conf || 0)));
+  }
+}
+
+export function recordAgentMatch(agentId: string, match: MatchRecord) {
+  agentStats.update((stats) => {
+    const ag = stats[agentId];
+    if (!ag) return stats;
+
+    if (match.win) {
+      ag.wins += 1;
+      ag.curStreak += 1;
+      ag.stamps.win += 1;
+      if (ag.curStreak > ag.bestStreak) {
+        ag.bestStreak = ag.curStreak;
+        ag.stamps.streak += 1;
+      }
+    } else {
+      ag.losses += 1;
+      ag.curStreak = 0;
+      ag.stamps.lose += 1;
+    }
+
+    ag.matches.push(match);
+    if (ag.matches.length > 60) ag.matches.shift();
+    recalcFromMatches(ag);
+    return { ...stats };
+  });
+}
+
 // Helpers
 export function addXP(agentId: string, amount: number) {
   agentStats.update(stats => {
@@ -166,6 +207,8 @@ export function addXP(agentId: string, amount: number) {
       ag.level++;
       ag.xpMax = Math.floor(ag.xpMax * 1.5);
     }
+    // Keep legacy helper compatible, but normalize to shared progression model when possible.
+    recalcFromMatches(ag);
     return { ...stats };
   });
 }

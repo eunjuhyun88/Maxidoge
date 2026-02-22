@@ -224,7 +224,7 @@ export function convertToTrade(signalId: string, currentPrice: number): string |
   if (typeof window !== 'undefined' && targetSignal && tradeId) {
     void convertSignalApi(signalId, {
       entry: currentPrice,
-      note: targetSignal.note,
+      note: (targetSignal as TrackedSignal).note,
     }).then((serverTrade) => {
       if (!serverTrade || !serverTrade.id) return;
       replaceQuickTradeId(tradeId as string, serverTrade.id, {

@@ -9,6 +9,7 @@ import {
   createSimulatedSignature,
   createSimulatedWalletConnection
 } from '$lib/wallet/simulatedWallet';
+import { resolveLifecyclePhase } from './progressionRules';
 
 export type UserTier = 'guest' | 'registered' | 'connected' | 'verified';
 
@@ -64,7 +65,13 @@ function loadWallet(): WalletState {
   if (typeof window === 'undefined') return defaultWallet;
   try {
     const saved = localStorage.getItem(STORAGE_KEYS.wallet);
-    if (saved) return { ...defaultWallet, ...JSON.parse(saved) };
+    if (saved) {
+      const merged = { ...defaultWallet, ...JSON.parse(saved) };
+      return {
+        ...merged,
+        phase: resolveLifecyclePhase(merged.matchesPlayed, merged.totalLP)
+      };
+    }
   } catch {}
   return defaultWallet;
 }
@@ -111,7 +118,7 @@ export function registerUser(email: string, nickname: string) {
     tier: w.connected ? 'connected' : 'registered',
     email,
     nickname,
-    phase: Math.max(w.phase, 1),
+    phase: Math.max(resolveLifecyclePhase(w.matchesPlayed, w.totalLP), 1),
     hasCompletedOnboarding: true,
     walletModalStep: 'profile'
   }));
@@ -122,7 +129,7 @@ export function completeDemoView() {
   walletStore.update(w => ({
     ...w,
     hasSeenDemo: true,
-    phase: Math.max(w.phase, 1),
+    phase: Math.max(resolveLifecyclePhase(w.matchesPlayed, w.totalLP), 1),
     walletModalStep: 'wallet-select'
   }));
 }
@@ -152,7 +159,7 @@ export function signMessage(signatureOverride?: string) {
     ...w,
     tier: w.email ? 'connected' : 'guest',
     signature,
-    phase: Math.max(w.phase, 2),
+    phase: Math.max(resolveLifecyclePhase(w.matchesPlayed, w.totalLP), 2),
     walletModalStep: 'connected'
   }));
 }
@@ -181,15 +188,11 @@ export function disconnectWallet() {
 }
 
 // Track match completion (for P2→P3 progression)
-export function recordMatch(won: boolean, lpDelta: number) {
+export function recordMatch(_won: boolean, lpDelta: number) {
   walletStore.update(w => {
     const matches = w.matchesPlayed + 1;
     const lp = w.totalLP + lpDelta;
-    let phase = w.phase;
-    // P3 progression: after 10 matches
-    if (matches >= 10 && phase < 3) phase = 3;
-    // P4 progression: after 50 matches
-    if (matches >= 50 && phase < 4) phase = 4;
+    const phase = resolveLifecyclePhase(matches, lp);
     return { ...w, matchesPlayed: matches, totalLP: lp, phase };
   });
 }

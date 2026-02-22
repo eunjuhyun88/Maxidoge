@@ -1,10 +1,10 @@
 <script lang="ts">
   import { gameState } from '$lib/stores/gameState';
-  import { agentStats, addXP } from '$lib/stores/agentData';
+  import { recordAgentMatch } from '$lib/stores/agentData';
   import { AGDEFS, SOURCES } from '$lib/data/agents';
   import { sfx } from '$lib/audio/sfx';
   import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_GATHER, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, DOGE_VOTE_LONG, DOGE_WORDS, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
-  import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, startGameLoop, resetPhaseInit } from '$lib/engine/gameLoop';
+  import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, resetPhaseInit, startAnalysisFromDraft } from '$lib/engine/gameLoop';
   import { calculateLP, determineConsensus } from '$lib/engine/scoring';
   import Lobby from '../../components/arena/Lobby.svelte';
   import ChartPanel from '../../components/arena/ChartPanel.svelte';
@@ -16,17 +16,14 @@
   import { addMatchRecord, type MatchRecord } from '$lib/stores/matchHistoryStore';
   import { matchRecordToReplayData, generateReplaySteps, createReplayState, type ReplayStep } from '$lib/engine/replay';
   import { addPnLEntry } from '$lib/stores/pnlStore';
-  import { deployFromConfig } from '$lib/engine/gameLoop';
   import type { Phase } from '$lib/stores/gameState';
   import { onMount, onDestroy } from 'svelte';
-  import { isWalletConnected, connectWallet } from '$lib/stores/walletStore';
+  import { isWalletConnected, connectWallet, recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
 
   $: walletOk = $isWalletConnected;
 
   $: state = $gameState;
-  $: stats = $agentStats;
-
   // Active agents for this match
   $: activeAgents = AGDEFS.filter(a => state.selectedAgents.includes(a.id));
 
@@ -39,7 +36,7 @@
   let floatingWords: Array<{id: number; text: string; color: string; x: number; dur: number}> = [];
   let feedMessages: Array<{icon: string; name: string; color: string; text: string; dir?: string; isNew?: boolean}> = [];
   let councilActive = false;
-  let phaseLabel = { name: 'STANDBY', color: '#888', emoji: '💤' };
+  let phaseLabel = PHASE_LABELS.DRAFT;
   let pvpVisible = false;
   let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = [];
   let historyOpen = false;
@@ -52,16 +49,15 @@
     pushFeedItem({
       agentId: 'system', agentName: 'SYSTEM', agentIcon: '🐕',
       agentColor: '#ffe600',
-      text: `Squad configured! Risk: ${e.detail.config.riskLevel.toUpperCase()} · TF: ${formatTimeframeLabel(e.detail.config.timeframe)} · Deploying...`,
-      phase: 'config'
+      text: `Squad configured! Risk: ${e.detail.config.riskLevel.toUpperCase()} · TF: ${formatTimeframeLabel(e.detail.config.timeframe)} · Analysis starting...`,
+      phase: 'DRAFT'
     });
-    // Advance from config → deploy
-    deployFromConfig();
+    startAnalysisFromDraft();
   }
 
   function onSquadBack() {
     // Go back to lobby
-    gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'standby' }));
+    gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'DRAFT', timer: 0 }));
   }
 
   // ═══════ HYPOTHESIS STATE ═══════
@@ -386,6 +382,15 @@
         tp: h.tp,
         sl: h.sl,
         rr: h.rr
+      },
+      pos: {
+        entry: h.entry,
+        tp: h.tp,
+        sl: h.sl,
+        dir: h.dir,
+        rr: h.rr,
+        size: 0,
+        lev: 0
       }
     }));
 
@@ -399,7 +404,7 @@
     addFeed('🐕', 'YOU', '#ffe600', `${h.dir} · TP $${h.tp.toLocaleString()} · SL $${h.sl.toLocaleString()} · R:R 1:${h.rr}`, h.dir);
     sfx.vote();
 
-    // Advance to scout phase
+    // HYPOTHESIS -> BATTLE
     advancePhase();
   }
 
@@ -442,24 +447,18 @@
 
   // ═══════ PHASE HANDLERS ═══════
   function onPhaseInit(phase: Phase) {
-    phaseLabel = PHASE_LABELS[phase] || PHASE_LABELS.standby;
+    phaseLabel = PHASE_LABELS[phase] || PHASE_LABELS.DRAFT;
 
     switch (phase) {
-      case 'deploy': initDeploy(); break;
-      case 'hypothesis': initHypothesis(); break;
-      case 'preview': initPreview(); break;
-      case 'scout': initScout(); break;
-      case 'gather': initGather(); break;
-      case 'council': initCouncil(); break;
-      case 'verdict': initVerdict(); break;
-      case 'compare': initCompare(); break;
-      case 'battle': initBattle(); break;
-      case 'result': initResult(); break;
-      case 'cooldown': initCooldown(); break;
+      case 'DRAFT': initDraft(); break;
+      case 'ANALYSIS': initAnalysis(); break;
+      case 'HYPOTHESIS': initHypothesis(); break;
+      case 'BATTLE': initBattle(); break;
+      case 'RESULT': initResult(); break;
     }
   }
 
-  function initDeploy() {
+  function initDraft() {
     findings = [];
     verdictVisible = false;
     resultVisible = false;
@@ -478,7 +477,7 @@
     initAgentStates();
     sfx.enter();
     dogeFloat();
-    addFeed('🐕', 'ARENA', '#ff2d9b', 'Match started! Agents deploying...');
+    addFeed('🐕', 'ARENA', '#ff2d9b', 'Draft locked. Preparing analysis...');
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
         setAgentState(ag.id, 'alert');
@@ -487,12 +486,19 @@
     });
   }
 
+  function initAnalysis() {
+    initScout();
+    initGather();
+    initCouncil();
+    addFeed('🔍', 'ANALYSIS', '#cc6600', '5-agent analysis pipeline running...');
+  }
+
   function initHypothesis() {
     // Show hypothesis panel for user prediction
     hypothesisVisible = true;
     floatDir = null; // Reset floating dir bar
     const speed = state.speed || 3;
-    hypothesisTimer = Math.round(45 / speed);
+    hypothesisTimer = Math.round(30 / speed);
 
     // Countdown timer
     if (hypothesisInterval) clearInterval(hypothesisInterval);
@@ -510,6 +516,15 @@
           hypothesis: {
             dir: 'NEUTRAL', conf: 1, tags: new Set(), tf: '1h', vmode: 'tpsl', closeN: 3,
             entry: price, tp: price * 1.02, sl: price * 0.985, rr: 1.3
+          },
+          pos: {
+            entry: price,
+            tp: price * 1.02,
+            sl: price * 0.985,
+            dir: 'NEUTRAL',
+            rr: 1.3,
+            size: 0,
+            lev: 0
           }
         }));
         showChartPosition = true;
@@ -522,7 +537,7 @@
       }
     }, 1000);
 
-    addFeed('🐕', 'ARENA', '#9900cc', 'YOUR CALL? Pick direction, set TP/SL!');
+    addFeed('🐕', 'ARENA', '#9900cc', 'HYPOTHESIS: pick direction and set TP/SL.');
 
     // Agents go into think state
     activeAgents.forEach((ag, i) => {
@@ -754,9 +769,20 @@
     });
 
     // Simulate TP/SL hit
-    const pos = state.pos;
+    const fallbackPos = state.hypothesis
+      ? {
+        entry: state.hypothesis.entry,
+        tp: state.hypothesis.tp,
+        sl: state.hypothesis.sl,
+        dir: state.hypothesis.dir,
+        rr: state.hypothesis.rr,
+        size: 0,
+        lev: 0
+      }
+      : null;
+    const pos = state.pos || fallbackPos;
     if (!pos) {
-      gameState.update(s => ({ ...s, battleResult: null }));
+      gameState.update(s => ({ ...s, battleResult: null, running: false }));
       setTimeout(() => advancePhase(), 3000);
       return;
     }
@@ -809,17 +835,15 @@
       lp: Math.max(0, s.lp + lpChange)
     }));
 
-    // Update agent stats
+    // Update progression (wallet + per-agent)
+    recordWalletMatch(win, lpChange);
     activeAgents.forEach(ag => {
-      agentStats.update(all => {
-        const d = all[ag.id];
-        if (!d) return all;
-        if (win) { d.wins++; d.curStreak++; if (d.curStreak > d.bestStreak) { d.bestStreak = d.curStreak; d.stamps.streak++; } d.stamps.win++; }
-        else { d.losses++; d.curStreak = 0; d.stamps.lose++; }
-        d.matches.push({ matchN: state.matchN + 1, dir: ag.dir, conf: ag.conf, win, lp: lpChange });
-        if (d.matches.length > 30) d.matches.shift();
-        addXP(ag.id, win ? 25 : 5);
-        return { ...all };
+      recordAgentMatch(ag.id, {
+        matchN: state.matchN + 1,
+        dir: ag.dir,
+        conf: ag.conf,
+        win,
+        lp: lpChange
       });
     });
 
@@ -877,6 +901,7 @@
       win ? `WIN! +${lpChange} LP [${resultTag}]` : `LOSE [${resultTag}] ${lpChange} LP`);
 
     setTimeout(() => { pvpVisible = true; }, 1500);
+    gameState.update((s) => ({ ...s, running: false, timer: 0 }));
   }
 
   function initCooldown() {
@@ -903,7 +928,7 @@
     floatDir = null;
     showChartPosition = false;
     if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
-    gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'standby' }));
+    gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'DRAFT', timer: 0 }));
   }
 
   function playAgain() {
@@ -941,7 +966,7 @@
         <div class="wg-icon">🔗</div>
         <div class="wg-title">CONNECT WALLET</div>
         <div class="wg-sub">Connect your wallet to access the Arena and start trading battles</div>
-        <button class="wg-btn" on:click={connectWallet}>
+        <button class="wg-btn" on:click={() => connectWallet()}>
           <span>⚡</span> CONNECT WALLET
         </button>
         <div class="wg-hint">Supported: MetaMask · WalletConnect · Coinbase</div>
@@ -951,7 +976,7 @@
 
   {#if state.inLobby}
     <Lobby />
-  {:else if state.phase === 'config'}
+  {:else if state.phase === 'DRAFT'}
     <SquadConfig selectedAgents={state.selectedAgents} on:deploy={onSquadDeploy} on:back={onSquadBack} />
   {:else}
     <!-- Match History Toggle -->

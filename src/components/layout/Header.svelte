@@ -6,7 +6,6 @@
   import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
   import { hydrateDomainStores } from '$lib/stores/hydration';
   import { fetchPrices, subscribeMiniTicker } from '$lib/api/binance';
-  import { formatTimeframeLabel } from '$lib/utils/timeframe';
 
   $: state = $gameState;
   $: wallet = $walletStore;
@@ -16,6 +15,13 @@
   $: activePath = $page.url.pathname;
 
   let wsCleanup: (() => void) | null = null;
+  function normalizePrice(price: number): number {
+    if (!Number.isFinite(price)) return 0;
+    const abs = Math.abs(price);
+    if (abs >= 1000) return Number(price.toFixed(2));
+    if (abs >= 1) return Number(price.toFixed(4));
+    return Number(price.toFixed(6));
+  }
 
   // Navigation items
   const NAV_ITEMS = [
@@ -36,8 +42,16 @@
       const sol = prices['SOLUSDT'] || state.prices.SOL;
       gameState.update(s => ({
         ...s,
-        prices: { BTC: Math.round(btc), ETH: Math.round(eth), SOL: +sol.toFixed(2) },
-        bases: { BTC: Math.round(btc), ETH: Math.round(eth), SOL: +sol.toFixed(2) }
+        prices: {
+          BTC: normalizePrice(btc),
+          ETH: normalizePrice(eth),
+          SOL: normalizePrice(sol)
+        },
+        bases: {
+          BTC: normalizePrice(btc),
+          ETH: normalizePrice(eth),
+          SOL: normalizePrice(sol)
+        }
       }));
     } catch (e) {
       console.warn('[Header] Failed to fetch initial prices, using defaults');
@@ -55,9 +69,9 @@
           _pendingPrices = {};
           gameState.update(s => {
             const newPrices = { ...s.prices };
-            if (batch['BTCUSDT']) newPrices.BTC = Math.round(batch['BTCUSDT']);
-            if (batch['ETHUSDT']) newPrices.ETH = Math.round(batch['ETHUSDT']);
-            if (batch['SOLUSDT']) newPrices.SOL = +(batch['SOLUSDT'] || s.prices.SOL).toFixed(2);
+            if (batch['BTCUSDT']) newPrices.BTC = normalizePrice(batch['BTCUSDT']);
+            if (batch['ETHUSDT']) newPrices.ETH = normalizePrice(batch['ETHUSDT']);
+            if (batch['SOLUSDT']) newPrices.SOL = normalizePrice(batch['SOLUSDT'] || s.prices.SOL);
             return { ...s, prices: newPrices };
           });
         }, 350);
@@ -101,6 +115,10 @@
   $: selectedToken = state.pair.split('/')[0] || 'BTC';
   $: selectedPrice = state.prices[selectedToken as keyof typeof state.prices] || state.prices.BTC;
   $: selectedBase = state.bases[selectedToken as keyof typeof state.bases] || state.bases.BTC;
+  $: selectedPriceText = Number(selectedPrice || 0).toLocaleString('en-US', {
+    minimumFractionDigits: selectedPrice >= 1000 ? 2 : 4,
+    maximumFractionDigits: selectedPrice >= 1000 ? 2 : 4
+  });
 </script>
 
 <nav id="nav">
@@ -116,7 +134,7 @@
 
   <div class="selected-ticker">
     <span class="st-pair">{state.pair}</span>
-    <span class="st-price">${Math.round(selectedPrice).toLocaleString()}</span>
+    <span class="st-price">${selectedPriceText}</span>
   </div>
 
   <div class="nav-sep"></div>

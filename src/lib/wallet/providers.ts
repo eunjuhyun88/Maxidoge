@@ -207,7 +207,7 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
     throw new Error('Coinbase Wallet SDK initialization failed.');
   }
 
-  if (!provider || typeof provider.request !== 'function') {
+  if (!provider || typeof (provider as Record<string, unknown>).request !== 'function') {
     throw new Error('Coinbase Wallet provider could not be created.');
   }
 

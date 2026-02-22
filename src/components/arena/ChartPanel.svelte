@@ -1,7 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { gameState } from '$lib/stores/gameState';
-  import { fetchKlines, subscribeKlines, pairToSymbol, type BinanceKline } from '$lib/api/binance';
+  import {
+    fetch24hr,
+    fetchKlines,
+    pairToSymbol,
+    subscribeKlines,
+    subscribeMiniTicker,
+    type BinanceKline
+  } from '$lib/api/binance';
   import {
     CORE_TIMEFRAME_OPTIONS,
     normalizeTimeframe,
@@ -13,6 +20,10 @@
 
   const dispatch = createEventDispatcher<{
     scanrequest: { source: 'chart-bar'; pair: string; timeframe: string };
+    priceUpdate: { price: number };
+    dragTP: { price: number };
+    dragSL: { price: number };
+    dragEntry: { price: number };
   }>();
 
   let chartContainer: HTMLDivElement;
@@ -21,6 +32,7 @@
   let volumeSeries: any;
   let cleanup: (() => void) | null = null;
   let wsCleanup: (() => void) | null = null;
+  let priceWsCleanup: (() => void) | null = null;
 
   // ═══ Indicator Series ═══
   let ma7Series: any;
@@ -969,12 +981,23 @@
 
   let _priceUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   let _pendingPrice: number | null = null;
+  function normalizeMarketPrice(price: number): number {
+    if (!Number.isFinite(price)) return 0;
+    const abs = Math.abs(price);
+    if (abs >= 1000) return Number(price.toFixed(2));
+    if (abs >= 1) return Number(price.toFixed(4));
+    return Number(price.toFixed(6));
+  }
+
   function throttledPriceUpdate(price: number, pairBase: string) {
     _pendingPrice = price;
     if (_priceUpdateTimer) return;
     _priceUpdateTimer = setTimeout(() => {
       if (_pendingPrice !== null) {
-        gameState.update(s => ({ ...s, prices: { ...s.prices, [pairBase]: Math.round(_pendingPrice!) } }));
+        gameState.update(s => ({
+          ...s,
+          prices: { ...s.prices, [pairBase]: normalizeMarketPrice(_pendingPrice!) }
+        }));
       }
       _priceUpdateTimer = null; _pendingPrice = null;
     }, 2000);
@@ -1183,6 +1206,7 @@
         ro.disconnect();
         window.removeEventListener('keydown', onKeyDown);
         if (wsCleanup) wsCleanup();
+        if (priceWsCleanup) priceWsCleanup();
         clearPositionLines();
         destroyTradingView();
         if (chart) chart.remove();
@@ -1241,13 +1265,17 @@
     if (!series || !volumeSeries || !chart) return;
     const sym = overrideSymbol || symbol;
     const intv = overrideInterval || interval;
+    const pairBase = (state.pair.split('/')[0] || 'BTC').toUpperCase();
     _currentSymbol = sym;
     _currentInterval = intv;
     _noMoreHistory = false;
     isLoading = true; error = '';
 
     try {
-      const klines = await fetchKlines(sym, intv, 1000);
+      const [klines, ticker24] = await Promise.all([
+        fetchKlines(sym, intv, 1000),
+        fetch24hr(sym).catch(() => null)
+      ]);
       if (!series || !chart) return;
       if (klines.length === 0) { error = 'No data received'; isLoading = false; return; }
 
@@ -1289,14 +1317,22 @@
       const lastKline = klines[len - 1];
       latestVolume = lastKline.volume;
       livePrice = lastKline.close;
-      if (len > 6) priceChange24h = ((lastKline.close - klines[len - 7].close) / klines[len - 7].close) * 100;
+      if (ticker24 && Number.isFinite(Number(ticker24.priceChangePercent))) {
+        priceChange24h = Number(ticker24.priceChangePercent);
+      } else if (len > 6) {
+        priceChange24h = ((lastKline.close - klines[len - 7].close) / klines[len - 7].close) * 100;
+      }
 
-      throttledPriceUpdate(lastKline.close, state.pair.split('/')[0]);
+      throttledPriceUpdate(lastKline.close, pairBase);
       dispatch('priceUpdate', { price: lastKline.close });
       chart.timeScale().fitContent();
 
       // ═══ WebSocket real-time ═══
       if (wsCleanup) wsCleanup();
+      if (priceWsCleanup) {
+        priceWsCleanup();
+        priceWsCleanup = null;
+      }
       wsCleanup = subscribeKlines(sym, intv, (kline: BinanceKline) => {
         if (!series) return;
 
@@ -1354,8 +1390,17 @@
 
         livePrice = kline.close;
         latestVolume = kline.volume;
-        throttledPriceUpdate(kline.close, state.pair.split('/')[0]);
+        throttledPriceUpdate(kline.close, pairBase);
         dispatch('priceUpdate', { price: kline.close });
+      });
+
+      // Keep displayed price synced to trade ticker (closer match with TradingView quote).
+      priceWsCleanup = subscribeMiniTicker([sym], (update) => {
+        const tick = update[sym];
+        if (!Number.isFinite(tick) || tick <= 0) return;
+        livePrice = tick;
+        throttledPriceUpdate(tick, pairBase);
+        dispatch('priceUpdate', { price: tick });
       });
 
       isLoading = false;
@@ -1363,7 +1408,11 @@
       console.error('[ChartPanel] API error:', e);
       error = `API Error: ${e.message || 'Failed'}`;
       isLoading = false;
-      loadFallbackData();
+      if (klineCache.length === 0) {
+        const pairBase = (state.pair.split('/')[0] || 'BTC') as keyof typeof state.prices;
+        const fallback = state.prices[pairBase] || state.prices.BTC;
+        if (Number.isFinite(fallback) && fallback > 0) livePrice = fallback;
+      }
     }
   }
 
@@ -1432,6 +1481,7 @@
     unbindGlobalDrawingMouseUp();
     if (cleanup) cleanup();
     if (wsCleanup) wsCleanup();
+    if (priceWsCleanup) priceWsCleanup();
     destroyTradingView();
   });
 </script>
@@ -1718,11 +1768,10 @@
       <span class="pos-active">{posDir || 'POS'}</span>
     {/if}
     <span class="agent-feed-text">
-      {#if state.phase === 'scout'}SCANNING...
-      {:else if state.phase === 'gather'}GATHERING...
-      {:else if state.phase === 'council'}DEBATING...
-      {:else if state.phase === 'verdict'}CONSENSUS...
-      {:else if state.phase === 'battle'}BATTLE...
+      {#if state.phase === 'ANALYSIS'}SCANNING...
+      {:else if state.phase === 'HYPOTHESIS'}HYPOTHESIS...
+      {:else if state.phase === 'BATTLE'}BATTLE...
+      {:else if state.phase === 'RESULT'}RESULT...
       {:else}●
       {/if}
     </span>

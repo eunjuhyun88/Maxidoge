@@ -73,9 +73,9 @@ export const AGENT_SIGNALS: AgentSignal[] = [
   { id: 'senti-btc', agentId: 'senti', icon: '💜', name: 'SENTI', color: '#8b5cf6', token: 'BTC', pair: 'BTC/USDT', vote: 'neutral', conf: 55, time: '14:20',
     text: 'Social +42% surge but mixed direction. F&G 28 Fear zone. 5 KOL bearish calls. NEUTRAL bias.',
     src: 'LUNAR:BTC:VOL/FG', entry: 68200, tp: 69800, sl: 66800 },
-  { id: 'guardian-btc', agentId: 'guardian', icon: '🛡', name: 'GUARDIAN', color: '#ff3d5c', token: 'BTC', pair: 'BTC/USDT', vote: 'short', conf: 72, time: '14:21',
-    text: '4/5 SHORT consensus. Historical zone: 3/4 past cases succeeded (avg +11.2%). Entry Score 72.',
-    src: 'CONTEXT:ZONE:72', entry: 68200, tp: 66100, sl: 69500 },
+  { id: 'macro-btc', agentId: 'macro', icon: '🌍', name: 'MACRO', color: '#f43f5e', token: 'BTC', pair: 'BTC/USDT', vote: 'short', conf: 72, time: '14:21',
+    text: 'DXY risk-off + elevated funding suggests reflexive downside. Regime score favors defensive SHORT bias.',
+    src: 'MACRO:REGIME', entry: 68200, tp: 66100, sl: 69500 },
 
   // ── ETH Signals ──
   { id: 'structure-eth', agentId: 'structure', icon: '⚡', name: 'STRUCTURE', color: '#3b9eff', token: 'ETH', pair: 'ETH/USDT', vote: 'long', conf: 78, time: '14:22',
@@ -90,9 +90,9 @@ export const AGENT_SIGNALS: AgentSignal[] = [
   { id: 'senti-eth', agentId: 'senti', icon: '💜', name: 'SENTI', color: '#8b5cf6', token: 'ETH', pair: 'ETH/USDT', vote: 'long', conf: 72, time: '14:26',
     text: 'ETH sentiment turning bullish. Pectra upgrade narrative. KOL mentions +120% 48h. F&G 42.',
     src: 'LUNAR:ETH:VOL/FG', entry: 1972, tp: 2080, sl: 1925 },
-  { id: 'guardian-eth', agentId: 'guardian', icon: '🛡', name: 'GUARDIAN', color: '#ff3d5c', token: 'ETH', pair: 'ETH/USDT', vote: 'long', conf: 70, time: '14:27',
-    text: '4/5 LONG consensus. Risk acceptable. ETH/BTC ratio at key support. Entry Score 70.',
-    src: 'CONTEXT:ZONE:70', entry: 1972, tp: 2050, sl: 1920 },
+  { id: 'macro-eth', agentId: 'macro', icon: '🌍', name: 'MACRO', color: '#f43f5e', token: 'ETH', pair: 'ETH/USDT', vote: 'long', conf: 70, time: '14:27',
+    text: 'Risk-on macro pocket with softer dollar and improving breadth supports ETH continuation scenario.',
+    src: 'MACRO:REGIME', entry: 1972, tp: 2050, sl: 1920 },
 
   // ── SOL Signals ──
   { id: 'structure-sol', agentId: 'structure', icon: '⚡', name: 'STRUCTURE', color: '#3b9eff', token: 'SOL', pair: 'SOL/USDT', vote: 'long', conf: 80, time: '14:28',
@@ -107,9 +107,9 @@ export const AGENT_SIGNALS: AgentSignal[] = [
   { id: 'senti-sol', agentId: 'senti', icon: '💜', name: 'SENTI', color: '#8b5cf6', token: 'SOL', pair: 'SOL/USDT', vote: 'long', conf: 76, time: '14:32',
     text: 'SOL narrative strongest in market. Firedancer hype. Social dominance 18%. Extremely bullish.',
     src: 'LUNAR:SOL:VOL/FG', entry: 85, tp: 95, sl: 80 },
-  { id: 'guardian-sol', agentId: 'guardian', icon: '🛡', name: 'GUARDIAN', color: '#ff3d5c', token: 'SOL', pair: 'SOL/USDT', vote: 'long', conf: 73, time: '14:33',
-    text: '4/5 LONG consensus. High conviction setup. SOL outperforming BTC and ETH. Entry Score 73.',
-    src: 'CONTEXT:ZONE:73', entry: 85, tp: 92, sl: 81 },
+  { id: 'macro-sol', agentId: 'macro', icon: '🌍', name: 'MACRO', color: '#f43f5e', token: 'SOL', pair: 'SOL/USDT', vote: 'long', conf: 73, time: '14:33',
+    text: 'High-beta regime remains supportive while liquidity expands. SOL relative strength keeps upside bias.',
+    src: 'MACRO:REGIME', entry: 85, tp: 92, sl: 81 },
 ];
 
 export function getSignalsByToken(token: string | 'ALL'): AgentSignal[] {

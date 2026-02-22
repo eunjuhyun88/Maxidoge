@@ -1,3 +1,4 @@
+// @ts-expect-error — pg ships without built-in types; install @types/pg to remove this
 import pg from 'pg';
 import { env } from '$env/dynamic/private';
 

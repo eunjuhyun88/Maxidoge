@@ -1,74 +1,169 @@
 <script lang="ts">
-  import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
+  import { CHARACTER_ART } from '$lib/data/agents';
+  import { AGENT_POOL } from '$lib/engine/agents';
+  import type { AgentId } from '$lib/engine/types';
   import { agentStats, hydrateAgentStats } from '$lib/stores/agentData';
-  import { gameState } from '$lib/stores/gameState';
   import { matchHistoryStore } from '$lib/stores/matchHistoryStore';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import EmptyState from '../../components/shared/EmptyState.svelte';
   import ContextBanner from '../../components/shared/ContextBanner.svelte';
 
+  type SortBy = 'wilson' | 'accuracy' | 'sample' | 'calibration';
+  type Period = '7d' | '30d' | 'all';
+  type VoteSnapshot = {
+    matchN: number;
+    dir: string;
+    conf: number;
+    win: boolean;
+    timestamp: number;
+    pair: string;
+  };
+  type OracleRow = {
+    agentId: string;
+    engineId: AgentId;
+    name: string;
+    nameKR: string;
+    icon: string;
+    color: string;
+    role: string;
+    specialty: string[];
+    finding: { title: string; detail: string };
+    abilities: Record<string, number>;
+    level: number;
+    xp: number;
+    sample: number;
+    wins: number;
+    losses: number;
+    accuracy: number;
+    wilson: number;
+    ciLow: number;
+    ciHigh: number;
+    calibration: number;
+    spec: string;
+    recentVotes: VoteSnapshot[];
+  };
+
   $: stats = $agentStats;
-  $: state = $gameState;
   $: records = $matchHistoryStore.records;
 
-  let sortBy = 'accuracy';
-  let period: '7d' | '30d' | 'all' = 'all';
-  let selectedAgent: (typeof AGDEFS[0] & { level: number; xp: number; accuracy: number; sample: number; wins: number; losses: number; recentVotes: any[] }) | null = null;
+  let sortBy: SortBy = 'wilson';
+  let period: Period = 'all';
+  let selectedAgent: OracleRow | null = null;
+
+  function inferMarketDirection(record: (typeof records)[number]): 'LONG' | 'SHORT' | null {
+    const userDir = String(record.hypothesis?.dir || '').toUpperCase();
+    if (userDir !== 'LONG' && userDir !== 'SHORT') return null;
+    if (record.win) return userDir as 'LONG' | 'SHORT';
+    return userDir === 'LONG' ? 'SHORT' : 'LONG';
+  }
+
+  function wilsonInterval(wins: number, total: number, z = 1.96) {
+    if (total <= 0) return { lower: 0, upper: 0 };
+    const p = wins / total;
+    const z2 = z * z;
+    const denom = 1 + z2 / total;
+    const center = (p + z2 / (2 * total)) / denom;
+    const margin = (z / denom) * Math.sqrt((p * (1 - p) + z2 / (4 * total)) / total);
+    return {
+      lower: Math.max(0, center - margin),
+      upper: Math.min(1, center + margin)
+    };
+  }
 
   // Filter records by period
   $: filteredRecords = (() => {
     const now = Date.now();
-    if (period === '7d') return records.filter(r => now - r.timestamp < 7 * 86400000);
-    if (period === '30d') return records.filter(r => now - r.timestamp < 30 * 86400000);
+    if (period === '7d') return records.filter((r) => now - r.timestamp < 7 * 86400000);
+    if (period === '30d') return records.filter((r) => now - r.timestamp < 30 * 86400000);
     return records;
   })();
 
-  // Calculate agent accuracy from match data
-  $: oracleData = AGDEFS.map(ag => {
-    const s = stats[ag.id] || { level: 1, xp: 0 };
+  // v3 Oracle: Wilson score + calibration based ranking.
+  $: oracleData = (Object.values(AGENT_POOL) as Array<(typeof AGENT_POOL)[AgentId]>).map((agent) => {
+    const statKey = agent.id.toLowerCase();
+    const s = stats[statKey] || { level: 1, xp: 0 };
     let wins = 0;
     let total = 0;
-    let recentVotes: Array<{ matchN: number; dir: string; conf: number; win: boolean; timestamp: number }> = [];
+    let calibrationErrorSum = 0;
+    let recentVotes: VoteSnapshot[] = [];
 
     for (const r of filteredRecords) {
-      if (r.agentVotes) {
-        const vote = r.agentVotes.find(v => v.agentId === ag.id);
-        if (vote) {
-          total++;
-          const agentWon = (vote.dir === 'LONG' && r.win) || (vote.dir === 'SHORT' && !r.win);
-          if (agentWon) wins++;
-          recentVotes.push({
-            matchN: r.matchN,
-            dir: vote.dir,
-            conf: vote.conf,
-            win: agentWon,
-            timestamp: r.timestamp,
-          });
-        }
-      }
+      if (!r.agentVotes || r.agentVotes.length === 0) continue;
+      const vote = r.agentVotes.find((v) => String(v.agentId).toUpperCase() === agent.id);
+      if (!vote) continue;
+
+      const marketDir = inferMarketDirection(r);
+      if (!marketDir) continue;
+
+      total++;
+      const voteDir = String(vote.dir).toUpperCase();
+      const agentWon = voteDir === marketDir;
+      if (agentWon) wins++;
+
+      const conf = Number(vote.conf || 0);
+      const p = Math.max(0, Math.min(1, conf / 100));
+      calibrationErrorSum += Math.abs(p - (agentWon ? 1 : 0));
+
+      recentVotes.push({
+        matchN: r.matchN,
+        dir: voteDir,
+        conf,
+        win: agentWon,
+        timestamp: r.timestamp,
+        pair: String((r as any).pair || '—')
+      });
     }
 
-    const accuracy = total > 0 ? Math.round((wins / total) * 100) : ag.conf;
+    const accuracy = total > 0 ? Math.round((wins / total) * 100) : 0;
+    const ci = wilsonInterval(wins, total);
+    const calibration = total > 0
+      ? Math.round((1 - calibrationErrorSum / total) * 100)
+      : 0;
 
     return {
-      ...ag,
+      agentId: statKey,
+      engineId: agent.id,
+      name: agent.name,
+      nameKR: agent.nameKR,
+      icon: agent.icon,
+      color: agent.color,
+      role: agent.role,
+      specialty: agent.factors.slice(0, 3).map((f) => f.name),
+      finding: {
+        title: `${agent.name} Signal Model`,
+        detail: agent.descriptionKR
+      },
+      abilities: {
+        analysis: 70,
+        accuracy: Math.max(35, accuracy),
+        speed: 65,
+        instinct: 60
+      },
       level: s.level || 1,
       xp: s.xp || 0,
-      accuracy,
       sample: total,
       wins,
       losses: total - wins,
-      recentVotes: recentVotes.slice(0, 5),
-    };
+      accuracy,
+      wilson: Math.round(ci.lower * 100),
+      ciLow: Math.round(ci.lower * 100),
+      ciHigh: Math.round(ci.upper * 100),
+      calibration,
+      spec: 'BASE',
+      recentVotes: recentVotes.slice(0, 8),
+    } satisfies OracleRow;
   }).sort((a, b) => {
+    if (sortBy === 'wilson') return b.wilson - a.wilson;
     if (sortBy === 'accuracy') return b.accuracy - a.accuracy;
-    if (sortBy === 'level') return b.level - a.level;
     if (sortBy === 'sample') return b.sample - a.sample;
-    return b.conf - a.conf;
+    if (sortBy === 'calibration') return b.calibration - a.calibration;
+    return b.wilson - a.wilson;
   });
 
-  function selectAgent(ag: typeof oracleData[0]) {
+  $: consistentRows = oracleData.filter((row) => row.sample >= 5 && row.wilson >= 55);
+
+  function selectAgent(ag: OracleRow) {
     selectedAgent = ag;
   }
 
@@ -94,10 +189,10 @@
     <div class="oh-bg"></div>
     <div class="oh-content">
       <h1 class="oh-title">ORACLE</h1>
-      <p class="oh-sub">Agent accuracy rankings from real match data</p>
+      <p class="oh-sub">8-agent Wilson leaderboard from Arena match outcomes</p>
       <div class="oh-stats">
         <span class="oh-stat">{filteredRecords.length} MATCHES</span>
-        <span class="oh-stat">{oracleData.filter(a => a.accuracy >= 70).length} AGENTS 70%+</span>
+        <span class="oh-stat">{consistentRows.length} CONSISTENT (N≥5)</span>
       </div>
     </div>
   </div>
@@ -107,13 +202,13 @@
     <div class="control-group">
       <span class="ctrl-label">PERIOD:</span>
       {#each [['7d', '7D'], ['30d', '30D'], ['all', 'ALL']] as [key, label]}
-        <button class="ctrl-btn" class:active={period === key} on:click={() => period = key}>{label}</button>
+        <button class="ctrl-btn" class:active={period === key} on:click={() => period = key as typeof period}>{label}</button>
       {/each}
     </div>
     <div class="control-group">
       <span class="ctrl-label">SORT:</span>
-      {#each [['accuracy', 'ACCURACY'], ['level', 'LEVEL'], ['sample', 'MATCHES'], ['conf', 'CONFIDENCE']] as [key, label]}
-        <button class="ctrl-btn" class:active={sortBy === key} on:click={() => sortBy = key}>{label}</button>
+      {#each [['wilson', 'WILSON'], ['accuracy', 'ACCURACY'], ['sample', 'SAMPLE'], ['calibration', 'CALIBRATION']] as [key, label]}
+        <button class="ctrl-btn" class:active={sortBy === key} on:click={() => sortBy = key as SortBy}>{label}</button>
       {/each}
     </div>
   </div>
@@ -134,8 +229,10 @@
       <div class="ot-header">
         <span class="ot-rank">#</span>
         <span class="ot-agent">AGENT</span>
+        <span class="ot-col">WILSON</span>
         <span class="ot-col">ACCURACY</span>
-        <span class="ot-col">W/L</span>
+        <span class="ot-col">95% CI</span>
+        <span class="ot-col">SAMPLE</span>
         <span class="ot-col">LEVEL</span>
         <span class="ot-col">SPECIALTY</span>
         <span class="ot-col">CALIBRATION</span>
@@ -144,28 +241,27 @@
         <button class="ot-row" on:click={() => selectAgent(ag)}>
           <span class="ot-rank rank-{i+1}">{i+1}</span>
           <div class="ot-agent">
-            {#if ag.img?.def}
-              <img src={ag.img.def} alt={ag.name} class="ot-img" />
-            {:else}
-              <span class="ot-icon">{ag.icon}</span>
-            {/if}
+            <span class="ot-icon">{ag.icon}</span>
             <div>
-              <div class="ot-name" style="color:{ag.color}">{ag.name}</div>
+              <div class="ot-name" style="color:{ag.color}">{ag.name} [{ag.spec}]</div>
               <div class="ot-role">{ag.nameKR} · {ag.role}</div>
             </div>
           </div>
+          <span class="ot-col ot-accuracy" style="color:{ag.wilson >= 60 ? 'var(--grn)' : ag.wilson >= 50 ? 'var(--yel)' : 'var(--red)'}">
+            {ag.wilson}%
+          </span>
           <span class="ot-col ot-accuracy" style="color:{ag.accuracy >= 70 ? 'var(--grn)' : ag.accuracy >= 50 ? 'var(--yel)' : 'var(--red)'}">
             {ag.accuracy}%
-            {#if ag.sample > 0}<span class="ot-sample">({ag.sample})</span>{/if}
           </span>
           <span class="ot-col ot-wl">
-            <span style="color:var(--grn)">{ag.wins}</span>/<span style="color:var(--red)">{ag.losses}</span>
+            {ag.ciLow}-{ag.ciHigh}
           </span>
+          <span class="ot-col ot-wl">{ag.sample}</span>
           <span class="ot-col ot-level">Lv.{ag.level}</span>
           <span class="ot-col ot-spec">{ag.specialty[0]}</span>
           <div class="ot-col ot-cal-wrap">
-            <div class="cal-bar"><div class="cal-fill" style="width:{ag.accuracy}%"></div></div>
-            <span class="cal-num">{ag.accuracy}%</span>
+            <div class="cal-bar"><div class="cal-fill" style="width:{ag.calibration}%"></div></div>
+            <span class="cal-num">{ag.calibration}%</span>
           </div>
         </button>
       {/each}
@@ -180,14 +276,12 @@
       <div class="agent-detail" on:click|stopPropagation>
         <button class="close-btn" on:click={() => selectedAgent = null}>✕</button>
         <div class="ad-header" style="border-color:{selectedAgent.color}">
-          {#if selectedAgent.img?.def}
-            <img src={selectedAgent.img.def} alt={selectedAgent.name} class="ad-img" />
-          {/if}
+          <div class="ot-icon" style="font-size:32px">{selectedAgent.icon}</div>
           <div class="ad-info">
-            <div class="ad-name" style="color:{selectedAgent.color}">{selectedAgent.icon} {selectedAgent.name}</div>
+            <div class="ad-name" style="color:{selectedAgent.color}">{selectedAgent.name} [{selectedAgent.spec}]</div>
             <div class="ad-role">{selectedAgent.nameKR} · {selectedAgent.role}</div>
             <div class="ad-accuracy" style="color:{selectedAgent.accuracy >= 70 ? 'var(--grn)' : 'var(--yel)'}">
-              {selectedAgent.accuracy}% Accuracy · {selectedAgent.sample} matches
+              Wilson {selectedAgent.wilson}% · Accuracy {selectedAgent.accuracy}% · {selectedAgent.sample} matches
             </div>
           </div>
         </div>
@@ -302,13 +396,13 @@
   /* Table */
   .oracle-table { padding: 0 16px 16px; }
   .ot-header {
-    display: grid; grid-template-columns: 30px 1.5fr .8fr .6fr .6fr 1.2fr 1fr;
+    display: grid; grid-template-columns: 30px 1.5fr .75fr .75fr .75fr .6fr .6fr 1.2fr 1fr;
     gap: 6px; padding: 8px 10px;
     border-bottom: 2px solid rgba(139,92,246,.3);
     font-family: var(--fd); font-size: 7px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.3);
   }
   .ot-row {
-    display: grid; grid-template-columns: 30px 1.5fr .8fr .6fr .6fr 1.2fr 1fr;
+    display: grid; grid-template-columns: 30px 1.5fr .75fr .75fr .75fr .6fr .6fr 1.2fr 1fr;
     gap: 6px; align-items: center; padding: 8px 10px;
     border-bottom: 1px solid rgba(255,255,255,.04);
     cursor: pointer; transition: background .15s;

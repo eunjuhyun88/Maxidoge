@@ -6,7 +6,6 @@
   import { incrementTrackedSignals } from '$lib/stores/userProfileStore';
   import { notifySignalTracked } from '$lib/stores/notificationStore';
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
-  import { fetch24hr, fetchKlines, pairToSymbol, type BinanceKline } from '$lib/api/binance';
   import {
     fetchCurrentOI,
     fetchCurrentFunding,
@@ -16,6 +15,7 @@
     formatOI,
     formatFunding
   } from '$lib/api/coinalyze';
+  import { runWarRoomScan } from '$lib/engine/warroomScan';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import { createEventDispatcher } from 'svelte';
@@ -59,13 +59,6 @@
 
   const dispatch = createEventDispatcher<WarRoomEvents>();
 
-  const AGENT_META = {
-    structure: { icon: 'STR', name: 'STRUCTURE', color: '#3b9eff' },
-    flow: { icon: 'FLOW', name: 'FLOW', color: '#00e68a' },
-    deriv: { icon: 'DER', name: 'DERIV', color: '#ff8c3b' },
-    senti: { icon: 'SENT', name: 'SENTI', color: '#8b5cf6' },
-    guardian: { icon: 'SAFE', name: 'GUARDIAN', color: '#ff3d5c' }
-  } as const;
   const SCAN_STATE_STORAGE_KEY = 'maxidoge.warroom.scanstate.v1';
   const MAX_SCAN_TABS = 6;
   const MAX_SIGNALS_PER_TAB = 60;
@@ -175,10 +168,6 @@
   })();
   $: trackedCount = $activeSignalCount;
 
-  function clamp(value: number, min: number, max: number) {
-    return Math.max(min, Math.min(max, value));
-  }
-
   function roundPrice(value: number): number {
     if (!Number.isFinite(value)) return 0;
     if (Math.abs(value) >= 1000) return Math.round(value);
@@ -190,89 +179,6 @@
     if (!Number.isFinite(price)) return '$0';
     if (Math.abs(price) >= 1000) return '$' + price.toLocaleString();
     return '$' + price.toFixed(price >= 100 ? 2 : 4);
-  }
-
-  function fmtCompact(value: number): string {
-    if (!Number.isFinite(value)) return '0';
-    const abs = Math.abs(value);
-    if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
-    if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
-    if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-    return value.toFixed(0);
-  }
-
-  function fmtSignedPct(value: number, decimals = 2): string {
-    if (!Number.isFinite(value)) return '0.00%';
-    const sign = value > 0 ? '+' : '';
-    return `${sign}${value.toFixed(decimals)}%`;
-  }
-
-  function computeSMA(values: number[], period: number): number | null {
-    if (values.length < period) return null;
-    const slice = values.slice(-period);
-    return slice.reduce((sum, v) => sum + v, 0) / period;
-  }
-
-  function computeRSI(values: number[], period = 14): number | null {
-    if (values.length < period + 1) return null;
-    let avgGain = 0;
-    let avgLoss = 0;
-    for (let i = 1; i <= period; i++) {
-      const delta = values[i] - values[i - 1];
-      if (delta > 0) avgGain += delta;
-      else avgLoss -= delta;
-    }
-    avgGain /= period;
-    avgLoss /= period;
-    for (let i = period + 1; i < values.length; i++) {
-      const delta = values[i] - values[i - 1];
-      avgGain = (avgGain * (period - 1) + Math.max(delta, 0)) / period;
-      avgLoss = (avgLoss * (period - 1) + Math.max(-delta, 0)) / period;
-    }
-    if (avgLoss === 0) return 100;
-    const rs = avgGain / avgLoss;
-    return 100 - 100 / (1 + rs);
-  }
-
-  function computeAtrPct(klines: BinanceKline[], period = 14): number | null {
-    if (klines.length < period + 1) return null;
-    const range = klines.slice(-(period + 1));
-    let totalTR = 0;
-    for (let i = 1; i < range.length; i++) {
-      const prevClose = range[i - 1].close;
-      const cur = range[i];
-      const tr = Math.max(
-        cur.high - cur.low,
-        Math.abs(cur.high - prevClose),
-        Math.abs(cur.low - prevClose)
-      );
-      totalTR += tr;
-    }
-    const atr = totalTR / period;
-    const lastClose = range[range.length - 1].close;
-    if (!Number.isFinite(lastClose) || lastClose <= 0) return null;
-    return (atr / lastClose) * 100;
-  }
-
-  function scoreToVote(score: number, neutralBand = 0.12): AgentSignal['vote'] {
-    if (score > neutralBand) return 'long';
-    if (score < -neutralBand) return 'short';
-    return 'neutral';
-  }
-
-  function scoreToConfidence(score: number, base = 58): number {
-    const conf = base + Math.abs(score) * 30;
-    return Math.round(clamp(conf, 45, 95));
-  }
-
-  function buildTradePlan(entry: number, vote: AgentSignal['vote'], score: number, atrPct: number | null) {
-    const baseDir = vote === 'neutral' ? (score >= 0 ? 'long' : 'short') : vote;
-    const riskPct = atrPct != null ? clamp((atrPct / 100) * 0.9, 0.0035, 0.03) : 0.008;
-    const rr = vote === 'neutral' ? 1.35 : 1.8;
-    const risk = Math.max(entry * riskPct, entry * 0.0035);
-    const sl = baseDir === 'long' ? roundPrice(entry - risk) : roundPrice(entry + risk);
-    const tp = baseDir === 'long' ? roundPrice(entry + risk * rr) : roundPrice(entry - risk * rr);
-    return { entry: roundPrice(entry), tp, sl };
   }
 
   function activateScanTab(id: string) {
@@ -415,289 +321,47 @@
     scanRunning = true;
     scanQueued = false;
     scanError = '';
-    scanStep = 'STRUCTURE · loading candles';
+    scanStep = 'ANALYSIS · loading market data';
 
     const pair = currentPair || 'BTC/USDT';
     const timeframe = String(currentTF || '4h');
-    const token = (pair.split('/')[0] || 'BTC').toUpperCase();
-    const symbol = pairToSymbol(pair);
 
     try {
-      const [klinesRes, tickerRes] = await Promise.allSettled([
-        fetchKlines(symbol, timeframe, 240),
-        fetch24hr(symbol)
-      ]);
-      if (klinesRes.status !== 'fulfilled') {
-        throw new Error('캔들 데이터 로드에 실패했습니다.');
-      }
-      const klines = klinesRes.value;
-      const ticker = tickerRes.status === 'fulfilled'
-        ? tickerRes.value
-        : { priceChangePercent: '0', quoteVolume: '0' };
-
-      if (!Array.isArray(klines) || klines.length < 60) {
-        throw new Error('캔들 데이터가 부족해서 스캔을 완료할 수 없습니다.');
-      }
-
-      scanStep = 'DERIV · funding / oi / liquidations';
-      const [oiRaw, fundingRaw, predFundingRaw, lsRaw, liqRaw] = await Promise.allSettled([
-        fetchCurrentOI(pair),
-        fetchCurrentFunding(pair),
-        fetchPredictedFunding(pair),
-        fetchLSRatioHistory(pair, timeframe, 24),
-        fetchLiquidationHistory(pair, timeframe, 24)
-      ]);
-
-      const now = Date.now();
-      const timeLabel = new Date(now).toTimeString().slice(0, 5);
-      const scanRunId = `${now}-${Math.floor(Math.random() * 1_000_000).toString(16)}`;
-      const latest = klines[klines.length - 1];
-      const closes = klines.map((k) => k.close);
-
-      const latestClose = latest.close;
-      const latestVolume = latest.volume;
-      const avgVolume20 = klines.slice(-20).reduce((sum, k) => sum + k.volume, 0) / Math.max(1, Math.min(20, klines.length));
-      const volumeRatio = avgVolume20 > 0 ? latestVolume / avgVolume20 : 1;
-      const rsi14 = computeRSI(closes, 14);
-      const sma20 = computeSMA(closes, 20);
-      const sma60 = computeSMA(closes, 60);
-      const sma120 = computeSMA(closes, 120);
-      const atrPct = computeAtrPct(klines, 14);
-
-      const change24 = Number(ticker.priceChangePercent || 0);
-      const quoteVolume24 = Number(ticker.quoteVolume || 0);
-      const oi = oiRaw.status === 'fulfilled' && oiRaw.value ? oiRaw.value.value : null;
-      const funding = fundingRaw.status === 'fulfilled' && fundingRaw.value ? fundingRaw.value.value : null;
-      const predFunding = predFundingRaw.status === 'fulfilled' && predFundingRaw.value ? predFundingRaw.value.value : null;
-      const lsRatio = lsRaw.status === 'fulfilled' && lsRaw.value.length > 0 ? lsRaw.value[lsRaw.value.length - 1].value : null;
-      const liqLong = liqRaw.status === 'fulfilled' && liqRaw.value.length > 0
-        ? liqRaw.value.reduce((sum, d) => sum + d.long, 0)
-        : 0;
-      const liqShort = liqRaw.status === 'fulfilled' && liqRaw.value.length > 0
-        ? liqRaw.value.reduce((sum, d) => sum + d.short, 0)
-        : 0;
-
-      scanStep = 'COUNCIL · synthesizing agent outputs';
-
-      let structureScore = 0;
-      if (sma20 != null) structureScore += latestClose >= sma20 ? 0.26 : -0.26;
-      if (sma60 != null) structureScore += latestClose >= sma60 ? 0.2 : -0.2;
-      if (sma120 != null) structureScore += latestClose >= sma120 ? 0.14 : -0.14;
-      structureScore += change24 >= 0 ? 0.08 : -0.08;
-      if (rsi14 != null) {
-        if (rsi14 > 64) structureScore += 0.08;
-        else if (rsi14 < 36) structureScore -= 0.08;
-      }
-
-      let flowScore = 0;
-      if (change24 > 0) flowScore += 0.16;
-      else if (change24 < 0) flowScore -= 0.16;
-      if (volumeRatio > 1.35) flowScore += change24 >= 0 ? 0.18 : -0.18;
-      else if (volumeRatio < 0.85) flowScore -= 0.06;
-      if (quoteVolume24 > 1_000_000_000) flowScore += 0.06;
-      else if (quoteVolume24 < 120_000_000) flowScore -= 0.04;
-
-      let derivScore = 0;
-      let derivDataPoints = 0;
-      if (funding != null) {
-        derivDataPoints++;
-        if (funding > 0.0006) derivScore -= 0.24;
-        else if (funding < -0.0006) derivScore += 0.24;
-      }
-      if (predFunding != null) {
-        derivDataPoints++;
-        if (predFunding > 0.0006) derivScore -= 0.12;
-        else if (predFunding < -0.0006) derivScore += 0.12;
-      }
-      if (lsRatio != null) {
-        derivDataPoints++;
-        if (lsRatio > 1.12) derivScore -= 0.17;
-        else if (lsRatio < 0.9) derivScore += 0.17;
-      }
-      if (liqLong > 0 || liqShort > 0) {
-        derivDataPoints++;
-        const liqBias = (liqShort - liqLong) / Math.max(liqShort + liqLong, 1);
-        derivScore += liqBias * 0.22;
-      }
-
-      let sentiScore = 0;
-      if (change24 >= 2.0) sentiScore += 0.22;
-      else if (change24 <= -2.0) sentiScore -= 0.22;
-      else sentiScore += change24 / 15;
-      if (rsi14 != null) {
-        if (rsi14 > 62) sentiScore += 0.12;
-        else if (rsi14 < 38) sentiScore -= 0.12;
-      }
-      if (funding != null) {
-        if (funding > 0.0007) sentiScore -= 0.08;
-        else if (funding < -0.0007) sentiScore += 0.08;
-      }
-
-      const aggregateScore = (structureScore + flowScore + derivScore + sentiScore) / 4;
-      let riskPenalty = 0;
-      if (atrPct != null && atrPct > 4) riskPenalty += 0.18;
-      if (Math.abs(change24) > 6) riskPenalty += 0.12;
-      if (funding != null && Math.abs(funding) > 0.001) riskPenalty += 0.1;
-      if (volumeRatio > 1.9) riskPenalty += 0.08;
-      let guardianScore = aggregateScore;
-      guardianScore += guardianScore >= 0 ? -riskPenalty : riskPenalty;
-
-      const structureVote = scoreToVote(structureScore, 0.1);
-      const flowVote = scoreToVote(flowScore, 0.08);
-      const derivVote = derivDataPoints === 0 ? 'neutral' : scoreToVote(derivScore, 0.1);
-      const sentiVote = scoreToVote(sentiScore, 0.08);
-      let guardianVote = scoreToVote(guardianScore, 0.14);
-      if (riskPenalty > 0.25 && Math.abs(guardianScore) < 0.25) guardianVote = 'neutral';
-
-      const structurePlan = buildTradePlan(latestClose, structureVote, structureScore, atrPct);
-      const flowPlan = buildTradePlan(latestClose, flowVote, flowScore, atrPct);
-      const derivPlan = buildTradePlan(latestClose, derivVote, derivScore, atrPct);
-      const sentiPlan = buildTradePlan(latestClose, sentiVote, sentiScore, atrPct);
-      const guardianPlan = buildTradePlan(latestClose, guardianVote, guardianScore, atrPct);
-
-      const signals: AgentSignal[] = [
-        {
-          id: `structure-${scanRunId}`,
-          agentId: 'structure',
-          icon: AGENT_META.structure.icon,
-          name: AGENT_META.structure.name,
-          color: AGENT_META.structure.color,
-          token,
-          pair,
-          vote: structureVote,
-          conf: scoreToConfidence(structureScore, 60),
-          text: `Price ${fmtPrice(latestClose)} · MA20 ${sma20 != null ? fmtPrice(sma20) : '—'} · MA60 ${sma60 != null ? fmtPrice(sma60) : '—'} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · 24h ${fmtSignedPct(change24)}.`,
-          src: `BINANCE:${token}:${timeframe.toUpperCase()}`,
-          time: timeLabel,
-          entry: structurePlan.entry,
-          tp: structurePlan.tp,
-          sl: structurePlan.sl
-        },
-        {
-          id: `flow-${scanRunId}`,
-          agentId: 'flow',
-          icon: AGENT_META.flow.icon,
-          name: AGENT_META.flow.name,
-          color: AGENT_META.flow.color,
-          token,
-          pair,
-          vote: flowVote,
-          conf: scoreToConfidence(flowScore, 56),
-          text: `Volume x${volumeRatio.toFixed(2)} vs 20-bar avg · 24h quote volume $${fmtCompact(quoteVolume24)} · momentum ${fmtSignedPct(change24)}.`,
-          src: 'BINANCE:VOLUME/FLOW',
-          time: timeLabel,
-          entry: flowPlan.entry,
-          tp: flowPlan.tp,
-          sl: flowPlan.sl
-        },
-        {
-          id: `deriv-${scanRunId}`,
-          agentId: 'deriv',
-          icon: AGENT_META.deriv.icon,
-          name: AGENT_META.deriv.name,
-          color: AGENT_META.deriv.color,
-          token,
-          pair,
-          vote: derivVote,
-          conf: derivDataPoints === 0 ? 48 : scoreToConfidence(derivScore, 58),
-          text: derivDataPoints === 0
-            ? 'Derivatives API unavailable. Fallback to neutral stance until funding/OI stream recovers.'
-            : `OI ${oi != null ? formatOI(oi) : '—'} · Funding ${funding != null ? formatFunding(funding) : '—'} · Pred ${predFunding != null ? formatFunding(predFunding) : '—'} · L/S ${lsRatio != null ? lsRatio.toFixed(2) : '—'} · Liq L ${formatOI(liqLong)} / S ${formatOI(liqShort)}.`,
-          src: 'COINALYZE:PERP',
-          time: timeLabel,
-          entry: derivPlan.entry,
-          tp: derivPlan.tp,
-          sl: derivPlan.sl
-        },
-        {
-          id: `senti-${scanRunId}`,
-          agentId: 'senti',
-          icon: AGENT_META.senti.icon,
-          name: AGENT_META.senti.name,
-          color: AGENT_META.senti.color,
-          token,
-          pair,
-          vote: sentiVote,
-          conf: scoreToConfidence(sentiScore, 54),
-          text: `Realtime sentiment proxy · 24h ${fmtSignedPct(change24)} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · volume regime x${volumeRatio.toFixed(2)}.`,
-          src: 'PROXY:PRICE/MOMENTUM',
-          time: timeLabel,
-          entry: sentiPlan.entry,
-          tp: sentiPlan.tp,
-          sl: sentiPlan.sl
-        },
-        {
-          id: `guardian-${scanRunId}`,
-          agentId: 'guardian',
-          icon: AGENT_META.guardian.icon,
-          name: AGENT_META.guardian.name,
-          color: AGENT_META.guardian.color,
-          token,
-          pair,
-          vote: guardianVote,
-          conf: Math.round(clamp(scoreToConfidence(guardianScore, 62) - riskPenalty * 32, 50, 92)),
-          text: `Risk gate · ATR ${atrPct != null ? atrPct.toFixed(2) : '—'}% · funding ${funding != null ? formatFunding(funding) : '—'} · volatility check ${riskPenalty > 0.2 ? 'tight' : 'normal'}.`,
-          src: 'RISK:ATR/FUNDING',
-          time: timeLabel,
-          entry: guardianPlan.entry,
-          tp: guardianPlan.tp,
-          sl: guardianPlan.sl
-        }
-      ];
-
-      const existingTab = scanTabs.find((tab) => tab.pair === pair && tab.timeframe === timeframe);
+      scanStep = 'COUNCIL · synthesizing outputs';
+      const scan = await runWarRoomScan(pair, timeframe);
+      const existingTab = scanTabs.find((tab) => tab.pair === scan.pair && tab.timeframe === scan.timeframe);
       const nextTab: ScanTab = existingTab
         ? {
           ...existingTab,
-          token,
-          createdAt: now,
-          label: timeLabel,
-          signals: [...signals, ...existingTab.signals].slice(0, MAX_SIGNALS_PER_TAB)
+          token: scan.token,
+          createdAt: scan.createdAt,
+          label: scan.label,
+          signals: [...scan.signals, ...existingTab.signals].slice(0, MAX_SIGNALS_PER_TAB)
         }
         : {
-          id: `scan-${scanRunId}`,
-          pair,
-          timeframe,
-          token,
-          createdAt: now,
-          label: timeLabel,
-          signals
+          id: `scan-${scan.createdAt}-${Math.floor(Math.random() * 10_000).toString(16)}`,
+          pair: scan.pair,
+          timeframe: scan.timeframe,
+          token: scan.token,
+          createdAt: scan.createdAt,
+          label: scan.label,
+          signals: scan.signals
         };
 
       scanTabs = [nextTab, ...scanTabs.filter((tab) => tab.id !== nextTab.id)].slice(0, MAX_SCAN_TABS);
       activeScanId = nextTab.id;
       activeToken = 'ALL';
       selectedIds = new Set();
-      const avgConfidence = Math.round(signals.reduce((sum, sig) => sum + sig.conf, 0) / Math.max(signals.length, 1));
-      const voteCounts = signals.reduce((acc, sig) => {
-        acc[sig.vote] += 1;
-        return acc;
-      }, { long: 0, short: 0, neutral: 0 });
-      const consensus: AgentSignal['vote'] =
-        voteCounts.long > voteCounts.short && voteCounts.long > voteCounts.neutral
-          ? 'long'
-          : voteCounts.short > voteCounts.long && voteCounts.short > voteCounts.neutral
-            ? 'short'
-            : 'neutral';
-      const summary =
-        `Consensus ${consensus.toUpperCase()} · Avg CONF ${avgConfidence}% · ` +
-        `RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · 24h ${fmtSignedPct(change24)} · Vol x${volumeRatio.toFixed(2)}`;
-      const highlights: ScanHighlight[] = signals.map((sig) => ({
-        agent: sig.name,
-        vote: sig.vote,
-        conf: sig.conf,
-        note: sig.text
-      }));
       dispatch('scancomplete', {
-        pair,
-        timeframe,
-        token,
-        createdAt: now,
+        pair: scan.pair,
+        timeframe: scan.timeframe,
+        token: scan.token,
+        createdAt: scan.createdAt,
         label: nextTab.label,
-        consensus,
-        avgConfidence,
-        summary,
-        highlights
+        consensus: scan.consensus,
+        avgConfidence: scan.avgConfidence,
+        summary: scan.summary,
+        highlights: scan.highlights
       });
       scanError = '';
       scanStep = 'DONE';
