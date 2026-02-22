@@ -303,11 +303,13 @@
   const agentResponses: Record<string, string[]> = {
     ORCHESTRATOR: ['Analyzing across 7 agents...', 'Running backtest... 68% win rate detected.', 'Consensus updated — SHORT bias.'],
     STRUCTURE: ['CHoCH on 4H confirmed. OB zone at $95,400.', 'BOS above $97,800. Bullish structure intact.'],
-    FLOW: ['Net flow: -$128M accumulation. Whales increasing positions.', 'Exchange outflows rising — bullish signal.'],
+    VPA: ['CVD rising with bullish absorption at POC.', 'Volume climax detected — potential reversal signal.'],
+    ICT: ['Liquidity pool swept below $96,200. FVG at $97,400.', 'Bullish OB reaction with displacement confirmation.'],
     DERIV: ['OI +4.2% with positive delta. Longs building.', 'FR at +0.082% — extreme. Liquidation cluster near $96.8K.'],
+    VALUATION: ['MVRV at 1.8 — mid-range healthy zone.', 'NUPL rising, supply in profit stable at 72%.'],
+    FLOW: ['Net flow: -$128M accumulation. Whales increasing positions.', 'Exchange outflows rising — bullish signal.'],
     SENTI: ['Fear & Greed: 42 (Fear). Social sentiment shifting bearish.', 'Whale wallets accumulating despite price drop.'],
-    GUARDIAN: ['Risk check: Max drawdown within limits.', 'Position sizing OK. Correlation risk moderate.'],
-    COMMANDER: ['Final signal: SHORT with 72% confidence.', 'Consensus: 4/5 agents agree on direction.'],
+    MACRO: ['DXY weakening — risk-on environment.', 'SPX rally + yield drop favoring BTC correlation.'],
   };
 
   function handleSendChat(e: CustomEvent<{ text: string }>) {

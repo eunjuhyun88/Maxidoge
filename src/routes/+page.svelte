@@ -23,9 +23,9 @@
 
   const FEATURES = [
     { label: 'WAR ROOM', sub: 'TERMINAL', brief: 'YOU MISSED THE PUMP BECAUSE YOU WERE SLEEPING. NEVER AGAIN.', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
-      detail: '7 AI AGENTS RUN 24/7 — SCANNING CHARTS, TRACKING WHALES, READING DERIVATIVES, AND MONITORING SOCIAL SENTIMENT ACROSS 200+ PAIRS. YOU OPEN YOUR EYES. THE INTEL IS ALREADY THERE.',
-      stats: [{ k: 'AI AGENTS', v: '7' }, { k: 'PAIRS', v: '200+' }, { k: 'SCAN PATTERNS', v: '28' }] },
-    { label: 'AI vs YOU', sub: 'ARENA', brief: 'SUBMIT YOUR CALL. 7 AI AGENTS CHALLENGE EVERY ANGLE.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
+      detail: '8 AI AGENTS RUN 24/7 — SCANNING CHARTS, TRACKING WHALES, READING DERIVATIVES, AND MONITORING SOCIAL SENTIMENT ACROSS 200+ PAIRS. YOU OPEN YOUR EYES. THE INTEL IS ALREADY THERE.',
+      stats: [{ k: 'AI AGENTS', v: '8' }, { k: 'PAIRS', v: '200+' }, { k: 'SCAN PATTERNS', v: '28' }] },
+    { label: 'AI vs YOU', sub: 'ARENA', brief: 'SUBMIT YOUR CALL. 8 AI AGENTS CHALLENGE EVERY ANGLE.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
       detail: 'THINK YOU FOUND THE TRADE? SUBMIT IT. 8 AI AGENTS WILL ANALYZE YOUR ENTRY, TP, SL, AND R:R FROM EVERY ANGLE — STRUCTURE, FLOW, DERIVATIVES, SENTIMENT, MACRO. IF YOUR THESIS SURVIVES 5 PHASES, IT MIGHT ACTUALLY WORK.',
       stats: [{ k: 'PHASES', v: '5' }, { k: 'AI JUDGES', v: '8' }, { k: 'REWARDS', v: 'XP+RANK' }] },
     { label: 'AI SCANNER', sub: 'SIGNALS', brief: 'THE MARKET WHISPERS BEFORE IT SCREAMS. WE HEAR IT FIRST.', img: '/blockparty/f5-doge-fire.png', path: '/signals',
@@ -318,7 +318,7 @@
 
       <div class="about-text sr sr-r" style="--d:0.15s">
         <p>
-          <strong class="ab abg">7 AI DOGS</strong>
+          <strong class="ab abg">8 AI DOGS</strong>
           <span class="ar">WATCHING</span>
           <strong class="ab abg">200+ PAIRS,</strong>
           <em class="ai">scanning</em>
@@ -350,7 +350,7 @@
       <span class="sq-w">THE</span>
       <span class="sq-pk">SQUAD</span>
     </h2>
-    <p class="sq-sub sr sr-r" style="--d:0.1s">7 AI DOGS THAT EAT THE MARKET ALIVE</p>
+    <p class="sq-sub sr sr-r" style="--d:0.1s">8 AI DOGS THAT EAT THE MARKET ALIVE</p>
 
     <div class="sq-frame">
       <div class="sq-grid">
@@ -462,7 +462,7 @@
           <div class="arena-mid">
             <span class="arena-tag">AI vs YOU</span>
             <h3 class="arena-name">ARENA</h3>
-            <p class="arena-sub">YOUR THESIS vs 7 AI AGENTS</p>
+            <p class="arena-sub">YOUR THESIS vs 8 AI AGENTS</p>
           </div>
           <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)"><img src="/blockparty/f5-doge-bull.png" alt="" class="arena-img" /></div>
         </div>

@@ -6,7 +6,7 @@
   import { PHASE_DURATION } from '$lib/engine/phases';
   import TokenDropdown from '../shared/TokenDropdown.svelte';
 
-  let selected: Set<string> = new Set(['structure', 'flow', 'deriv', 'senti', 'guardian']);
+  let selected: Set<string> = new Set(['structure', 'vpa', 'ict', 'deriv', 'valuation', 'flow', 'senti', 'macro']);
   let speed = 3;
   let pair = 'BTC/USDT';
 
