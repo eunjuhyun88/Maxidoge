@@ -6,7 +6,7 @@ import { toBoundedInt } from '$lib/server/apiValidation';
 
 const MOBILE_TABS = new Set(['warroom', 'chart', 'intel']);
 const ACTIVE_TABS = new Set(['intel', 'community', 'positions']);
-const INNER_TABS = new Set(['headlines', 'events', 'flow']);
+const INNER_TABS = new Set(['chat', 'headlines', 'events', 'flow']);
 const PASSPORT_TABS = new Set(['profile', 'wallet', 'positions', 'arena']);
 const ORACLE_PERIODS = new Set(['7d', '30d', 'all']);
 const ORACLE_SORTS = new Set(['accuracy', 'level', 'sample', 'conf']);
@@ -112,7 +112,7 @@ export const PUT: RequestHandler = async ({ cookies, request }) => {
           COALESCE($5, false),
           COALESCE($6, 'chart'),
           COALESCE($7, 'intel'),
-          COALESCE($8, 'headlines'),
+          COALESCE($8, 'chat'),
           COALESCE($9, 'profile'),
           COALESCE($10, 'all'),
           COALESCE($11, 'all'),

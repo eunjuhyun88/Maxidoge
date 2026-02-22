@@ -252,16 +252,21 @@ export function updateTradePrice(tradeId: string, currentPrice: number) {
 
 let _lastPriceSnapshot = '';
 let _priceSyncTimer: ReturnType<typeof setTimeout> | null = null;
-export function updateAllPrices(prices: Record<string, number>) {
+export function updateAllPrices(
+  prices: Record<string, number>,
+  options: { syncServer?: boolean } = {}
+) {
+  const syncServer = options.syncServer ?? true;
   // Skip if prices haven't changed
   const snap = JSON.stringify(prices);
   if (snap === _lastPriceSnapshot) return;
   _lastPriceSnapshot = snap;
 
+  let hasOpenTrades = false;
   quickTradeStore.update(s => {
     // Skip if no open trades
-    const hasOpen = s.trades.some(t => t.status === 'open');
-    if (!hasOpen) return s;
+    hasOpenTrades = s.trades.some(t => t.status === 'open');
+    if (!hasOpenTrades) return s;
 
     let changed = false;
     const trades = s.trades.map(t => {
@@ -278,7 +283,7 @@ export function updateAllPrices(prices: Record<string, number>) {
     return changed ? { ...s, trades } : s;
   });
 
-  if (typeof window !== 'undefined') {
+  if (syncServer && hasOpenTrades && typeof window !== 'undefined') {
     if (_priceSyncTimer) clearTimeout(_priceSyncTimer);
     _priceSyncTimer = setTimeout(() => {
       void updateQuickTradePricesApi({ prices });

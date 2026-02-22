@@ -68,7 +68,47 @@
   $: isDesktop = windowWidth >= BP_TABLET;
 
   // Mobile tab control
-  let mobileTab: 'warroom' | 'chart' | 'intel' = 'chart';
+  type MobileTab = 'warroom' | 'chart' | 'intel';
+  const MOBILE_TAB_META: Record<MobileTab, { label: string; icon: string; desc: string }> = {
+    warroom: { label: 'War Room', icon: '🎖', desc: 'Signal stream and quick trade actions' },
+    chart: { label: 'Chart', icon: '📊', desc: 'Execution chart with drawing and indicators' },
+    intel: { label: 'Intel', icon: '🧠', desc: 'News, community and agent chat' },
+  };
+  let mobileTab: MobileTab = 'chart';
+  let mobileViewTracked = false;
+
+  function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
+    if (typeof window === 'undefined') return;
+    const w = window as any;
+    if (!Array.isArray(w.dataLayer)) return;
+    w.dataLayer.push({
+      event,
+      page: 'terminal',
+      component: 'terminal-shell',
+      viewport: isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop',
+      ...payload,
+    });
+  }
+
+  function setMobileTab(tab: MobileTab) {
+    if (mobileTab === tab) return;
+    mobileTab = tab;
+    gtmEvent('terminal_mobile_tab_change', {
+      tab,
+      pair: $gameState.pair,
+      timeframe: $gameState.timeframe,
+    });
+  }
+
+  $: if (isMobile && !mobileViewTracked) {
+    mobileViewTracked = true;
+    gtmEvent('terminal_mobile_view', {
+      tab: mobileTab,
+      pair: $gameState.pair,
+      timeframe: $gameState.timeframe,
+    });
+  }
+  $: if (!isMobile && mobileViewTracked) mobileViewTracked = false;
 
   function startDrag(target: DragTarget, e: MouseEvent) {
     if (isMobile || isTablet) return;
@@ -107,18 +147,26 @@
     windowWidth = window.innerWidth;
   }
 
-  // Sync live prices to open quick trades every 2s
-  let priceSync: ReturnType<typeof setInterval> | null = null;
+  // Fast local updates + slower server persistence (keeps UI snappy without hammering DB)
+  let priceUiSync: ReturnType<typeof setInterval> | null = null;
+  let pricePersistSync: ReturnType<typeof setInterval> | null = null;
 
   onMount(() => {
     windowWidth = window.innerWidth;
     window.addEventListener('resize', handleResize);
-    // Sync prices less aggressively — WS already updates in real-time via ChartPanel
-    priceSync = setInterval(() => {
+    // 1) Near real-time local UI refresh
+    priceUiSync = setInterval(() => {
       const s = $gameState;
       const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
-      updateAllPrices(prices);
+      updateAllPrices(prices, { syncServer: false });
       updateTrackedPrices(prices);
+    }, 1000);
+
+    // 2) Periodic server persistence (batched in store debounce)
+    pricePersistSync = setInterval(() => {
+      const s = $gameState;
+      const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
+      updateAllPrices(prices, { syncServer: true });
     }, 30000);
 
     const params = new URLSearchParams(window.location.search);
@@ -161,7 +209,8 @@
   });
 
   onDestroy(() => {
-    if (priceSync) clearInterval(priceSync);
+    if (priceUiSync) clearInterval(priceUiSync);
+    if (pricePersistSync) clearInterval(pricePersistSync);
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', handleResize);
     }
@@ -169,9 +218,50 @@
 
   // Selected pair display
   $: pair = $gameState.pair || 'BTC/USDT';
+  $: mobileMeta = MOBILE_TAB_META[mobileTab];
 
   function onTokenSelect(e: CustomEvent<{ pair: string }>) {
     gameState.update(s => ({ ...s, pair: e.detail.pair }));
+    gtmEvent('terminal_pair_change_shell', {
+      pair: e.detail.pair,
+      source: isMobile ? 'mobile-topbar' : 'shell-token-control',
+      timeframe: $gameState.timeframe,
+    });
+  }
+
+  type WarRoomHandle = {
+    triggerScanFromChart?: () => void;
+  };
+  let warRoomRef: WarRoomHandle | null = null;
+  let pendingChartScan = false;
+
+  function tryTriggerWarRoomScan(): boolean {
+    if (!warRoomRef || typeof warRoomRef.triggerScanFromChart !== 'function') return false;
+    warRoomRef.triggerScanFromChart();
+    return true;
+  }
+
+  function handleChartScanRequest(e: CustomEvent<{ source?: string; pair?: string; timeframe?: string }>) {
+    const detail = e.detail ?? {};
+    gtmEvent('terminal_scan_request_shell', {
+      source: detail.source || 'chart-panel',
+      pair: detail.pair || $gameState.pair,
+      timeframe: detail.timeframe || $gameState.timeframe,
+    });
+
+    if (tryTriggerWarRoomScan()) return;
+
+    pendingChartScan = true;
+    if (isDesktop && leftCollapsed) {
+      toggleLeft();
+    }
+    if (isMobile && mobileTab !== 'warroom') {
+      setMobileTab('warroom');
+    }
+  }
+
+  $: if (pendingChartScan && tryTriggerWarRoomScan()) {
+    pendingChartScan = false;
   }
 
   // ── Agent Chat State ──
@@ -185,10 +275,30 @@
     isSystem?: boolean;
   }
 
+  type ScanHighlight = {
+    agent: string;
+    vote: 'long' | 'short' | 'neutral';
+    conf: number;
+    note: string;
+  };
+
+  type ScanIntelDetail = {
+    pair: string;
+    timeframe: string;
+    token: string;
+    createdAt: number;
+    label: string;
+    consensus: 'long' | 'short' | 'neutral';
+    avgConfidence: number;
+    summary: string;
+    highlights: ScanHighlight[];
+  };
+
   let chatMessages: ChatMsg[] = [
     { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'MAXI⚡DOGE Orchestrator v8 online. Type @AGENT to query.', time: '—', isUser: false, isSystem: true },
   ];
   let isTyping = false;
+  let latestScan: ScanIntelDetail | null = null;
 
   const agentResponses: Record<string, string[]> = {
     ORCHESTRATOR: ['Analyzing across 7 agents...', 'Running backtest... 68% win rate detected.', 'Consensus updated — SHORT bias.'],
@@ -221,6 +331,28 @@
       }];
     }, 600 + Math.random() * 500);
   }
+
+  function handleScanComplete(e: CustomEvent<ScanIntelDetail>) {
+    const detail = e.detail;
+    latestScan = detail;
+    const stamp = new Date(detail.createdAt);
+    const time = `${stamp.getHours()}:${String(stamp.getMinutes()).padStart(2, '0')}`;
+    const highlights = detail.highlights
+      .slice(0, 3)
+      .map((h) => `${h.agent} ${h.vote.toUpperCase()} ${h.conf}%`)
+      .join(' · ');
+    chatMessages = [
+      ...chatMessages,
+      {
+        from: 'ORCHESTRATOR',
+        icon: '📡',
+        color: '#5ecbff',
+        text: `${detail.token} ${detail.timeframe.toUpperCase()} scan done. ${detail.summary}${highlights ? ` · ${highlights}` : ''}`,
+        time,
+        isUser: false
+      }
+    ];
+  }
 </script>
 
 <div class="terminal-shell">
@@ -231,41 +363,55 @@
   <!-- ═══ MOBILE LAYOUT ═══ -->
   {#if isMobile}
   <div class="terminal-mobile">
-    <div class="mob-tabs">
-      <button class="mob-tab" class:active={mobileTab === 'warroom'} on:click={() => mobileTab = 'warroom'}>
-        <span class="mob-tab-icon">🎖</span>WAR ROOM
-      </button>
-      <button class="mob-tab" class:active={mobileTab === 'chart'} on:click={() => mobileTab = 'chart'}>
-        <span class="mob-tab-icon">📊</span>CHART
-      </button>
-      <button class="mob-tab" class:active={mobileTab === 'intel'} on:click={() => mobileTab = 'intel'}>
-        <span class="mob-tab-icon">🧠</span>INTEL
-      </button>
+    <div class="mob-topbar">
+      <div class="mob-topline">
+        <div class="mob-title-wrap">
+          <span class="mob-eyebrow">TERMINAL MOBILE</span>
+          <span class="mob-title">{mobileMeta.icon} {mobileMeta.label}</span>
+        </div>
+        <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
+      </div>
+      <div class="mob-meta">
+        <div class="mob-token">
+          <TokenDropdown value={pair} compact on:select={onTokenSelect} />
+        </div>
+        <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
+        <span class="mob-meta-chip subtle">{pair}</span>
+      </div>
+      <div class="mob-desc">{mobileMeta.desc}</div>
     </div>
 
     <div class="mob-content">
       {#if mobileTab === 'warroom'}
-        <WarRoom />
+        <div class="mob-panel-wrap">
+          <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
+        </div>
       {:else if mobileTab === 'chart'}
         <div class="mob-chart-section">
-          <div class="chart-token-bar">
-            <TokenDropdown value={pair} compact on:select={onTokenSelect} />
-            <span class="ctb-tf">{formatTimeframeLabel($gameState.timeframe)}</span>
-            <span class="ctb-live"><span class="ctb-dot"></span>LIVE</span>
-          </div>
           <div class="mob-chart-area">
-            <ChartPanel advancedMode enableTradeLineEntry />
+            <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
           </div>
         </div>
       {:else if mobileTab === 'intel'}
-        <IntelPanel {chatMessages} {isTyping} on:sendchat={handleSendChat} />
+        <div class="mob-panel-wrap">
+          <IntelPanel {chatMessages} {isTyping} {latestScan} prioritizeChat on:sendchat={handleSendChat} />
+        </div>
       {/if}
     </div>
 
-    <div class="ticker-bar">
-      <div class="ticker-inner">
-        <span class="ticker-text">{TICKER_STR}</span>
-      </div>
+    <div class="mob-bottom-nav">
+      <button class="mob-nav-btn" class:active={mobileTab === 'warroom'} on:click={() => setMobileTab('warroom')}>
+        <span class="mob-nav-icon">🎖</span>
+        <span class="mob-nav-label">WAR ROOM</span>
+      </button>
+      <button class="mob-nav-btn" class:active={mobileTab === 'chart'} on:click={() => setMobileTab('chart')}>
+        <span class="mob-nav-icon">📊</span>
+        <span class="mob-nav-label">CHART</span>
+      </button>
+      <button class="mob-nav-btn" class:active={mobileTab === 'intel'} on:click={() => setMobileTab('intel')}>
+        <span class="mob-nav-icon">🧠</span>
+        <span class="mob-nav-label">INTEL</span>
+      </button>
     </div>
   </div>
 
@@ -274,16 +420,16 @@
   <div class="terminal-tablet">
     <div class="tab-top">
       <div class="tab-left">
-        <WarRoom />
+        <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
       </div>
       <div class="tab-center">
         <div class="tab-chart-area">
-          <ChartPanel advancedMode enableTradeLineEntry />
+          <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
         </div>
       </div>
     </div>
     <div class="tab-bottom">
-      <IntelPanel {chatMessages} {isTyping} on:sendchat={handleSendChat} />
+      <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} />
     </div>
 
     <div class="ticker-bar">
@@ -301,7 +447,7 @@
     <!-- Left: WAR ROOM or collapsed strip -->
     {#if !leftCollapsed}
       <div class="tl">
-        <WarRoom on:collapse={toggleLeft} />
+        <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scancomplete={handleScanComplete} />
       </div>
     {:else}
       <button class="panel-strip panel-strip-left" on:click={toggleLeft} title="Show War Room">
@@ -326,7 +472,7 @@
     <!-- Center: Chart -->
     <div class="tc">
       <div class="chart-area chart-area-full">
-        <ChartPanel advancedMode enableTradeLineEntry />
+        <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
       </div>
     </div>
 
@@ -343,7 +489,7 @@
     <!-- Right: Intel Panel or collapsed strip -->
     {#if !rightCollapsed}
       <div class="tr">
-        <IntelPanel {chatMessages} {isTyping} on:sendchat={handleSendChat} on:collapse={toggleRight} />
+        <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} on:collapse={toggleRight} />
       </div>
     {:else}
       <button class="panel-strip panel-strip-right" on:click={toggleRight} title="Show Intel">
@@ -532,37 +678,7 @@
     min-height: 0;
   }
 
-  /* Chart Token Bar */
-  .chart-token-bar {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    background: linear-gradient(90deg, rgba(18, 44, 28, 0.96), rgba(14, 33, 23, 0.96));
-    border-bottom: 1px solid var(--term-border);
-    box-shadow: 0 1px 0 rgba(245, 196, 184, 0.08) inset;
-  }
-  .ctb-tf {
-    font-family: var(--fm);
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--term-text-dim);
-    letter-spacing: 1px;
-    border: 1px solid rgba(240, 237, 228, 0.14);
-    padding: 1px 6px;
-  }
-  .ctb-live {
-    margin-left: auto;
-    font-family: var(--fm);
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: var(--term-live);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
+  /* Shared live status dot */
   .ctb-dot {
     width: 5px;
     height: 5px;
@@ -634,10 +750,10 @@
   .strip-label {
     writing-mode: vertical-rl;
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 8px;
     font-weight: 900;
-    letter-spacing: 2px;
-    color: rgba(245, 196, 184, 0.42);
+    letter-spacing: 1.8px;
+    color: rgba(245, 196, 184, 0.62);
     transition: color .15s;
   }
   .panel-strip:hover .strip-label { color: rgba(245, 196, 184, 0.8); }
@@ -697,59 +813,164 @@
   }
 
   /* ═══════════════════════════════════════════
-     MOBILE — Single column with tab switching
+     MOBILE — Context header + bottom nav
      ═══════════════════════════════════════════ */
   .terminal-mobile {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
     height: 100%;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
     overflow: hidden;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
   }
-  .mob-tabs {
-    display: flex;
+  .mob-topbar {
     flex-shrink: 0;
+    padding: 10px 12px 8px;
     border-bottom: 1px solid var(--term-border);
-    background: rgba(12, 30, 20, 0.85);
+    background:
+      linear-gradient(135deg, rgba(232, 150, 125, 0.14), rgba(232, 150, 125, 0.04)),
+      linear-gradient(180deg, rgba(14, 36, 23, 0.92), rgba(10, 27, 17, 0.94));
+    backdrop-filter: blur(8px);
   }
-  .mob-tab {
+  .mob-topline {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .mob-title-wrap {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 1px;
+  }
+  .mob-eyebrow {
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    color: rgba(240, 237, 228, 0.48);
+  }
+  .mob-title {
+    font-family: var(--fd);
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 0.6px;
+    color: var(--term-text);
+    line-height: 1.2;
+  }
+  .mob-live {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(135, 220, 190, 0.26);
+    background: rgba(135, 220, 190, 0.08);
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 1.3px;
+    color: var(--term-live);
+    white-space: nowrap;
+  }
+  .mob-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .mob-token {
+    min-width: 0;
     flex: 1;
-    padding: 9px 4px;
+  }
+  .mob-meta-chip {
+    flex-shrink: 0;
+    padding: 4px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(240, 237, 228, 0.2);
+    background: rgba(240, 237, 228, 0.08);
     font-family: var(--fm);
     font-size: 9px;
     font-weight: 700;
-    letter-spacing: 1.2px;
-    text-align: center;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--term-text-dim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    transition: all .15s;
-  }
-  .mob-tab.active {
-    background: rgba(232, 150, 125, 0.18);
-    color: var(--term-accent-soft);
-  }
-  .mob-tab-icon { font-size: 11px; }
-  .mob-content {
-    flex: 1;
+    letter-spacing: 0.35px;
+    color: rgba(240, 237, 228, 0.84);
+    max-width: 44vw;
     overflow: hidden;
-    min-height: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
+  .mob-meta-chip.subtle {
+    color: rgba(240, 237, 228, 0.65);
+    border-color: rgba(240, 237, 228, 0.13);
+    background: rgba(240, 237, 228, 0.04);
+  }
+  .mob-desc {
+    margin-top: 8px;
+    font-family: var(--fm);
+    font-size: 10px;
+    color: rgba(240, 237, 228, 0.56);
+    letter-spacing: 0.15px;
+    line-height: 1.35;
+  }
+  .mob-content {
+    min-height: 0;
+    overflow: hidden;
+    padding: 10px 10px 8px;
+  }
+  .mob-panel-wrap,
   .mob-chart-section {
-    display: flex;
-    flex-direction: column;
     height: 100%;
+    min-height: 0;
+    border-radius: 12px;
+    border: 1px solid rgba(232, 150, 125, 0.16);
+    overflow: hidden;
+    background: rgba(8, 22, 14, 0.58);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
   }
   .mob-chart-area {
     flex: 1;
-    min-height: 200px;
+    min-height: 220px;
     overflow: hidden;
+  }
+  .mob-bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px 10px 4px;
+    border-top: 1px solid var(--term-border);
+    background: rgba(10, 26, 16, 0.92);
+    backdrop-filter: blur(8px);
+  }
+  .mob-nav-btn {
+    min-height: 50px;
+    border-radius: 12px;
+    border: 1px solid rgba(232, 150, 125, 0.16);
+    background: rgba(240, 237, 228, 0.03);
+    color: rgba(240, 237, 228, 0.62);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-family: var(--fm);
+    cursor: pointer;
+    transition: all .14s ease;
+  }
+  .mob-nav-btn.active {
+    color: var(--term-accent-soft);
+    border-color: rgba(232, 150, 125, 0.4);
+    background: linear-gradient(135deg, rgba(232, 150, 125, 0.2), rgba(232, 150, 125, 0.08));
+    box-shadow: inset 0 0 0 1px rgba(245, 196, 184, 0.18);
+  }
+  .mob-nav-icon { font-size: 12px; line-height: 1; }
+  .mob-nav-label {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1.1px;
+    line-height: 1;
   }
 
   /* ═══════════════════════════════════════════
@@ -810,32 +1031,43 @@
   }
   .terminal-shell :global(.war-room .wr-title) {
     color: #112419;
-    letter-spacing: 2px;
+    letter-spacing: 1.4px;
+    white-space: nowrap;
   }
-  .terminal-shell :global(.war-room .signal-link),
-  .terminal-shell :global(.war-room .wr-auto-badge) {
+  .terminal-shell :global(.war-room .signal-link) {
     color: #132418;
     background: rgba(240, 237, 228, 0.55);
     border-color: rgba(10, 26, 13, 0.28);
   }
-  .terminal-shell :global(.war-room .wr-live) {
-    background: rgba(10, 26, 13, 0.18);
-    color: #193123;
-    border-color: rgba(10, 26, 13, 0.4);
+  .terminal-shell :global(.war-room .ticker-flow) {
+    border-bottom-color: var(--term-border-soft);
+    background: rgba(9, 24, 16, 0.62);
   }
-  .terminal-shell :global(.war-room .wr-live-dot) {
-    background: #193123;
+  .terminal-shell :global(.war-room .ticker-chip) {
+    color: rgba(240, 237, 228, 0.78);
+    border-color: rgba(232, 150, 125, 0.2);
+    background: rgba(240, 237, 228, 0.03);
+  }
+  .terminal-shell :global(.war-room .ticker-label) {
+    color: var(--term-accent-soft);
+    border-color: rgba(232, 150, 125, 0.42);
+    background: rgba(232, 150, 125, 0.16);
+  }
+  .terminal-shell :global(.war-room .ticker-tf) {
+    color: var(--term-live);
+    border-color: rgba(94, 203, 180, 0.44);
+    background: rgba(94, 203, 180, 0.14);
   }
   .terminal-shell :global(.war-room .token-tabs) {
     border-bottom-color: var(--term-border-soft);
     background: rgba(9, 24, 16, 0.55);
   }
   .terminal-shell :global(.war-room .token-tab) {
-    color: var(--term-text-dim);
+    color: rgba(240, 237, 228, 0.78);
   }
   .terminal-shell :global(.war-room .token-tab.active) {
     color: var(--term-accent-soft);
-    border-bottom-color: var(--term-accent);
+    border-color: rgba(232, 150, 125, 0.52);
     background: rgba(232, 150, 125, 0.08);
   }
   .terminal-shell :global(.war-room .token-tab.active .token-tab-count) {
@@ -871,7 +1103,7 @@
     border-right-color: rgba(232, 150, 125, 0.14);
   }
   .terminal-shell :global(.war-room .stat-lbl) {
-    color: rgba(245, 196, 184, 0.5);
+    color: rgba(245, 196, 184, 0.72);
   }
 
   .terminal-shell :global(.intel-panel) {
@@ -881,8 +1113,8 @@
     border-bottom-color: var(--term-border);
   }
   .terminal-shell :global(.intel-panel .rp-tab) {
-    color: var(--term-text-dim);
-    background: rgba(240, 237, 228, 0.015);
+    color: rgba(240, 237, 228, 0.8);
+    background: rgba(240, 237, 228, 0.04);
   }
   .terminal-shell :global(.intel-panel .rp-tab.active) {
     background: rgba(232, 150, 125, 0.2);
@@ -895,7 +1127,7 @@
   .terminal-shell :global(.intel-panel .rp-collapse),
   .terminal-shell :global(.intel-panel .rp-panel-collapse) {
     border-left-color: var(--term-border-soft);
-    color: rgba(245, 196, 184, 0.62);
+    color: rgba(245, 196, 184, 0.78);
   }
   .terminal-shell :global(.intel-panel .rp-collapse:hover),
   .terminal-shell :global(.intel-panel .rp-panel-collapse:hover) {
@@ -904,6 +1136,9 @@
   }
   .terminal-shell :global(.intel-panel .rp-inner-tabs) {
     border-bottom-color: var(--term-border-soft);
+  }
+  .terminal-shell :global(.intel-panel .rp-inner-tab) {
+    color: rgba(240, 237, 228, 0.72);
   }
   .terminal-shell :global(.intel-panel .rp-inner-tab.active) {
     color: var(--term-accent-soft);
@@ -917,6 +1152,13 @@
   .terminal-shell :global(.intel-panel .hl-row),
   .terminal-shell :global(.intel-panel .ev-card) {
     border-bottom-color: rgba(232, 150, 125, 0.08);
+  }
+  .terminal-shell :global(.intel-panel .hl-time),
+  .terminal-shell :global(.intel-panel .ev-etime),
+  .terminal-shell :global(.intel-panel .comm-time),
+  .terminal-shell :global(.intel-panel .flow-addr),
+  .terminal-shell :global(.intel-panel .ac-name) {
+    color: rgba(240, 237, 228, 0.68);
   }
   .terminal-shell :global(.intel-panel .hl-row:hover),
   .terminal-shell :global(.intel-panel .comm-react:hover) {
@@ -942,6 +1184,14 @@
     background: linear-gradient(90deg, rgba(17, 42, 27, 0.98), rgba(15, 34, 24, 0.95));
     border-bottom-color: rgba(232, 150, 125, 0.28);
   }
+  .terminal-shell :global(.tfbtn),
+  .terminal-shell :global(.mode-btn),
+  .terminal-shell :global(.scan-btn),
+  .terminal-shell :global(.draw-btn),
+  .terminal-shell :global(.ind-chip),
+  .terminal-shell :global(.legend-chip) {
+    color: rgba(240, 237, 228, 0.8);
+  }
   .terminal-shell :global(.tfbtn.active) {
     background: rgba(232, 150, 125, 0.18);
     color: var(--term-accent-soft);
@@ -962,6 +1212,17 @@
     color: var(--term-accent-soft);
     text-shadow: 0 0 8px rgba(232, 150, 125, 0.35);
   }
+  .terminal-shell :global(.scan-btn) {
+    border-color: rgba(232, 150, 125, 0.45);
+    background: linear-gradient(135deg, rgba(232, 150, 125, 0.3), rgba(232, 150, 125, 0.15));
+    color: var(--term-accent-soft);
+  }
+  .terminal-shell :global(.scan-btn:hover) {
+    border-color: rgba(232, 150, 125, 0.62);
+    background: linear-gradient(135deg, rgba(232, 150, 125, 0.42), rgba(232, 150, 125, 0.24));
+    color: var(--term-text);
+    box-shadow: 0 0 10px rgba(232, 150, 125, 0.28);
+  }
   .terminal-shell :global(.draw-btn:hover) {
     background: rgba(232, 150, 125, 0.11);
     color: var(--term-accent-soft);
@@ -980,7 +1241,7 @@
   }
   .terminal-shell :global(.loading-overlay) {
     background: rgba(10, 26, 13, 0.86);
-    color: var(--term-text-dim);
+    color: rgba(240, 237, 228, 0.8);
   }
   .terminal-shell :global(.loader) {
     border-color: rgba(232, 150, 125, 0.25);
@@ -989,7 +1250,7 @@
   .terminal-shell :global(.chart-footer) {
     border-top-color: rgba(232, 150, 125, 0.14);
     background: rgba(8, 20, 13, 0.55);
-    color: rgba(240, 237, 228, 0.45);
+    color: rgba(240, 237, 228, 0.68);
   }
   .terminal-shell :global(.src-badge),
   .terminal-shell :global(.draw-count) {
@@ -1000,5 +1261,189 @@
   }
   .terminal-shell :global(.pos-rr) {
     color: var(--term-accent-soft);
+  }
+
+  /* Mobile-only readability and touch ergonomics */
+  .terminal-mobile :global(.war-room),
+  .terminal-mobile :global(.intel-panel),
+  .terminal-mobile :global(.chart-wrapper),
+  .terminal-mobile :global(.tv-container) {
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .terminal-mobile :global(.war-room .wr-header) {
+    height: 38px;
+    padding: 0 12px;
+  }
+  .terminal-mobile :global(.war-room .wr-title) {
+    font-size: 13px;
+    letter-spacing: 1.5px;
+  }
+  .terminal-mobile :global(.war-room .signal-link),
+  .terminal-mobile :global(.war-room .wr-collapse-btn) {
+    display: none;
+  }
+  .terminal-mobile :global(.war-room .arena-trigger) {
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 9px;
+  }
+  .terminal-mobile :global(.scan-btn) {
+    min-height: 28px;
+    padding: 4px 10px;
+    font-size: 9px;
+  }
+  .terminal-mobile :global(.war-room .token-tab),
+  .terminal-mobile :global(.intel-panel .rp-tab),
+  .terminal-mobile :global(.intel-panel .rp-inner-tab) {
+    min-height: 38px;
+    font-size: 10px;
+    letter-spacing: 0.9px;
+  }
+  .terminal-mobile :global(.war-room .token-tab-count) {
+    font-size: 8px;
+  }
+  .terminal-mobile :global(.war-room .deriv-strip) {
+    padding: 6px 8px;
+  }
+  .terminal-mobile :global(.war-room .deriv-val) {
+    font-size: 12px;
+  }
+  .terminal-mobile :global(.war-room .wr-msg-body) {
+    padding: 10px 12px 10px 6px;
+  }
+  .terminal-mobile :global(.war-room .wr-msg-head) {
+    gap: 5px;
+    margin-bottom: 4px;
+  }
+  .terminal-mobile :global(.war-room .wr-msg-name),
+  .terminal-mobile :global(.war-room .wr-msg-text) {
+    font-size: 10px;
+  }
+  .terminal-mobile :global(.war-room .wr-msg-signal-row),
+  .terminal-mobile :global(.war-room .wr-msg-actions) {
+    margin-top: 6px;
+    gap: 6px;
+  }
+  .terminal-mobile :global(.war-room .wr-act-btn),
+  .terminal-mobile :global(.war-room .copy-trade-cta),
+  .terminal-mobile :global(.war-room .signal-room-cta) {
+    min-height: 34px;
+  }
+  .terminal-mobile :global(.war-room .wr-act-btn) {
+    font-size: 8px;
+    padding: 4px 7px;
+  }
+  .terminal-mobile :global(.war-room .ctc-text),
+  .terminal-mobile :global(.war-room .src-text) {
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
+
+  .terminal-mobile :global(.intel-panel .rp-tabs) {
+    border-bottom-width: 2px;
+  }
+  .terminal-mobile :global(.intel-panel .rp-collapse) {
+    width: 34px;
+    font-size: 10px;
+  }
+  .terminal-mobile :global(.intel-panel .rp-panel-collapse) {
+    display: none;
+  }
+  .terminal-mobile :global(.intel-panel .rp-body) {
+    padding: 10px;
+    gap: 8px;
+  }
+  .terminal-mobile :global(.intel-panel .hl-row),
+  .terminal-mobile :global(.intel-panel .ev-card),
+  .terminal-mobile :global(.intel-panel .pos-row),
+  .terminal-mobile :global(.intel-panel .comm-post) {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .terminal-mobile :global(.intel-panel .hl-txt),
+  .terminal-mobile :global(.intel-panel .comm-txt),
+  .terminal-mobile :global(.intel-panel .ev-body),
+  .terminal-mobile :global(.intel-panel .ac-txt) {
+    font-size: 10px;
+    line-height: 1.45;
+  }
+  .terminal-mobile :global(.intel-panel .ac-section) {
+    flex: 1 1 auto;
+    min-height: 185px;
+    max-height: none;
+  }
+  .terminal-mobile :global(.intel-panel .ac-title) {
+    font-size: 10px;
+    letter-spacing: 1.2px;
+  }
+  .terminal-mobile :global(.intel-panel .ac-input) {
+    padding: 6px 8px 8px;
+    gap: 6px;
+  }
+  .terminal-mobile :global(.intel-panel .ac-input input) {
+    min-height: 36px;
+    font-size: 10px;
+    padding: 8px 10px;
+  }
+  .terminal-mobile :global(.intel-panel .ac-send) {
+    width: 38px;
+    min-height: 36px;
+    border-radius: 8px;
+  }
+
+  .terminal-tablet :global(.intel-panel .rp-body-wrap) {
+    min-height: 0;
+  }
+  .terminal-tablet :global(.intel-panel .ac-section) {
+    flex: 0 0 132px;
+    min-height: 120px;
+    max-height: none;
+  }
+
+  .terminal-mobile :global(.chart-wrapper .chart-bar) {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar > .live-indicator),
+  .terminal-mobile :global(.chart-wrapper .chart-bar > .tdd) {
+    display: none;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar > .tf-btns) {
+    order: 1;
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 1px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar > .mode-toggle),
+  .terminal-mobile :global(.chart-wrapper .chart-bar > .draw-tools),
+  .terminal-mobile :global(.chart-wrapper .chart-bar > .price-info) {
+    order: 2;
+  }
+  .terminal-mobile :global(.chart-wrapper .indicator-strip) {
+    padding: 6px 8px;
+    gap: 5px;
+  }
+  .terminal-mobile :global(.chart-wrapper .ind-chip),
+  .terminal-mobile :global(.chart-wrapper .legend-chip),
+  .terminal-mobile :global(.chart-wrapper .view-chip) {
+    min-height: 24px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-footer) {
+    gap: 6px;
+    font-size: 8px;
+    padding: 4px 8px;
+  }
+
+  @media (max-width: 768px) {
+    .terminal-shell::before,
+    .term-stars-soft,
+    .term-grain {
+      opacity: 0.2;
+    }
+    .term-stars {
+      opacity: 0.28;
+    }
   }
 </style>

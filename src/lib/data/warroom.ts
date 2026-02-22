@@ -47,7 +47,7 @@ export interface AgentSignal {
   icon: string;
   name: string;
   color: string;
-  token: 'BTC' | 'ETH' | 'SOL';
+  token: string;
   pair: string;
   vote: 'long' | 'short' | 'neutral';
   conf: number;
@@ -112,7 +112,7 @@ export const AGENT_SIGNALS: AgentSignal[] = [
     src: 'CONTEXT:ZONE:73', entry: 85, tp: 92, sl: 81 },
 ];
 
-export function getSignalsByToken(token: 'BTC' | 'ETH' | 'SOL' | 'ALL'): AgentSignal[] {
+export function getSignalsByToken(token: string | 'ALL'): AgentSignal[] {
   if (token === 'ALL') return AGENT_SIGNALS;
   return AGENT_SIGNALS.filter(s => s.token === token);
 }

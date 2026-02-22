@@ -60,7 +60,7 @@
             if (batch['SOLUSDT']) newPrices.SOL = +(batch['SOLUSDT'] || s.prices.SOL).toFixed(2);
             return { ...s, prices: newPrices };
           });
-        }, 1000);
+        }, 350);
       });
     } catch (e) {
       console.warn('[Header] WebSocket connection failed');

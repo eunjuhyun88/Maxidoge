@@ -4,7 +4,6 @@
   import { fetchKlines, subscribeKlines, pairToSymbol, type BinanceKline } from '$lib/api/binance';
   import {
     CORE_TIMEFRAME_OPTIONS,
-    formatTimeframeLabel,
     normalizeTimeframe,
     toBinanceInterval,
     toTradingViewInterval,
@@ -12,7 +11,9 @@
   import { openQuickTrade } from '$lib/stores/quickTradeStore';
   import TokenDropdown from '../shared/TokenDropdown.svelte';
 
-  const dispatch = createEventDispatcher();
+  const dispatch = createEventDispatcher<{
+    scanrequest: { source: 'chart-bar'; pair: string; timeframe: string };
+  }>();
 
   let chartContainer: HTMLDivElement;
   let chart: any;
@@ -64,10 +65,28 @@
   let _tvReinitKey = '';
 
   // ═══ Drawing Tools ═══
+  const LINE_ENTRY_DEFAULT_RR = 2;
+  const LINE_ENTRY_MIN_PIXEL_RISK = 6;
+  type DrawingMode = 'none' | 'hline' | 'trendline' | 'longentry' | 'shortentry';
+  type DrawingItem =
+    | { type: 'hline'; points: Array<{ x: number; y: number }>; color: string }
+    | { type: 'trendline'; points: Array<{ x: number; y: number }>; color: string }
+    | {
+      type: 'tradebox';
+      points: Array<{ x: number; y: number }>; // [entry-left, entry-right, sl-left, tp-left]
+      color: string;
+      dir: 'LONG' | 'SHORT';
+      entry: number;
+      sl: number;
+      tp: number;
+      rr: number;
+      riskPct: number;
+    };
   let drawingCanvas: HTMLCanvasElement;
-  let drawingMode: 'none' | 'hline' | 'trendline' | 'longentry' | 'shortentry' = 'none';
-  let drawings: Array<{ type: 'hline' | 'trendline'; points: Array<{ x: number; y: number }>; color: string }> = [];
-  let currentDrawing: { type: 'trendline' | 'longentry' | 'shortentry'; points: Array<{ x: number; y: number }> } | null = null;
+  let drawingMode: DrawingMode = 'none';
+  let drawings: DrawingItem[] = [];
+  let currentDrawing: { type: 'trendline'; points: Array<{ x: number; y: number }> } | null = null;
+  let tradePreview: { mode: 'longentry' | 'shortentry'; startX: number; startY: number; cursorX: number; cursorY: number } | null = null;
   let isDrawing = false;
   let chartNotice = '';
   let _chartNoticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -115,12 +134,13 @@
     vol: true,
   };
   let chartVisualMode: 'focus' | 'full' = 'focus';
-  let showIndicatorLegend = false;
+  let showIndicatorLegend = true;
+  let indicatorStripState: 'expanded' | 'collapsed' | 'hidden' = 'expanded';
   let _indicatorProfileApplied: string | null = null;
   const BAR_SPACING_MIN = 5;
   const BAR_SPACING_MAX = 28;
   const BAR_SPACING_STEP = 1.5;
-  const BAR_SPACING_DEFAULT = 12;
+  const BAR_SPACING_DEFAULT = 14;
   let barSpacing = BAR_SPACING_DEFAULT;
   let autoScaleY = true;
 
@@ -153,7 +173,7 @@
   const FALLBACK_THEME: ChartTheme = {
     bg: '#0a0a1a',
     text: '#a6b0bf',
-    grid: 'rgba(255,230,0,.08)',
+    grid: 'rgba(255,230,0,.06)',
     border: 'rgba(255,230,0,.3)',
     candleUp: '#00ff88',
     candleDown: '#ff2d55',
@@ -245,8 +265,8 @@
 
     return {
       bg,
-      text: withAlpha(fg, 0.72),
-      grid: withAlpha(accent, 0.1),
+      text: withAlpha(fg, 0.82),
+      grid: withAlpha(accent, 0.07),
       border: withAlpha(accent, 0.34),
       candleUp: up,
       candleDown: down,
@@ -297,6 +317,11 @@
     try { return series.coordinateToPrice(y); } catch { return null; }
   }
 
+  function toChartY(price: number): number | null {
+    if (!series) return null;
+    try { return series.priceToCoordinate(price); } catch { return null; }
+  }
+
   function clampRoundPrice(v: number) {
     if (!Number.isFinite(v)) return v;
     const abs = Math.abs(v);
@@ -305,7 +330,7 @@
     return Number(v.toFixed(4));
   }
 
-  function openTradeByLine(dir: 'LONG' | 'SHORT', entry: number, stopHint: number) {
+  function openTradeByLine(dir: 'LONG' | 'SHORT', entry: number, stopHint: number, rr = LINE_ENTRY_DEFAULT_RR) {
     const pair = state.pair || 'BTC/USDT';
     const entryPx = clampRoundPrice(entry);
     let sl = clampRoundPrice(stopHint);
@@ -316,10 +341,151 @@
       pushChartNotice('라인 기준 가격 계산 실패');
       return;
     }
-    const tp = clampRoundPrice(dir === 'LONG' ? entryPx + risk * 2 : entryPx - risk * 2);
+    const tp = clampRoundPrice(dir === 'LONG' ? entryPx + risk * rr : entryPx - risk * rr);
     openQuickTrade(pair, dir, entryPx, tp, sl, 'chart-line', `${dir} line-entry`);
-    gtmEvent('terminal_line_entry_open', { pair, dir, entry: entryPx, tp, sl });
-    pushChartNotice(`${dir} 진입 생성 · ENTRY ${formatPrice(entryPx)} · TP ${formatPrice(tp)} · SL ${formatPrice(sl)}`);
+    gtmEvent('terminal_line_entry_open', { pair, dir, entry: entryPx, tp, sl, rr });
+    pushChartNotice(`${dir} 진입 생성 · ENTRY ${formatPrice(entryPx)} · TP ${formatPrice(tp)} · SL ${formatPrice(sl)} · RR 1:${rr.toFixed(1)}`);
+  }
+
+  function clampToCanvas(v: number, max: number) {
+    return Math.max(0, Math.min(max, v));
+  }
+
+  function computeTradePreview(mode: 'longentry' | 'shortentry', startX: number, startY: number, cursorX: number, cursorY: number) {
+    if (!drawingCanvas) return null;
+    const sx = clampToCanvas(startX, drawingCanvas.width);
+    const sy = clampToCanvas(startY, drawingCanvas.height);
+    const cx = clampToCanvas(cursorX, drawingCanvas.width);
+    const cy = clampToCanvas(cursorY, drawingCanvas.height);
+
+    const left = Math.min(sx, cx);
+    const right = Math.min(drawingCanvas.width, Math.max(sx, cx, left + 26));
+    const entryY = sy;
+    let slY = cy;
+    let tpY = cy;
+
+    if (mode === 'longentry') {
+      slY = Math.max(cy, entryY + LINE_ENTRY_MIN_PIXEL_RISK);
+      tpY = entryY - (slY - entryY) * LINE_ENTRY_DEFAULT_RR;
+    } else {
+      slY = Math.min(cy, entryY - LINE_ENTRY_MIN_PIXEL_RISK);
+      tpY = entryY + (entryY - slY) * LINE_ENTRY_DEFAULT_RR;
+    }
+
+    const entryRaw = toChartPrice(entryY);
+    const fallbackEntry = Number.isFinite(livePrice) && livePrice > 0 ? livePrice : null;
+    if (entryRaw == null && fallbackEntry == null) return null;
+    const entryPx = clampRoundPrice(entryRaw ?? fallbackEntry!);
+
+    const slRaw = toChartPrice(slY);
+    let slPx = 0;
+    if (slRaw != null) {
+      slPx = clampRoundPrice(slRaw);
+    } else {
+      // If pointer is outside candle pane, approximate stop distance by drag pixel delta.
+      const pxDelta = Math.max(LINE_ENTRY_MIN_PIXEL_RISK, Math.abs(slY - entryY));
+      const approxRisk = Math.max(0.0035, Math.min(0.08, (pxDelta / Math.max(120, drawingCanvas.height)) * 0.24));
+      slPx = clampRoundPrice(mode === 'longentry' ? entryPx * (1 - approxRisk) : entryPx * (1 + approxRisk));
+    }
+    if (mode === 'longentry' && slPx >= entryPx) slPx = clampRoundPrice(entryPx * 0.995);
+    if (mode === 'shortentry' && slPx <= entryPx) slPx = clampRoundPrice(entryPx * 1.005);
+    const risk = Math.abs(entryPx - slPx);
+    if (!Number.isFinite(risk) || risk <= 0) return null;
+    const tpPx = clampRoundPrice(mode === 'longentry' ? entryPx + risk * LINE_ENTRY_DEFAULT_RR : entryPx - risk * LINE_ENTRY_DEFAULT_RR);
+
+    const mappedEntryY = toChartY(entryPx);
+    const mappedSlY = toChartY(slPx);
+    const mappedTpY = toChartY(tpPx);
+    if (mappedSlY != null) slY = mappedSlY;
+    tpY = mappedTpY ?? tpY;
+    const normalizedEntryY = mappedEntryY ?? entryY;
+
+    const riskPct = Math.abs(entryPx - slPx) / Math.max(Math.abs(entryPx), 1) * 100;
+
+    return {
+      mode,
+      dir: mode === 'longentry' ? 'LONG' as const : 'SHORT' as const,
+      left,
+      right,
+      entryY: normalizedEntryY,
+      slY,
+      tpY,
+      entry: entryPx,
+      sl: slPx,
+      tp: tpPx,
+      rr: LINE_ENTRY_DEFAULT_RR,
+      riskPct,
+    };
+  }
+
+  function drawTradePreview(ctx: CanvasRenderingContext2D, preview: NonNullable<ReturnType<typeof computeTradePreview>>) {
+    const lossTop = Math.min(preview.entryY, preview.slY);
+    const lossBottom = Math.max(preview.entryY, preview.slY);
+    const gainTop = Math.min(preview.entryY, preview.tpY);
+    const gainBottom = Math.max(preview.entryY, preview.tpY);
+
+    ctx.save();
+    ctx.fillStyle = withAlpha(chartTheme.candleUp, 0.17);
+    ctx.fillRect(preview.left, gainTop, preview.right - preview.left, gainBottom - gainTop);
+    ctx.fillStyle = withAlpha(chartTheme.candleDown, 0.17);
+    ctx.fillRect(preview.left, lossTop, preview.right - preview.left, lossBottom - lossTop);
+
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = withAlpha(chartTheme.entry, 0.92);
+    ctx.beginPath();
+    ctx.moveTo(preview.left, preview.entryY);
+    ctx.lineTo(preview.right, preview.entryY);
+    ctx.stroke();
+
+    ctx.strokeStyle = withAlpha(chartTheme.sl, 0.9);
+    ctx.beginPath();
+    ctx.moveTo(preview.left, preview.slY);
+    ctx.lineTo(preview.right, preview.slY);
+    ctx.stroke();
+
+    ctx.strokeStyle = withAlpha(chartTheme.tp, 0.9);
+    ctx.beginPath();
+    ctx.moveTo(preview.left, preview.tpY);
+    ctx.lineTo(preview.right, preview.tpY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const label = `${preview.dir} · E ${formatPrice(preview.entry)} · TP ${formatPrice(preview.tp)} · SL ${formatPrice(preview.sl)} · RR 1:${preview.rr.toFixed(1)} · Risk ${preview.riskPct.toFixed(2)}%`;
+    ctx.font = "10px 'JetBrains Mono', monospace";
+    const textW = ctx.measureText(label).width;
+    const padX = 7;
+    const boxW = textW + padX * 2;
+    const boxH = 16;
+    const boxX = Math.max(4, Math.min(preview.right + 8, drawingCanvas.width - boxW - 4));
+    const boxY = Math.max(4, Math.min(preview.entryY - boxH - 4, drawingCanvas.height - boxH - 4));
+
+    ctx.fillStyle = withAlpha('#000000', 0.68);
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.strokeStyle = withAlpha(preview.dir === 'LONG' ? chartTheme.candleUp : chartTheme.candleDown, 0.9);
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
+    ctx.fillStyle = withAlpha('#f5f7fa', 0.95);
+    ctx.fillText(label, boxX + padX, boxY + 11);
+    ctx.restore();
+  }
+
+  function makeTradeBoxDrawing(preview: NonNullable<ReturnType<typeof computeTradePreview>>): DrawingItem {
+    return {
+      type: 'tradebox',
+      points: [
+        { x: preview.left, y: preview.entryY },
+        { x: preview.right, y: preview.entryY },
+        { x: preview.left, y: preview.slY },
+        { x: preview.left, y: preview.tpY },
+      ],
+      color: preview.dir === 'LONG' ? chartTheme.candleUp : chartTheme.candleDown,
+      dir: preview.dir,
+      entry: preview.entry,
+      sl: preview.sl,
+      tp: preview.tp,
+      rr: preview.rr,
+      riskPct: preview.riskPct,
+    };
   }
 
   function applyIndicatorProfile() {
@@ -327,7 +493,7 @@
       ? (
         chartVisualMode === 'full'
           ? { ma20: true, ma60: true, ma120: true, ma7: true, ma25: true, ma99: true, rsi: true, vol: true }
-          : { ma20: true, ma60: true, ma120: true, ma7: false, ma25: false, ma99: false, rsi: false, vol: false }
+          : { ma20: true, ma60: true, ma120: true, ma7: false, ma25: false, ma99: false, rsi: true, vol: true }
       )
       : { ma20: false, ma60: false, ma120: false, ma7: true, ma25: true, ma99: true, rsi: true, vol: true };
     indicatorEnabled = next;
@@ -358,13 +524,13 @@
       const rsiOn = indicatorEnabled.rsi;
 
       if (volOn && rsiOn) {
-        mainPane.setStretchFactor(0.76);
-        volPane.setStretchFactor(0.12);
-        rsiPane.setStretchFactor(0.12);
+        mainPane.setStretchFactor(0.82);
+        volPane.setStretchFactor(0.09);
+        rsiPane.setStretchFactor(0.09);
       } else if (volOn || rsiOn) {
-        mainPane.setStretchFactor(0.88);
-        volPane.setStretchFactor(volOn ? 0.12 : 0.02);
-        rsiPane.setStretchFactor(rsiOn ? 0.12 : 0.02);
+        mainPane.setStretchFactor(0.9);
+        volPane.setStretchFactor(volOn ? 0.1 : 0.02);
+        rsiPane.setStretchFactor(rsiOn ? 0.1 : 0.02);
       } else {
         mainPane.setStretchFactor(0.96);
         volPane.setStretchFactor(0.02);
@@ -424,6 +590,12 @@
   function toggleIndicatorLegend() {
     showIndicatorLegend = !showIndicatorLegend;
     gtmEvent('terminal_indicator_legend_toggle', { show: showIndicatorLegend });
+  }
+
+  function setIndicatorStripState(next: 'expanded' | 'collapsed' | 'hidden') {
+    if (indicatorStripState === next) return;
+    indicatorStripState = next;
+    gtmEvent('terminal_indicator_strip_state', { state: next });
   }
 
   $: {
@@ -628,12 +800,37 @@
   //  DRAWING TOOLS
   // ═══════════════════════════════════════════
 
-  function setDrawingMode(mode: 'none' | 'hline' | 'trendline' | 'longentry' | 'shortentry') {
+  let _globalDrawingMouseUpBound = false;
+
+  function bindGlobalDrawingMouseUp() {
+    if (_globalDrawingMouseUpBound || typeof window === 'undefined') return;
+    window.addEventListener('mouseup', handleDrawingMouseUp);
+    _globalDrawingMouseUpBound = true;
+  }
+
+  function unbindGlobalDrawingMouseUp() {
+    if (!_globalDrawingMouseUpBound || typeof window === 'undefined') return;
+    window.removeEventListener('mouseup', handleDrawingMouseUp);
+    _globalDrawingMouseUpBound = false;
+  }
+
+  function setDrawingMode(mode: DrawingMode) {
     drawingMode = mode;
     isDrawing = false;
     currentDrawing = null;
+    tradePreview = null;
+    unbindGlobalDrawingMouseUp();
+    renderDrawings();
   }
-  function clearAllDrawings() { drawings = []; currentDrawing = null; isDrawing = false; drawingMode = 'none'; renderDrawings(); }
+  function clearAllDrawings() {
+    drawings = [];
+    currentDrawing = null;
+    tradePreview = null;
+    isDrawing = false;
+    drawingMode = 'none';
+    unbindGlobalDrawingMouseUp();
+    renderDrawings();
+  }
 
   function handleDrawingMouseDown(e: MouseEvent) {
     if (drawingMode === 'none' || !drawingCanvas) return;
@@ -653,46 +850,59 @@
       return;
     }
     if (drawingMode === 'longentry' || drawingMode === 'shortentry') {
-      if (!isDrawing) {
-        currentDrawing = { type: drawingMode, points: [{ x, y }] };
-        isDrawing = true;
-        return;
-      }
-      if (!currentDrawing) return;
-      const p1 = toChartPrice(currentDrawing.points[0].y);
-      const p2 = toChartPrice(y);
-      if (p1 == null || p2 == null) {
-        isDrawing = false;
-        currentDrawing = null;
-        drawingMode = 'none';
-        pushChartNotice('라인 진입 계산 실패');
-        return;
-      }
-      openTradeByLine(drawingMode === 'longentry' ? 'LONG' : 'SHORT', p1, p2);
-      isDrawing = false;
+      tradePreview = { mode: drawingMode, startX: x, startY: y, cursorX: x, cursorY: y };
       currentDrawing = null;
-      drawingMode = 'none';
+      isDrawing = true;
+      bindGlobalDrawingMouseUp();
+      renderDrawings();
       return;
     }
   }
 
+  function handleDrawingMouseUp(e: MouseEvent) {
+    if (!drawingCanvas || !isDrawing || !tradePreview) return;
+    if (drawingMode !== 'longentry' && drawingMode !== 'shortentry') return;
+    const rect = drawingCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, x, y);
+    if (!preview) {
+      pushChartNotice('라인 진입 계산 실패');
+    } else {
+      openTradeByLine(preview.dir, preview.entry, preview.sl, preview.rr);
+      drawings = [...drawings, makeTradeBoxDrawing(preview)];
+    }
+    isDrawing = false;
+    currentDrawing = null;
+    tradePreview = null;
+    drawingMode = 'none';
+    unbindGlobalDrawingMouseUp();
+    renderDrawings();
+  }
+
   let _drawRAF: number | null = null;
   function handleDrawingMouseMove(e: MouseEvent) {
-    if (!isDrawing || !currentDrawing || !drawingCanvas) return;
+    if (!isDrawing || !drawingCanvas) return;
     if (_drawRAF) return; // throttle to animation frame
     _drawRAF = requestAnimationFrame(() => {
       _drawRAF = null;
-      if (!currentDrawing || !drawingCanvas) return;
+      if (!drawingCanvas) return;
       const rect = drawingCanvas.getBoundingClientRect();
+      if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry')) {
+        tradePreview = {
+          ...tradePreview,
+          cursorX: e.clientX - rect.left,
+          cursorY: e.clientY - rect.top,
+        };
+        renderDrawings();
+        return;
+      }
+      if (!currentDrawing) return;
       renderDrawings();
       const ctx = drawingCanvas.getContext('2d');
       if (!ctx) return;
       ctx.beginPath();
-      const ghostColor = currentDrawing?.type === 'longentry'
-        ? withAlpha(chartTheme.candleUp, 0.72)
-        : currentDrawing?.type === 'shortentry'
-          ? withAlpha(chartTheme.candleDown, 0.72)
-          : chartTheme.drawGhost;
+      const ghostColor = chartTheme.drawGhost;
       ctx.strokeStyle = ghostColor;
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
@@ -711,7 +921,33 @@
       ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.5;
       if (d.type === 'hline') { ctx.setLineDash([6, 3]); ctx.moveTo(0, d.points[0].y); ctx.lineTo(drawingCanvas.width, d.points[0].y); }
       else if (d.type === 'trendline' && d.points.length === 2) { ctx.setLineDash([]); ctx.moveTo(d.points[0].x, d.points[0].y); ctx.lineTo(d.points[1].x, d.points[1].y); }
+      else if (d.type === 'tradebox' && d.points.length >= 4) {
+        const entryLeft = d.points[0];
+        const entryRight = d.points[1];
+        const slLeft = d.points[2];
+        const tpLeft = d.points[3];
+        const preview = {
+          mode: d.dir === 'LONG' ? 'longentry' as const : 'shortentry' as const,
+          dir: d.dir,
+          left: Math.min(entryLeft.x, entryRight.x),
+          right: Math.max(entryLeft.x, entryRight.x),
+          entryY: entryLeft.y,
+          slY: slLeft.y,
+          tpY: tpLeft.y,
+          entry: d.entry,
+          sl: d.sl,
+          tp: d.tp,
+          rr: d.rr,
+          riskPct: d.riskPct,
+        };
+        drawTradePreview(ctx, preview);
+        continue;
+      }
       ctx.stroke(); ctx.setLineDash([]);
+    }
+    if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry')) {
+      const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
+      if (preview) drawTradePreview(ctx, preview);
     }
   }
 
@@ -830,13 +1066,13 @@
 
       chart = lwc.createChart(chartContainer, {
         width: chartContainer.clientWidth, height: chartContainer.clientHeight,
-        layout: { background: { type: lwc.ColorType.Solid, color: chartTheme.bg }, textColor: chartTheme.text, fontFamily: "'JetBrains Mono', monospace", fontSize: 10 },
+        layout: { background: { type: lwc.ColorType.Solid, color: chartTheme.bg }, textColor: chartTheme.text, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 },
         grid: { vertLines: { color: chartTheme.grid }, horzLines: { color: chartTheme.grid } },
         crosshair: { mode: lwc.CrosshairMode.Normal },
         rightPriceScale: {
           autoScale: true,
           borderColor: chartTheme.border,
-          minimumWidth: 66,
+          minimumWidth: 74,
           scaleMargins: { top: 0.04, bottom: 0.08 }
         },
         timeScale: {
@@ -866,8 +1102,8 @@
         wickUpColor: chartTheme.candleUp,
         wickDownColor: chartTheme.candleDown,
         borderVisible: true,
-        borderUpColor: withAlpha(chartTheme.candleUp, 0.9),
-        borderDownColor: withAlpha(chartTheme.candleDown, 0.9)
+        borderUpColor: withAlpha(chartTheme.candleUp, 1),
+        borderDownColor: withAlpha(chartTheme.candleDown, 1)
       });
 
       // MA lines on main pane
@@ -1174,12 +1410,26 @@
     loadKlines(symbol, toBinanceInterval(normalized));
   }
 
+  function requestAgentScan() {
+    gtmEvent('terminal_scan_request_chart', {
+      source: 'chart-bar',
+      pair: state.pair,
+      timeframe: state.timeframe,
+    });
+    dispatch('scanrequest', {
+      source: 'chart-bar',
+      pair: state.pair,
+      timeframe: state.timeframe,
+    });
+  }
+
   onDestroy(() => {
     if (_priceUpdateTimer) clearTimeout(_priceUpdateTimer);
     if (_tvInitTimer) clearTimeout(_tvInitTimer);
     if (_tvLoadTimer) clearTimeout(_tvLoadTimer);
     if (_chartNoticeTimer) clearTimeout(_chartNoticeTimer);
     if (_drawRAF) cancelAnimationFrame(_drawRAF);
+    unbindGlobalDrawingMouseUp();
     if (cleanup) cleanup();
     if (wsCleanup) wsCleanup();
     destroyTradingView();
@@ -1216,13 +1466,17 @@
       </button>
     </div>
 
+    <button class="scan-btn" on:click={requestAgentScan} title="Run agent scan for current market">
+      SCAN
+    </button>
+
     {#if chartMode === 'agent'}
       <div class="draw-tools">
         <button class="draw-btn" class:active={drawingMode === 'hline'} on:click={() => setDrawingMode(drawingMode === 'hline' ? 'none' : 'hline')} title="Horizontal Line">&#x2500;</button>
         <button class="draw-btn" class:active={drawingMode === 'trendline'} on:click={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
         {#if enableTradeLineEntry}
-          <button class="draw-btn long-tool" class:active={drawingMode === 'longentry'} on:click={() => setDrawingMode(drawingMode === 'longentry' ? 'none' : 'longentry')} title="Line Entry LONG (L)">L</button>
-          <button class="draw-btn short-tool" class:active={drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'shortentry' ? 'none' : 'shortentry')} title="Line Entry SHORT (S)">S</button>
+          <button class="draw-btn long-tool" class:active={drawingMode === 'longentry'} on:click={() => setDrawingMode(drawingMode === 'longentry' ? 'none' : 'longentry')} title="LONG RR Box (L) · drag once">L</button>
+          <button class="draw-btn short-tool" class:active={drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'shortentry' ? 'none' : 'shortentry')} title="SHORT RR Box (S) · drag once">S</button>
         {/if}
         <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
       </div>
@@ -1242,43 +1496,64 @@
         {priceChange24h >= 0 ? '▲' : '▼'}{Math.abs(priceChange24h).toFixed(2)}%
       </span>
     </div>
+    {#if chartMode === 'agent' && advancedMode && indicatorStripState === 'hidden'}
+      <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>지표 ON</button>
+    {/if}
   </div>
 
-  {#if chartMode === 'agent' && advancedMode}
-    <div class="indicator-strip">
-      <div class="view-mode">
-        <button class="view-chip" class:on={chartVisualMode === 'focus'} on:click={() => setChartVisualMode('focus')}>FOCUS</button>
-        <button class="view-chip" class:on={chartVisualMode === 'full'} on:click={() => setChartVisualMode('full')}>FULL</button>
-      </div>
-      <button class="ind-chip" class:on={indicatorEnabled.ma20} on:click={() => toggleIndicator('ma20')} style="--ind-color:{chartTheme.ma20}">
-        MA20 <span>{formatPrice(ma20Val)}</span>
-      </button>
-      <button class="ind-chip" class:on={indicatorEnabled.ma60} on:click={() => toggleIndicator('ma60')} style="--ind-color:{chartTheme.ma60}">
-        MA60 <span>{formatPrice(ma60Val)}</span>
-      </button>
-      <button class="ind-chip" class:on={indicatorEnabled.ma120} on:click={() => toggleIndicator('ma120')} style="--ind-color:{chartTheme.ma120}">
-        MA120 <span>{formatPrice(ma120Val)}</span>
-      </button>
-      {#if chartVisualMode === 'full'}
-        <button class="ind-chip muted" class:on={indicatorEnabled.ma7} on:click={() => toggleIndicator('ma7')} style="--ind-color:{chartTheme.ma7}">
-          MA7
+  {#if chartMode === 'agent' && advancedMode && indicatorStripState !== 'hidden'}
+    <div class="indicator-strip" class:collapsed={indicatorStripState === 'collapsed'}>
+      {#if indicatorStripState === 'expanded'}
+        <div class="view-mode">
+          <button class="view-chip" class:on={chartVisualMode === 'focus'} on:click={() => setChartVisualMode('focus')}>FOCUS</button>
+          <button class="view-chip" class:on={chartVisualMode === 'full'} on:click={() => setChartVisualMode('full')}>FULL</button>
+        </div>
+        <button class="ind-chip" class:on={indicatorEnabled.ma20} on:click={() => toggleIndicator('ma20')} style="--ind-color:{chartTheme.ma20}">
+          MA20 <span>{formatPrice(ma20Val)}</span>
         </button>
-        <button class="ind-chip muted" class:on={indicatorEnabled.ma25} on:click={() => toggleIndicator('ma25')} style="--ind-color:{chartTheme.ma25}">
-          MA25
+        <button class="ind-chip" class:on={indicatorEnabled.ma60} on:click={() => toggleIndicator('ma60')} style="--ind-color:{chartTheme.ma60}">
+          MA60 <span>{formatPrice(ma60Val)}</span>
         </button>
-        <button class="ind-chip muted" class:on={indicatorEnabled.ma99} on:click={() => toggleIndicator('ma99')} style="--ind-color:{chartTheme.ma99}">
-          MA99
+        <button class="ind-chip" class:on={indicatorEnabled.ma120} on:click={() => toggleIndicator('ma120')} style="--ind-color:{chartTheme.ma120}">
+          MA120 <span>{formatPrice(ma120Val)}</span>
         </button>
-      {/if}
-      <button class="ind-chip" class:on={indicatorEnabled.rsi} on:click={() => toggleIndicator('rsi')} style="--ind-color:{chartTheme.rsi}">
-        RSI14 <span>{Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
-      </button>
-      <button class="ind-chip" class:on={indicatorEnabled.vol} on:click={() => toggleIndicator('vol')} style="--ind-color:{chartTheme.candleUp}">
-        VOL <span>{formatCompact(latestVolume)}</span>
-      </button>
-      <button class="legend-chip" class:on={showIndicatorLegend} on:click={toggleIndicatorLegend}>LABELS</button>
-      {#if enableTradeLineEntry}
-        <span class="ind-hint">H/T/L/S · +/- 줌 · F 맞춤 · 0 리셋 · Esc 취소</span>
+        {#if chartVisualMode === 'full'}
+          <button class="ind-chip muted" class:on={indicatorEnabled.ma7} on:click={() => toggleIndicator('ma7')} style="--ind-color:{chartTheme.ma7}">
+            MA7
+          </button>
+          <button class="ind-chip muted" class:on={indicatorEnabled.ma25} on:click={() => toggleIndicator('ma25')} style="--ind-color:{chartTheme.ma25}">
+            MA25
+          </button>
+          <button class="ind-chip muted" class:on={indicatorEnabled.ma99} on:click={() => toggleIndicator('ma99')} style="--ind-color:{chartTheme.ma99}">
+            MA99
+          </button>
+        {/if}
+        <button class="ind-chip" class:on={indicatorEnabled.rsi} on:click={() => toggleIndicator('rsi')} style="--ind-color:{chartTheme.rsi}">
+          RSI14(상대강도) <span>{Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
+        </button>
+        <button class="ind-chip" class:on={indicatorEnabled.vol} on:click={() => toggleIndicator('vol')} style="--ind-color:{chartTheme.candleUp}">
+          VOL(거래량) <span>{formatCompact(latestVolume)}</span>
+        </button>
+        <button class="legend-chip" class:on={showIndicatorLegend} on:click={toggleIndicatorLegend}>LABELS</button>
+        <button class="legend-chip" on:click={() => setIndicatorStripState('collapsed')}>접기</button>
+        <button class="legend-chip danger" on:click={() => setIndicatorStripState('hidden')}>끄기</button>
+        {#if enableTradeLineEntry}
+          <span class="ind-hint">H/T/L/S · L/S는 드래그 1회로 ENTRY/SL/TP 생성 · +/- 줌 · F 맞춤 · 0 리셋 · Esc 취소</span>
+        {/if}
+      {:else}
+        <div class="collapsed-summary">
+          <span class="sum-title">INDICATORS</span>
+          <span class="sum-item">MA20 {formatPrice(ma20Val)}</span>
+          <span class="sum-item">MA60 {formatPrice(ma60Val)}</span>
+          <span class="sum-item">MA120 {formatPrice(ma120Val)}</span>
+          <span class="sum-item">RSI14(상대강도) {Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
+          <span class="sum-item">VOL(거래량) {formatCompact(latestVolume)}</span>
+        </div>
+        <div class="strip-actions">
+          <button class="legend-chip" class:on={showIndicatorLegend} on:click={toggleIndicatorLegend}>LABELS</button>
+          <button class="legend-chip" on:click={() => setIndicatorStripState('expanded')}>펴기</button>
+          <button class="legend-chip danger" on:click={() => setIndicatorStripState('hidden')}>끄기</button>
+        </div>
       {/if}
     </div>
   {/if}
@@ -1324,10 +1599,10 @@
           <span class="legend-item" style="--legend-color:{chartTheme.ma99}">MA99 {ma99Val > 0 ? formatPrice(ma99Val) : '—'}</span>
         {/if}
         {#if indicatorEnabled.rsi}
-          <span class="legend-item" style="--legend-color:{chartTheme.rsi}">RSI14 {rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
+          <span class="legend-item" style="--legend-color:{chartTheme.rsi}">RSI14(상대강도지수) {rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
         {/if}
         {#if indicatorEnabled.vol}
-          <span class="legend-item" style="--legend-color:{chartTheme.candleUp}">VOL {latestVolume > 0 ? formatCompact(latestVolume) : '—'}</span>
+          <span class="legend-item" style="--legend-color:{chartTheme.candleUp}">VOL(거래량) {latestVolume > 0 ? formatCompact(latestVolume) : '—'}</span>
         {/if}
       </div>
     {/if}
@@ -1336,7 +1611,7 @@
       <!-- svelte-ignore a11y-no-static-element-interactions -->
       <canvas class="drawing-canvas" bind:this={drawingCanvas}
         class:drawing-active={drawingMode !== 'none'}
-        on:mousedown={handleDrawingMouseDown} on:mousemove={handleDrawingMouseMove}></canvas>
+        on:mousedown={handleDrawingMouseDown} on:mousemove={handleDrawingMouseMove} on:mouseup={handleDrawingMouseUp}></canvas>
     {/if}
 
     {#if drawingMode !== 'none' && chartMode === 'agent'}
@@ -1346,9 +1621,9 @@
         {:else if drawingMode === 'trendline'}
           CLICK two points for trend line
         {:else if drawingMode === 'longentry'}
-          LONG line-entry: 1) ENTRY 클릭 2) STOP 클릭
+          LONG RR Box: 클릭 후 드래그(캔들/하단패널 가능)로 ENTRY/SL/TP 생성
         {:else if drawingMode === 'shortentry'}
-          SHORT line-entry: 1) ENTRY 클릭 2) STOP 클릭
+          SHORT RR Box: 클릭 후 드래그(캔들/하단패널 가능)로 ENTRY/SL/TP 생성
         {/if}
         <button class="drawing-cancel" on:click={() => setDrawingMode('none')}>ESC</button>
       </div>
@@ -1429,21 +1704,25 @@
   {/if}
 
   <div class="chart-footer">
-    <span class="src-badge">{chartMode === 'trading' ? '📊 TV' : '📡 BINANCE'}</span>
-    <span class="src-pair">{chartMode === 'trading' ? pairToTVSymbol(state.pair) : symbol}</span>
-    <span class="src-tf">{formatTimeframeLabel(state.timeframe)}</span>
+    <span class="src-badge">{chartMode === 'trading' ? 'TV' : 'BINANCE'}</span>
+    {#if chartMode === 'agent' && indicatorEnabled.vol}
+      <span class="footer-ind vol" title="Volume · 거래량">VOL(거래량) {latestVolume > 0 ? formatCompact(latestVolume) : '—'}</span>
+    {/if}
+    {#if chartMode === 'agent' && indicatorEnabled.rsi}
+      <span class="footer-ind rsi" title="RSI14 · 상대강도지수">RSI14(상대강도) {rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
+    {/if}
     {#if chartMode === 'agent' && drawings.length > 0}
-      <span class="draw-count">✏️ {drawings.length}</span>
+      <span class="draw-count">DRAW {drawings.length}</span>
     {/if}
     {#if showPosition}
-      <span class="pos-active">📍 {posDir || 'POS'}</span>
+      <span class="pos-active">{posDir || 'POS'}</span>
     {/if}
     <span class="agent-feed-text">
-      {#if state.phase === 'scout'}⚡ Scanning...
-      {:else if state.phase === 'gather'}🔍 Gathering...
-      {:else if state.phase === 'council'}🗣️ Debating...
-      {:else if state.phase === 'verdict'}⚖️ Consensus...
-      {:else if state.phase === 'battle'}⚔️ Battle...
+      {#if state.phase === 'scout'}SCANNING...
+      {:else if state.phase === 'gather'}GATHERING...
+      {:else if state.phase === 'council'}DEBATING...
+      {:else if state.phase === 'verdict'}CONSENSUS...
+      {:else if state.phase === 'battle'}BATTLE...
       {:else}●
       {/if}
     </span>
@@ -1458,22 +1737,22 @@
     background: linear-gradient(90deg, #1a1a3a, #0a0a2a); font-size: 10px; font-family: var(--fm);
     flex-shrink: 0; flex-wrap: wrap; row-gap: 3px;
   }
-  .live-indicator { font-size: 8px; font-weight: 700; color: var(--grn); display: flex; align-items: center; gap: 3px; letter-spacing: 1px; margin-right: 4px; }
+  .live-indicator { font-size: 9px; font-weight: 700; color: var(--grn); display: flex; align-items: center; gap: 3px; letter-spacing: .9px; margin-right: 4px; }
   .live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--grn); animation: pulse .8s infinite; }
   .live-dot.err { background: #ff2d55; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
   .tf-btns { display: flex; gap: 2px; }
-  .tfbtn { padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #888; font-size: 8px; font-family: var(--fd); font-weight: 700; letter-spacing: 1px; cursor: pointer; transition: all .15s; }
+  .tfbtn { padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #b8c0cc; font-size: 9px; font-family: var(--fd); font-weight: 700; letter-spacing: .8px; cursor: pointer; transition: all .15s; }
   .tfbtn:hover { background: rgba(255,255,255,.1); color: #fff; }
   .tfbtn.active { background: rgba(255,230,0,.15); color: #ffe600; border-color: rgba(255,230,0,.3); }
 
   .ma-vals { display: flex; gap: 6px; flex-wrap: wrap; }
-  .ma-tag { font-size: 7px; font-family: var(--fm); font-weight: 700; letter-spacing: .3px; opacity: .85; }
+  .ma-tag { font-size: 8px; font-family: var(--fm); font-weight: 700; letter-spacing: .3px; opacity: 1; }
 
   .price-info { margin-left: auto; display: flex; align-items: baseline; gap: 6px; }
-  .cprc { font-size: 17px; font-weight: 700; color: #fff; font-family: var(--fd); }
-  .pchg { font-size: 10px; font-weight: 700; }
+  .cprc { font-size: 20px; font-weight: 700; color: #fff; font-family: var(--fd); }
+  .pchg { font-size: 12px; font-weight: 700; }
   .pchg.up { color: #00ff88; }
   .pchg.down { color: #ff2d55; }
 
@@ -1516,17 +1795,17 @@
     background: rgba(255,255,255,.06);
     color: rgba(255,255,255,.8);
     border-radius: 6px;
-    min-width: 24px;
-    height: 20px;
+    min-width: 26px;
+    height: 22px;
     padding: 0 6px;
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .5px;
     cursor: pointer;
     transition: all .15s;
   }
-  .scale-btn.wide { min-width: 42px; }
+  .scale-btn.wide { min-width: 46px; }
   .scale-btn:hover {
     color: #fff;
     border-color: rgba(255,255,255,.35);
@@ -1537,6 +1816,24 @@
     border-color: rgba(255,230,0,.55);
     background: rgba(255,230,0,.16);
   }
+  .strip-restore-btn {
+    border: 1px solid rgba(255,255,255,.22);
+    background: rgba(255,255,255,.08);
+    color: rgba(255,255,255,.85);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-family: var(--fd);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .5px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .strip-restore-btn:hover {
+    color: #fff;
+    border-color: rgba(255,230,0,.45);
+    background: rgba(255,230,0,.16);
+  }
 
   @media (max-width: 900px) {
     .scale-tools {
@@ -1545,19 +1842,20 @@
       padding: 3px;
     }
     .scale-btn {
-      min-width: 22px;
-      height: 19px;
-      font-size: 7px;
+      min-width: 24px;
+      height: 20px;
+      font-size: 8px;
       padding: 0 5px;
     }
-    .scale-btn.wide { min-width: 38px; }
+    .scale-btn.wide { min-width: 40px; }
+    .strip-restore-btn { padding: 2px 6px; font-size: 8px; }
     .chart-notice { bottom: 36px; }
     .drag-indicator { bottom: 30px; }
   }
   .legend-item {
     --legend-color: #aaa;
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 8px;
     color: rgba(255,255,255,.88);
     letter-spacing: .35px;
     white-space: nowrap;
@@ -1575,20 +1873,41 @@
   }
 
   .mode-toggle { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1.5px solid rgba(255,230,0,.25); margin-left: 4px; }
-  .mode-btn { padding: 3px 10px; background: rgba(255,255,255,.03); border: none; color: #666; font-size: 8px; font-family: var(--fd); font-weight: 800; letter-spacing: 1px; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .mode-btn { padding: 3px 10px; background: rgba(255,255,255,.03); border: none; color: #b2b9c5; font-size: 9px; font-family: var(--fd); font-weight: 800; letter-spacing: .9px; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
   .mode-btn:first-child { border-right: 1px solid rgba(255,230,0,.15); }
   .mode-btn:hover { background: rgba(255,230,0,.08); color: #ccc; }
   .mode-btn.active { background: linear-gradient(135deg, rgba(255,230,0,.2), rgba(255,180,0,.15)); color: #ffe600; text-shadow: 0 0 8px rgba(255,230,0,.5); }
-  .mode-icon { font-size: 9px; line-height: 1; }
+  .mode-icon { font-size: 10px; line-height: 1; }
+  .scan-btn {
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 4px;
+    border: 1.5px solid rgba(255,230,0,.35);
+    background: linear-gradient(135deg, rgba(255,230,0,.2), rgba(255,180,0,.12));
+    color: #ffe600;
+    font-size: 9px;
+    font-family: var(--fd);
+    font-weight: 900;
+    letter-spacing: .85px;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .scan-btn:hover {
+    background: linear-gradient(135deg, rgba(255,230,0,.28), rgba(255,180,0,.18));
+    border-color: rgba(255,230,0,.55);
+    color: #fff3bf;
+    box-shadow: 0 0 10px rgba(255,230,0,.26);
+  }
 
   .draw-tools { display: flex; gap: 2px; margin-left: 2px; padding-left: 4px; border-left: 1px solid rgba(255,255,255,.06); }
-  .draw-btn { width: 24px; height: 20px; border-radius: 4px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: #888; font-size: 11px; font-family: monospace; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
+  .draw-btn { width: 24px; height: 20px; border-radius: 4px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: #b5bdc9; font-size: 11px; font-family: monospace; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
   .draw-btn:hover { background: rgba(255,230,0,.1); color: #ffe600; border-color: rgba(255,230,0,.3); }
   .draw-btn.active { background: rgba(255,230,0,.2); color: #ffe600; border-color: #ffe600; box-shadow: 0 0 6px rgba(255,230,0,.3); }
-  .draw-btn.long-tool { font-family: var(--fd); font-size: 7px; color: #5cd4a0; border-color: rgba(92,212,160,.22); }
+  .draw-btn.long-tool { font-family: var(--fd); font-size: 8px; color: #5cd4a0; border-color: rgba(92,212,160,.22); }
   .draw-btn.long-tool:hover { background: rgba(92,212,160,.15); color: #78e9bc; border-color: rgba(92,212,160,.45); }
   .draw-btn.long-tool.active { background: rgba(92,212,160,.2); color: #88ffd0; border-color: rgba(92,212,160,.6); box-shadow: 0 0 8px rgba(92,212,160,.35); }
-  .draw-btn.short-tool { font-family: var(--fd); font-size: 7px; color: #e77f90; border-color: rgba(231,127,144,.22); }
+  .draw-btn.short-tool { font-family: var(--fd); font-size: 8px; color: #e77f90; border-color: rgba(231,127,144,.22); }
   .draw-btn.short-tool:hover { background: rgba(231,127,144,.15); color: #ff9caf; border-color: rgba(231,127,144,.45); }
   .draw-btn.short-tool.active { background: rgba(231,127,144,.2); color: #ffadbc; border-color: rgba(231,127,144,.6); box-shadow: 0 0 8px rgba(231,127,144,.35); }
   .draw-btn.clear-btn:hover { background: rgba(255,45,85,.15); color: #ff2d55; border-color: rgba(255,45,85,.4); }
@@ -1602,6 +1921,37 @@
     border-bottom: 1px solid rgba(255,255,255,.06);
     background: rgba(255,255,255,.03);
   }
+  .indicator-strip.collapsed {
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .collapsed-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+  .sum-title {
+    font-family: var(--fd);
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: .8px;
+    color: rgba(255,255,255,.92);
+  }
+  .sum-item {
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.74);
+    letter-spacing: .35px;
+    white-space: nowrap;
+  }
+  .strip-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
   .view-mode {
     display: inline-flex;
     align-items: center;
@@ -1613,11 +1963,11 @@
   .view-chip {
     border: 1px solid rgba(255,255,255,.16);
     background: rgba(255,255,255,.04);
-    color: rgba(255,255,255,.6);
+    color: rgba(255,255,255,.78);
     border-radius: 10px;
     padding: 2px 8px;
     font-family: var(--fd);
-    font-size: 7px;
+    font-size: 8px;
     font-weight: 800;
     letter-spacing: .5px;
     cursor: pointer;
@@ -1637,11 +1987,11 @@
     --ind-color: #888;
     border: 1px solid rgba(255,255,255,.15);
     background: rgba(255,255,255,.05);
-    color: rgba(255,255,255,.58);
+    color: rgba(255,255,255,.74);
     border-radius: 12px;
     padding: 3px 8px;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .3px;
     cursor: pointer;
@@ -1665,18 +2015,18 @@
   .ind-hint {
     margin-left: auto;
     font-family: var(--fm);
-    font-size: 7px;
-    color: rgba(255,255,255,.32);
+    font-size: 8px;
+    color: rgba(255,255,255,.58);
     letter-spacing: .4px;
   }
   .legend-chip {
     border: 1px solid rgba(255,255,255,.2);
     background: rgba(255,255,255,.04);
-    color: rgba(255,255,255,.65);
+    color: rgba(255,255,255,.78);
     border-radius: 10px;
     padding: 3px 8px;
     font-family: var(--fd);
-    font-size: 7px;
+    font-size: 8px;
     font-weight: 800;
     letter-spacing: .5px;
     cursor: pointer;
@@ -1687,14 +2037,23 @@
     border-color: rgba(255,230,0,.45);
     background: rgba(255,230,0,.14);
   }
+  .legend-chip.danger {
+    color: rgba(255,165,165,.85);
+    border-color: rgba(255,120,120,.32);
+  }
+  .legend-chip.danger:hover {
+    color: #ffd0d0;
+    border-color: rgba(255,120,120,.55);
+    background: rgba(255,70,70,.14);
+  }
   .legend-chip:hover { color: #fff; border-color: rgba(255,255,255,.36); }
 
   .drawing-canvas { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
   .drawing-canvas.drawing-active { pointer-events: auto; cursor: crosshair; }
 
-  .drawing-indicator { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); z-index: 15; padding: 3px 12px; border-radius: 6px; background: rgba(255,230,0,.12); border: 1px solid rgba(255,230,0,.3); color: #ffe600; font-size: 8px; font-weight: 700; font-family: var(--fm); letter-spacing: 1px; display: flex; align-items: center; gap: 8px; animation: drawPulse 1.5s ease infinite; }
+  .drawing-indicator { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); z-index: 15; padding: 4px 12px; border-radius: 6px; background: rgba(255,230,0,.12); border: 1px solid rgba(255,230,0,.3); color: #ffe600; font-size: 9px; font-weight: 700; font-family: var(--fm); letter-spacing: .9px; display: flex; align-items: center; gap: 8px; animation: drawPulse 1.5s ease infinite; }
   @keyframes drawPulse { 0%,100% { opacity: 1 } 50% { opacity: .65 } }
-  .drawing-cancel { padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.15); color: #aaa; font-size: 6px; font-family: var(--fm); font-weight: 800; cursor: pointer; letter-spacing: 1px; }
+  .drawing-cancel { padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.15); color: #ddd; font-size: 7px; font-family: var(--fm); font-weight: 800; cursor: pointer; letter-spacing: .8px; }
   .drawing-cancel:hover { background: rgba(255,45,85,.2); color: #ff2d55; border-color: rgba(255,45,85,.4); }
   .chart-notice {
     position: absolute;
@@ -1708,7 +2067,7 @@
     background: rgba(0,0,0,.7);
     color: #ffe7b8;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: .4px;
     box-shadow: 0 8px 24px rgba(0,0,0,.4);
     pointer-events: none;
@@ -1739,7 +2098,7 @@
   }
   .tv-error-desc {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     line-height: 1.45;
     color: rgba(255, 255, 255, 0.72);
     margin-bottom: 10px;
@@ -1757,7 +2116,7 @@
     border-radius: 6px;
     padding: 6px 10px;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 0.8px;
     cursor: pointer;
@@ -1769,7 +2128,7 @@
   }
   .tv-open-link {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: #9ed9ff;
     text-decoration: none;
@@ -1782,32 +2141,32 @@
   .tv-safe-hint {
     margin-top: 8px;
     font-family: var(--fm);
-    font-size: 7px;
-    color: rgba(255, 255, 255, 0.42);
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.62);
     letter-spacing: 0.8px;
   }
 
-  .loading-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(10,10,26,.9); z-index: 10; color: #888; font-size: 9px; font-family: var(--fm); }
+  .loading-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(10,10,26,.9); z-index: 10; color: #d0d6df; font-size: 10px; font-family: var(--fm); }
   .loader { width: 24px; height: 24px; border: 2px solid rgba(255,230,0,.2); border-top-color: #ffe600; border-radius: 50%; animation: spin .6s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .error-badge { position: absolute; top: 6px; left: 6px; padding: 3px 8px; border-radius: 4px; background: rgba(255,45,85,.2); border: 1px solid rgba(255,45,85,.4); color: #ff2d55; font-size: 7px; font-family: var(--fm); font-weight: 600; z-index: 5; }
+  .error-badge { position: absolute; top: 6px; left: 6px; padding: 3px 8px; border-radius: 4px; background: rgba(255,45,85,.2); border: 1px solid rgba(255,45,85,.4); color: #ff2d55; font-size: 8px; font-family: var(--fm); font-weight: 700; z-index: 5; }
 
   .pos-overlay { position: absolute; top: 6px; right: 6px; z-index: 12; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
   .pos-badge { padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; border: 2px solid; }
   .pos-badge.long { background: rgba(0,255,136,.2); border-color: #00ff88; color: #00ff88; }
   .pos-badge.short { background: rgba(255,45,85,.2); border-color: #ff2d55; color: #ff2d55; }
   .pos-badge.neutral { background: rgba(255,170,0,.2); border-color: #ffaa00; color: #ffaa00; }
-  .pos-levels { display: flex; flex-direction: column; gap: 1px; font-size: 7px; font-family: var(--fm); font-weight: 700; text-align: right; }
+  .pos-levels { display: flex; flex-direction: column; gap: 1px; font-size: 8px; font-family: var(--fm); font-weight: 700; text-align: right; }
   .pos-tp { color: #4ade80; }
   .pos-entry { color: #ffba30; }
   .pos-sl { color: #ff4060; }
-  .pos-rr { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #ffe600; background: rgba(0,0,0,.6); padding: 2px 8px; border-radius: 4px; }
-  .pos-hint { font-size: 6px; color: rgba(255,255,255,.25); font-family: var(--fm); letter-spacing: .5px; text-align: right; margin-top: 2px; }
+  .pos-rr { font-size: 10px; font-weight: 900; font-family: var(--fd); color: #ffe600; background: rgba(0,0,0,.6); padding: 2px 8px; border-radius: 4px; }
+  .pos-hint { font-size: 7px; color: rgba(255,255,255,.5); font-family: var(--fm); letter-spacing: .5px; text-align: right; margin-top: 2px; }
   .pos-levels .highlight { background: rgba(255,255,255,.15); padding: 0 4px; border-radius: 3px; animation: lineHover .5s ease infinite; }
   @keyframes lineHover { 0%,100%{opacity:1} 50%{opacity:.7} }
 
-  .drag-indicator { position: absolute; bottom: 38px; left: 50%; transform: translateX(-50%); z-index: 15; padding: 4px 12px; border-radius: 6px; background: rgba(255,230,0,.9); color: #000; font-size: 8px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; animation: dragPulse .5s ease infinite; }
+  .drag-indicator { position: absolute; bottom: 38px; left: 50%; transform: translateX(-50%); z-index: 15; padding: 4px 12px; border-radius: 6px; background: rgba(255,230,0,.9); color: #000; font-size: 9px; font-weight: 900; font-family: var(--fd); letter-spacing: 1.6px; animation: dragPulse .5s ease infinite; }
   @keyframes dragPulse { 0%,100% { opacity: 1 } 50% { opacity: .6 } }
 
   .chart-annotation { position: absolute; z-index: 8; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--ann-color); background: rgba(0,0,0,.8); box-shadow: 0 0 10px var(--ann-color), 0 0 20px rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all .2s; transform: translate(-50%, -50%); padding: 0; contain: layout style; }
@@ -1823,15 +2182,18 @@
   @keyframes annPopIn { from { opacity: 0; transform: translateX(-50%) translateY(5px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
   .ann-popup-header { display: flex; align-items: center; gap: 4px; padding-bottom: 4px; border-bottom: 1px solid; margin-bottom: 4px; }
   .ann-popup-icon { font-size: 12px; }
-  .ann-popup-name { font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 1px; }
-  .ann-popup-type { margin-left: auto; font-family: var(--fm); font-size: 6px; font-weight: 700; padding: 1px 4px; border-radius: 3px; background: rgba(255,255,255,.1); color: rgba(255,255,255,.4); letter-spacing: .5px; }
-  .ann-popup-label { font-family: var(--fm); font-size: 8px; font-weight: 900; color: #fff; margin-bottom: 2px; }
-  .ann-popup-detail { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.5); line-height: 1.4; }
+  .ann-popup-name { font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px; }
+  .ann-popup-type { margin-left: auto; font-family: var(--fm); font-size: 7px; font-weight: 700; padding: 1px 4px; border-radius: 3px; background: rgba(255,255,255,.1); color: rgba(255,255,255,.7); letter-spacing: .5px; }
+  .ann-popup-label { font-family: var(--fm); font-size: 9px; font-weight: 900; color: #fff; margin-bottom: 2px; }
+  .ann-popup-detail { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.74); line-height: 1.4; }
 
-  .chart-footer { padding: 3px 10px; border-top: 1px solid rgba(255,255,255,.05); background: rgba(0,0,0,.3); display: flex; align-items: center; gap: 8px; font-size: 7px; font-family: var(--fm); color: #555; flex-shrink: 0; }
+  .chart-footer { padding: 3px 10px; border-top: 1px solid rgba(255,255,255,.05); background: rgba(0,0,0,.3); display: flex; align-items: center; gap: 8px; font-size: 8px; font-family: var(--fm); color: rgba(255,255,255,.62); flex-shrink: 0; }
   .src-badge { color: #ffe600; font-weight: 700; }
   .src-ws { margin-left: auto; color: #00ff88; }
+  .footer-ind { font-weight: 800; letter-spacing: .4px; }
+  .footer-ind.vol { color: #77dba6; }
+  .footer-ind.rsi { color: #d6a8ff; }
   .pos-active { color: #ffba30; font-weight: 700; animation: pulse .8s infinite; }
   .draw-count { color: #ffe600; font-weight: 700; }
-  .agent-feed-text { flex: 1; color: rgba(255,255,255,.3); font-size: 7px; font-weight: 600; letter-spacing: .5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .agent-feed-text { flex: 1; color: rgba(255,255,255,.62); font-size: 8px; font-weight: 600; letter-spacing: .5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
