@@ -256,6 +256,8 @@ export interface AgentChatContext {
     tpPrice?: number;
     slPrice?: number;
   }>;
+  /** 실시간 가격 (클라이언트에서 전달) */
+  livePrices?: Record<string, number>;
 }
 
 /**
@@ -278,6 +280,17 @@ export function buildAgentSystemPrompt(ctx: AgentChatContext): string {
     '- Include specific price levels, percentages, or metrics when available.',
     '- State directional bias (LONG/SHORT/NEUTRAL) with confidence %.',
   ];
+
+  // 실시간 가격 정보 추가
+  if (ctx.livePrices && Object.keys(ctx.livePrices).length > 0) {
+    lines.push('', '── Current Live Prices (REAL-TIME) ──');
+    for (const [sym, price] of Object.entries(ctx.livePrices)) {
+      if (typeof price === 'number' && price > 0) {
+        lines.push(`  ${sym}: $${price.toLocaleString()}`);
+      }
+    }
+    lines.push('IMPORTANT: Always use these LIVE prices. Never make up or guess prices.');
+  }
 
   if (ctx.scanSummary || (ctx.scanSignals && ctx.scanSignals.length > 0)) {
     lines.push('', `── Scan Context (${ctx.pair} ${ctx.timeframe.toUpperCase()}) ──`);
@@ -320,6 +333,17 @@ export function buildOrchestratorSystemPrompt(ctx: Omit<AgentChatContext, 'agent
     '- Include directional bias, confidence, and key levels.',
     '- Use trading jargon.',
   ];
+
+  // 실시간 가격 정보 추가
+  if (ctx.livePrices && Object.keys(ctx.livePrices).length > 0) {
+    lines.push('', '── Current Live Prices (REAL-TIME) ──');
+    for (const [sym, price] of Object.entries(ctx.livePrices)) {
+      if (typeof price === 'number' && price > 0) {
+        lines.push(`  ${sym}: $${price.toLocaleString()}`);
+      }
+    }
+    lines.push('IMPORTANT: Always use these LIVE prices when discussing markets. Never guess or use outdated prices.');
+  }
 
   if (ctx.scanSummary || (ctx.scanSignals && ctx.scanSignals.length > 0)) {
     lines.push('', `── Scan Context (${ctx.pair} ${ctx.timeframe.toUpperCase()}) ──`);

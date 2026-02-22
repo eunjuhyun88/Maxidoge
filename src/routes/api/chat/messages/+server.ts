@@ -305,6 +305,11 @@ async function buildAgentReply(
   const fallbackPair = typeof meta.pair === 'string' && meta.pair ? meta.pair : 'BTC/USDT';
   const fallbackTf = typeof meta.timeframe === 'string' && meta.timeframe ? meta.timeframe : '4h';
 
+  // 실시간 가격 (meta에서 전달받음)
+  const livePrices = (meta.livePrices && typeof meta.livePrices === 'object')
+    ? meta.livePrices as Record<string, number>
+    : {};
+
   // Scan context → LLM signal data 변환
   const scanSignals = context?.signals?.map(s => ({
     agentName: s.agent_name,
@@ -330,6 +335,7 @@ async function buildAgentReply(
       timeframe: fallbackTf,
       scanSummary,
       scanSignals,
+      livePrices,
     });
   } else {
     systemPrompt = buildAgentSystemPrompt({
@@ -339,6 +345,7 @@ async function buildAgentReply(
       timeframe: fallbackTf,
       scanSummary,
       scanSignals,
+      livePrices,
     });
   }
 
@@ -453,8 +460,9 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     let agentResponse: ReturnType<typeof mapRow> | null = null;
 
     if (channel === 'terminal' && senderKind === 'user') {
-      const mentionedAgent = detectMentionedAgent(message, meta);
-      if (mentionedAgent) {
+      // 멘션 없으면 ORCHESTRATOR가 기본 응답 (클라이언트 retry 불필요)
+      const mentionedAgent = detectMentionedAgent(message, meta) || 'ORCHESTRATOR';
+      {
         const context = await loadScanContext(user.id, meta);
         const reply = await buildAgentReply(mentionedAgent, message, context, meta);
         const replyMeta = {

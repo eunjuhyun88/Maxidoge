@@ -13,6 +13,7 @@
     ? `${liveTickerStr}  \u00a0|\u00a0  ${liveTickerStr}`
     : `${TICKER_DATA}  \u00a0|\u00a0  ${TICKER_DATA}`;
   import { gameState } from '$lib/stores/gameState';
+  import { livePrices } from '$lib/stores/priceStore';
   import { updateAllPrices } from '$lib/stores/quickTradeStore';
   import { updateTrackedPrices } from '$lib/stores/trackedSignalStore';
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
@@ -361,7 +362,7 @@
     chatMessages = [...chatMessages, { from: 'YOU', icon: '🐕', color: '#ffe600', text, time, isUser: true }];
     isTyping = true;
 
-    // 멘션된 에이전트 감지
+    // 멘션된 에이전트 감지 (없으면 서버에서 ORCHESTRATOR로 기본 처리)
     const agent = AGDEFS.find(ag => text.toLowerCase().includes(`@${ag.name.toLowerCase()}`));
     const mentionedAgent = agent?.name || undefined;
 
@@ -378,7 +379,7 @@
             pair: $gameState.pair || 'BTC/USDT',
             timeframe: $gameState.timeframe || '4h',
             mentionedAgent,
-            scanId: latestScan ? undefined : undefined, // scanId는 서버에서 최신 조회
+            livePrices: { ...$livePrices },
           },
         }),
       });
@@ -387,55 +388,19 @@
 
       if (res.ok) {
         const data = await res.json();
-        // 에이전트 응답이 있으면 표시
         if (data.agentResponse) {
           const r = data.agentResponse;
-          const meta = AGENT_META[r.senderName] || AGENT_META['ORCHESTRATOR'];
+          const agMeta = AGENT_META[r.senderName] || AGENT_META['ORCHESTRATOR'];
           chatMessages = [...chatMessages, {
             from: r.senderName,
-            icon: meta.icon,
-            color: meta.color,
+            icon: agMeta.icon,
+            color: agMeta.color,
             text: r.message,
             time,
             isUser: false,
           }];
-        } else {
-          // 에이전트 응답 없음 (멘션 안 했을 때) → 오케스트레이터가 기본 응답
-          // 멘션 없이 일반 질문한 경우: @없이도 오케스트레이터가 답하도록 재시도
-          const retryRes = await fetch('/api/chat/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              channel: 'terminal',
-              senderKind: 'user',
-              senderName: 'YOU',
-              message: `@ORCHESTRATOR ${text}`,
-              meta: {
-                pair: $gameState.pair || 'BTC/USDT',
-                timeframe: $gameState.timeframe || '4h',
-                mentionedAgent: 'ORCHESTRATOR',
-              },
-            }),
-          });
-          if (retryRes.ok) {
-            const retryData = await retryRes.json();
-            if (retryData.agentResponse) {
-              const r = retryData.agentResponse;
-              const meta = AGENT_META[r.senderName] || AGENT_META['ORCHESTRATOR'];
-              chatMessages = [...chatMessages, {
-                from: r.senderName,
-                icon: meta.icon,
-                color: meta.color,
-                text: r.message,
-                time,
-                isUser: false,
-              }];
-            }
-          }
         }
       } else {
-        // API 실패 시 에러 메시지
-        isTyping = false;
         chatMessages = [...chatMessages, {
           from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
           text: 'Connection error. Try again or check server status.',

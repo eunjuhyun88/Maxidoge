@@ -163,7 +163,20 @@
     ? null
     : scanTabs.find((tab) => tab.id === activeScanId) ?? null;
   $: if (!tokenTabs.includes(activeToken)) activeToken = 'ALL';
-  $: filteredSignals = activeToken === 'ALL' ? signalPool : signalPool.filter((s) => s.token === activeToken);
+  $: filteredSignals = (() => {
+    const base = activeToken === 'ALL' ? signalPool : signalPool.filter((s) => s.token === activeToken);
+    // diff 활성중이면 변화 큰 순서로 정렬
+    if (diffFreshUntil > Date.now() && signalDiffs.size > 0) {
+      return [...base].sort((a, b) => {
+        const da = signalDiffs.get(a.id);
+        const db = signalDiffs.get(b.id);
+        const sa = da ? (da.isNew ? 100 : da.voteChanged ? 90 : Math.abs(da.confDelta)) : 0;
+        const sb = db ? (db.isNew ? 100 : db.voteChanged ? 90 : Math.abs(db.confDelta)) : 0;
+        return sb - sa;
+      });
+    }
+    return base;
+  })();
   $: selectedCount = selectedIds.size;
   $: avgConfidence = signalPool.length > 0
     ? Math.round(signalPool.reduce((sum, sig) => sum + sig.conf, 0) / signalPool.length)
@@ -545,15 +558,15 @@
 
   <div class="scan-tabs" on:wheel={scrollXOnWheel}>
     {#if scanTabs.length > 0}
+      <button class="scan-tab scan-tab-history" class:active={activeScanId === 'preset'} on:click={() => activateScanTab('preset')}>
+        HISTORY
+      </button>
       {#each scanTabs as tab (tab.id)}
         <button class="scan-tab" class:active={activeScanId === tab.id} on:click={() => activateScanTab(tab.id)}>
           <span class="scan-tab-token">{tab.token}</span>
           <span class="scan-tab-meta">{tab.label}</span>
         </button>
       {/each}
-      <button class="scan-tab scan-tab-history" class:active={activeScanId === 'preset'} on:click={() => activateScanTab('preset')}>
-        HISTORY
-      </button>
     {:else}
       <button class="scan-tab active" disabled>
         SCAN TO START
@@ -1282,4 +1295,62 @@
   .stat-cell:last-child { border-right: none; }
   .stat-lbl { font-family: var(--fm); font-size: 8px; color: rgba(255,230,0,.62); letter-spacing: 1.4px; margin-bottom: 1px; }
   .stat-val { font-family: var(--fdisplay); font-size: 16px; letter-spacing: 1px; line-height: 1.1; }
+
+  /* ═══ Scan Diff Visualization ═══ */
+  .wr-msg-new {
+    animation: diffGlow 2s ease-out;
+    border-left: 2px solid rgba(0,255,166,.6) !important;
+  }
+  .wr-msg-vote-flip {
+    animation: voteFlipGlow 2.5s ease-out;
+    border-left: 2px solid rgba(255,45,155,.6) !important;
+  }
+  @keyframes diffGlow {
+    0% { background: rgba(0,255,166,.15); box-shadow: inset 0 0 12px rgba(0,255,166,.2); }
+    100% { background: transparent; box-shadow: none; }
+  }
+  @keyframes voteFlipGlow {
+    0% { background: rgba(255,45,155,.15); box-shadow: inset 0 0 12px rgba(255,45,155,.2); }
+    100% { background: transparent; box-shadow: none; }
+  }
+
+  .wr-diff-badge {
+    display: inline-flex; align-items: center;
+    padding: 1px 5px; border-radius: 3px;
+    font-family: var(--fm); font-size: 7px; font-weight: 900;
+    letter-spacing: .5px; line-height: 1;
+    animation: badgePop .4s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes badgePop {
+    0% { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .wr-diff-new {
+    color: #0a0908; background: var(--grn);
+    box-shadow: 0 0 6px rgba(0,255,136,.4);
+  }
+  .wr-diff-flip {
+    color: #fff; background: rgba(255,45,155,.85);
+    box-shadow: 0 0 6px rgba(255,45,155,.4);
+  }
+
+  .wr-diff-delta {
+    font-family: var(--fm); font-size: 8px; font-weight: 900;
+    padding: 1px 4px; border-radius: 3px;
+  }
+  .wr-diff-delta.pos { color: var(--grn); background: rgba(0,255,136,.1); }
+  .wr-diff-delta.neg { color: var(--red); background: rgba(255,45,85,.1); }
+
+  .wr-conf-bar {
+    height: 3px; width: 100%; border-radius: 2px;
+    background: rgba(255,255,255,.06); margin: 3px 0 2px;
+    overflow: hidden;
+  }
+  .wr-conf-fill {
+    height: 100%; border-radius: 2px;
+    transition: width .6s cubic-bezier(.22,1,.36,1);
+  }
+  .wr-conf-fill.long { background: linear-gradient(90deg, rgba(0,255,136,.4), rgba(0,255,136,.8)); }
+  .wr-conf-fill.short { background: linear-gradient(90deg, rgba(255,45,85,.4), rgba(255,45,85,.8)); }
+  .wr-conf-fill.neutral { background: linear-gradient(90deg, rgba(255,255,255,.15), rgba(255,255,255,.3)); }
 </style>
