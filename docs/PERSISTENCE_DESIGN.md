@@ -2,6 +2,7 @@
 
 작성일: 2026-02-22
 목적: 모든 사용자 데이터를 Supabase primary로 전환하고, v3에서 각 플로우가 서버 기준으로 어떻게 동작하는지 고정한다.
+Doc index: `docs/README.md`
 
 ---
 

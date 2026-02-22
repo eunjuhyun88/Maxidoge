@@ -2,6 +2,7 @@
 
 작성일: 2026-02-22  
 목적: FE에서 상태 소스를 단일화하고, Phase 기반 UI 흐름을 고정한다.
+Doc index: `docs/README.md`
 
 ## 1. FE State Principles
 

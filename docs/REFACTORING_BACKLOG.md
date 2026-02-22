@@ -2,6 +2,7 @@
 
 Created: 2026-02-22
 Updated: 2026-02-22 (user-confirmed final)
+Doc index: `docs/README.md`
 Rule: **Contract → BE → FE**, never mixed in one PR
 
 ---

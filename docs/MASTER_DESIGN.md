@@ -2,7 +2,7 @@
 
 작성일: 2026-02-22  
 목표: 구현 전에 설계를 고정해 FE/BE 혼재 리팩토링을 방지한다.
-문서 진입점: `docs/README.md`
+Doc index: `docs/README.md`
 
 ## 1. Scope
 

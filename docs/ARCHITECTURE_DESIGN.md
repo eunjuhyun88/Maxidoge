@@ -2,6 +2,7 @@
 
 Created: 2026-02-22
 Status: **DESIGN REVIEW** — 구현 시작 전 승인 필요
+Doc index: `docs/README.md`
 
 > **구현 게이트**: 이 문서 승인 전 코드 작업 금지.
 > 승인 후 Shared → BE → FE 순서로만 진행.

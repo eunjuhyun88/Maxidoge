@@ -1,7 +1,8 @@
 # MAXI DOGE Terminal Scan E2E Spec
 
-작성일: 2026-02-22  
+작성일: 2026-02-22
 목적: 차트 변경 -> SCAN 클릭 1회 기준으로, 좌/중앙/우 패널과 히스토리/채팅/타 페이지 반영까지 제품 동작을 고정한다.
+Doc index: `docs/README.md`
 
 ## 1. Scope
 
