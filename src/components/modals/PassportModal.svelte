@@ -65,7 +65,7 @@
       <!-- Abilities -->
       <div class="abilities">
         <div class="ab-title">ABILITIES</div>
-        {#each agent.abilities as ability}
+        {#each Object.values(agent.abilities ?? {}) as ability}
           <div class="ab-item">{ability}</div>
         {/each}
       </div>

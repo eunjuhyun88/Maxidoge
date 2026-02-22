@@ -43,7 +43,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
       success: true,
       total: Number(totalResult.rows[0]?.total ?? '0'),
       count: Number(totalResult.rows[0]?.count ?? '0'),
-      bySource: bySource.rows.map((r) => ({
+      bySource: bySource.rows.map((r: AggregateRow) => ({
         source: r.source,
         total: Number(r.total),
         count: Number(r.count),

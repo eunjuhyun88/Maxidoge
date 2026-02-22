@@ -6,7 +6,6 @@
   import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
   import { hydrateDomainStores } from '$lib/stores/hydration';
   import { fetchPrices, subscribeMiniTicker } from '$lib/api/binance';
-  import { formatTimeframeLabel } from '$lib/utils/timeframe';
 
   $: state = $gameState;
   $: wallet = $walletStore;
@@ -16,6 +15,13 @@
   $: activePath = $page.url.pathname;
 
   let wsCleanup: (() => void) | null = null;
+  function normalizePrice(price: number): number {
+    if (!Number.isFinite(price)) return 0;
+    const abs = Math.abs(price);
+    if (abs >= 1000) return Number(price.toFixed(2));
+    if (abs >= 1) return Number(price.toFixed(4));
+    return Number(price.toFixed(6));
+  }
 
   // Navigation items
   const NAV_ITEMS = [
@@ -36,8 +42,16 @@
       const sol = prices['SOLUSDT'] || state.prices.SOL;
       gameState.update(s => ({
         ...s,
-        prices: { BTC: Math.round(btc), ETH: Math.round(eth), SOL: +sol.toFixed(2) },
-        bases: { BTC: Math.round(btc), ETH: Math.round(eth), SOL: +sol.toFixed(2) }
+        prices: {
+          BTC: normalizePrice(btc),
+          ETH: normalizePrice(eth),
+          SOL: normalizePrice(sol)
+        },
+        bases: {
+          BTC: normalizePrice(btc),
+          ETH: normalizePrice(eth),
+          SOL: normalizePrice(sol)
+        }
       }));
     } catch (e) {
       console.warn('[Header] Failed to fetch initial prices, using defaults');
@@ -55,12 +69,12 @@
           _pendingPrices = {};
           gameState.update(s => {
             const newPrices = { ...s.prices };
-            if (batch['BTCUSDT']) newPrices.BTC = Math.round(batch['BTCUSDT']);
-            if (batch['ETHUSDT']) newPrices.ETH = Math.round(batch['ETHUSDT']);
-            if (batch['SOLUSDT']) newPrices.SOL = +(batch['SOLUSDT'] || s.prices.SOL).toFixed(2);
+            if (batch['BTCUSDT']) newPrices.BTC = normalizePrice(batch['BTCUSDT']);
+            if (batch['ETHUSDT']) newPrices.ETH = normalizePrice(batch['ETHUSDT']);
+            if (batch['SOLUSDT']) newPrices.SOL = normalizePrice(batch['SOLUSDT'] || s.prices.SOL);
             return { ...s, prices: newPrices };
           });
-        }, 1000);
+        }, 350);
       });
     } catch (e) {
       console.warn('[Header] WebSocket connection failed');
@@ -101,6 +115,10 @@
   $: selectedToken = state.pair.split('/')[0] || 'BTC';
   $: selectedPrice = state.prices[selectedToken as keyof typeof state.prices] || state.prices.BTC;
   $: selectedBase = state.bases[selectedToken as keyof typeof state.bases] || state.bases.BTC;
+  $: selectedPriceText = Number(selectedPrice || 0).toLocaleString('en-US', {
+    minimumFractionDigits: selectedPrice >= 1000 ? 2 : 4,
+    maximumFractionDigits: selectedPrice >= 1000 ? 2 : 4
+  });
 </script>
 
 <nav id="nav">
@@ -116,7 +134,7 @@
 
   <div class="selected-ticker">
     <span class="st-pair">{state.pair}</span>
-    <span class="st-price">${Math.round(selectedPrice).toLocaleString()}</span>
+    <span class="st-price">${selectedPriceText}</span>
   </div>
 
   <div class="nav-sep"></div>
@@ -170,14 +188,14 @@
     top: 0; left: 0; right: 0;
     z-index: 110;
     flex-shrink: 0;
-    height: 36px;
+    height: 42px;
     font-family: var(--fp, 'Press Start 2P', monospace);
     color: #F0EDE4;
   }
 
   .nav-back {
     font-family: var(--fp);
-    font-size: 10px;
+    font-size: 12px;
     color: #E8967D;
     background: none;
     border: 1px solid rgba(232,150,125,0.3);
@@ -194,7 +212,7 @@
 
   .nav-logo {
     font-family: var(--fp);
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 1px;
     color: #F0EDE4;
     background: none;
@@ -213,7 +231,7 @@
 
   .nav-sep {
     width: 1px;
-    height: 16px;
+    height: 18px;
     background: rgba(232,150,125,0.15);
     margin: 0 8px;
     flex-shrink: 0;
@@ -229,23 +247,23 @@
   }
   .st-pair {
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     color: rgba(240,237,228,0.4);
     letter-spacing: 1px;
   }
   .st-price {
     font-family: var(--fp);
-    font-size: 9px;
+    font-size: 11px;
     color: #F0EDE4;
   }
 
   /* ── Nav Tabs ── */
   .nav-tab {
     font-family: var(--fp);
-    font-size: 6px;
+    font-size: 8px;
     letter-spacing: 1px;
     color: rgba(240,237,228,0.45);
-    padding: 0 10px;
+    padding: 0 8px;
     height: 100%;
     display: flex;
     align-items: center;
@@ -281,7 +299,7 @@
   }
 
   .tab-icon {
-    font-size: 6px;
+    font-size: 8px;
     opacity: 0.5;
     line-height: 1;
   }
@@ -298,7 +316,7 @@
 
   .score-badge {
     font-family: var(--fp);
-    font-size: 6px;
+    font-size: 8px;
     background: rgba(232,150,125,0.08);
     color: #E8967D;
     border: 1px solid rgba(232,150,125,0.2);
@@ -311,18 +329,18 @@
   }
   .score-badge b {
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 10px;
     color: #F0EDE4;
   }
   .score-bolt {
-    font-size: 8px;
+    font-size: 10px;
     text-shadow: 0 0 6px rgba(232,150,125,0.5);
   }
 
   /* ── Wallet ── */
   .wallet-btn {
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     background: #E8967D;
     color: #0a1a0d;
     border: none;
@@ -345,7 +363,7 @@
     color: #00cc66;
     border: 1px solid rgba(0,204,102,0.3);
     box-shadow: none;
-    font-size: 6px;
+    font-size: 8px;
   }
   .wallet-dot {
     width: 5px; height: 5px;
@@ -355,7 +373,7 @@
   }
 
   .settings-btn {
-    font-size: 12px;
+    font-size: 14px;
     background: none;
     border: none;
     cursor: pointer;

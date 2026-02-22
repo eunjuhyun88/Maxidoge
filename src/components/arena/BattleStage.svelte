@@ -29,7 +29,7 @@
   {/each}
 
   <!-- Council Table -->
-  <div id="ctable" class:on={state.phase === 'council' || state.phase === 'verdict'}>
+  <div id="ctable" class:on={state.phase === 'ANALYSIS' || state.phase === 'RESULT'}>
     <span class="cl">COUNCIL</span>
   </div>
 

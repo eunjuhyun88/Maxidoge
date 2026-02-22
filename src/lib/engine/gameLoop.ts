@@ -33,6 +33,10 @@ export function resetPhaseInit() {
 
 export function advancePhase() {
   const state = get(gameState);
+  if (state.phase === 'RESULT') {
+    gameState.update((s) => ({ ...s, running: false, timer: 0 }));
+    return;
+  }
   const nextPhase = getNextPhase(state.phase);
   const speed = state.speed || 3;
   const duration = (PHASE_DURATION[nextPhase] || 2) / speed;
@@ -54,12 +58,9 @@ function loop(ts: number) {
     if (state.timer > 0) {
       gameState.update(s => ({ ...s, timer: s.timer - dt }));
     }
-    const selfManaged: Phase[] = ['config', 'hypothesis', 'preview', 'compare', 'battle', 'cooldown'];
+    const selfManaged: Phase[] = ['DRAFT', 'HYPOTHESIS', 'BATTLE', 'RESULT'];
     if (state.timer <= 0 && !selfManaged.includes(state.phase)) {
       advancePhase();
-    }
-    if (state.phase === 'cooldown' && state.timer <= 0) {
-      gameState.update(s => ({ ...s, running: false }));
     }
     requestAnimationFrame(loop);
   } else {
@@ -73,20 +74,14 @@ export function startMatch() {
   gameState.update(s => ({
     ...s,
     running: true,
-    phase: 'config',
-    timer: 0  // config is user-controlled, no timer
+    phase: 'DRAFT',
+    timer: 0
   }));
   startGameLoop();
 }
 
-// Called after SquadConfig → DEPLOY to skip past config into deploy
-export function deployFromConfig() {
+// Called after SquadConfig submit during DRAFT to start ANALYSIS.
+export function startAnalysisFromDraft() {
   phaseInitialized = false;
-  const state = get(gameState);
-  const speed = state.speed || 3;
-  gameState.update(s => ({
-    ...s,
-    phase: 'deploy',
-    timer: (PHASE_DURATION.deploy || 2) / speed
-  }));
+  advancePhase();
 }

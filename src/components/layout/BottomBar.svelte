@@ -11,7 +11,7 @@
   $: state = $gameState;
 
   $: feed = $latestFeed;
-  $: phaseLabel = PHASE_LABELS[state.phase] || PHASE_LABELS.standby;
+  $: phaseLabel = PHASE_LABELS[state.phase] || PHASE_LABELS.DRAFT;
   $: openPos = $openTradeCount;
   $: trackedSigs = $activeSignalCount;
 </script>

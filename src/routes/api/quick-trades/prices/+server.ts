@@ -1,67 +1,111 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { query, withTransaction } from '$lib/server/db';
+import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
-import { getPairBase, toPositiveNumber, UUID_RE } from '$lib/server/apiValidation';
+import { toPositiveNumber, UUID_RE } from '$lib/server/apiValidation';
 
 interface PriceUpdateItem {
   id: string;
   currentPrice: number;
 }
 
-interface TradeForUpdate {
-  id: string;
-  pair: string;
-  dir: 'LONG' | 'SHORT';
-  entry: number;
-}
-
-function calcPnlPercent(dir: 'LONG' | 'SHORT', entry: number, currentPrice: number): number {
-  if (entry <= 0) return 0;
-  if (dir === 'LONG') return ((currentPrice - entry) / entry) * 100;
-  return ((entry - currentPrice) / entry) * 100;
-}
+const MAX_EXPLICIT_UPDATES = 400;
+const MAX_PRICE_KEYS = 64;
 
 async function applyExplicitUpdates(userId: string, updates: PriceUpdateItem[]) {
-  return withTransaction(async (client) => {
-    let updatedCount = 0;
-    for (const item of updates) {
-      if (!UUID_RE.test(item.id) || !Number.isFinite(item.currentPrice) || item.currentPrice <= 0) continue;
+  if (!updates.length) return 0;
 
-      const tradeResult = await client.query<TradeForUpdate>(
-        `SELECT id, pair, dir, entry FROM quick_trades WHERE id = $1 AND user_id = $2 AND status = 'open' LIMIT 1`,
-        [item.id, userId]
-      );
-      const trade = tradeResult.rows[0];
-      if (!trade) continue;
+  // Keep last value per trade id and drop invalid rows.
+  const dedup = new Map<string, number>();
+  for (const item of updates) {
+    if (!UUID_RE.test(item.id)) continue;
+    if (!Number.isFinite(item.currentPrice) || item.currentPrice <= 0) continue;
+    dedup.set(item.id, item.currentPrice);
+  }
+  if (dedup.size === 0) return 0;
 
-      const pnlPercent = Number(calcPnlPercent(trade.dir, Number(trade.entry), Number(item.currentPrice)).toFixed(4));
-      await client.query(
-        `UPDATE quick_trades SET current_price = $1, pnl_percent = $2 WHERE id = $3 AND user_id = $4`,
-        [item.currentPrice, pnlPercent, trade.id, userId]
-      );
-      updatedCount += 1;
-    }
+  const values: string[] = [];
+  const params: unknown[] = [userId];
+  let p = 2;
+  for (const [id, currentPrice] of dedup.entries()) {
+    values.push(`($${p}::uuid, $${p + 1}::numeric)`);
+    params.push(id, currentPrice);
+    p += 2;
+  }
 
-    return updatedCount;
-  });
+  const result = await query<{ updated: string }>(
+    `
+      WITH incoming(id, current_price) AS (
+        VALUES ${values.join(', ')}
+      ),
+      updated_rows AS (
+        UPDATE quick_trades qt
+        SET
+          current_price = incoming.current_price,
+          pnl_percent = ROUND(
+            CASE
+              WHEN qt.entry <= 0 THEN 0
+              WHEN qt.dir = 'LONG' THEN ((incoming.current_price - qt.entry) / qt.entry) * 100
+              ELSE ((qt.entry - incoming.current_price) / qt.entry) * 100
+            END,
+            4
+          )
+        FROM incoming
+        WHERE qt.user_id = $1
+          AND qt.status = 'open'
+          AND qt.id = incoming.id
+        RETURNING 1
+      )
+      SELECT count(*)::text AS updated FROM updated_rows
+    `,
+    params
+  );
+
+  return Number(result.rows[0]?.updated ?? '0');
 }
 
 async function applyTickerMap(userId: string, prices: Record<string, number>) {
-  const openRows = await query<TradeForUpdate>(
-    `SELECT id, pair, dir, entry FROM quick_trades WHERE user_id = $1 AND status = 'open'`,
-    [userId]
-  );
+  const entries = Object.entries(prices).filter(([, v]) => Number.isFinite(v) && v > 0);
+  if (entries.length === 0) return 0;
 
-  const updates: PriceUpdateItem[] = [];
-  for (const row of openRows.rows) {
-    const base = getPairBase(row.pair).toUpperCase();
-    const mapped = prices[base];
-    if (!Number.isFinite(mapped) || mapped <= 0) continue;
-    updates.push({ id: row.id, currentPrice: mapped });
+  const values: string[] = [];
+  const params: unknown[] = [userId];
+  let p = 2;
+  for (const [base, currentPrice] of entries) {
+    values.push(`($${p}::text, $${p + 1}::numeric)`);
+    params.push(String(base).toUpperCase(), currentPrice);
+    p += 2;
   }
 
-  return applyExplicitUpdates(userId, updates);
+  const result = await query<{ updated: string }>(
+    `
+      WITH incoming(base, current_price) AS (
+        VALUES ${values.join(', ')}
+      ),
+      updated_rows AS (
+        UPDATE quick_trades qt
+        SET
+          current_price = incoming.current_price,
+          pnl_percent = ROUND(
+            CASE
+              WHEN qt.entry <= 0 THEN 0
+              WHEN qt.dir = 'LONG' THEN ((incoming.current_price - qt.entry) / qt.entry) * 100
+              ELSE ((qt.entry - incoming.current_price) / qt.entry) * 100
+            END,
+            4
+          )
+        FROM incoming
+        WHERE qt.user_id = $1
+          AND qt.status = 'open'
+          AND UPPER(split_part(qt.pair::text, '/', 1)) = incoming.base
+        RETURNING 1
+      )
+      SELECT count(*)::text AS updated FROM updated_rows
+    `,
+    params
+  );
+
+  return Number(result.rows[0]?.updated ?? '0');
 }
 
 async function handle(cookies: any, request: Request) {
@@ -73,6 +117,9 @@ async function handle(cookies: any, request: Request) {
   const pricesRaw = body?.prices && typeof body.prices === 'object' ? body.prices : null;
 
   if (updatesRaw) {
+    if (updatesRaw.length > MAX_EXPLICIT_UPDATES) {
+      return json({ error: `Too many updates (max ${MAX_EXPLICIT_UPDATES})` }, { status: 400 });
+    }
     const updates: PriceUpdateItem[] = updatesRaw.map((x: any) => ({
       id: typeof x?.id === 'string' ? x.id : '',
       currentPrice: toPositiveNumber(x?.currentPrice, 0),
@@ -82,8 +129,12 @@ async function handle(cookies: any, request: Request) {
   }
 
   if (pricesRaw) {
+    const rawEntries = Object.entries(pricesRaw);
+    if (rawEntries.length > MAX_PRICE_KEYS) {
+      return json({ error: `Too many price keys (max ${MAX_PRICE_KEYS})` }, { status: 400 });
+    }
     const normalized: Record<string, number> = {};
-    for (const [k, v] of Object.entries(pricesRaw)) {
+    for (const [k, v] of rawEntries) {
       const n = toPositiveNumber(v, 0);
       if (n > 0) normalized[String(k).toUpperCase()] = n;
     }

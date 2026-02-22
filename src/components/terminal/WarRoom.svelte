@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AGENT_SIGNALS, getSignalsByToken, type AgentSignal } from '$lib/data/warroom';
+  import { AGENT_SIGNALS, type AgentSignal } from '$lib/data/warroom';
   import { gameState, setView } from '$lib/stores/gameState';
   import { openQuickTrade } from '$lib/stores/quickTradeStore';
   import { trackSignal as trackSignalStore, activeSignalCount } from '$lib/stores/trackedSignalStore';
@@ -7,59 +7,79 @@
   import { notifySignalTracked } from '$lib/stores/notificationStore';
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import {
-    fetchCurrentOI, fetchCurrentFunding, fetchPredictedFunding,
-    fetchLiquidationHistory, fetchLSRatioHistory,
-    formatOI, formatFunding, tfToCoinalyzeInterval
+    fetchCurrentOI,
+    fetchCurrentFunding,
+    fetchPredictedFunding,
+    fetchLiquidationHistory,
+    fetchLSRatioHistory,
+    formatOI,
+    formatFunding
   } from '$lib/api/coinalyze';
+  import { runWarRoomScan } from '$lib/engine/warroomScan';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import { createEventDispatcher } from 'svelte';
 
-  const dispatch = createEventDispatcher();
-
-  // ── Token filter (pre-computed counts) ──
-  type TokenFilter = 'ALL' | 'BTC' | 'ETH' | 'SOL';
-  const TOKEN_TABS: TokenFilter[] = ['ALL', 'BTC', 'ETH', 'SOL'];
-  const TOKEN_COUNTS: Record<TokenFilter, number> = {
-    ALL: AGENT_SIGNALS.length,
-    BTC: AGENT_SIGNALS.filter(s => s.token === 'BTC').length,
-    ETH: AGENT_SIGNALS.filter(s => s.token === 'ETH').length,
-    SOL: AGENT_SIGNALS.filter(s => s.token === 'SOL').length,
+  type TokenFilter = 'ALL' | string;
+  type ScanTab = {
+    id: string;
+    pair: string;
+    timeframe: string;
+    token: string;
+    createdAt: number;
+    label: string;
+    signals: AgentSignal[];
   };
+
+  type ScanHighlight = {
+    agent: string;
+    vote: AgentSignal['vote'];
+    conf: number;
+    note: string;
+  };
+
+  type ScanCompleteDetail = {
+    pair: string;
+    timeframe: string;
+    token: string;
+    createdAt: number;
+    label: string;
+    consensus: AgentSignal['vote'];
+    avgConfidence: number;
+    summary: string;
+    highlights: ScanHighlight[];
+  };
+
+  type WarRoomEvents = {
+    collapse: void;
+    tracked: { dir: AgentSignal['vote']; pair: string };
+    quicktrade: { dir: 'LONG' | 'SHORT'; pair: string; price: number };
+    scancomplete: ScanCompleteDetail;
+  };
+
+  const dispatch = createEventDispatcher<WarRoomEvents>();
+
+  const SCAN_STATE_STORAGE_KEY = 'maxidoge.warroom.scanstate.v1';
+  const MAX_SCAN_TABS = 6;
+  const MAX_SIGNALS_PER_TAB = 60;
+
   let activeToken: TokenFilter = 'ALL';
-  $: filteredSignals = getSignalsByToken(activeToken);
-
-  // ── Selection state ──
   let selectedIds: Set<string> = new Set();
-  $: selectedCount = selectedIds.size;
-
-  function toggleSelect(id: string) {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    selectedIds = next;
-  }
-
-  function selectAll() {
-    if (selectedCount === filteredSignals.length) {
-      selectedIds = new Set();
-    } else {
-      selectedIds = new Set(filteredSignals.map(s => s.id));
-    }
-  }
-
-  function openCopyTrade() {
-    if (selectedCount === 0) return;
-    copyTradeStore.openModal([...selectedIds]);
-  }
+  let scanTabs: ScanTab[] = [];
+  let activeScanId = 'preset';
+  let scanRunning = false;
+  let scanQueued = false;
+  let scanStep = '';
+  let scanError = '';
+  let scanStateHydrated = false;
 
   // ── Derivatives Data (real-time from Coinalyze) ──
   let derivOI: number | null = null;
   let derivFunding: number | null = null;
   let derivPredFunding: number | null = null;
   let derivLSRatio: number | null = null;
-  let derivLiqLong: number = 0;
-  let derivLiqShort: number = 0;
+  let derivLiqLong = 0;
+  let derivLiqShort = 0;
   let derivLoading = false;
   let derivLastPair = '';
   let derivRefreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -72,22 +92,191 @@
   $: currentPair = $gameState.pair;
   $: currentTF = $gameState.timeframe;
 
+  $: signalPool =
+    activeScanId === 'preset'
+      ? AGENT_SIGNALS
+      : scanTabs.find((tab) => tab.id === activeScanId)?.signals ?? scanTabs[0]?.signals ?? AGENT_SIGNALS;
+
+  $: {
+    if (activeScanId === 'preset') {
+      // noop
+    } else {
+      const activeTab = scanTabs.find((tab) => tab.id === activeScanId);
+      if (!activeTab) {
+        activeScanId = scanTabs[0]?.id ?? 'preset';
+        activeToken = 'ALL';
+        selectedIds = new Set();
+      } else {
+        const tf = String(currentTF || '4h');
+        const pairChanged = activeTab.pair !== currentPair;
+        const tfChanged = activeTab.timeframe !== tf;
+        if (pairChanged || tfChanged) {
+          const sameMarketTab = scanTabs.find((tab) => tab.pair === currentPair && tab.timeframe === tf);
+          // Keep current scan tab if there is no same-market scan tab.
+          // Prevents unexpected fallback to preset BTC/ETH/SOL feed.
+          if (sameMarketTab && sameMarketTab.id !== activeScanId) {
+            activeScanId = sameMarketTab.id;
+            activeToken = 'ALL';
+            selectedIds = new Set();
+          }
+        }
+      }
+    }
+  }
+
+  $: if (scanStateHydrated && typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(
+        SCAN_STATE_STORAGE_KEY,
+        JSON.stringify({
+          activeScanId,
+          activeToken,
+          scanTabs: scanTabs.slice(0, MAX_SCAN_TABS)
+        })
+      );
+    } catch (err) {
+      console.warn('[WarRoom] Failed to persist scan state', err);
+    }
+  }
+
+  $: tokenTabs = ['ALL', ...Array.from(new Set(signalPool.map((s) => s.token)))];
+  $: tokenCounts = tokenTabs.reduce<Record<string, number>>((acc, tok) => {
+    acc[tok] = tok === 'ALL' ? signalPool.length : signalPool.filter((s) => s.token === tok).length;
+    return acc;
+  }, {});
+  $: activeScanTab = activeScanId === 'preset'
+    ? null
+    : scanTabs.find((tab) => tab.id === activeScanId) ?? null;
+  $: if (!tokenTabs.includes(activeToken)) activeToken = 'ALL';
+  $: filteredSignals = activeToken === 'ALL' ? signalPool : signalPool.filter((s) => s.token === activeToken);
+  $: selectedCount = selectedIds.size;
+  $: avgConfidence = signalPool.length > 0
+    ? Math.round(signalPool.reduce((sum, sig) => sum + sig.conf, 0) / signalPool.length)
+    : 0;
+  $: avgRR = signalPool.length > 0
+    ? signalPool.reduce((sum, sig) => {
+      const risk = Math.max(Math.abs(sig.entry - sig.sl), 0.0001);
+      return sum + Math.abs(sig.tp - sig.entry) / risk;
+    }, 0) / signalPool.length
+    : 0;
+  $: consensusDir = (() => {
+    const counts = { long: 0, short: 0, neutral: 0 };
+    signalPool.forEach((sig) => counts[sig.vote]++);
+    if (counts.long > counts.short && counts.long > counts.neutral) return 'LONG';
+    if (counts.short > counts.long && counts.short > counts.neutral) return 'SHORT';
+    return 'NEUTRAL';
+  })();
+  $: trackedCount = $activeSignalCount;
+
+  function roundPrice(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    if (Math.abs(value) >= 1000) return Math.round(value);
+    if (Math.abs(value) >= 100) return Number(value.toFixed(2));
+    return Number(value.toFixed(4));
+  }
+
+  function fmtPrice(price: number): string {
+    if (!Number.isFinite(price)) return '$0';
+    if (Math.abs(price) >= 1000) return '$' + price.toLocaleString();
+    return '$' + price.toFixed(price >= 100 ? 2 : 4);
+  }
+
+  function activateScanTab(id: string) {
+    if (activeScanId === id) return;
+    activeScanId = id;
+    selectedIds = new Set();
+    activeToken = 'ALL';
+  }
+
+  function toggleSelect(id: string) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selectedIds = next;
+  }
+
+  function selectAll() {
+    if (selectedCount === filteredSignals.length) selectedIds = new Set();
+    else selectedIds = new Set(filteredSignals.map((s) => s.id));
+  }
+
+  function openCopyTrade() {
+    if (selectedCount === 0) return;
+    copyTradeStore.openModal([...selectedIds]);
+  }
+
+  function scrollXOnWheel(event: WheelEvent) {
+    const el = event.currentTarget as HTMLElement | null;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    const delta = Math.abs(event.deltaX) > 0 ? event.deltaX : event.deltaY;
+    if (!delta) return;
+    el.scrollLeft += delta;
+    if (Math.abs(event.deltaY) > 0) event.preventDefault();
+  }
+
+  function restoreScanState() {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(SCAN_STATE_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        activeScanId?: string;
+        activeToken?: string;
+        scanTabs?: unknown[];
+      };
+      if (!parsed || !Array.isArray(parsed.scanTabs)) return;
+
+      const restoredTabs = parsed.scanTabs
+        .filter((tab): tab is ScanTab =>
+          Boolean(tab) &&
+          typeof (tab as ScanTab).id === 'string' &&
+          typeof (tab as ScanTab).pair === 'string' &&
+          typeof (tab as ScanTab).timeframe === 'string' &&
+          typeof (tab as ScanTab).token === 'string' &&
+          typeof (tab as ScanTab).label === 'string' &&
+          typeof (tab as ScanTab).createdAt === 'number' &&
+          Array.isArray((tab as ScanTab).signals)
+        )
+        .map((tab) => {
+          const rawLabel = String(tab.label || '').trim();
+          const tokenPrefix = `${String(tab.token || '').trim()} `;
+          const label = tokenPrefix && rawLabel.toUpperCase().startsWith(tokenPrefix.toUpperCase())
+            ? rawLabel.slice(tokenPrefix.length).trim()
+            : rawLabel;
+          return { ...tab, label: label || rawLabel };
+        })
+        .slice(0, MAX_SCAN_TABS);
+
+      if (restoredTabs.length === 0) return;
+
+      scanTabs = restoredTabs;
+      activeScanId =
+        typeof parsed.activeScanId === 'string' && restoredTabs.some((tab) => tab.id === parsed.activeScanId)
+          ? parsed.activeScanId
+          : restoredTabs[0].id;
+      if (typeof parsed.activeToken === 'string') activeToken = parsed.activeToken;
+    } catch (err) {
+      console.warn('[WarRoom] Failed to restore scan state', err);
+    }
+  }
+
   async function fetchDerivativesData() {
     const pair = currentPair;
     if (!pair) return;
-
-    // Check cache first
     const cached = _derivCache.get(pair);
     if (cached && Date.now() - cached.ts < DERIV_CACHE_TTL) {
       const d = cached.data;
-      derivOI = d.oi; derivFunding = d.funding; derivPredFunding = d.predFunding;
-      derivLSRatio = d.lsRatio; derivLiqLong = d.liqLong; derivLiqShort = d.liqShort;
+      derivOI = d.oi;
+      derivFunding = d.funding;
+      derivPredFunding = d.predFunding;
+      derivLSRatio = d.lsRatio;
+      derivLiqLong = d.liqLong;
+      derivLiqShort = d.liqShort;
       derivLastPair = pair;
       return;
     }
 
     derivLoading = true;
-
     try {
       const [oi, funding, predFunding, lsRatio, liqs] = await Promise.allSettled([
         fetchCurrentOI(pair),
@@ -100,24 +289,100 @@
       if (oi.status === 'fulfilled' && oi.value) derivOI = oi.value.value;
       if (funding.status === 'fulfilled' && funding.value) derivFunding = funding.value.value;
       if (predFunding.status === 'fulfilled' && predFunding.value) derivPredFunding = predFunding.value.value;
-      if (lsRatio.status === 'fulfilled' && lsRatio.value.length > 0) {
-        derivLSRatio = lsRatio.value[lsRatio.value.length - 1].value;
-      }
+      if (lsRatio.status === 'fulfilled' && lsRatio.value.length > 0) derivLSRatio = lsRatio.value[lsRatio.value.length - 1].value;
       if (liqs.status === 'fulfilled' && liqs.value.length > 0) {
-        derivLiqLong = liqs.value.reduce((s, d) => s + d.long, 0);
-        derivLiqShort = liqs.value.reduce((s, d) => s + d.short, 0);
+        derivLiqLong = liqs.value.reduce((sum, d) => sum + d.long, 0);
+        derivLiqShort = liqs.value.reduce((sum, d) => sum + d.short, 0);
       }
       derivLastPair = pair;
-
-      // Store in cache
       _derivCache.set(pair, {
         ts: Date.now(),
-        data: { oi: derivOI, funding: derivFunding, predFunding: derivPredFunding, lsRatio: derivLSRatio, liqLong: derivLiqLong, liqShort: derivLiqShort }
+        data: {
+          oi: derivOI,
+          funding: derivFunding,
+          predFunding: derivPredFunding,
+          lsRatio: derivLSRatio,
+          liqLong: derivLiqLong,
+          liqShort: derivLiqShort
+        }
       });
     } catch (err) {
       console.error('[WarRoom] Derivatives fetch error:', err);
     }
     derivLoading = false;
+  }
+
+  async function runAgentScan() {
+    if (scanRunning) {
+      scanQueued = true;
+      scanStep = 'QUEUED';
+      return;
+    }
+    scanRunning = true;
+    scanQueued = false;
+    scanError = '';
+    scanStep = 'ANALYSIS · loading market data';
+
+    const pair = currentPair || 'BTC/USDT';
+    const timeframe = String(currentTF || '4h');
+
+    try {
+      scanStep = 'COUNCIL · synthesizing outputs';
+      const scan = await runWarRoomScan(pair, timeframe);
+      const existingTab = scanTabs.find((tab) => tab.pair === scan.pair && tab.timeframe === scan.timeframe);
+      const nextTab: ScanTab = existingTab
+        ? {
+          ...existingTab,
+          token: scan.token,
+          createdAt: scan.createdAt,
+          label: scan.label,
+          signals: [...scan.signals, ...existingTab.signals].slice(0, MAX_SIGNALS_PER_TAB)
+        }
+        : {
+          id: `scan-${scan.createdAt}-${Math.floor(Math.random() * 10_000).toString(16)}`,
+          pair: scan.pair,
+          timeframe: scan.timeframe,
+          token: scan.token,
+          createdAt: scan.createdAt,
+          label: scan.label,
+          signals: scan.signals
+        };
+
+      scanTabs = [nextTab, ...scanTabs.filter((tab) => tab.id !== nextTab.id)].slice(0, MAX_SCAN_TABS);
+      activeScanId = nextTab.id;
+      activeToken = 'ALL';
+      selectedIds = new Set();
+      dispatch('scancomplete', {
+        pair: scan.pair,
+        timeframe: scan.timeframe,
+        token: scan.token,
+        createdAt: scan.createdAt,
+        label: nextTab.label,
+        consensus: scan.consensus,
+        avgConfidence: scan.avgConfidence,
+        summary: scan.summary,
+        highlights: scan.highlights
+      });
+      scanError = '';
+      scanStep = 'DONE';
+    } catch (err) {
+      console.error('[WarRoom] Agent scan error:', err);
+      scanError = err instanceof Error ? err.message : '스캔 중 오류가 발생했습니다.';
+    } finally {
+      scanRunning = false;
+      if (scanQueued) {
+        scanQueued = false;
+        void runAgentScan();
+        return;
+      }
+      setTimeout(() => {
+        if (!scanRunning) scanStep = '';
+      }, 900);
+    }
+  }
+
+  export function triggerScanFromChart() {
+    runAgentScan();
   }
 
   // Debounced refetch when pair changes (prevents rapid switching spam)
@@ -129,9 +394,6 @@
   // ── Volatility alert ──
   let volatilityAlert = false;
   let volatilityInterval: ReturnType<typeof setInterval> | null = null;
-
-  $: trackedCount = $activeSignalCount;
-
 
   function handleTrack(sig: AgentSignal) {
     trackSignalStore(sig.pair, sig.vote === 'long' ? 'LONG' : sig.vote === 'short' ? 'SHORT' : 'LONG', sig.entry, sig.name, sig.conf);
@@ -146,16 +408,19 @@
   }
 
   function quickTrade(dir: 'LONG' | 'SHORT', sig: AgentSignal) {
-    openQuickTrade(sig.pair, dir, sig.entry, sig.tp, sig.sl, sig.name);
-    dispatch('quicktrade', { dir, pair: sig.pair, price: sig.entry });
-  }
-
-  function fmtPrice(p: number): string {
-    if (p >= 1000) return '$' + p.toLocaleString();
-    return '$' + p;
+    const entry = sig.entry;
+    const baseRisk = Math.max(Math.abs(sig.entry - sig.sl), Math.abs(sig.entry) * 0.0035);
+    const rr = Math.max(Math.abs(sig.tp - sig.entry) / Math.max(baseRisk, 0.0001), 1.2);
+    const sl = dir === 'LONG' ? roundPrice(entry - baseRisk) : roundPrice(entry + baseRisk);
+    const tp = dir === 'LONG' ? roundPrice(entry + baseRisk * rr) : roundPrice(entry - baseRisk * rr);
+    openQuickTrade(sig.pair, dir, entry, tp, sl, sig.name);
+    dispatch('quicktrade', { dir, pair: sig.pair, price: entry });
   }
 
   onMount(() => {
+    restoreScanState();
+    scanStateHydrated = true;
+
     volatilityInterval = setInterval(() => {
       if (Math.random() < 0.2) {
         volatilityAlert = true;
@@ -163,9 +428,7 @@
       }
     }, 30000);
 
-    // Initial derivatives fetch
     fetchDerivativesData();
-    // Auto-refresh every 30s
     derivRefreshTimer = setInterval(fetchDerivativesData, 30000);
   });
 
@@ -181,31 +444,52 @@
   {#if volatilityAlert}
     <div class="vol-alert">
       <div class="vol-pulse"></div>
-      <span class="vol-text">⚡ VOLATILITY SPIKE DETECTED</span>
-      <button class="vol-arena-btn" on:click={goArena}>🐕 OPEN ARENA</button>
+      <span class="vol-text">VOLATILITY SPIKE DETECTED</span>
+      <button class="vol-arena-btn" on:click={goArena}>OPEN ARENA</button>
     </div>
   {/if}
 
   <!-- Header -->
   <div class="wr-header">
-    <span class="wr-title">WAR ROOM</span>
-    <div class="wr-header-right">
-      <button class="signal-link" on:click={() => goto('/signals')}>📡 SIGNALS</button>
-      <button class="arena-trigger" on:click={goArena}>🐕 ARENA</button>
-      <span class="wr-auto-badge">⚡AUTO</span>
-      <span class="wr-live"><span class="wr-live-dot"></span> LIVE</span>
-      <button class="wr-collapse-btn" on:click={() => dispatch('collapse')} title="Collapse">
-        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="1" y="2" width="14" height="12" rx="1.5"/>
-          <line x1="6" y1="2" x2="6" y2="14"/>
-        </svg>
-      </button>
+    <div class="wr-title-wrap">
+      <span class="wr-title">WAR ROOM</span>
     </div>
+    <div class="wr-header-right" on:wheel={scrollXOnWheel}>
+      <button class="wr-chip signal-link" on:click={() => goto('/signals')}>SIGNALS</button>
+      <button class="wr-chip arena-trigger" on:click={goArena}>ARENA</button>
+    </div>
+    <button class="wr-collapse-btn" on:click={() => dispatch('collapse')} title="Collapse panel" aria-label="Collapse panel">
+      <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <rect x="1" y="2" width="14" height="12" rx="1.5"/>
+        <line x1="6" y1="2" x2="6" y2="14"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="ticker-flow" on:wheel={scrollXOnWheel}>
+    <span class="ticker-chip ticker-label">MARKET</span>
+    <span class="ticker-chip ticker-pair">{currentPair}</span>
+    <span class="ticker-chip ticker-tf">{String(currentTF).toUpperCase()}</span>
+    {#if activeScanTab}
+      <span class="ticker-chip ticker-stamp">{activeScanTab.label}</span>
+    {/if}
+  </div>
+
+  <div class="scan-tabs" on:wheel={scrollXOnWheel}>
+    <button class="scan-tab" class:active={activeScanId === 'preset'} on:click={() => activateScanTab('preset')}>
+      LIVE FEED
+    </button>
+    {#each scanTabs as tab (tab.id)}
+      <button class="scan-tab" class:active={activeScanId === tab.id} on:click={() => activateScanTab(tab.id)}>
+        <span class="scan-tab-token">{tab.token}</span>
+        <span class="scan-tab-meta">{tab.label}</span>
+      </button>
+    {/each}
   </div>
 
   <!-- Token Filter Tabs -->
-  <div class="token-tabs">
-    {#each TOKEN_TABS as tok (tok)}
+  <div class="token-tabs" on:wheel={scrollXOnWheel}>
+    {#each tokenTabs as tok (tok)}
       <button
         class="token-tab"
         class:active={activeToken === tok}
@@ -215,7 +499,7 @@
         on:click={() => { activeToken = tok; selectedIds = new Set(); }}
       >
         {tok}
-        <span class="token-tab-count">{TOKEN_COUNTS[tok]}</span>
+        <span class="token-tab-count">{tokenCounts[tok] || 0}</span>
       </button>
     {/each}
   </div>
@@ -259,6 +543,19 @@
       </div>
     </div>
   </div>
+
+  {#if scanRunning || scanStep || scanError}
+    <div class="scan-status" class:error={Boolean(scanError)}>
+      <span class="scan-status-dot"></span>
+      <span class="scan-status-text">
+        {#if scanError}
+          {scanError}
+        {:else}
+          {scanStep || 'SCANNING...'}
+        {/if}
+      </span>
+    </div>
+  {/if}
 
   <!-- Select All bar -->
   <div class="select-bar">
@@ -311,17 +608,22 @@
             <span class="wr-msg-src">{sig.src}</span>
             <button class="wr-act-btn long" on:click|stopPropagation={() => quickTrade('LONG', sig)}>▲ LONG</button>
             <button class="wr-act-btn short" on:click|stopPropagation={() => quickTrade('SHORT', sig)}>▼ SHORT</button>
-            <button class="wr-act-btn track" on:click|stopPropagation={() => handleTrack(sig)}>📌</button>
+            <button class="wr-act-btn track" on:click|stopPropagation={() => handleTrack(sig)}>TRACK</button>
           </div>
         </div>
       </div>
     {/each}
+    {#if filteredSignals.length === 0}
+      <div class="wr-empty">
+        <div class="wr-empty-title">NO SIGNALS</div>
+        <div class="wr-empty-text">현재 필터에서 표시할 데이터가 없습니다. ALL로 전환하거나 스캔을 실행하세요.</div>
+      </div>
+    {/if}
   </div>
 
   <!-- CREATE COPY TRADE CTA -->
   {#if selectedCount > 0}
     <button class="copy-trade-cta" on:click={openCopyTrade}>
-      <span class="ctc-icon">⚡</span>
       <span class="ctc-text">CREATE COPY TRADE</span>
       <span class="ctc-count">{selectedCount} selected</span>
       <span class="ctc-arrow">→</span>
@@ -330,21 +632,20 @@
 
   <!-- Signal Room Link -->
   <button class="signal-room-cta" on:click={() => goto('/signals')}>
-    <span class="src-icon">📡</span>
     <span class="src-text">SIGNAL ROOM</span>
-    <span class="src-count">{AGENT_SIGNALS.length} SIGNALS</span>
+    <span class="src-count">{signalPool.length} SIGNALS</span>
     {#if trackedCount > 0}
-      <span class="src-tracked">📌 {trackedCount}</span>
+      <span class="src-tracked">TRACKED {trackedCount}</span>
     {/if}
     <span class="src-arrow">→</span>
   </button>
 
   <!-- Stats Footer -->
   <div class="wr-stats">
-    <div class="stat-cell"><div class="stat-lbl">SIG</div><div class="stat-val" style="color:var(--yel)">847</div></div>
-    <div class="stat-cell"><div class="stat-lbl">WIN</div><div class="stat-val" style="color:var(--grn)">65%</div></div>
-    <div class="stat-cell"><div class="stat-lbl">R:R</div><div class="stat-val" style="color:var(--ora)">1:1.8</div></div>
-    <div class="stat-cell"><div class="stat-lbl">STK</div><div class="stat-val" style="color:var(--pk)">W3</div></div>
+    <div class="stat-cell"><div class="stat-lbl">SIG</div><div class="stat-val" style="color:var(--yel)">{signalPool.length}</div></div>
+    <div class="stat-cell"><div class="stat-lbl">CONF</div><div class="stat-val" style="color:var(--grn)">{avgConfidence}%</div></div>
+    <div class="stat-cell"><div class="stat-lbl">R:R</div><div class="stat-val" style="color:var(--ora)">1:{avgRR.toFixed(1)}</div></div>
+    <div class="stat-cell"><div class="stat-lbl">DIR</div><div class="stat-val" style="color:var(--pk)">{consensusDir}</div></div>
   </div>
 </div>
 
@@ -365,9 +666,9 @@
     animation: blink .6s infinite;
   }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
-  .vol-text { font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px; color: var(--red); flex: 1; }
+  .vol-text { font-family: var(--fm); font-size: 10px; font-weight: 900; letter-spacing: 1px; color: var(--red); flex: 1; }
   .vol-arena-btn {
-    font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 1px;
+    font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px;
     padding: 3px 8px; border-radius: 4px; background: var(--red); color: #fff;
     border: 1.5px solid #000; cursor: pointer; box-shadow: 2px 2px 0 #000;
   }
@@ -383,61 +684,247 @@
   }
 
   .wr-header {
-    height: 34px; padding: 0 10px; flex-shrink: 0;
+    height: 36px; padding: 0 8px; flex-shrink: 0;
     background: var(--yel); border-bottom: 3px solid #000;
     display: flex; align-items: center; gap: 8px; position: relative; z-index: 2;
   }
-  .wr-title { font-family: var(--fdisplay); font-size: 16px; letter-spacing: 3px; color: #000; }
-  .wr-header-right { display: flex; align-items: center; gap: 5px; margin-left: auto; }
+  .wr-title-wrap {
+    display: flex;
+    align-items: center;
+    min-width: 84px;
+    flex-shrink: 0;
+  }
+  .wr-title {
+    font-family: var(--fdisplay);
+    font-size: 13px;
+    letter-spacing: 1.2px;
+    color: #000;
+    white-space: nowrap;
+  }
+  .wr-header-right {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,.35) rgba(0,0,0,.08);
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+  .wr-header-right::-webkit-scrollbar { height: 4px; }
+  .wr-header-right::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,.38);
+    border-radius: 999px;
+  }
+  .wr-header-right::-webkit-scrollbar-track {
+    background: rgba(0,0,0,.08);
+  }
+  .wr-chip {
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,.26);
+    font-family: var(--fm);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .4px;
+    line-height: 1;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
   .arena-trigger {
-    font-family: var(--fm); font-size: 7px; font-weight: 700;
     color: var(--pk); background: rgba(255,45,155,.1);
     border: 1.5px solid rgba(255,45,155,.4);
-    padding: 2px 6px; cursor: pointer; letter-spacing: 1px; transition: all .15s;
+    cursor: pointer;
+    transition: all .15s;
   }
   .arena-trigger:hover { background: rgba(255,45,155,.25); }
-  .wr-live {
-    font-family: var(--fm); font-size: 6.5px; font-weight: 700; letter-spacing: 2px;
-    color: #000; background: var(--grn); padding: 2px 6px;
-    display: flex; align-items: center; gap: 3px;
-  }
-  .wr-live-dot { width: 4px; height: 4px; border-radius: 50%; background: #000; animation: wr-blink .9s infinite; }
-  @keyframes wr-blink { 0%,100%{opacity:1} 50%{opacity:.2} }
-  .wr-auto-badge {
-    font-family: var(--fm); font-size: 6px; font-weight: 700; letter-spacing: 1px;
-    background: #000; color: var(--yel); padding: 2px 5px; border: 1px solid #000;
-  }
   .wr-collapse-btn {
-    display: flex; align-items: center; justify-content: center;
-    width: 18px; height: 18px; padding: 0;
-    background: rgba(0,0,0,.4); border: 1px solid rgba(0,0,0,.3);
-    border-radius: 3px; cursor: pointer; color: rgba(0,0,0,.5);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+    width: 24px;
+    padding: 0;
+    background: rgba(0,0,0,.14);
+    border: 1.5px solid rgba(0,0,0,.45);
+    border-radius: 3px;
+    cursor: pointer;
+    color: #111;
     transition: all .12s;
   }
-  .wr-collapse-btn:hover { background: rgba(0,0,0,.6); color: #000; }
+  .wr-collapse-btn:hover {
+    background: #000;
+    border-color: #000;
+    color: var(--yel);
+  }
+
+  .ticker-flow {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 8px;
+    background: linear-gradient(90deg, rgba(0,0,0,.62), rgba(0,0,0,.48));
+    border-bottom: 1px solid rgba(255,230,0,.14);
+    position: relative;
+    z-index: 2;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,230,0,.35) transparent;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+  .ticker-flow::-webkit-scrollbar { height: 4px; }
+  .ticker-flow::-webkit-scrollbar-thumb { background: rgba(255,230,0,.35); border-radius: 999px; }
+  .ticker-flow::-webkit-scrollbar-track { background: rgba(255,255,255,.04); }
+  .ticker-chip {
+    height: 20px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.03);
+    color: rgba(255,255,255,.75);
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .55px;
+    white-space: nowrap;
+  }
+  .ticker-label {
+    color: rgba(255,230,0,.86);
+    border-color: rgba(255,230,0,.38);
+    background: rgba(255,230,0,.1);
+  }
+  .ticker-pair {
+    color: rgba(255,255,255,.92);
+    border-color: rgba(255,255,255,.22);
+  }
+  .ticker-tf {
+    color: rgba(0,255,166,.92);
+    border-color: rgba(0,255,166,.35);
+    background: rgba(0,255,166,.1);
+  }
+  .ticker-stamp {
+    color: rgba(255,255,255,.72);
+    border-color: rgba(255,255,255,.18);
+    background: rgba(255,255,255,.04);
+  }
+
+  .scan-tabs {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 4px;
+    padding: 4px 6px;
+    border-bottom: 1px solid rgba(255,230,0,.08);
+    position: relative;
+    z-index: 2;
+    background: rgba(0,0,0,.35);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,230,0,.35) transparent;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+  .scan-tabs::-webkit-scrollbar { height: 4px; }
+  .scan-tabs::-webkit-scrollbar-thumb { background: rgba(255,230,0,.35); border-radius: 999px; }
+  .scan-tabs::-webkit-scrollbar-track { background: rgba(255,255,255,.04); }
+  .scan-tab {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 4px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+    color: rgba(255,255,255,.72);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .7px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .scan-tab:hover { color: rgba(255,255,255,.82); border-color: rgba(255,255,255,.2); }
+  .scan-tab.active {
+    color: var(--yel);
+    border-color: rgba(255,230,0,.5);
+    background: rgba(255,230,0,.12);
+  }
+  .scan-tab-token {
+    color: rgba(255,255,255,.88);
+    font-weight: 900;
+  }
+  .scan-tab-meta {
+    color: rgba(255,230,0,.72);
+    font-weight: 700;
+  }
 
   /* Token Filter Tabs */
   .token-tabs {
-    display: flex; flex-shrink: 0; border-bottom: 2px solid rgba(255,230,0,.15);
-    position: relative; z-index: 2; background: rgba(0,0,0,.6);
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+    padding: 5px 8px;
+    border-bottom: 1px solid rgba(255,230,0,.12);
+    position: relative;
+    z-index: 2;
+    background: rgba(0,0,0,.56);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,230,0,.35) transparent;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
   }
+  .token-tabs::-webkit-scrollbar { height: 4px; }
+  .token-tabs::-webkit-scrollbar-thumb { background: rgba(255,230,0,.35); border-radius: 999px; }
+  .token-tabs::-webkit-scrollbar-track { background: rgba(255,255,255,.04); }
   .token-tab {
-    flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
-    padding: 6px 4px; font-family: var(--fm); font-size: 9px; font-weight: 900;
-    letter-spacing: 1.5px; color: rgba(255,255,255,.35);
-    background: none; border: none; border-bottom: 2px solid transparent;
+    flex: 0 0 auto;
+    min-width: 56px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 9px;
+    font-family: var(--fm);
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .65px;
+    color: rgba(255,255,255,.68);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 999px;
+    background: rgba(255,255,255,.03);
     cursor: pointer; transition: color .15s, border-color .15s;
   }
-  .token-tab:hover { color: rgba(255,255,255,.6); }
-  .token-tab.active { color: var(--yel); border-bottom-color: var(--yel); background: rgba(255,230,0,.05); }
-  .token-tab.active.btc { color: #f7931a; border-bottom-color: #f7931a; }
-  .token-tab.active.eth { color: #627eea; border-bottom-color: #627eea; }
-  .token-tab.active.sol { color: #9945ff; border-bottom-color: #9945ff; }
+  .token-tab:hover { color: rgba(255,255,255,.84); border-color: rgba(255,255,255,.2); }
+  .token-tab.active { color: var(--yel); border-color: rgba(255,230,0,.5); background: rgba(255,230,0,.1); }
+  .token-tab.active.btc { color: #f7931a; border-color: rgba(247,147,26,.6); background: rgba(247,147,26,.12); }
+  .token-tab.active.eth { color: #8ea0ff; border-color: rgba(98,126,234,.6); background: rgba(98,126,234,.12); }
+  .token-tab.active.sol { color: #b57bff; border-color: rgba(153,69,255,.62); background: rgba(153,69,255,.12); }
   .token-tab-count {
-    font-size: 7px; font-weight: 700; padding: 1px 4px; border-radius: 6px;
-    background: rgba(255,255,255,.06); color: rgba(255,255,255,.3);
+    font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 999px;
+    background: rgba(255,255,255,.1); color: rgba(255,255,255,.66);
   }
-  .token-tab.active .token-tab-count { background: rgba(255,230,0,.12); color: var(--yel); }
+  .token-tab.active .token-tab-count { background: rgba(255,230,0,.2); color: var(--yel); }
 
   /* Derivatives Data Strip */
   .deriv-strip {
@@ -449,18 +936,53 @@
   .deriv-row + .deriv-row { margin-top: 2px; }
   .deriv-cell { text-align: center; padding: 2px 0; }
   .deriv-lbl {
-    display: block; font-family: var(--fm); font-size: 6px; font-weight: 700;
-    letter-spacing: 1px; color: rgba(255,255,255,.25); line-height: 1;
+    display: block; font-family: var(--fm); font-size: 8px; font-weight: 700;
+    letter-spacing: .9px; color: rgba(255,255,255,.52); line-height: 1;
   }
   .deriv-val {
-    display: block; font-family: var(--fd); font-size: 11px; font-weight: 900;
-    color: rgba(255,255,255,.7); line-height: 1.3;
+    display: block; font-family: var(--fd); font-size: 12px; font-weight: 900;
+    color: rgba(255,255,255,.86); line-height: 1.3;
   }
   .deriv-val.loading { opacity: .4; }
   .deriv-val.pos { color: var(--grn); }
   .deriv-val.neg { color: var(--red); }
-  .deriv-val.long-liq { color: var(--grn); font-size: 9px; }
-  .deriv-val.short-liq { color: var(--red); font-size: 9px; }
+  .deriv-val.long-liq { color: var(--grn); font-size: 10px; }
+  .deriv-val.short-liq { color: var(--red); font-size: 10px; }
+  .scan-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(255,230,0,.12);
+    background: rgba(255,230,0,.06);
+    position: relative;
+    z-index: 2;
+  }
+  .scan-status.error {
+    background: rgba(255,45,85,.08);
+    border-bottom-color: rgba(255,45,85,.2);
+  }
+  .scan-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--yel);
+    box-shadow: 0 0 8px rgba(255,230,0,.6);
+    animation: wr-blink .9s infinite;
+  }
+  @keyframes wr-blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+  .scan-status.error .scan-status-dot {
+    background: var(--red);
+    box-shadow: 0 0 8px rgba(255,45,85,.6);
+  }
+  .scan-status-text {
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .7px;
+    color: rgba(255,255,255,.9);
+  }
 
   /* Select All Bar */
   .select-bar {
@@ -470,15 +992,15 @@
   }
   .select-all-btn {
     display: flex; align-items: center; gap: 4px;
-    font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 1px;
-    color: rgba(255,255,255,.4); background: none; border: none;
+    font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 1px;
+    color: rgba(255,255,255,.68); background: none; border: none;
     cursor: pointer; padding: 2px 0; transition: color .12s;
   }
   .select-all-btn:hover { color: rgba(255,255,255,.7); }
   .sa-check { font-size: 11px; color: rgba(255,255,255,.3); }
   .sa-check.checked { color: var(--yel); }
   .select-count {
-    font-family: var(--fm); font-size: 7px; font-weight: 700;
+    font-family: var(--fm); font-size: 8px; font-weight: 700;
     color: var(--yel); background: rgba(255,230,0,.1); padding: 1px 6px; border-radius: 8px;
   }
 
@@ -497,34 +1019,49 @@
   .wr-msg-checkbox { display: flex; align-items: flex-start; padding: 8px 2px 0 6px; flex-shrink: 0; }
   .msg-check { font-size: 13px; color: rgba(255,255,255,.2); line-height: 1; }
   .msg-check.checked { color: var(--yel); }
-  .wr-msg-body { flex: 1; padding: 7px 10px 6px 4px; }
+  .wr-msg-body { flex: 1; padding: 8px 10px 8px 5px; }
   .wr-msg-head { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; flex-wrap: wrap; }
-  .wr-msg-icon { font-size: 11px; line-height: 1; flex-shrink: 0; }
-  .wr-msg-name { font-family: var(--fm); font-size: 9px; font-weight: 700; }
-  .wr-msg-token {
-    font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: .5px;
-    padding: 1px 4px; border-radius: 3px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.5);
+  .wr-msg-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    padding: 1px 3px;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,.2);
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: .4px;
+    line-height: 1;
+    color: rgba(255,255,255,.72);
+    flex-shrink: 0;
   }
-  .wr-msg-vote { font-family: var(--fm); font-size: 8px; font-weight: 700; padding: 1px 5px; border: 1px solid; }
+  .wr-msg-name { font-family: var(--fm); font-size: 10px; font-weight: 700; }
+  .wr-msg-token {
+    font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: .5px;
+    padding: 1px 4px; border-radius: 3px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.72);
+  }
+  .wr-msg-vote { font-family: var(--fm); font-size: 9px; font-weight: 700; padding: 1px 5px; border: 1px solid; }
   .wr-msg-vote.short { color: var(--red); border-color: rgba(255,45,85,.4); background: rgba(255,45,85,.08); }
   .wr-msg-vote.long { color: var(--grn); border-color: rgba(0,255,136,.4); background: rgba(0,255,136,.08); }
   .wr-msg-vote.neutral { color: rgba(255,255,255,.35); border-color: rgba(255,255,255,.1); }
-  .wr-msg-conf { font-family: var(--fm); font-size: 8px; font-weight: 900; color: var(--yel); }
-  .wr-msg-time { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.25); margin-left: auto; }
-  .wr-msg-text { font-family: var(--fm); font-size: 9px; line-height: 1.5; color: rgba(255,255,255,.7); }
+  .wr-msg-conf { font-family: var(--fm); font-size: 9px; font-weight: 900; color: var(--yel); }
+  .wr-msg-time { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.56); margin-left: auto; }
+  .wr-msg-text { font-family: var(--fm); font-size: 10px; line-height: 1.5; color: rgba(255,255,255,.84); }
   .wr-msg-signal-row {
     display: flex; align-items: center; gap: 6px; margin-top: 3px;
-    font-family: var(--fm); font-size: 8px; font-weight: 700;
+    font-family: var(--fm); font-size: 9px; font-weight: 700;
   }
-  .wr-msg-entry { color: rgba(255,255,255,.6); }
-  .wr-msg-arrow-price { color: rgba(255,255,255,.2); font-size: 7px; }
+  .wr-msg-entry { color: rgba(255,255,255,.78); }
+  .wr-msg-arrow-price { color: rgba(255,255,255,.5); font-size: 8px; }
   .wr-msg-tp { color: var(--grn); }
   .wr-msg-sl { color: var(--red); }
-  .wr-msg-src { font-family: var(--fm); font-size: 7px; color: rgba(255,230,0,.25); }
+  .wr-msg-src { font-family: var(--fm); font-size: 8px; color: rgba(255,230,0,.6); }
   .wr-msg-actions { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
   .wr-act-btn {
-    font-family: var(--fm); font-size: 7px; font-weight: 800; letter-spacing: .5px;
-    padding: 2px 6px; border-radius: 3px; cursor: pointer; transition: background .12s; border: 1px solid;
+    font-family: var(--fm); font-size: 8px; font-weight: 800; letter-spacing: .5px;
+    padding: 3px 7px; border-radius: 3px; cursor: pointer; transition: background .12s; border: 1px solid;
   }
   .wr-act-btn.long { color: var(--grn); border-color: rgba(0,255,136,.3); background: rgba(0,255,136,.06); }
   .wr-act-btn.long:hover { background: rgba(0,255,136,.2); }
@@ -532,6 +1069,29 @@
   .wr-act-btn.short:hover { background: rgba(255,45,85,.2); }
   .wr-act-btn.track { color: #00ccff; border-color: rgba(0,204,255,.3); background: rgba(0,204,255,.06); }
   .wr-act-btn.track:hover { background: rgba(0,204,255,.2); }
+  .wr-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 120px;
+    padding: 18px 12px;
+    color: rgba(255,255,255,.45);
+  }
+  .wr-empty-title {
+    font-family: var(--fd);
+    font-size: 10px;
+    letter-spacing: 1.6px;
+    color: rgba(255,230,0,.72);
+  }
+  .wr-empty-text {
+    font-family: var(--fm);
+    font-size: 9px;
+    text-align: center;
+    max-width: 220px;
+    line-height: 1.5;
+  }
 
   /* Copy Trade CTA */
   .copy-trade-cta {
@@ -543,20 +1103,19 @@
     flex-shrink: 0; position: relative; z-index: 2;
   }
   .copy-trade-cta:hover { background: linear-gradient(90deg, rgba(255,230,0,.22), rgba(255,230,0,.08)); }
-  .ctc-icon { font-size: 14px; }
   .ctc-text { font-family: var(--fd); font-size: 10px; font-weight: 900; letter-spacing: 2px; color: var(--yel); }
   .ctc-count {
-    font-family: var(--fm); font-size: 7px; font-weight: 700;
+    font-family: var(--fm); font-size: 8px; font-weight: 700;
     color: #000; background: var(--yel); padding: 2px 6px; border-radius: 8px;
   }
   .ctc-arrow { margin-left: auto; font-family: var(--fm); font-size: 12px; color: var(--yel); }
 
   /* Signal Link / Signal Room CTA */
   .signal-link {
-    font-family: var(--fm); font-size: 7px; font-weight: 700;
     color: var(--pk); background: rgba(255,45,155,.1);
     border: 1.5px solid rgba(255,45,155,.4);
-    padding: 2px 6px; cursor: pointer; letter-spacing: 1px; transition: all .15s;
+    cursor: pointer;
+    transition: all .15s;
   }
   .signal-link:hover { background: rgba(255,45,155,.25); }
   .signal-room-cta {
@@ -566,10 +1125,9 @@
     cursor: pointer; transition: background .12s; flex-shrink: 0; position: relative; z-index: 1;
   }
   .signal-room-cta:hover { background: linear-gradient(90deg, rgba(255,45,155,.18), rgba(255,45,155,.06)); }
-  .src-icon { font-size: 12px; }
-  .src-text { font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 1.5px; color: var(--pk); }
-  .src-count { font-family: var(--fm); font-size: 7px; font-weight: 700; color: rgba(255,255,255,.4); }
-  .src-tracked { font-family: var(--fm); font-size: 7px; font-weight: 900; color: var(--ora); background: rgba(255,140,59,.1); padding: 1px 5px; border-radius: 4px; }
+  .src-text { font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1.5px; color: var(--pk); }
+  .src-count { font-family: var(--fm); font-size: 8px; font-weight: 700; color: rgba(255,255,255,.64); }
+  .src-tracked { font-family: var(--fm); font-size: 8px; font-weight: 900; color: var(--ora); background: rgba(255,140,59,.1); padding: 1px 5px; border-radius: 4px; }
   .src-arrow { margin-left: auto; font-family: var(--fm); font-size: 10px; color: var(--pk); }
 
   /* Stats Footer */
@@ -579,6 +1137,6 @@
   }
   .stat-cell { padding: 5px 4px; text-align: center; border-right: 1px solid rgba(255,230,0,.1); }
   .stat-cell:last-child { border-right: none; }
-  .stat-lbl { font-family: var(--fm); font-size: 7px; color: rgba(255,230,0,.4); letter-spacing: 1.5px; margin-bottom: 1px; }
+  .stat-lbl { font-family: var(--fm); font-size: 8px; color: rgba(255,230,0,.62); letter-spacing: 1.4px; margin-bottom: 1px; }
   .stat-val { font-family: var(--fdisplay); font-size: 16px; letter-spacing: 1px; line-height: 1.1; }
 </style>

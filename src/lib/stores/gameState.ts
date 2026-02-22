@@ -7,7 +7,7 @@ import type { CanonicalTimeframe } from '$lib/utils/timeframe';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
 
-export type Phase = 'standby' | 'config' | 'deploy' | 'hypothesis' | 'preview' | 'scout' | 'gather' | 'council' | 'verdict' | 'compare' | 'battle' | 'result' | 'cooldown';
+export type Phase = 'DRAFT' | 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE' | 'RESULT';
 export type ViewMode = 'arena' | 'terminal' | 'passport';
 export type Direction = 'LONG' | 'SHORT' | 'NEUTRAL';
 export type RiskLevel = 'low' | 'mid' | 'aggro';
@@ -92,7 +92,7 @@ export interface GameState {
 
 const defaultState: GameState = {
   currentView: 'arena',
-  phase: 'standby',
+  phase: 'DRAFT',
   running: false,
   matchN: 0,
   wins: 0,
@@ -135,7 +135,7 @@ function loadState(): GameState {
         squadConfig,
         timeframe: normalizeTimeframe(parsed?.timeframe),
         running: false,
-        phase: 'standby',
+        phase: 'DRAFT',
         inLobby: true
       };
     }

@@ -22,6 +22,7 @@ export interface CopyTradeDraft {
   marginMode: 'cross' | 'isolated';
   evidence: { icon: string; name: string; text: string; conf: number; color: string }[];
   note: string;
+  source?: string;
 }
 
 interface CopyTradeState {

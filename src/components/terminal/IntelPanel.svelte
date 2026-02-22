@@ -13,9 +13,28 @@
   // Chat props (passed from terminal page)
   export let chatMessages: { from: string; icon: string; color: string; text: string; time: string; isUser: boolean; isSystem?: boolean }[] = [];
   export let isTyping = false;
+  export let prioritizeChat = false;
+  type ScanHighlight = {
+    agent: string;
+    vote: 'long' | 'short' | 'neutral';
+    conf: number;
+    note: string;
+  };
+  type ScanBrief = {
+    pair: string;
+    timeframe: string;
+    token: string;
+    createdAt: number;
+    label: string;
+    consensus: 'long' | 'short' | 'neutral';
+    avgConfidence: number;
+    summary: string;
+    highlights: ScanHighlight[];
+  };
+  export let latestScan: ScanBrief | null = null;
 
   let activeTab = 'intel';
-  let innerTab = 'headlines';
+  let innerTab = 'chat';
   let tabCollapsed = false;
   let _uiStateSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -30,6 +49,10 @@
     } else {
       activeTab = tab;
       tabCollapsed = false;
+      if (tab === 'intel') {
+        innerTab = 'chat';
+        queueUiStateSave({ terminalInnerTab: innerTab });
+      }
       queueUiStateSave({ terminalActiveTab: activeTab });
     }
   }
@@ -68,6 +91,7 @@
 
   $: opens = $openTrades;
   $: openCount = opens.length;
+  $: latestScanTime = latestScan ? new Date(latestScan.createdAt).toTimeString().slice(0, 5) : '';
 
   // ═══ Filter headlines by current chart ticker ═══
   $: currentToken = $gameState.pair.split('/')[0] || 'BTC';
@@ -106,8 +130,13 @@
       if (ui?.terminalActiveTab && ['intel', 'community', 'positions'].includes(ui.terminalActiveTab)) {
         activeTab = ui.terminalActiveTab;
       }
-      if (ui?.terminalInnerTab && ['headlines', 'events', 'flow'].includes(ui.terminalInnerTab)) {
+      if (ui?.terminalInnerTab && ['chat', 'headlines', 'events', 'flow'].includes(ui.terminalInnerTab)) {
         innerTab = ui.terminalInnerTab;
+      }
+      if (prioritizeChat) {
+        activeTab = 'intel';
+        innerTab = 'chat';
+        tabCollapsed = false;
       }
     })();
   });
@@ -135,15 +164,77 @@
     <div class="rp-body-wrap">
       {#if activeTab === 'intel'}
         <div class="rp-inner-tabs">
-          {#each ['headlines', 'events', 'flow'] as tab}
+          {#each ['chat', 'headlines', 'events', 'flow'] as tab}
             <button class="rp-inner-tab" class:active={innerTab === tab} on:click={() => setInnerTab(tab)}>
               {tab.toUpperCase()}
             </button>
           {/each}
         </div>
 
-        <div class="rp-body">
-          {#if innerTab === 'headlines'}
+        <div class="rp-body" class:chat-mode={innerTab === 'chat'}>
+          {#if innerTab === 'chat'}
+            <div class="ac-section ac-embedded">
+              <div class="ac-header">
+                <span class="ac-title">🤖 AGENT CHAT</span>
+              </div>
+              {#if latestScan}
+                <div class="scan-brief">
+                  <div class="scan-brief-head">
+                    <span class="scan-brief-badge">SCAN</span>
+                    <span class="scan-brief-market">{latestScan.token} · {latestScan.timeframe.toUpperCase()}</span>
+                    <span class="scan-brief-time">{latestScanTime}</span>
+                  </div>
+                  <div class="scan-brief-summary">{latestScan.summary}</div>
+                  <div class="scan-brief-tags">
+                    {#each latestScan.highlights.slice(0, 3) as item}
+                      <span class="scan-brief-tag {item.vote}">
+                        {item.agent} {item.vote.toUpperCase()} {item.conf}%
+                      </span>
+                    {/each}
+                  </div>
+                  <div class="scan-brief-notes">
+                    {#each latestScan.highlights.slice(0, 2) as item}
+                      <div class="scan-brief-note">
+                        <span>{item.agent}:</span> {item.note}
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+              <div class="ac-msgs" bind:this={chatEl}>
+                {#each chatMessages as msg}
+                  {#if msg.isSystem}
+                    <div class="ac-sys">{msg.icon} {msg.text}</div>
+                  {:else if msg.isUser}
+                    <div class="ac-row ac-right">
+                      <div class="ac-bub ac-bub-user">
+                        <span class="ac-txt">{msg.text}</span>
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="ac-row ac-left">
+                      <span class="ac-av" style="border-color:{msg.color}">{msg.icon}</span>
+                      <div class="ac-bub ac-bub-agent">
+                        <span class="ac-name" style="color:{msg.color}">{msg.from}</span>
+                        <span class="ac-txt">{msg.text}</span>
+                      </div>
+                    </div>
+                  {/if}
+                {/each}
+                {#if isTyping}
+                  <div class="ac-row ac-left">
+                    <span class="ac-av" style="border-color:#ff2d9b">🧠</span>
+                    <div class="ac-bub ac-bub-agent"><span class="ac-dots"><span></span><span></span><span></span></span></div>
+                  </div>
+                {/if}
+              </div>
+              <div class="ac-input">
+                <input type="text" bind:value={chatInput} on:keydown={chatKey} placeholder="@STRUCTURE @FLOW @DERIV ..." />
+                <button class="ac-send" on:click={sendChat} disabled={!chatInput.trim()}>⚡</button>
+              </div>
+            </div>
+
+          {:else if innerTab === 'headlines'}
             <div class="hl-ticker-badge">{currentToken} NEWS</div>
             <div class="hl-list">
               {#each displayHeadlines as hl}
@@ -290,63 +381,25 @@
       {/if}
     </div>
   {/if}
-
-  <!-- ═══ AGENT CHAT — always visible outside tabs ═══ -->
-  <div class="ac-section">
-    <div class="ac-header">
-      <span class="ac-title">🤖 AGENT CHAT</span>
-    </div>
-    <div class="ac-msgs" bind:this={chatEl}>
-      {#each chatMessages as msg}
-        {#if msg.isSystem}
-          <div class="ac-sys">{msg.icon} {msg.text}</div>
-        {:else if msg.isUser}
-          <div class="ac-row ac-right">
-            <div class="ac-bub ac-bub-user">
-              <span class="ac-txt">{msg.text}</span>
-            </div>
-          </div>
-        {:else}
-          <div class="ac-row ac-left">
-            <span class="ac-av" style="border-color:{msg.color}">{msg.icon}</span>
-            <div class="ac-bub ac-bub-agent">
-              <span class="ac-name" style="color:{msg.color}">{msg.from}</span>
-              <span class="ac-txt">{msg.text}</span>
-            </div>
-          </div>
-        {/if}
-      {/each}
-      {#if isTyping}
-        <div class="ac-row ac-left">
-          <span class="ac-av" style="border-color:#ff2d9b">🧠</span>
-          <div class="ac-bub ac-bub-agent"><span class="ac-dots"><span></span><span></span><span></span></span></div>
-        </div>
-      {/if}
-    </div>
-    <div class="ac-input">
-      <input type="text" bind:value={chatInput} on:keydown={chatKey} placeholder="@STRUCTURE @FLOW @DERIV ..." />
-      <button class="ac-send" on:click={sendChat} disabled={!chatInput.trim()}>⚡</button>
-    </div>
-  </div>
 </div>
 
 <style>
-  .intel-panel { display: flex; flex-direction: column; height: 100%; background: var(--blk); overflow: hidden; }
+  .intel-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--blk); overflow: hidden; }
 
   /* ── Tabs ── */
   .rp-tabs { display: flex; border-bottom: 3px solid var(--yel); flex-shrink: 0; }
   .rp-tab {
-    flex: 1; padding: 7px 2px;
-    font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: 2px; text-align: center;
+    flex: 1; padding: 8px 3px;
+    font-family: var(--fm); font-size: 10px; font-weight: 700; letter-spacing: 1.8px; text-align: center;
     background: none; border: none; cursor: pointer; transition: all .15s;
   }
   .rp-tab.active { background: var(--yel); color: var(--blk); }
-  .rp-tab:not(.active) { color: rgba(255,255,255,.4); }
+  .rp-tab:not(.active) { color: rgba(255,255,255,.62); }
   .rp-tab:not(.active):hover { color: var(--yel); }
   .rp-collapse {
     width: 28px; flex-shrink: 0;
     background: rgba(255,230,0,.08); border: none; border-left: 1px solid rgba(255,230,0,.15);
-    color: var(--yel); font-size: 9px; cursor: pointer;
+    color: var(--yel); font-size: 10px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: background .12s;
   }
@@ -354,7 +407,7 @@
   .rp-panel-collapse {
     width: 24px; flex-shrink: 0;
     background: rgba(255,255,255,.03); border: none; border-left: 1px solid rgba(255,230,0,.1);
-    color: rgba(255,230,0,.5); cursor: pointer;
+    color: rgba(255,230,0,.68); cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: all .12s; padding: 0;
   }
@@ -363,48 +416,49 @@
   .rp-inner-tabs { display: flex; border-bottom: 2px solid rgba(255,230,0,.15); flex-shrink: 0; }
   .rp-inner-tab {
     flex: 1; padding: 5px 2px;
-    font-family: var(--fm); font-size: 8px; font-weight: 700; letter-spacing: 1px; text-align: center;
+    font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: 1px; text-align: center;
     background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer;
-    color: rgba(255,255,255,.35); transition: all .15s;
+    color: rgba(255,255,255,.62); transition: all .15s;
   }
   .rp-inner-tab.active { color: var(--yel); border-bottom-color: var(--pk); }
 
   /* ── Tab Content Wrapper ── */
-  .rp-body-wrap { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 80px; }
-  .rp-body { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .rp-body-wrap { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; min-height: 72px; }
+  .rp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .rp-body.chat-mode { padding: 0; overflow: hidden; }
 
   /* ── Headlines ── */
   .hl-ticker-badge {
-    padding: 3px 8px; font-family: var(--fm); font-size: 7px; font-weight: 900;
+    padding: 4px 8px; font-family: var(--fm); font-size: 8px; font-weight: 900;
     letter-spacing: 1.5px; color: var(--yel); background: rgba(255,230,0,.06);
     border-bottom: 1px solid rgba(255,230,0,.1);
   }
   .hl-list { display: flex; flex-direction: column; }
-  .hl-row { display: flex; gap: 5px; padding: 6px 8px; border-bottom: 1px solid rgba(255,230,0,.06); cursor: pointer; }
+  .hl-row { display: flex; gap: 6px; padding: 7px 8px; border-bottom: 1px solid rgba(255,230,0,.08); cursor: pointer; }
   .hl-row:hover { background: rgba(255,230,0,.03); }
-  .hl-icon { font-size: 9px; flex-shrink: 0; width: 14px; }
-  .hl-time { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.35); width: 30px; flex-shrink: 0; }
-  .hl-txt { font-family: var(--fm); font-size: 9px; line-height: 1.4; color: rgba(255,255,255,.65); }
+  .hl-icon { font-size: 10px; flex-shrink: 0; width: 16px; }
+  .hl-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58); width: 34px; flex-shrink: 0; }
+  .hl-txt { font-family: var(--fm); font-size: 10px; line-height: 1.45; color: rgba(255,255,255,.82); }
   .hl-txt.bull { color: var(--grn); }
 
   /* ── Events ── */
   .ev-list { display: flex; flex-direction: column; gap: 5px; }
-  .ev-card { border-left: 2px solid; padding: 5px 7px; background: rgba(255,255,255,.02); }
+  .ev-card { border-left: 2px solid; padding: 6px 8px; background: rgba(255,255,255,.03); }
   .ev-head { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; }
-  .ev-tag { font-family: var(--fm); font-size: 8px; font-weight: 700; padding: 2px 5px; }
-  .ev-etime { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.35); }
-  .ev-body { font-family: var(--fm); font-size: 9px; line-height: 1.4; color: rgba(255,255,255,.6); }
-  .ev-src { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.25); display: block; margin-top: 2px; }
+  .ev-tag { font-family: var(--fm); font-size: 9px; font-weight: 700; padding: 2px 5px; }
+  .ev-etime { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58); }
+  .ev-body { font-family: var(--fm); font-size: 10px; line-height: 1.45; color: rgba(255,255,255,.8); }
+  .ev-src { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.52); display: block; margin-top: 3px; }
 
   /* ── Flow ── */
   .flow-list { display: flex; flex-direction: column; gap: 4px; }
-  .flow-section-lbl { font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: var(--grn); padding: 4px 0 5px; border-bottom: 1px solid rgba(255,255,255,.06); }
-  .flow-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.04); }
-  .flow-dir { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+  .flow-section-lbl { font-family: var(--fm); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: var(--grn); padding: 4px 0 5px; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .flow-row { display: flex; align-items: center; gap: 6px; padding: 5px 7px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); }
+  .flow-dir { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
   .flow-dir.sell { color: var(--red); } .flow-dir.buy { color: var(--grn); }
   .flow-info { flex: 1; min-width: 0; }
-  .flow-lbl { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.6); }
-  .flow-addr { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.3); }
+  .flow-lbl { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.82); }
+  .flow-addr { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58); }
   .flow-amt { font-family: var(--fm); font-size: 10px; font-weight: 700; flex-shrink: 0; }
   .flow-amt.sell { color: var(--red); } .flow-amt.buy { color: var(--grn); }
 
@@ -412,11 +466,11 @@
   .community-body { gap: 0; }
   .comm-post { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
   .comm-head { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
-  .comm-avatar { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; border: 1px solid rgba(255,255,255,.1); }
-  .comm-name { font-family: var(--fm); font-size: 9px; font-weight: 700; color: #fff; }
-  .comm-time { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.3); margin-left: auto; }
-  .comm-txt { font-family: var(--fm); font-size: 9px; line-height: 1.45; color: rgba(255,255,255,.65); }
-  .comm-sig { display: inline-block; font-family: var(--fm); font-size: 8px; font-weight: 700; padding: 2px 7px; border: 1px solid; margin-top: 3px; }
+  .comm-avatar { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; border: 1px solid rgba(255,255,255,.2); }
+  .comm-name { font-family: var(--fm); font-size: 10px; font-weight: 700; color: #fff; }
+  .comm-time { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.56); margin-left: auto; }
+  .comm-txt { font-family: var(--fm); font-size: 10px; line-height: 1.45; color: rgba(255,255,255,.82); }
+  .comm-sig { display: inline-block; font-family: var(--fm); font-size: 9px; font-weight: 700; padding: 2px 7px; border: 1px solid; margin-top: 3px; }
   .comm-sig.long { color: var(--grn); border-color: rgba(0,255,136,.3); }
   .comm-sig.short { color: var(--red); border-color: rgba(255,45,85,.3); }
   .user-post { border-left: 2px solid var(--yel); }
@@ -426,8 +480,8 @@
     display: flex; align-items: center; gap: 4px; margin-top: 3px;
   }
   .comm-react {
-    font-size: 10px; background: rgba(255,255,255,.04);
-    border: 1px solid rgba(255,255,255,.08); border-radius: 4px;
+    font-size: 11px; background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.14); border-radius: 4px;
     padding: 2px 6px; cursor: pointer; transition: all .12s;
   }
   .comm-react:hover { background: rgba(255,230,0,.1); border-color: rgba(255,230,0,.25); }
@@ -460,13 +514,13 @@
   .pos-dir.short { color: var(--red); }
   .pos-info { flex: 1; display: flex; flex-direction: column; gap: 1px; }
   .pos-pair { font-family: var(--fd); font-size: 11px; font-weight: 900; color: #fff; letter-spacing: .5px; }
-  .pos-entry { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.35); }
+  .pos-entry { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58); }
   .pos-pnl {
     font-family: var(--fd); font-size: 13px; font-weight: 900;
     letter-spacing: .5px; min-width: 50px; text-align: right;
   }
   .pos-close {
-    font-family: var(--fm); font-size: 7px; font-weight: 900;
+    font-family: var(--fm); font-size: 8px; font-weight: 900;
     letter-spacing: 1px; padding: 4px 8px;
     background: rgba(255,45,85,.1); color: var(--red);
     border: 1px solid rgba(255,45,85,.3); border-radius: 3px;
@@ -477,11 +531,11 @@
   .pos-empty-mini {
     display: flex; align-items: center; gap: 6px;
     padding: 12px 8px;
-    color: rgba(255,255,255,.3);
+    color: rgba(255,255,255,.56);
   }
   .pos-empty-icon { font-size: 14px; opacity: .5; }
   .pos-empty-txt {
-    font-family: var(--fm); font-size: 9px; font-weight: 700;
+    font-family: var(--fm); font-size: 10px; font-weight: 700;
     letter-spacing: 1.5px;
   }
 
@@ -496,11 +550,11 @@
     padding-bottom: 5px;
   }
   .pp-title {
-    font-family: var(--fm); font-size: 9px; font-weight: 900;
+    font-family: var(--fm); font-size: 10px; font-weight: 900;
     letter-spacing: 2px; color: #a78bfa;
   }
   .pp-cnt {
-    font-family: var(--fm); font-size: 7px; font-weight: 900;
+    font-family: var(--fm); font-size: 8px; font-weight: 900;
     background: rgba(139,92,246,.25); color: #c4b5fd;
     padding: 1px 5px; border-radius: 8px;
   }
@@ -522,8 +576,8 @@
     border-radius: 4px;
   }
   .pp-q {
-    font-family: var(--fm); font-size: 9px; font-weight: 700;
-    color: rgba(255,255,255,.7); line-height: 1.3;
+    font-family: var(--fm); font-size: 10px; font-weight: 700;
+    color: rgba(255,255,255,.84); line-height: 1.35;
     margin-bottom: 6px;
   }
   .pp-bar-wrap {
@@ -536,45 +590,96 @@
   }
   .pp-odds {
     display: flex; justify-content: space-between;
-    font-family: var(--fm); font-size: 8px; font-weight: 800;
+    font-family: var(--fm); font-size: 9px; font-weight: 800;
   }
   .pp-yes { color: var(--grn); }
   .pp-no { color: var(--red); }
   .pp-hint {
     text-align: center; padding: 3px 0 0;
-    font-family: var(--fm); font-size: 7px;
-    color: rgba(255,255,255,.2); letter-spacing: 2px;
+    font-family: var(--fm); font-size: 8px;
+    color: rgba(255,255,255,.42); letter-spacing: 1.6px;
   }
   .pp-empty {
-    font-family: var(--fm); font-size: 8px;
-    color: rgba(255,255,255,.25); padding: 8px 0;
+    font-family: var(--fm); font-size: 9px;
+    color: rgba(255,255,255,.5); padding: 8px 0;
   }
 
-  /* ═══ AGENT CHAT — always visible outside tabs ═══ */
+  /* ═══ AGENT CHAT (inside INTEL tab) ═══ */
   .ac-section {
-    flex: 1;
-    border-top: 2px solid rgba(255,230,0,.25);
-    display: flex; flex-direction: column;
-    min-height: 160px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-height: 0;
+    height: 100%;
     background: rgba(0,0,0,.3);
   }
+  .ac-section.ac-embedded { border-top: 0; }
   .ac-header {
     display: flex; align-items: center; gap: 6px;
     padding: 5px 8px 3px;
     flex-shrink: 0;
   }
+  .scan-brief {
+    margin: 2px 8px 4px;
+    padding: 6px 7px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,230,0,.26);
+    background: rgba(255,230,0,.08);
+  }
+  .scan-brief-head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .scan-brief-badge {
+    font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 1.1px;
+    color: #000; background: var(--yel); padding: 1px 5px; border-radius: 999px;
+  }
+  .scan-brief-market {
+    font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: .5px; color: rgba(255,255,255,.92);
+  }
+  .scan-brief-time {
+    margin-left: auto; font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.72);
+  }
+  .scan-brief-summary {
+    font-family: var(--fm); font-size: 10px; line-height: 1.5; color: rgba(255,255,255,.9);
+  }
+  .scan-brief-tags {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 4px;
+  }
+  .scan-brief-tag {
+    font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: .4px;
+    border-radius: 8px; border: 1px solid rgba(255,255,255,.16); padding: 1px 6px;
+    color: rgba(255,255,255,.88); background: rgba(255,255,255,.05);
+  }
+  .scan-brief-tag.long { color: var(--grn); border-color: rgba(0,255,136,.36); background: rgba(0,255,136,.1); }
+  .scan-brief-tag.short { color: var(--red); border-color: rgba(255,45,85,.36); background: rgba(255,45,85,.1); }
+  .scan-brief-tag.neutral { color: rgba(255,255,255,.75); border-color: rgba(255,255,255,.22); }
+  .scan-brief-notes {
+    margin-top: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .scan-brief-note {
+    font-family: var(--fm);
+    font-size: 9px;
+    line-height: 1.35;
+    color: rgba(255,255,255,.82);
+    word-break: break-word;
+  }
+  .scan-brief-note span {
+    color: rgba(255,230,0,.86);
+    font-weight: 700;
+    letter-spacing: .3px;
+  }
   .ac-title {
-    font-family: var(--fm); font-size: 9px; font-weight: 900;
+    font-family: var(--fm); font-size: 10px; font-weight: 900;
     letter-spacing: 2px; color: var(--yel);
   }
   .ac-msgs {
     flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
-    padding: 4px 8px; min-height: 40px;
+    padding: 4px 8px; min-height: 0;
   }
   .ac-msgs::-webkit-scrollbar { width: 2px; }
   .ac-msgs::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
   .ac-sys {
-    font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.3);
+    font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58);
     padding: 4px 6px; background: rgba(255,230,0,.04);
     border-left: 2px solid rgba(255,230,0,.2);
   }
@@ -582,16 +687,16 @@
   .ac-right { justify-content: flex-end; }
   .ac-left { justify-content: flex-start; }
   .ac-av {
-    width: 18px; height: 18px; border-radius: 50%;
+    width: 20px; height: 20px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    font-size: 9px; border: 1.5px solid; flex-shrink: 0;
+    font-size: 10px; border: 1.5px solid; flex-shrink: 0;
     background: rgba(255,255,255,.03);
   }
-  .ac-bub { max-width: 85%; padding: 5px 8px; border-radius: 6px; }
+  .ac-bub { max-width: 85%; padding: 6px 9px; border-radius: 6px; }
   .ac-bub-user { background: rgba(255,230,0,.12); border: 1px solid rgba(255,230,0,.2); margin-left: auto; }
   .ac-bub-agent { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
-  .ac-name { font-family: var(--fm); font-size: 7px; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 1px; }
-  .ac-txt { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.7); line-height: 1.4; }
+  .ac-name { font-family: var(--fm); font-size: 8px; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 1px; }
+  .ac-txt { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.84); line-height: 1.45; }
   .ac-dots { display: flex; gap: 3px; padding: 4px 0; }
   .ac-dots span { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,.3); animation: dotBounce .6s infinite; }
   .ac-dots span:nth-child(2) { animation-delay: .15s; }
@@ -599,23 +704,25 @@
   @keyframes dotBounce { 0%,100%{opacity:.3} 50%{opacity:1} }
 
   .ac-input {
-    display: flex; gap: 4px; padding: 4px 8px 6px;
+    display: flex; gap: 4px; padding: 6px 8px 8px;
     border-top: 1px solid rgba(255,255,255,.06);
     flex-shrink: 0;
+    background: rgba(5, 9, 7, .6);
+    backdrop-filter: blur(4px);
   }
   .ac-input input {
     flex: 1; background: rgba(255,255,255,.04);
     border: 1px solid rgba(255,255,255,.1);
-    border-radius: 4px; padding: 6px 8px;
-    font-family: var(--fm); font-size: 9px;
+    border-radius: 6px; padding: 8px 10px;
+    font-family: var(--fm); font-size: 10px;
     color: #fff; outline: none;
   }
-  .ac-input input::placeholder { color: #555; }
+  .ac-input input::placeholder { color: rgba(255,255,255,.45); }
   .ac-input input:focus { border-color: rgba(255,230,0,.4); }
   .ac-send {
-    width: 32px; background: var(--yel); color: #000;
-    border: 1.5px solid #000; border-radius: 4px;
-    font-size: 12px; cursor: pointer; display: flex;
+    width: 36px; background: var(--yel); color: #000;
+    border: 1.5px solid #000; border-radius: 6px;
+    font-size: 13px; cursor: pointer; display: flex;
     align-items: center; justify-content: center;
   }
   .ac-send:disabled { opacity: .3; cursor: not-allowed; }

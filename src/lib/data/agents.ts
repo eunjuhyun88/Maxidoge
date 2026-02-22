@@ -86,9 +86,9 @@ export const AGDEFS: AgentDef[] = [
     specialty: ['OHLCV candle structure', 'ICT OB/FVG detection', 'BOS/CHoCH pivot points'],
     finding: { title: '4H CHoCH Uptrend', detail: 'OB $95,400 reaction with BOS confirmation' },
     speech: { scout: 'such chart. wow candle', vote: 'very LONG. much structure', win: 'WOW TP HIT!!', lose: 'such sad. no structure' },
-    img: { def: '/doge/trade-bull.png', alt: '/doge/sticker-think.png', win: '/doge/action-victory.png' },
-    characterSet: ['/doge/trade-bull.png', '/doge/sticker-think.png', '/doge/action-victory.png'],
-    characters: ['/doge/trade-bull.png', '/doge/sticker-think.png', '/doge/action-victory.png', '/doge/doge-detective.svg', '/doge/doge-ninja.svg']
+    img: { def: '/doge/char-structure.png', alt: '/doge/state-retro.png', win: '/doge/state-win-arrow.png' },
+    characterSet: ['/doge/char-structure.png', '/doge/state-retro.png', '/doge/state-win-arrow.png'],
+    characters: ['/doge/char-structure.png', '/doge/state-retro.png', '/doge/state-win-arrow.png', '/doge/state-bull-phone.png']
   },
   {
     id: 'flow', name: 'FLOW', nameKR: '자금추적',
@@ -98,9 +98,9 @@ export const AGDEFS: AgentDef[] = [
     specialty: ['Exchange net flows', 'Whale wallet monitoring', 'Smart money tracking'],
     finding: { title: '$128M Net Outflow Accumulation', detail: 'Cold wallet transfers with smart money' },
     speech: { scout: 'much money flow. wow whale', vote: 'LONG! such confident', win: 'many profit!! wow', lose: 'where money go...' },
-    img: { def: '/doge/trade-whale.png', alt: '/doge/meme-cash.png', win: '/doge/action-celebrate.png' },
-    characterSet: ['/doge/trade-whale.png', '/doge/meme-cash.png', '/doge/action-celebrate.png'],
-    characters: ['/doge/trade-whale.png', '/doge/meme-cash.png', '/doge/action-celebrate.png', '/doge/doge-pirate.svg', '/doge/doge-astronaut.svg']
+    img: { def: '/doge/char-flow.png', alt: '/doge/state-neutral.png', win: '/doge/state-win-flex.png' },
+    characterSet: ['/doge/char-flow.png', '/doge/state-neutral.png', '/doge/state-win-flex.png'],
+    characters: ['/doge/char-flow.png', '/doge/state-neutral.png', '/doge/state-win-flex.png', '/doge/state-thumbsup.png']
   },
   {
     id: 'deriv', name: 'DERIV', nameKR: '파생상품',
@@ -110,9 +110,9 @@ export const AGDEFS: AgentDef[] = [
     specialty: ['FR/OI real-time analysis', 'Liquidation heatmap detection', 'Options max pain'],
     finding: { title: 'OI +4.2% Buy Bias', detail: 'FR normal with liquidation wall at $96k' },
     speech: { scout: 'wow. much open interest', vote: 'LONG. derivatives say so', win: 'derivatives always right!!', lose: 'even derivatives wrong sometimes...' },
-    img: { def: '/doge/trade-surge.png', alt: '/doge/meme-shocked.png', win: '/doge/trade-pump.png' },
-    characterSet: ['/doge/trade-surge.png', '/doge/meme-shocked.png', '/doge/trade-pump.png'],
-    characters: ['/doge/trade-surge.png', '/doge/meme-shocked.png', '/doge/trade-pump.png', '/doge/doge-wizard.svg', '/doge/doge-hacker.svg']
+    img: { def: '/doge/char-deriv.png', alt: '/doge/state-bear-down.png', win: '/doge/state-win-grin.png' },
+    characterSet: ['/doge/char-deriv.png', '/doge/state-bear-down.png', '/doge/state-win-grin.png'],
+    characters: ['/doge/char-deriv.png', '/doge/state-bear-down.png', '/doge/state-win-grin.png', '/doge/state-bull-phone.png']
   },
   {
     id: 'senti', name: 'SENTI', nameKR: '여론분석',
@@ -122,9 +122,9 @@ export const AGDEFS: AgentDef[] = [
     specialty: ['KOL sentiment tracking', 'Social mention analysis', 'Fear & Greed interpretation'],
     finding: { title: 'KOL 72% Bullish Bias', detail: 'F&G 74 Greed with social volume up' },
     speech: { scout: 'much sentiment. very social', vote: 'LONG wow. such bullish', win: 'very profit!!', lose: 'such bearish. wow pain' },
-    img: { def: '/doge/action-portal.png', alt: '/doge/meme-annoyed.png', win: '/doge/action-charge.png' },
-    characterSet: ['/doge/action-portal.png', '/doge/meme-annoyed.png', '/doge/action-charge.png'],
-    characters: ['/doge/action-portal.png', '/doge/meme-annoyed.png', '/doge/action-charge.png', '/doge/doge-chef.svg', '/doge/doge-samurai.svg']
+    img: { def: '/doge/char-senti.png', alt: '/doge/state-lose-cry.png', win: '/doge/state-alert.png' },
+    characterSet: ['/doge/char-senti.png', '/doge/state-lose-cry.png', '/doge/state-alert.png'],
+    characters: ['/doge/char-senti.png', '/doge/state-lose-cry.png', '/doge/state-alert.png', '/doge/state-excited.png']
   },
   {
     id: 'guardian', name: 'GUARDIAN', nameKR: '위험관리',
@@ -134,9 +134,9 @@ export const AGDEFS: AgentDef[] = [
     specialty: ['Agent report validation', 'Risk override authority', 'Position sizing adjustment'],
     finding: { title: 'Risk Acceptable · Entry Approved', detail: 'Risk Score 42 with no overrides' },
     speech: { scout: 'checking all reports...', vote: 'APPROVED. risk acceptable', win: 'risk managed perfectly', lose: 'should have overridden...' },
-    img: { def: '/doge/trade-shield.png', alt: '/doge/trade-bear.png', win: '/doge/meme-thumbsup.png' },
-    characterSet: ['/doge/trade-shield.png', '/doge/trade-bear.png', '/doge/meme-thumbsup.png'],
-    characters: ['/doge/trade-shield.png', '/doge/trade-bear.png', '/doge/meme-thumbsup.png', '/doge/doge-knight.svg', '/doge/doge-king.svg']
+    img: { def: '/doge/char-guardian.png', alt: '/doge/state-lose-sweat.png', win: '/doge/state-thumbsup.png' },
+    characterSet: ['/doge/char-guardian.png', '/doge/state-lose-sweat.png', '/doge/state-thumbsup.png'],
+    characters: ['/doge/char-guardian.png', '/doge/state-lose-sweat.png', '/doge/state-thumbsup.png', '/doge/state-bear-down.png']
   },
   {
     id: 'commander', name: 'COMMANDER', nameKR: '종합지휘',
@@ -146,9 +146,9 @@ export const AGDEFS: AgentDef[] = [
     specialty: ['5-agent report synthesis', 'Final direction determination', 'Confidence weighting'],
     finding: { title: 'Final Judgment: LONG Confirmed', detail: '5/5 agent consensus with high confidence' },
     speech: { scout: 'reviewing all intel...', vote: 'FINAL DECISION: LONG', win: 'COMMANDER VICTORY!!', lose: 'we regroup and try again...' },
-    img: { def: '/doge/meme-buff.png', alt: '/doge/meme-skeptic.png', win: '/doge/action-victory.png' },
-    characterSet: ['/doge/meme-buff.png', '/doge/meme-skeptic.png', '/doge/action-victory.png'],
-    characters: ['/doge/meme-buff.png', '/doge/meme-skeptic.png', '/doge/action-victory.png', '/doge/doge-king.svg', '/doge/doge-samurai.svg']
+    img: { def: '/doge/char-commander.png', alt: '/doge/state-alliance.png', win: '/doge/state-win-pixel.png' },
+    characterSet: ['/doge/char-commander.png', '/doge/state-alliance.png', '/doge/state-win-pixel.png'],
+    characters: ['/doge/char-commander.png', '/doge/state-alliance.png', '/doge/state-win-pixel.png', '/doge/state-win-flex.png']
   },
   {
     id: 'scanner', name: 'SCANNER', nameKR: '시장감색',
@@ -158,9 +158,9 @@ export const AGDEFS: AgentDef[] = [
     specialty: ['Full market real-time scanning', 'Altcoin correlation', 'Sector rotation detection'],
     finding: { title: 'BTC Dominance Declining', detail: 'Altseason signals with sector strength' },
     speech: { scout: 'scanning all markets...', vote: 'LONG. market confirms', win: 'scanner called it!!', lose: 'markets are unpredictable...' },
-    img: { def: '/doge/meme-classic.png', alt: '/doge/sticker-default.png', win: '/doge/sticker-grin.png' },
-    characterSet: ['/doge/meme-classic.png', '/doge/sticker-default.png', '/doge/sticker-grin.png'],
-    characters: ['/doge/meme-classic.png', '/doge/sticker-default.png', '/doge/sticker-grin.png', '/doge/doge-astronaut.svg', '/doge/doge-detective.svg']
+    img: { def: '/doge/char-scanner.png', alt: '/doge/state-neutral.png', win: '/doge/state-excited.png' },
+    characterSet: ['/doge/char-scanner.png', '/doge/state-neutral.png', '/doge/state-excited.png'],
+    characters: ['/doge/char-scanner.png', '/doge/state-neutral.png', '/doge/state-excited.png', '/doge/state-retro.png']
   }
 ];
 

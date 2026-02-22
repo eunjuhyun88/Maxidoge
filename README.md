@@ -1,5 +1,7 @@
 # MAXI⚡DOGE Unified
 
+> Multi-agent collaboration rule: before any work, read `docs/README.md` first.
+
 AI 에이전트 기반 트레이딩 시뮬레이션 웹앱입니다.  
 SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signals`, `Passport` 경험을 제공합니다.
 
