@@ -113,6 +113,11 @@ export interface DraftSelection {
   weight: number;                // 0-100, 3개 합산 = 100
 }
 
+export interface DraftValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
 // ─── Agent Output ────────────────────────────────────────────
 
 export type Direction = 'LONG' | 'SHORT' | 'NEUTRAL';
