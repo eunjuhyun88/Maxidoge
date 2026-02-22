@@ -235,13 +235,13 @@
       });
     }
 
-    // GUARDIAN agent → Risk zone
-    const guardAg = agents.find(a => a.id === 'guardian');
-    if (guardAg) {
+    // MACRO agent → Regime zone
+    const macroAg = agents.find(a => a.id === 'macro');
+    if (macroAg) {
       anns.push({
-        id: 'risk-zone', icon: '🛡', name: 'GUARDIAN', color: guardAg.color,
-        label: guardAg.finding.title,
-        detail: guardAg.finding.detail,
+        id: 'macro-zone', icon: '🌍', name: 'MACRO', color: macroAg.color,
+        label: macroAg.finding.title,
+        detail: macroAg.finding.detail,
         yPercent: 70 + Math.random() * 10,
         xPercent: 30 + Math.random() * 15,
         type: 'signal'
@@ -591,7 +591,7 @@
       { agentId: 'deriv', source: SOURCES.find(s => s.id === 'coinglass')! },
       { agentId: 'flow', source: SOURCES.find(s => s.id === 'onchain')! },
       { agentId: 'senti', source: SOURCES.find(s => s.id === 'social')! },
-      { agentId: 'guardian', source: SOURCES.find(s => s.id === 'feargreed')! },
+      { agentId: 'macro', source: SOURCES.find(s => s.id === 'feargreed')! },
     ];
 
     activeAgents.forEach((ag, i) => {
