@@ -230,16 +230,19 @@
     hydrateCommunityPosts();
     void (async () => {
       const ui = await fetchUiStateApi();
-      if (ui?.terminalActiveTab && ['intel', 'community', 'positions'].includes(ui.terminalActiveTab)) {
-        activeTab = ui.terminalActiveTab;
-      }
-      if (ui?.terminalInnerTab && ['chat', 'headlines', 'events', 'flow'].includes(ui.terminalInnerTab)) {
-        innerTab = ui.terminalInnerTab;
-      }
+      // 채팅이 항상 최우선 — 저장된 상태보다 우선
+      // 사용자가 다른 탭을 명시적으로 선택하면 그때 저장됨
       if (prioritizeChat) {
         activeTab = 'intel';
         innerTab = 'chat';
         tabCollapsed = false;
+      } else {
+        // 저장 상태 복원하되, 항상 chat을 기본 innerTab으로
+        if (ui?.terminalActiveTab && ['intel', 'community', 'positions'].includes(ui.terminalActiveTab)) {
+          activeTab = ui.terminalActiveTab;
+        }
+        // innerTab은 항상 chat으로 시작 (headlines/events/flow는 사용자가 직접 선택)
+        innerTab = 'chat';
       }
     })();
 

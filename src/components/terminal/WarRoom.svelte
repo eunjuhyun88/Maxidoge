@@ -67,6 +67,7 @@
   let activeToken: TokenFilter = 'ALL';
   let selectedIds: Set<string> = new Set();
   let scanTabs: ScanTab[] = [];
+  // 기본값: 스캔 없으면 preset(빈 상태), 스캔 있으면 최신 스캔
   let activeScanId = 'preset';
   let scanRunning = false;
   let scanQueued = false;
@@ -94,10 +95,11 @@
   $: currentPair = $gameState.pair;
   $: currentTF = $gameState.timeframe;
 
+  // 프리셋(하드코딩) 데이터 제거 — 실제 스캔 데이터만 표시
   $: signalPool =
     activeScanId === 'preset'
-      ? AGENT_SIGNALS
-      : scanTabs.find((tab) => tab.id === activeScanId)?.signals ?? scanTabs[0]?.signals ?? AGENT_SIGNALS;
+      ? (scanTabs.length > 0 ? scanTabs.flatMap(t => t.signals).slice(0, MAX_SIGNALS_PER_TAB) : [])
+      : scanTabs.find((tab) => tab.id === activeScanId)?.signals ?? scanTabs[0]?.signals ?? [];
 
   $: {
     if (activeScanId === 'preset') {
@@ -491,42 +493,52 @@
   </div>
 
   <div class="ticker-flow" on:wheel={scrollXOnWheel}>
-    <span class="ticker-chip ticker-label">MARKET</span>
     <span class="ticker-chip ticker-pair">{currentPair}</span>
     <span class="ticker-chip ticker-tf">{String(currentTF).toUpperCase()}</span>
     {#if activeScanTab}
-      <span class="ticker-chip ticker-stamp">{activeScanTab.label}</span>
+      <span class="ticker-chip ticker-stamp">SCANNED {activeScanTab.label}</span>
+    {/if}
+    {#if !activeScanTab && activeScanId === 'preset'}
+      <span class="ticker-chip ticker-hint">RUN SCAN ↓</span>
     {/if}
   </div>
 
   <div class="scan-tabs" on:wheel={scrollXOnWheel}>
-    <button class="scan-tab" class:active={activeScanId === 'preset'} on:click={() => activateScanTab('preset')}>
-      LIVE FEED
-    </button>
-    {#each scanTabs as tab (tab.id)}
-      <button class="scan-tab" class:active={activeScanId === tab.id} on:click={() => activateScanTab(tab.id)}>
-        <span class="scan-tab-token">{tab.token}</span>
-        <span class="scan-tab-meta">{tab.label}</span>
+    {#if scanTabs.length > 0}
+      {#each scanTabs as tab (tab.id)}
+        <button class="scan-tab" class:active={activeScanId === tab.id} on:click={() => activateScanTab(tab.id)}>
+          <span class="scan-tab-token">{tab.token}</span>
+          <span class="scan-tab-meta">{tab.label}</span>
+        </button>
+      {/each}
+      <button class="scan-tab scan-tab-history" class:active={activeScanId === 'preset'} on:click={() => activateScanTab('preset')}>
+        HISTORY
       </button>
-    {/each}
+    {:else}
+      <button class="scan-tab active" disabled>
+        SCAN TO START
+      </button>
+    {/if}
   </div>
 
-  <!-- Token Filter Tabs -->
-  <div class="token-tabs" on:wheel={scrollXOnWheel}>
-    {#each tokenTabs as tok (tok)}
-      <button
-        class="token-tab"
-        class:active={activeToken === tok}
-        class:btc={tok === 'BTC'}
-        class:eth={tok === 'ETH'}
-        class:sol={tok === 'SOL'}
-        on:click={() => { activeToken = tok; selectedIds = new Set(); }}
-      >
-        {tok}
-        <span class="token-tab-count">{tokenCounts[tok] || 0}</span>
-      </button>
-    {/each}
-  </div>
+  <!-- Token Filter Tabs (only show when multiple tokens exist) -->
+  {#if tokenTabs.length > 2}
+    <div class="token-tabs" on:wheel={scrollXOnWheel}>
+      {#each tokenTabs as tok (tok)}
+        <button
+          class="token-tab"
+          class:active={activeToken === tok}
+          class:btc={tok === 'BTC'}
+          class:eth={tok === 'ETH'}
+          class:sol={tok === 'SOL'}
+          on:click={() => { activeToken = tok; selectedIds = new Set(); }}
+        >
+          {tok}
+          <span class="token-tab-count">{tokenCounts[tok] || 0}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   <!-- ═══ Derivatives Data Strip ═══ -->
   <div class="deriv-strip">
@@ -639,8 +651,17 @@
     {/each}
     {#if filteredSignals.length === 0}
       <div class="wr-empty">
-        <div class="wr-empty-title">NO SIGNALS</div>
-        <div class="wr-empty-text">현재 필터에서 표시할 데이터가 없습니다. ALL로 전환하거나 스캔을 실행하세요.</div>
+        {#if scanTabs.length === 0}
+          <div class="wr-empty-icon">🔍</div>
+          <div class="wr-empty-title">SCAN TO START</div>
+          <div class="wr-empty-text">차트에서 SCAN 버튼을 눌러 AI 에이전트 분석을 시작하세요. 스캔 결과가 여기에 표시됩니다.</div>
+          <button class="wr-empty-scan-btn" on:click={runAgentScan}>
+            ⚡ RUN SCAN NOW
+          </button>
+        {:else}
+          <div class="wr-empty-title">NO SIGNALS</div>
+          <div class="wr-empty-text">현재 필터에서 표시할 데이터가 없습니다.</div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -833,6 +854,13 @@
     border-color: rgba(255,230,0,.38);
     background: rgba(255,230,0,.1);
   }
+  .ticker-hint {
+    color: rgba(255,230,0,.5);
+    border-color: rgba(255,230,0,.2);
+    background: rgba(255,230,0,.05);
+    font-style: italic;
+    font-size: 8px;
+  }
   .ticker-pair {
     color: rgba(255,255,255,.92);
     border-color: rgba(255,255,255,.22);
@@ -899,6 +927,12 @@
     color: rgba(255,230,0,.72);
     font-weight: 700;
   }
+  .scan-tab-history {
+    opacity: .6;
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+  .scan-tab-history.active { opacity: 1; }
 
   /* Token Filter Tabs */
   .token-tabs {
@@ -1115,6 +1149,30 @@
     text-align: center;
     max-width: 220px;
     line-height: 1.5;
+  }
+  .wr-empty-icon {
+    font-size: 28px;
+    opacity: .6;
+    margin-bottom: 4px;
+  }
+  .wr-empty-scan-btn {
+    margin-top: 8px;
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1.5px solid rgba(255,230,0,.5);
+    background: rgba(255,230,0,.12);
+    color: var(--yel);
+    font-family: var(--fm);
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .wr-empty-scan-btn:hover {
+    background: rgba(255,230,0,.22);
+    border-color: var(--yel);
+    box-shadow: 0 0 10px rgba(255,230,0,.2);
   }
 
   /* Copy Trade CTA */

@@ -266,19 +266,21 @@ export function buildAgentSystemPrompt(ctx: AgentChatContext): string {
   const lines: string[] = [
     `You are ${ctx.agentId}, a specialized crypto trading analysis agent in the MAXI⚡DOGE terminal.`,
     `Specialty: ${ctx.agentDescription}`,
-    `Current market: ${ctx.pair} on ${ctx.timeframe.toUpperCase()} timeframe.`,
     '',
-    'Rules:',
-    '- Respond concisely (2-4 sentences max). Use trading jargon.',
-    '- Always include specific price levels, percentages, or metrics when available.',
-    '- State your directional bias (LONG/SHORT/NEUTRAL) with confidence %.',
+    'Conversation Rules:',
+    '- FIRST: Answer what the user actually asked. If they greet you, greet back. If they ask who you are, introduce yourself.',
+    '- ONLY provide trading analysis when the user asks about markets, charts, price, trading, or related topics.',
+    '- Respond concisely (2-4 sentences). Match the user\'s language (Korean OK).',
     '- Format: plain text, no markdown headers. Use → for flow, | for separators.',
-    '- If asked about topics outside your specialty, briefly answer then redirect to your domain.',
-    '- Korean responses are OK if the user writes in Korean.',
+    '',
+    'When giving trading analysis:',
+    '- Use trading jargon appropriate to your specialty.',
+    '- Include specific price levels, percentages, or metrics when available.',
+    '- State directional bias (LONG/SHORT/NEUTRAL) with confidence %.',
   ];
 
   if (ctx.scanSummary || (ctx.scanSignals && ctx.scanSignals.length > 0)) {
-    lines.push('', '── Latest Scan Context ──');
+    lines.push('', `── Scan Context (${ctx.pair} ${ctx.timeframe.toUpperCase()}) ──`);
     if (ctx.scanSummary) {
       lines.push(`Consensus: ${ctx.scanSummary}`);
     }
@@ -291,9 +293,7 @@ export function buildAgentSystemPrompt(ctx: AgentChatContext): string {
         lines.push(`  ${sig.agentName}: ${sig.vote.toUpperCase()} ${sig.confidence}%${prices} — ${sig.analysisText}`);
       }
     }
-    lines.push('', 'Use this scan data to ground your response with real numbers.');
-  } else {
-    lines.push('', 'No recent scan data available. Provide general analysis based on your specialty.');
+    lines.push('', 'Use this scan data ONLY when the user asks about trading or markets.');
   }
 
   return lines.join('\n');
@@ -305,20 +305,24 @@ export function buildAgentSystemPrompt(ctx: AgentChatContext): string {
 export function buildOrchestratorSystemPrompt(ctx: Omit<AgentChatContext, 'agentId' | 'agentDescription'>): string {
   const lines: string[] = [
     'You are the ORCHESTRATOR, the lead AI commander of the MAXI⚡DOGE 8-agent crypto intelligence system.',
-    `Current market: ${ctx.pair} on ${ctx.timeframe.toUpperCase()} timeframe.`,
     '',
     'Your agents: STRUCTURE (chart), VPA (volume), ICT (smart money), DERIV (derivatives), VALUATION (on-chain), FLOW (fund flows), SENTI (sentiment), MACRO (macro).',
     '',
-    'Rules:',
+    'Conversation Rules:',
+    '- FIRST: Answer what the user actually asked. If they greet you, greet back. If they ask who you are, introduce yourself and your agents.',
+    '- For general questions (who are you, what can you do, help, etc.), respond conversationally.',
+    '- ONLY provide trading analysis when the user asks about markets, price, or trading.',
+    '- Respond concisely (2-5 sentences). Match the user\'s language (Korean OK).',
+    '- If the user asks about a specific domain, suggest tagging the relevant agent (e.g., "@DERIV for derivatives data").',
+    '',
+    'When giving trading analysis:',
     '- Synthesize multi-agent perspectives into actionable insights.',
-    '- Respond concisely (3-5 sentences max). Use trading jargon.',
     '- Include directional bias, confidence, and key levels.',
-    '- If the user asks about a specific domain, suggest tagging the relevant agent (e.g., "@DERIV").',
-    '- Korean responses are OK if the user writes in Korean.',
+    '- Use trading jargon.',
   ];
 
   if (ctx.scanSummary || (ctx.scanSignals && ctx.scanSignals.length > 0)) {
-    lines.push('', '── Latest Scan Context ──');
+    lines.push('', `── Scan Context (${ctx.pair} ${ctx.timeframe.toUpperCase()}) ──`);
     if (ctx.scanSummary) lines.push(`Summary: ${ctx.scanSummary}`);
     if (ctx.scanSignals && ctx.scanSignals.length > 0) {
       lines.push('Signals:');
@@ -326,7 +330,7 @@ export function buildOrchestratorSystemPrompt(ctx: Omit<AgentChatContext, 'agent
         lines.push(`  ${sig.agentName}: ${sig.vote.toUpperCase()} ${sig.confidence}%`);
       }
     }
-    lines.push('', 'Synthesize this data in your response.');
+    lines.push('', 'Use this data ONLY when the user asks about trading or markets.');
   }
 
   return lines.join('\n');
