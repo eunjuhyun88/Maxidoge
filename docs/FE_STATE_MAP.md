@@ -54,6 +54,22 @@ type LivePriceMap = {
 6. `battleRuntime`
 7. `resultPayload`
 
+`battleRuntime` 구조:
+
+```ts
+type BattleRuntime = {
+  sessionId: string | null;
+  status: 'idle' | 'live' | 'ended';
+  startedAt: number | null;
+  endedAt: number | null;
+  currentPrice: number | null;
+  pnlPct: number;
+  hitTP: boolean;
+  hitSL: boolean;
+  ticks: Array<{ ts: number; price: number }>;
+};
+```
+
 ## 3. Route-Level State Map
 
 ## 3.1 `/arena`

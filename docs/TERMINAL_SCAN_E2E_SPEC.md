@@ -61,6 +61,21 @@ UI 변경:
 3. 우측 Intel Chat 상단에 스캔 브리프 표시
 4. 우측 채팅 타임라인에 스캔 완료 메시지 추가
 
+## 2.3 스캔 에이전트 범위 (5 vs 8)
+
+CURRENT:
+1. Terminal 스캔은 5개 에이전트 사용
+2. 대상: `STRUCTURE`, `FLOW`, `DERIV`, `SENTI`, `MACRO`
+
+ARENA와 구분:
+1. Arena Draft/분석은 8개 에이전트 풀 기준
+2. 추가 3개(`VPA`, `ICT`, `VALUATION`)는 Arena 중심 고급 분석에 우선 적용
+
+TARGET 옵션:
+1. 옵션 A: Terminal은 5개 유지 (속도/가독성 우선)
+2. 옵션 B: Terminal도 8개 확장 (심화 분석 우선)
+3. 최종 결정 전까지 본 문서와 `ARCHITECTURE_DESIGN.md`는 5개 기준을 정본으로 유지
+
 ## 3. 좌측 히스토리 누적 구조
 
 ## 3.1 현재 구현 (CURRENT)
@@ -181,7 +196,7 @@ type ChatInput = {
 
 1. Intel 입력은 텍스트 기반
 2. 응답은 로컬 랜덤 응답 풀 기반
-3. `agent_chat_messages` API는 존재하지만 UI 연결은 아직 미완료
+3. `/api/chat/messages` API는 존재하지만, Terminal UI는 아직 서버 저장/조회를 완전 사용하지 않음
 
 ## 6. 클릭 결과의 페이지 간 전파
 

@@ -83,7 +83,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | ID | 제목 | 설명 | depends | 상태 |
 |----|------|------|---------|------|
 | **F-01** | AGDEFS 소비부 치환 | 현재 AGDEFS 참조 16개 파일을 브릿지/신규 모델 기준으로 정리 | S-01 | ⬜ |
-| **F-02** | progressionStore 소비 통일 | wallet/userProfile/agentData의 중복 계산 제거, 표시값 단일화 | S-02 | ⬜ |
+| **F-02** | progressionStore 소비 통일 | wallet/userProfile/agentData의 중복 계산 제거, 표시값 단일화 (Oracle 프로필 모달 Tier/Phase 표시 교체 포함) | S-02 | ⬜ |
 | **F-03** | priceService 적용 | Header/Chart/Terminal의 WS/interval 중복 제거, 단일 구독으로 통일 | S-03, B-05 | ⬜ |
 | **F-04** | Lobby v3 | 8에이전트 표시, 3개 선택, 가중치 합 100, Spec 선택 UI | S-04, F-01 | ⬜ |
 | **F-05** | SquadConfig v3 | 기존 risk/timeframe 중심 UI를 DraftSelection 중심으로 교체 | S-04, F-01 | ⬜ |
@@ -93,6 +93,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **F-09** | Store 전환 | localStorage primary → Supabase primary (quickTrade/tracked/scanTabs/chat) | B-09, B-10 | ⬜ |
 | **F-10** | 하드코딩 제거 | LIVE FEED/HEADLINES/EVENTS/FLOW → API fetch, chat 응답 → 스캔 컨텍스트 | B-09, B-10, B-11 | ⬜ |
 | **F-11** | 영속성 검증 | 새로고침/다른기기/오프라인 시 데이터 복원 확인 | F-09, F-10 | ⬜ |
+| **F-12** | Oracle 모달 정합성 | Oracle 프로필 모달의 `TIER: CONNECTED`, `PHASE P1` 구형 표기를 v3 계약 값으로 교체 | F-02 | ⬜ |
 
 ---
 
@@ -112,7 +113,7 @@ Phase 3: 크리티컬 패스
 
 Phase 4: 마무리
   BE: B-05 + B-06 + B-07 + B-08
-  FE: F-07 + F-08 + F-09 (Store 전환) + F-10 (하드코딩 제거) + F-11 (영속성 검증)
+  FE: F-07 + F-08 + F-09 (Store 전환) + F-10 (하드코딩 제거) + F-11 (영속성 검증) + F-12 (Oracle 모달)
 ```
 
 ---

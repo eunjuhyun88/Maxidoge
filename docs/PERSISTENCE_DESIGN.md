@@ -470,7 +470,7 @@ v3에서 바뀌는 것:
 
 ```
 POST   /api/terminal/scan                          ← 스캔 실행 (BE에서 계산)
-GET    /api/terminal/scan/history?pair=...&tf=...   ← 스캔 히스토리 (API_CONTRACT §9.2 기준)
+GET    /api/terminal/scan/history?pair=...&timeframe=...   ← 스캔 히스토리 (API_CONTRACT §9.2 기준)
 GET    /api/terminal/scan/:id                       ← 단일 스캔 상세
 GET    /api/terminal/scan/:id/signals               ← 스캔 내 시그널 목록
 ```
@@ -482,7 +482,6 @@ GET    /api/terminal/scan/:id/signals               ← 스캔 내 시그널 목
 ```
 POST   /api/chat/messages             ← 메시지 전송 + 에이전트 응답 생성 (meta.mentionedAgent 포함 시)
 GET    /api/chat/messages?channel=terminal&limit=100  ← 채팅 히스토리 (pagination)
-DELETE /api/chat/messages?channel=terminal             ← 채팅 초기화
 ```
 
 > **통일 규칙**: API_CONTRACT §9.1의 기존 `/api/chat/messages` 엔드포인트를 그대로 사용한다.
@@ -512,7 +511,7 @@ async function loadScanTabs(): ScanTab[] {
   if (cached) renderTabs(JSON.parse(cached));
 
   // 2. 서버에서 최신 데이터 fetch
-  const fresh = await fetch('/api/terminal/scans?limit=6');
+  const fresh = await fetch(`/api/terminal/scan/history?pair=${pair}&timeframe=${timeframe}&limit=6`);
   const data = await fresh.json();
 
   // 3. 서버 데이터로 갱신
@@ -533,9 +532,15 @@ async function sendChat(text: string) {
   chatMessages.push({ id: tempId, from: 'YOU', text, isUser: true });
 
   // 2. 서버 전송
-  const res = await fetch('/api/terminal/chat', {
+  const res = await fetch('/api/chat/messages', {
     method: 'POST',
-    body: JSON.stringify({ text, mentionedAgent })
+    body: JSON.stringify({
+      channel: 'terminal',
+      senderKind: 'user',
+      senderName: 'YOU',
+      message: text,
+      meta: { mentionedAgent, pair, timeframe, scanId }
+    })
   });
 
   // 3. 서버 응답으로 교체

@@ -422,6 +422,10 @@ SSE 이벤트:
 }
 ```
 
+저장소 호환 규칙:
+1. 마이그레이션 기간에는 `/api/chat/messages`가 내부적으로 `chat_messages` 또는 `agent_chat_messages`를 adapter로 사용할 수 있다.
+2. 외부 계약(요청/응답 JSON)은 변경하지 않는다.
+
 응답:
 
 ```json
