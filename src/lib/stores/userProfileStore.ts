@@ -98,14 +98,26 @@ function createDefault(): UserProfile {
 
 export const userProfileStore = writable<UserProfile>(loadProfile());
 
-// Persist (debounced)
+// Persist (debounced) + badge sync to server
 let _profileSave: ReturnType<typeof setTimeout> | null = null;
+let _badgeSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let _lastBadgeHash = '';
 userProfileStore.subscribe(p => {
   if (typeof window === 'undefined') return;
   if (_profileSave) clearTimeout(_profileSave);
   _profileSave = setTimeout(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
   }, 500);
+
+  // Badge → server sync (debounced 2s, only when earned badges change)
+  const earnedHash = JSON.stringify(p.badges.filter(b => b.earnedAt !== null).map(b => b.id));
+  if (earnedHash !== _lastBadgeHash && _lastBadgeHash !== '') {
+    if (_badgeSyncTimer) clearTimeout(_badgeSyncTimer);
+    _badgeSyncTimer = setTimeout(() => {
+      void updateProfileApi({ badges: p.badges });
+    }, 2000);
+  }
+  _lastBadgeHash = earnedHash;
 });
 
 // ═══ Auto-sync from walletStore ═══

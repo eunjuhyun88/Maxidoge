@@ -7,9 +7,11 @@
   import { walletStore, openWalletModal } from '$lib/stores/walletStore';
   import { agentStats, hydrateAgentStats } from '$lib/stores/agentData';
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
-  import { HOLDINGS_DATA, calcTotal, calcPnL } from '$lib/data/holdings';
+  import { HOLDINGS_DATA, calcTotal, calcPnL, type HoldingAsset } from '$lib/data/holdings';
   import { gameState } from '$lib/stores/gameState';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
+  import { fetchHoldings, type PortfolioHolding } from '$lib/api/portfolioApi';
+  import { livePrices } from '$lib/stores/priceStore';
   import EmptyState from '../../components/shared/EmptyState.svelte';
 
   $: profile = $userProfileStore;
@@ -31,9 +33,17 @@
   $: wr = $winRate;
   $: bStreak = $bestStreak;
 
+  // Holdings: live API data with static fallback
+  let liveHoldings: HoldingAsset[] = [];
+  let holdingsLoaded = false;
+  $: liveP = $livePrices;
+
+  // Build effective holdings array: live API → static fallback
+  $: effectiveHoldings = holdingsLoaded && liveHoldings.length > 0 ? liveHoldings : HOLDINGS_DATA;
+
   // Holdings calculations
-  $: total = calcTotal();
-  $: totalCost = HOLDINGS_DATA.reduce((s, h) => s + h.amount * h.avgPrice, 0);
+  $: total = effectiveHoldings.reduce((s, h) => s + h.amount * h.currentPrice, 0);
+  $: totalCost = effectiveHoldings.reduce((s, h) => s + h.amount * h.avgPrice, 0);
   $: totalPnl = total - totalCost;
   $: totalPnlPct = totalCost > 0 ? ((totalPnl / totalCost) * 100) : 0;
   $: unrealizedPnl = opens.reduce((s, t) => s + t.pnlPercent, 0);
@@ -103,6 +113,17 @@
     void updateUiStateApi({ passportActiveTab: tab });
   }
 
+  // Color map for known assets (donut chart)
+  const ASSET_COLORS: Record<string, string> = {
+    BTC: '#f7931a', ETH: '#627eea', SOL: '#14f195', AVAX: '#e84142',
+    DOGE: '#c2a633', USDC: '#2775ca', USDT: '#26a17b', BNB: '#f3ba2f',
+    ADA: '#0d1e30', MATIC: '#8247e5', DOT: '#e6007a', LINK: '#2a5ada',
+  };
+  const ASSET_ICONS: Record<string, string> = {
+    BTC: '₿', ETH: 'Ξ', SOL: 'S', AVAX: 'A', DOGE: 'Ð',
+    USDC: '$', USDT: '$', BNB: 'B', ADA: 'A', MATIC: 'M', DOT: 'D', LINK: 'L',
+  };
+
   onMount(() => {
     hydrateUserProfile();
     hydrateAgentStats();
@@ -110,6 +131,30 @@
       const ui = await fetchUiStateApi();
       if (ui?.passportActiveTab && isPassportTab(ui.passportActiveTab)) {
         activeTab = ui.passportActiveTab;
+      }
+    })();
+
+    // Holdings: fire-and-forget API fetch
+    void (async () => {
+      try {
+        const res = await fetchHoldings();
+        if (res?.ok && res.data.holdings.length > 0) {
+          const totalVal = res.data.totalValue || 1;
+          liveHoldings = res.data.holdings.map((h) => ({
+            symbol: h.symbol,
+            name: h.name,
+            icon: ASSET_ICONS[h.symbol] || h.symbol[0],
+            color: ASSET_COLORS[h.symbol] || '#888',
+            amount: h.amount,
+            avgPrice: h.avgPrice,
+            // Use live price from priceStore if available
+            currentPrice: liveP[h.symbol] || h.currentPrice,
+            allocation: (h.amount * h.currentPrice) / totalVal,
+          }));
+          holdingsLoaded = true;
+        }
+      } catch {
+        // Fallback to static data — no action needed
       }
     })();
   });
@@ -310,20 +355,20 @@
                 <div class="st">ALLOCATION</div>
                 <div class="donut-wrap">
                   <svg viewBox="0 0 200 200">
-                    {#each HOLDINGS_DATA as asset, i}
-                      {@const offset = HOLDINGS_DATA.slice(0, i).reduce((s, a) => s + a.allocation * 100, 0)}
+                    {#each effectiveHoldings as asset, i}
+                      {@const offset = effectiveHoldings.slice(0, i).reduce((s, a) => s + a.allocation * 100, 0)}
                       {@const pct = asset.allocation * 100}
                       <circle cx="100" cy="100" r="70" fill="none" stroke={asset.color} stroke-width="30"
                         stroke-dasharray="{pct * 4.4} {(100 - pct) * 4.4}"
                         stroke-dashoffset="{-offset * 4.4}" transform="rotate(-90 100 100)" />
                     {/each}
                     <circle cx="100" cy="100" r="55" fill="#0a0a1a" />
-                    <text x="100" y="95" text-anchor="middle" fill="#fff" font-size="16" font-weight="900" font-family="var(--fd)">{HOLDINGS_DATA.length}</text>
+                    <text x="100" y="95" text-anchor="middle" fill="#fff" font-size="16" font-weight="900" font-family="var(--fd)">{effectiveHoldings.length}</text>
                     <text x="100" y="112" text-anchor="middle" fill="#888" font-size="9" font-family="var(--fm)">ASSETS</text>
                   </svg>
                 </div>
                 <div class="legend">
-                  {#each HOLDINGS_DATA as asset}
+                  {#each effectiveHoldings as asset}
                     <div class="legend-item"><span class="li-dot" style="background:{asset.color}"></span><span class="li-name">{asset.symbol}</span><span class="li-pct">{(asset.allocation * 100).toFixed(0)}%</span></div>
                   {/each}
                 </div>
@@ -333,7 +378,7 @@
                 <div class="st">HOLDINGS</div>
                 <div class="htable">
                   <div class="hrow header-row"><span class="hc asset-col">ASSET</span><span class="hc">AMOUNT</span><span class="hc">VALUE</span><span class="hc">PnL</span></div>
-                  {#each HOLDINGS_DATA as asset}
+                  {#each effectiveHoldings as asset}
                     {@const assetPnl = calcPnL(asset)}
                     {@const value = asset.amount * asset.currentPrice}
                     <div class="hrow">

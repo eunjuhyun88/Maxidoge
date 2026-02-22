@@ -77,6 +77,7 @@ export const PATCH: RequestHandler = async ({ cookies, request }) => {
     const nickname = typeof body?.nickname === 'string' ? body.nickname.trim() : null;
     const avatar = typeof body?.avatar === 'string' ? body.avatar.trim() : null;
     const displayTier = typeof body?.displayTier === 'string' ? body.displayTier.trim().toLowerCase() : null;
+    const badges = Array.isArray(body?.badges) ? body.badges : null;
 
     if (nickname && nickname.length < 2) {
       return json({ error: 'nickname must be at least 2 characters' }, { status: 400 });
@@ -101,14 +102,24 @@ export const PATCH: RequestHandler = async ({ cookies, request }) => {
       );
     }
 
-    if (displayTier) {
+    if (displayTier || badges) {
+      const setClauses: string[] = ['updated_at = now()'];
+      const params: any[] = [];
+      let paramIdx = 1;
+
+      if (displayTier) {
+        setClauses.push(`display_tier = $${paramIdx++}`);
+        params.push(displayTier);
+      }
+      if (badges) {
+        setClauses.push(`badges = $${paramIdx++}::jsonb`);
+        params.push(JSON.stringify(badges));
+      }
+      params.push(user.id);
+
       await query(
-        `
-          UPDATE user_profiles
-          SET display_tier = $1, updated_at = now()
-          WHERE user_id = $2
-        `,
-        [displayTier, user.id]
+        `UPDATE user_profiles SET ${setClauses.join(', ')} WHERE user_id = $${paramIdx}`,
+        params
       );
     }
 
