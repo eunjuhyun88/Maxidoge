@@ -6,7 +6,7 @@
   import { predictMarkets, loadPolymarkets } from '$lib/stores/predictStore';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import { parseOutcomePrices } from '$lib/api/polymarket';
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -122,7 +122,8 @@
 
   async function fetchLiveHeadlines() {
     try {
-      const res = await fetch('/api/market/news?limit=10');
+      const token = ($gameState.pair || 'BTC/USDT').split('/')[0];
+      const res = await fetch(`/api/market/news?limit=15&token=${encodeURIComponent(token)}`);
       const json = await res.json();
       if (json.ok && json.data?.records?.length > 0) {
         liveHeadlines = json.data.records.map((r: any) => ({
@@ -227,6 +228,23 @@
     return map[token] || [token.toLowerCase()];
   }
 
+  // ═══ Pair 변경 시 Events/Flow 자동 refetch ═══
+  let _prevPair = '';
+  let _pairRefetchTimer: ReturnType<typeof setTimeout> | null = null;
+  $: {
+    const pair = $gameState.pair || 'BTC/USDT';
+    if (_prevPair && pair !== _prevPair) {
+      // pair 바뀌면 debounce 후 refetch (빠른 전환 스팸 방지)
+      if (_pairRefetchTimer) clearTimeout(_pairRefetchTimer);
+      _pairRefetchTimer = setTimeout(() => {
+        fetchLiveHeadlines();
+        fetchLiveEvents();
+        fetchLiveFlow();
+      }, 300);
+    }
+    _prevPair = pair;
+  }
+
   // Crypto prediction markets for POSITIONS tab
   const CRYPTO_RX = /\b(bitcoin|btc|ethereum|eth|solana|sol|crypto|defi|web3)\b/i;
   $: cryptoMarkets = $predictMarkets
@@ -258,6 +276,11 @@
     fetchLiveHeadlines();
     fetchLiveEvents();
     fetchLiveFlow();
+  });
+
+  onDestroy(() => {
+    if (_pairRefetchTimer) clearTimeout(_pairRefetchTimer);
+    if (_uiStateSaveTimer) clearTimeout(_uiStateSaveTimer);
   });
 </script>
 
