@@ -11,7 +11,7 @@ import { totalQuickPnL, openTradeCount } from './quickTradeStore';
 import { STORAGE_KEYS } from './storageKeys';
 import { fetchPassportApi, fetchProfileApi, updateProfileApi } from '$lib/api/profileApi';
 
-export type ProfileTier = 'bronze' | 'silver' | 'gold' | 'diamond';
+export type ProfileTier = 'bronze' | 'silver' | 'gold' | 'diamond' | 'master';
 
 export interface Badge {
   id: string;
@@ -120,23 +120,36 @@ userProfileStore.subscribe(p => {
   _lastBadgeHash = earnedHash;
 });
 
-// ═══ Auto-sync from walletStore ═══
+// ═══ Auto-sync from walletStore (S-02: LP → tier 자동 갱신 포함) ═══
+let _prevLP = -1;
 walletStore.subscribe(w => {
   userProfileStore.update(p => {
+    let changed = false;
+    let next = p;
+
+    // 주소/닉네임 변경
     if (w.address !== p.address || w.nickname !== p.username) {
-      return {
-        ...p,
-        address: w.address,
-        username: w.nickname || p.username,
-      };
+      next = { ...next, address: w.address, username: w.nickname || p.username };
+      changed = true;
     }
-    return p;
+
+    // LP 변경 → tier 갱신 (S-02 통합: LP 기반 단일 소스)
+    if (w.totalLP !== _prevLP) {
+      _prevLP = w.totalLP;
+      const newTier = calcTierFromLP(w.totalLP);
+      if (newTier !== next.tier) {
+        next = { ...next, tier: newTier };
+        changed = true;
+      }
+    }
+
+    return changed ? next : p;
   });
 });
 
 function normalizeDisplayTier(value: unknown): ProfileTier {
   const tier = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (tier === 'diamond' || tier === 'gold' || tier === 'silver') return tier;
+  if (tier === 'master' || tier === 'diamond' || tier === 'gold' || tier === 'silver') return tier;
   return 'bronze';
 }
 
@@ -258,12 +271,13 @@ matchHistoryStore.subscribe($mh => {
   }));
 });
 
-// ═══ Tier Calculation ═══
-function calcTier(stats: UserProfile['stats']): ProfileTier {
-  if (stats.totalMatches >= 50 && stats.winRate >= 65 && stats.totalPnL >= 30) return 'diamond';
-  if (stats.totalMatches >= 25 && stats.winRate >= 55 && stats.totalPnL >= 10) return 'gold';
-  if (stats.totalMatches >= 10 && stats.winRate >= 45) return 'silver';
-  return 'bronze';
+// ═══ Tier Calculation (S-02 통합: LP 기반 단일 소스) ═══
+// progressionRules.ts의 getTier() 사용. PnL/winRate 기반 레거시 제거.
+import { getTier, tierToDisplay } from './progressionRules';
+
+function calcTierFromLP(lp: number): ProfileTier {
+  const { tier } = getTier(lp);
+  return tierToDisplay(tier) as ProfileTier;
 }
 
 // ═══ Badge Check ═══
@@ -295,8 +309,17 @@ function checkBadges(profile: UserProfile): Badge[] {
 export function syncPnL(pnl: number) {
   userProfileStore.update(p => {
     const newStats = { ...p.stats, totalPnL: +pnl.toFixed(2) };
-    const newTier = calcTier(newStats);
-    const updated = { ...p, stats: newStats, tier: newTier };
+    const updated = { ...p, stats: newStats };
+    updated.badges = checkBadges(updated);
+    return updated;
+  });
+}
+
+/** LP 변경 시 호출 — tier를 LP 기반으로 갱신 */
+export function syncLP(lp: number) {
+  userProfileStore.update(p => {
+    const newTier = calcTierFromLP(lp);
+    const updated = { ...p, tier: newTier };
     updated.badges = checkBadges(updated);
     return updated;
   });
