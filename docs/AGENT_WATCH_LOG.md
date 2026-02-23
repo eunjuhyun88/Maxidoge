@@ -129,7 +129,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
     - `getLivePriceSnapshot(['BTC','ETH','SOL'])` 기반 동기화로 변경
 - Diff vs plan:
   - 없음
-- Commit / Push: pending
+- Commit / Push: `ca36fdc` — pushed to origin
 - Status: DONE
 
 ---
