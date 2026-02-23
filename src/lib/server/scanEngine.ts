@@ -5,7 +5,7 @@
 // 13 data sources → scoring → WarRoomScanResult
 // All fetch calls use server modules with LRU caching.
 
-import type { BinanceKline } from '$lib/api/binance';
+import type { BinanceKline } from '$lib/server/binance';
 import type { AgentSignal } from '$lib/data/warroom';
 import { AGENT_POOL } from '$lib/engine/agents';
 

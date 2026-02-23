@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { PAIR_RE } from '$lib/server/apiValidation';
-import { tfToCoinalyzeInterval } from '$lib/api/coinalyze';
+import { toCoinalyzeInterval } from '$lib/utils/timeframe';
 import { getCached, setCache } from './providers/cache';
 
 const NEWS_CACHE_TTL = 2 * 60_000; // 2분
@@ -152,7 +152,7 @@ export async function fetchDerivatives(
   timeframe = '4h'
 ): Promise<DerivativesSnapshot> {
   const symbol = toSymbol(pair);
-  const interval = tfToCoinalyzeInterval(timeframe);
+  const interval = toCoinalyzeInterval(timeframe);
   const now = Math.floor(Date.now() / 1000);
   const intervalSeconds: Record<string, number> = {
     '1min': 60,

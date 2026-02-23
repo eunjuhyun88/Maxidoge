@@ -4,7 +4,6 @@
 // Public endpoints — no API key. Server-side caching via LRU cache.
 
 import { getCached, setCache } from './providers/cache';
-import type { BinanceKline } from '$lib/api/binance';
 import { toBinanceInterval } from '$lib/utils/timeframe';
 
 const BASE = 'https://api.binance.com';
@@ -12,8 +11,16 @@ const FETCH_TIMEOUT = 8_000;
 const KLINE_CACHE_TTL = 60_000;    // 1min — klines change fast
 const TICKER_CACHE_TTL = 30_000;   // 30s
 
-// Re-export the shared type
-export type { BinanceKline } from '$lib/api/binance';
+// ─── Shared types (defined locally to avoid client dependency) ──
+
+export interface BinanceKline {
+  time: number;       // Open time (seconds for LWC)
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
 
 // ─── Klines ──────────────────────────────────────────────────
 
@@ -57,6 +64,9 @@ export interface ServerBinance24hr {
   volume: string;
   quoteVolume: string;
 }
+
+// Alias for backward compatibility with modules that used the client type name
+export type Binance24hr = ServerBinance24hr;
 
 export async function fetch24hrServer(symbol: string): Promise<ServerBinance24hr> {
   const cacheKey = `binance:24hr:${symbol}`;

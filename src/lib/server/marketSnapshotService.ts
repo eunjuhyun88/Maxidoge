@@ -6,7 +6,7 @@ import type { MarketContext } from '$lib/engine/factorEngine';
 import { analyzeTrend, detectDivergence } from '$lib/engine/trend';
 import type { DivergenceSignal, TrendAnalysis } from '$lib/engine/types';
 import { calcEMA, calcRSI } from '$lib/engine/indicators';
-import { fetch24hr, fetchKlines, pairToSymbol, type Binance24hr, type BinanceKline } from '$lib/api/binance';
+import { fetch24hrServer, fetchKlinesServer, pairToSymbol, type Binance24hr, type BinanceKline } from '$lib/server/binance';
 import { fetchDerivatives, fetchNews, normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
 import { fetchFearGreed } from '$lib/server/feargreed';
 import { fetchCoinGeckoGlobal, fetchStablecoinMcap } from '$lib/server/coingecko';
@@ -257,10 +257,10 @@ export async function collectMarketSnapshot(
     newsRes,
     cmcRes,
   ] = await Promise.allSettled([
-    fetchKlines(symbol, timeframe, 300),
-    fetchKlines(symbol, '1h', 300),
-    fetchKlines(symbol, '1d', 300),
-    fetch24hr(symbol),
+    fetchKlinesServer(symbol, timeframe, 300),
+    fetchKlinesServer(symbol, '1h', 300),
+    fetchKlinesServer(symbol, '1d', 300),
+    fetch24hrServer(symbol),
     fetchDerivatives(eventFetch, pair, timeframe),
     fetchFearGreed(60),
     fetchCoinGeckoGlobal(),

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { fetch24hr, pairToSymbol } from '$lib/api/binance';
+import { fetch24hrServer, pairToSymbol } from '$lib/server/binance';
 import { fetchDerivatives, normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
 import { fetchCoinMarketCapQuote, hasCoinMarketCapApiKey } from '$lib/server/coinmarketcap';
 
@@ -21,7 +21,7 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
     const token = pair.split('/')[0];
 
     const [tickerRes, derivRes, cmcRes] = await Promise.allSettled([
-      fetch24hr(pairToSymbol(pair)),
+      fetch24hrServer(pairToSymbol(pair)),
       fetchDerivatives(fetch, pair, timeframe),
       fetchCoinMarketCapQuote(token),
     ]);

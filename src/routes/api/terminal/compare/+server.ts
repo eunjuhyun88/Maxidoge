@@ -5,7 +5,7 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { runWarRoomScan } from '$lib/engine/warroomScan';
+import { runServerScan } from '$lib/server/scanEngine';
 import { compareLimiter } from '$lib/server/rateLimit';
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
@@ -35,7 +35,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
     // Run scans in parallel
     const scanPromises = validPairs.map(pair =>
-      runWarRoomScan(pair, timeframe).catch(err => ({
+      runServerScan(pair, timeframe).catch(err => ({
         pair,
         error: (err as Error).message,
       }))
