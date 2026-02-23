@@ -6,8 +6,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { runWarRoomScan } from '$lib/engine/warroomScan';
+import { compareLimiter } from '$lib/server/rateLimit';
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, getClientAddress }) => {
+  // Rate limit: 3 comparisons/min per IP
+  const ip = getClientAddress();
+  if (!compareLimiter.check(ip)) {
+    return json({ error: 'Too many comparison requests. Please wait.' }, { status: 429 });
+  }
+
   try {
     const body = await request.json();
     const pairs: string[] = body?.pairs ?? [];

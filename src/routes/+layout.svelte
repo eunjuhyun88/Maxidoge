@@ -196,4 +196,12 @@
     overflow: hidden;
     position: relative;
   }
+
+  @media (max-width: 900px) {
+    #main-content {
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+    }
+  }
 </style>

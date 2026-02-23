@@ -53,6 +53,44 @@ import {
 
 type Vote = AgentSignal['vote'];
 
+// ── Concurrency control (1000-user safety) ───────────────────
+// - MAX_CONCURRENT: hard limit on parallel scans server-wide
+// - Coalescing: same pair+tf requests share one in-flight scan
+// - Short TTL cache: repeat scans within 30s return cached result
+
+const MAX_CONCURRENT_SCANS = 8;
+const SCAN_CACHE_TTL_MS = 30_000; // 30s
+
+let _activeScanCount = 0;
+const _inflightScans = new Map<string, Promise<WarRoomScanResult>>();
+
+interface CachedScanResult {
+  result: WarRoomScanResult;
+  expiresAt: number;
+}
+const _scanCache = new Map<string, CachedScanResult>();
+
+// Periodic cleanup of expired scan cache entries
+let _scanCacheCleanupTimer: ReturnType<typeof setInterval> | null = null;
+function ensureScanCacheCleanup() {
+  if (_scanCacheCleanupTimer) return;
+  _scanCacheCleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _scanCache.entries()) {
+      if (now > v.expiresAt) _scanCache.delete(k);
+    }
+    // Also cap cache size (max 100 entries)
+    if (_scanCache.size > 100) {
+      const entries = [..._scanCache.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+      const toRemove = _scanCache.size - 80;
+      for (let i = 0; i < toRemove; i++) _scanCache.delete(entries[i][0]);
+    }
+  }, 60_000);
+  if (_scanCacheCleanupTimer && typeof _scanCacheCleanupTimer === 'object' && 'unref' in _scanCacheCleanupTimer) {
+    (_scanCacheCleanupTimer as NodeJS.Timeout).unref();
+  }
+}
+
 export type ScanHighlight = {
   agent: string;
   vote: Vote;
@@ -184,7 +222,55 @@ function buildTradePlan(entry: number, vote: Vote, score: number, atrPct: number
   return { entry: roundPrice(entry), tp, sl };
 }
 
+/**
+ * Public entry point with concurrency control:
+ * 1. Check cache → return if fresh
+ * 2. Coalesce duplicate requests for same pair+tf
+ * 3. Enforce MAX_CONCURRENT_SCANS limit
+ */
 export async function runWarRoomScan(pair: string, timeframe: string): Promise<WarRoomScanResult> {
+  ensureScanCacheCleanup();
+
+  const marketPair = (pair || 'BTC/USDT').toUpperCase();
+  const tf = String(timeframe || '4h');
+  const cacheKey = `${marketPair}:${tf}`;
+
+  // 1. Cache hit?
+  const cached = _scanCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.result;
+  }
+
+  // 2. Coalesce: if same scan is in-flight, piggyback
+  const inflight = _inflightScans.get(cacheKey);
+  if (inflight) return inflight;
+
+  // 3. Concurrency gate
+  if (_activeScanCount >= MAX_CONCURRENT_SCANS) {
+    // Try to return stale cache if available (even if expired)
+    if (cached) return cached.result;
+    throw new Error('서버가 바빠서 스캔을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.');
+  }
+
+  // 4. Run scan
+  const scanPromise = (async () => {
+    _activeScanCount++;
+    try {
+      const result = await _runWarRoomScanInternal(marketPair, tf);
+      _scanCache.set(cacheKey, { result, expiresAt: Date.now() + SCAN_CACHE_TTL_MS });
+      return result;
+    } finally {
+      _activeScanCount--;
+      _inflightScans.delete(cacheKey);
+    }
+  })();
+
+  _inflightScans.set(cacheKey, scanPromise);
+  return scanPromise;
+}
+
+/** Internal scan logic — do not call directly, use runWarRoomScan() */
+async function _runWarRoomScanInternal(pair: string, timeframe: string): Promise<WarRoomScanResult> {
   const marketPair = pair || 'BTC/USDT';
   const tf = String(timeframe || '4h');
   const token = (marketPair.split('/')[0] || 'BTC').toUpperCase();

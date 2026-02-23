@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { query } from '$lib/server/db';
 import { runTerminalScan } from '$lib/services/scanService';
+import { scanLimiter } from '$lib/server/rateLimit';
 
 function parseValidationMessage(message: string): string | null {
   if (message.startsWith('pair must be like')) return message;
@@ -10,7 +11,13 @@ function parseValidationMessage(message: string): string | null {
   return null;
 }
 
-export const POST: RequestHandler = async ({ cookies, request }) => {
+export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
+  // Rate limit: 6 scans/min per IP
+  const ip = getClientAddress();
+  if (!scanLimiter.check(ip)) {
+    return json({ error: 'Too many scan requests. Please wait.' }, { status: 429 });
+  }
+
   try {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });

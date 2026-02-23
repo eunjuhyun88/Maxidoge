@@ -48,6 +48,8 @@ const SCORE_THRESHOLD_NOTIFY = 65;                // notify for scores ≥ this
 const RANK_CHANGE_THRESHOLD = 3;                  // notify if coin jumps ≥ 3 ranks
 const PRICE_SPIKE_THRESHOLD_1H = 5;               // % change 1h to trigger spike alert
 const NEW_ENTRY_NOTIFY = true;                    // notify when new coin enters top 5
+const INIT_JITTER_MAX_MS = 60_000;               // randomize initial delay 30s-90s (prevent thundering herd)
+const INTERVAL_JITTER_PCT = 0.15;                // ±15% jitter on each polling interval
 
 // ── State ────────────────────────────────────────────────────
 
@@ -202,19 +204,29 @@ export const alertEngine = {
     _running = true;
     _intervalMs = Math.max(MIN_INTERVAL_MS, intervalMs ?? DEFAULT_INTERVAL_MS);
 
-    // Initial scan after 30s delay (let the page load first)
+    // Jittered initial delay: 30s + random(0-60s) → spreads 1000 clients over 90s window
+    const initDelay = 30_000 + Math.floor(Math.random() * INIT_JITTER_MAX_MS);
     _initTimer = setTimeout(() => {
       _initTimer = null;
       if (!_running) return;
       void runScanCycle();
-    }, 30_000);
+    }, initDelay);
 
-    // Periodic scans
-    _timer = setInterval(() => {
-      void runScanCycle();
-    }, _intervalMs);
+    // Jittered periodic scans: ±15% randomization per interval
+    // This ensures 1000 clients don't hit the server at exact same moment
+    function scheduleNext() {
+      if (!_running) return;
+      const jitter = _intervalMs * INTERVAL_JITTER_PCT;
+      const nextMs = _intervalMs + Math.floor(Math.random() * jitter * 2 - jitter);
+      _timer = setTimeout(() => {
+        if (!_running) return;
+        void runScanCycle().finally(scheduleNext);
+      }, Math.max(MIN_INTERVAL_MS, nextMs));
+    }
+    // Start the jittered loop after initial delay
+    setTimeout(scheduleNext, initDelay + 1000);
 
-    console.log(`[AlertEngine] Started (interval: ${_intervalMs / 1000}s)`);
+    console.log(`[AlertEngine] Started (interval: ~${_intervalMs / 1000}s, initDelay: ${(initDelay / 1000).toFixed(0)}s)`);
   },
 
   /** Stop background monitoring. */
@@ -225,7 +237,7 @@ export const alertEngine = {
       _initTimer = null;
     }
     if (_timer) {
-      clearInterval(_timer);
+      clearTimeout(_timer);
       _timer = null;
     }
     console.log('[AlertEngine] Stopped');

@@ -361,6 +361,8 @@
       overflow-x: auto;
       overflow-y: hidden;
       -webkit-overflow-scrolling: touch;
+      touch-action: pan-x;
+      overscroll-behavior-x: contain;
       scrollbar-width: none;
     }
     #nav::-webkit-scrollbar { display: none; }
@@ -404,6 +406,39 @@
     .wallet-btn.connected {
       font-size: 7px;
       padding: 3px 7px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    #nav {
+      padding: 0 6px;
+    }
+
+    .nav-tab {
+      font-size: 0;
+      min-width: 20px;
+      padding: 0 5px;
+      justify-content: center;
+      border-right-color: rgba(232, 150, 125, 0.03);
+    }
+    .tab-icon {
+      display: inline-block;
+      font-size: 8px;
+      line-height: 1;
+      opacity: 0.9;
+    }
+    .nav-tab.active .tab-icon {
+      opacity: 1;
+    }
+
+    .selected-ticker { gap: 3px; }
+    .st-price { font-size: 9px; }
+    .nav-sep { margin: 0 4px; }
+
+    .wallet-btn {
+      max-width: 76px;
+      font-size: 7px;
+      padding: 3px 6px;
     }
   }
 </style>

@@ -990,7 +990,9 @@
   }
   .mob-content {
     min-height: 0;
-    overflow: hidden;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     padding: 10px 10px 8px;
     display: flex;
     flex-direction: column;
@@ -1357,7 +1359,7 @@
     min-height: 0;
   }
   .terminal-mobile :global(.chart-wrapper .chart-container) {
-    min-height: 180px;
+    min-height: max(180px, 36vh);
   }
   .terminal-mobile :global(.war-room .wr-header) {
     height: 38px;
@@ -1528,6 +1530,27 @@
     padding: 4px 8px;
   }
 
+  .terminal-mobile :global(.war-room .wr-msgs),
+  .terminal-mobile :global(.intel-panel .rp-body),
+  .terminal-mobile :global(.intel-panel .hl-scrollable),
+  .terminal-mobile :global(.intel-panel .ac-msgs),
+  .terminal-mobile :global(.intel-panel .trend-list),
+  .terminal-mobile :global(.intel-panel .picks-panel) {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+
+  .terminal-mobile :global(.war-room .ticker-flow),
+  .terminal-mobile :global(.war-room .scan-tabs),
+  .terminal-mobile :global(.war-room .token-tabs),
+  .terminal-mobile :global(.chart-wrapper .indicator-strip),
+  .terminal-mobile :global(.chart-wrapper .chart-bar > .tf-btns) {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+  }
+
   @media (max-width: 768px) {
     .terminal-shell::before,
     .term-stars-soft,
@@ -1557,6 +1580,23 @@
     }
     .mob-nav-btn {
       min-height: 44px;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .mob-title {
+      font-size: 13px;
+    }
+    .mob-meta {
+      gap: 4px;
+    }
+    .mob-meta-chip {
+      max-width: 36vw;
+      padding: 4px 7px;
+      font-size: 8px;
+    }
+    .mob-meta-chip.subtle {
+      display: none;
     }
   }
 </style>
