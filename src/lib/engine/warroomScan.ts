@@ -16,6 +16,7 @@ import type { AgentSignal } from '$lib/data/warroom';
 import { AGENT_POOL } from './agents';
 import { fetchFearGreed, fngToScore } from '$lib/api/feargreed';
 import { fetchGlobal, btcDominanceToScore } from '$lib/api/coingecko';
+import { fetchEthOnchain, gasToActivityScore, netflowToScore } from '$lib/api/etherscan';
 
 type Vote = AgentSignal['vote'];
 
@@ -172,14 +173,15 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
     throw new Error('캔들 데이터가 부족해서 스캔을 완료할 수 없습니다.');
   }
 
-  const [oiRaw, fundingRaw, predFundingRaw, lsRaw, liqRaw, fngRaw, cgGlobalRaw] = await Promise.allSettled([
+  const [oiRaw, fundingRaw, predFundingRaw, lsRaw, liqRaw, fngRaw, cgGlobalRaw, ethOnchainRaw] = await Promise.allSettled([
     fetchCurrentOI(marketPair),
     fetchCurrentFunding(marketPair),
     fetchPredictedFunding(marketPair),
     fetchLSRatioHistory(marketPair, tf, 24),
     fetchLiquidationHistory(marketPair, tf, 24),
     fetchFearGreed(),
-    fetchGlobal()
+    fetchGlobal(),
+    fetchEthOnchain()
   ]);
 
   const now = Date.now();
@@ -212,6 +214,7 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
     : 0;
   const fng = fngRaw.status === 'fulfilled' ? fngRaw.value : null;
   const cgGlobal = cgGlobalRaw.status === 'fulfilled' ? cgGlobalRaw.value : null;
+  const ethOnchain = ethOnchainRaw.status === 'fulfilled' ? ethOnchainRaw.value : null;
 
   let structureScore = 0;
   if (sma20 != null) structureScore += latestClose >= sma20 ? 0.26 : -0.26;
@@ -230,6 +233,11 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
   else if (volumeRatio < 0.85) flowScore -= 0.06;
   if (quoteVolume24 > 1_000_000_000) flowScore += 0.06;
   else if (quoteVolume24 < 120_000_000) flowScore -= 0.04;
+  // On-chain exchange netflow (Etherscan)
+  if (ethOnchain?.exchangeNetflowEth != null) {
+    const nfScore = netflowToScore(ethOnchain.exchangeNetflowEth);
+    flowScore += (nfScore / 100) * 0.2;
+  }
 
   let derivScore = 0;
   let derivDataPoints = 0;
@@ -358,6 +366,11 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
     if (cgGlobal.marketCapChange24h < -5) valuationScore += 0.1;
     if (cgGlobal.marketCapChange24h > 5) valuationScore -= 0.1;
   }
+  // On-chain network activity (Etherscan gas)
+  if (ethOnchain?.gas) {
+    const gasScore = gasToActivityScore(ethOnchain.gas.standard);
+    valuationScore += (gasScore / 100) * 0.12;
+  }
 
   const structureVote = scoreToVote(structureScore, 0.1);
   const flowVote = scoreToVote(flowScore, 0.08);
@@ -405,8 +418,8 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
       pair: marketPair,
       vote: flowVote,
       conf: scoreToConfidence(flowScore, 56),
-      text: `Volume x${volumeRatio.toFixed(2)} vs 20-bar avg · 24h quote volume $${fmtCompact(quoteVolume24)} · momentum ${fmtSignedPct(change24)}.`,
-      src: 'BINANCE:VOLUME/FLOW',
+      text: `Volume x${volumeRatio.toFixed(2)} vs 20-bar avg · 24h vol $${fmtCompact(quoteVolume24)} · ${fmtSignedPct(change24)}${ethOnchain?.exchangeNetflowEth != null ? ` · Exchange ETH ${fmtCompact(ethOnchain.exchangeNetflowEth)}` : ''}.`,
+      src: ethOnchain?.exchangeNetflowEth != null ? 'BINANCE+ETHERSCAN:FLOW' : 'BINANCE:VOLUME/FLOW',
       time: timeLabel,
       entry: flowPlan.entry,
       tp: flowPlan.tp,
@@ -513,8 +526,8 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
       pair: marketPair,
       vote: valuationVote,
       conf: scoreToConfidence(valuationScore, 54),
-      text: `${sma120 != null ? `MA120 dev ${fmtSignedPct(((latestClose - sma120) / sma120) * 100)}` : 'MA120 —'} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · Vol regime x${volumeRatio.toFixed(2)}${cgGlobal ? ` · MktCap ${fmtSignedPct(cgGlobal.marketCapChange24h)}` : ''}.`,
-      src: cgGlobal ? 'COINGECKO:VALUATION' : 'PROXY:VALUATION',
+      text: `${sma120 != null ? `MA120 dev ${fmtSignedPct(((latestClose - sma120) / sma120) * 100)}` : 'MA120 —'} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · Vol x${volumeRatio.toFixed(2)}${ethOnchain?.gas ? ` · Gas ${ethOnchain.gas.standard} Gwei` : ''}${cgGlobal ? ` · MktCap ${fmtSignedPct(cgGlobal.marketCapChange24h)}` : ''}.`,
+      src: ethOnchain?.gas ? 'ETHERSCAN+COINGECKO:VALUATION' : cgGlobal ? 'COINGECKO:VALUATION' : 'PROXY:VALUATION',
       time: timeLabel,
       entry: valuationPlan.entry,
       tp: valuationPlan.tp,
