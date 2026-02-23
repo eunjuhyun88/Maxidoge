@@ -9,7 +9,11 @@
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"gate": "npm run check && npm run build",
+		"safe:status": "bash scripts/dev/safe-status.sh",
+		"safe:worktree": "bash scripts/dev/new-worktree.sh",
+		"safe:hooks": "bash scripts/dev/install-git-hooks.sh"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.0",

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${SKIP_PREPUSH:-0}" = "1" ]; then
+	echo "[pre-push] SKIP_PREPUSH=1 set. Skipping gate."
+	exit 0
+fi
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+echo "[pre-push] branch: $CURRENT_BRANCH"
+echo "[pre-push] running npm run check"
+npm run check
+
+echo "[pre-push] running npm run build"
+npm run build
+
+echo "[pre-push] gate passed"
