@@ -4,7 +4,7 @@
 // Arena와 완전 분리 — 빠른 시그널 기반 트레이딩
 // ═══════════════════════════════════════════════════════════════
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
 import {
   closeQuickTradeApi,
@@ -273,32 +273,36 @@ export function updateAllPrices(
   const prices = toNumericPriceMap(priceInput);
   const snap = buildPriceMapHash(prices);
 
-  let hasOpenTrades = false;
-  let openTradeHash = '';
-  quickTradeStore.update(s => {
-    const openIds = s.trades.filter((t) => t.status === 'open').map((t) => t.id);
-    hasOpenTrades = openIds.length > 0;
-    openTradeHash = openIds.join('|');
-    if (!hasOpenTrades) return s;
+  const state = get(quickTradeStore);
+  const openIds = state.trades.filter((t) => t.status === 'open').map((t) => t.id);
+  const hasOpenTrades = openIds.length > 0;
+  const openTradeHash = openIds.join('|');
 
+  if (hasOpenTrades) {
     // Skip only when both prices and open-trade set are unchanged.
     // This prevents missing updates when a new trade opens at the same price snapshot.
-    if (snap === _lastLocalPriceSnapshot && openTradeHash === _lastOpenTradeHash) return s;
+    if (!(snap === _lastLocalPriceSnapshot && openTradeHash === _lastOpenTradeHash)) {
+      let changed = false;
+      const trades = state.trades.map((t) => {
+        if (t.status !== 'open') return t;
+        const token = getBaseSymbolFromPair(t.pair);
+        const price = prices[token];
+        if (!price || price === t.currentPrice) return t;
+        changed = true;
+        const pnl = t.dir === 'LONG'
+          ? +((price - t.entry) / t.entry * 100).toFixed(2)
+          : +((t.entry - price) / t.entry * 100).toFixed(2);
+        return { ...t, currentPrice: price, pnlPercent: pnl };
+      });
 
-    let changed = false;
-    const trades = s.trades.map(t => {
-      if (t.status !== 'open') return t;
-      const token = getBaseSymbolFromPair(t.pair);
-      const price = prices[token];
-      if (!price || price === t.currentPrice) return t;
-      changed = true;
-      const pnl = t.dir === 'LONG'
-        ? +((price - t.entry) / t.entry * 100).toFixed(2)
-        : +((t.entry - price) / t.entry * 100).toFixed(2);
-      return { ...t, currentPrice: price, pnlPercent: pnl };
-    });
-    return changed ? { ...s, trades } : s;
-  });
+      if (changed) {
+        quickTradeStore.set({
+          ...state,
+          trades,
+        });
+      }
+    }
+  }
 
   _lastLocalPriceSnapshot = snap;
   _lastOpenTradeHash = openTradeHash;

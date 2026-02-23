@@ -4,7 +4,7 @@
 // 24h 자동 만료, QuickTrade로 전환 가능
 // ═══════════════════════════════════════════════════════════════
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { openQuickTrade, replaceQuickTradeId, type TradeDirection } from './quickTradeStore';
 import { STORAGE_KEYS } from './storageKeys';
 import { convertSignalApi, fetchTrackedSignalsApi, trackSignalApi, type ApiTrackedSignal, untrackSignalApi } from '$lib/api/tradingApi';
@@ -258,31 +258,33 @@ export function updateTrackedPrices(priceInput: PriceLikeMap) {
   _lastTrackedPriceSnap = snap;
 
   const now = Date.now();
-  trackedSignalStore.update(s => {
-    const hasTracking = s.signals.some(sig => sig.status === 'tracking');
-    if (!hasTracking) return s;
+  const state = get(trackedSignalStore);
+  const hasTracking = state.signals.some((sig) => sig.status === 'tracking');
+  if (!hasTracking) return;
 
-    let changed = false;
-    const signals = s.signals.map(sig => {
-      if (sig.status === 'tracking' && sig.expiresAt < now) {
-        changed = true;
-        return { ...sig, status: 'expired' as SignalStatus };
-      }
-      if (sig.status !== 'tracking') return sig;
-
-      const token = getBaseSymbolFromPair(sig.pair);
-      const price = prices[token];
-      if (!price || price === sig.currentPrice) return sig;
-
+  let changed = false;
+  const signals = state.signals.map((sig) => {
+    if (sig.status === 'tracking' && sig.expiresAt < now) {
       changed = true;
-      const pnl = sig.dir === 'LONG'
-        ? +((price - sig.entryPrice) / sig.entryPrice * 100).toFixed(2)
-        : +((sig.entryPrice - price) / sig.entryPrice * 100).toFixed(2);
+      return { ...sig, status: 'expired' as SignalStatus };
+    }
+    if (sig.status !== 'tracking') return sig;
 
-      return { ...sig, currentPrice: price, pnlPercent: pnl };
-    });
-    return changed ? { signals } : s;
+    const token = getBaseSymbolFromPair(sig.pair);
+    const price = prices[token];
+    if (!price || price === sig.currentPrice) return sig;
+
+    changed = true;
+    const pnl = sig.dir === 'LONG'
+      ? +((price - sig.entryPrice) / sig.entryPrice * 100).toFixed(2)
+      : +((sig.entryPrice - price) / sig.entryPrice * 100).toFixed(2);
+
+    return { ...sig, currentPrice: price, pnlPercent: pnl };
   });
+
+  if (changed) {
+    trackedSignalStore.set({ signals });
+  }
 }
 
 export function clearExpired() {
