@@ -156,7 +156,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `src/lib/server/scanEngine.ts` — 신규: 서버사이드 스캔 오케스트레이션 (13 소스 병렬 fetch → 8 에이전트 스코어링 → WarRoomScanResult, 동시성 제어 포함)
   - `src/lib/services/scanService.ts` — warroomScan → scanEngine 전환 + persistScan N+1 → 배치 INSERT (8쿼리→1쿼리)
 - Diff vs plan: 없음 (계획 4건 전부 실행)
-- Commit / Push: `ca36fdc` — pushed to origin
+- Commit / Push: `50a0216`, `b6b6aa2` — pushed to origin
 - Status: DONE
 
 ---
@@ -164,6 +164,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 ### W-20260223-006
 
 - Start (KST): 2026-02-23 20:03
+- End (KST): 2026-02-23 20:28
 - Agent: 2-FE
 - Branch: `codex/fe-api-connect`
 - Scope (planned):
@@ -174,7 +175,25 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `git log -n 12` 확인: 최신 작업은 docs/perf/store 중심, WarRoom 직접 수정은 `2e4c6a9` 이후 없음
   - `git log -- src/components/terminal/WarRoom.svelte` 확인: 기존 WarRoom 변경 이력 파악
   - 현재 IN_PROGRESS `W-20260223-005`(Agent 1-BE)는 `src/lib/server/**`, `src/lib/services/**` 범위로 FE 컴포넌트 분해와 직접 충돌 없음
-- Status: IN_PROGRESS
+- Changes (actual):
+  - `src/components/terminal/WarRoom.svelte`
+    - 1428줄 → 564줄로 축소
+    - 상단/신호피드/하단을 분리 컴포넌트 조합으로 교체
+    - 기존 스캔/선택/퀵트레이드/트래킹 동작은 부모에서 그대로 유지
+  - 신규 `src/components/terminal/warroom/WarRoomHeaderSection.svelte`
+    - 변동성 알림, 헤더 액션, 티커/스캔/토큰 탭, 파생 데이터 스트립, 스캔 상태 렌더링 분리
+  - 신규 `src/components/terminal/warroom/WarRoomSignalFeed.svelte`
+    - Select-all 바, Signal 카드 목록, diff 하이라이트, empty state 분리
+  - 신규 `src/components/terminal/warroom/WarRoomFooterSection.svelte`
+    - CopyTrade CTA, Signal Room CTA, 요약 통계 분리
+  - 신규 `src/components/terminal/warroom/types.ts`
+    - `TokenFilter`, `ScanTab`, `SignalDiff`, `ScanHighlight` 타입 분리
+  - 신규 `src/components/terminal/warroom/warroom.css`
+    - 기존 `WarRoom.svelte` 스타일(654줄) 외부 CSS로 이관
+- Diff vs plan:
+  - 계획 대비 추가: 기존 스타일도 외부 파일로 분리해 WarRoom 본체를 렌더링 조립 중심으로 정리
+- Commit / Push: pending
+- Status: DONE
 
 ---
 
@@ -208,5 +227,5 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
     - `livePrice` 구독 브릿지 추가: `gameState.prices(BTC/ETH/SOL)`를 canonical livePrice와 동기화
 - Diff vs plan:
   - 없음
-- Commit / Push: pending
+- Commit / Push: `ca36fdc` — pushed to origin
 - Status: DONE
