@@ -137,6 +137,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 ### W-20260223-005
 
 - Start (KST): 2026-02-23 21:00
+- End (KST): 2026-02-23 21:30
 - Agent: 1-BE
 - Branch: `codex/fe-api-connect`
 - Scope (planned):
@@ -149,7 +150,14 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `git log -n 8` 확인: 최신 `9b4d462`, W-004(Agent 3-Glue)는 stores 작업 → 파일 충돌 없음
   - warroomScan.ts(engine)은 이번에 직접 수정 안 함 → client-side 호환 유지
   - src/lib/server/ 내 파일은 다른 에이전트 미접근
-- Status: IN_PROGRESS
+- Changes (actual):
+  - `src/lib/server/binance.ts` — 신규: 서버사이드 Binance REST (klines, 24hr ticker, LRU 캐시)
+  - `src/lib/server/coinalyze.ts` — 신규: 서버사이드 Coinalyze (OI, funding, LS ratio, liq, history, API key direct)
+  - `src/lib/server/scanEngine.ts` — 신규: 서버사이드 스캔 오케스트레이션 (13 소스 병렬 fetch → 8 에이전트 스코어링 → WarRoomScanResult, 동시성 제어 포함)
+  - `src/lib/services/scanService.ts` — warroomScan → scanEngine 전환 + persistScan N+1 → 배치 INSERT (8쿼리→1쿼리)
+- Diff vs plan: 없음 (계획 4건 전부 실행)
+- Commit / Push: pending
+- Status: DONE
 
 ---
 

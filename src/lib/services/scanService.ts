@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { randomUUID } from 'node:crypto';
-import { runWarRoomScan, type WarRoomScanResult } from '$lib/engine/warroomScan';
+import { runServerScan, type WarRoomScanResult } from '$lib/server/scanEngine';
 import { PAIR_RE, UUID_RE, toBoundedInt } from '$lib/server/apiValidation';
 import { query, withTransaction } from '$lib/server/db';
 
@@ -224,28 +224,28 @@ async function persistScan(userId: string, scan: WarRoomScanResult): Promise<str
     );
     const scanId = runRes.rows[0].id;
 
-    for (const sig of scan.signals) {
+    // Batch INSERT — eliminates N+1 query problem (8 signals → 1 query)
+    if (scan.signals.length > 0) {
+      const cols = 11; // columns per signal row
+      const placeholders: string[] = [];
+      const values: unknown[] = [];
+      for (let i = 0; i < scan.signals.length; i++) {
+        const sig = scan.signals[i];
+        const base = i * cols;
+        placeholders.push(
+          `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11})`
+        );
+        values.push(
+          scanId, userId, sig.agentId, sig.name, sig.vote,
+          sig.conf, sig.text, sig.src, sig.entry, sig.tp, sig.sl
+        );
+      }
       await client.query(
-        `
-          INSERT INTO terminal_scan_signals (
-            scan_id, user_id, agent_id, agent_name, vote, confidence,
-            analysis_text, data_source, entry_price, tp_price, sl_price
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        `,
-        [
-          scanId,
-          userId,
-          sig.agentId,
-          sig.name,
-          sig.vote,
-          sig.conf,
-          sig.text,
-          sig.src,
-          sig.entry,
-          sig.tp,
-          sig.sl,
-        ]
+        `INSERT INTO terminal_scan_signals (
+          scan_id, user_id, agent_id, agent_name, vote, confidence,
+          analysis_text, data_source, entry_price, tp_price, sl_price
+        ) VALUES ${placeholders.join(', ')}`,
+        values
       );
     }
 
@@ -258,7 +258,7 @@ export async function runTerminalScan(
   request: { pair?: unknown; timeframe?: unknown }
 ): Promise<RunTerminalScanResult> {
   const { pair, timeframe } = normalizeScanRequest(request);
-  const scan = await runWarRoomScan(pair, timeframe);
+  const scan = await runServerScan(pair, timeframe);
 
   try {
     const scanId = await persistScan(userId, scan);
