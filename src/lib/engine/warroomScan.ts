@@ -1,6 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
 // MAXI⚡DOGE — War Room Scan Engine (v3 extraction)
 // ═══════════════════════════════════════════════════════════════
+// @deprecated — 서버 라우트에서는 $lib/server/scanEngine.ts의 runServerScan() 사용.
+// 이 모듈은 클라이언트 전용 레거시. FE에서 직접 호출하는 곳이 없어지면 삭제 예정.
 
 import { fetch24hr, fetchKlines, pairToSymbol, type BinanceKline } from '$lib/api/binance';
 import {

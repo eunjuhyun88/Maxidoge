@@ -14,6 +14,18 @@ export interface BinanceKline {
   volume: number;
 }
 
+/** Binance 24hr ticker — canonical type shared between client & server. */
+export interface Binance24hr {
+  symbol: string;
+  priceChange: string;
+  priceChangePercent: string;
+  lastPrice: string;
+  highPrice: string;
+  lowPrice: string;
+  volume: string;
+  quoteVolume: string;
+}
+
 // ─── Agent Pool ──────────────────────────────────────────────
 
 export const AGENT_IDS = [

@@ -11,23 +11,12 @@ const DATA_BASE = 'https://data-api.binance.vision';
 const FETCH_TIMEOUT = 8000; // 8s timeout for all REST calls
 
 // ─── Types ───────────────────────────────────────────────────
-// BinanceKline is canonical in engine/types.ts — re-export for convenience
-export type { BinanceKline } from '$lib/engine/types';
+// Canonical types in engine/types.ts — re-export for convenience
+export type { BinanceKline, Binance24hr } from '$lib/engine/types';
 
 export interface BinanceTicker {
   symbol: string;
   price: string;
-}
-
-export interface Binance24hr {
-  symbol: string;
-  priceChange: string;
-  priceChangePercent: string;
-  lastPrice: string;
-  highPrice: string;
-  lowPrice: string;
-  volume: string;
-  quoteVolume: string;
 }
 
 // ─── Interval mapping ────────────────────────────────────────

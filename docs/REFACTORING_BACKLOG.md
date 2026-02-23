@@ -75,16 +75,16 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | ID | 제목 | 설명 | depends | 상태 |
 |----|------|------|---------|------|
 | **B-01** | Arena API 스캐폴딩 | `/api/arena/match/*` 생성 (create/draft/analyze/hypothesis/result) | S-04 | ⬜ |
-| **B-02** | 지표 엔진 분리 | `indicators.ts`, `trend.ts`, `scanService.ts` 서버/서비스 계층 구성 | — | ⬜ |
-| **B-03** | agentPipeline 구현 | `agentPipeline.ts` + 8개 에이전트 scoring 모듈 + `computeFinalPrediction` | B-02 | ⬜ |
+| **B-02** | 지표 엔진 분리 | `scanEngine.ts` 서버 분리, 타입 통합, 클라이언트 임포트 전면 제거 | — | ✅ |
+| **B-03** | agentPipeline 구현 | `agentPipeline.ts` + 8개 에이전트 scoring 모듈 + `computeFinalPrediction` | B-02 | ✅ |
 | **B-04** | exitOptimizer 구현 | SL/TP 3전략 + EV/R:R 계산 | B-02 | ⬜ |
 | **B-05** | 데이터 수집 API | snapshot/proxy 라우트 및 외부 API 클라이언트 추가 | — | ⬜ |
 | **B-06** | progression 서버 반영 | 매치 결과 기준 LP/티어/해금 업데이트 일원화 | B-01, B-03 | ⬜ |
 | **B-07** | RAG memory | `memory.ts` + pgvector 검색/저장 연동 | B-03 | ⬜ |
 | **B-08** | 하위호환 어댑터 | 기존 `/api/matches`를 신규 arena API 내부 호출로 연결 | B-01 | ⬜ |
-| **B-09** | Terminal Scan API | `POST /api/terminal/scan` (warroomScan.ts 로직 서버 이전) | B-02, S-05 | ⬜ |
-| **B-10** | Terminal Chat API | 기존 `/api/chat/messages` 확장 (meta.mentionedAgent → 에이전트 응답 생성) | B-09 | ⬜ |
-| **B-11** | Market Data API | 뉴스(RSS)/이벤트(온체인)/플로우(스마트머니) + DexScreener(boost/ads/takeover/search) 프록시 | — | ⬜ |
+| **B-09** | Terminal Scan API | `POST /api/terminal/scan` (warroomScan.ts 로직 서버 이전) | B-02, S-05 | ✅ |
+| **B-10** | Terminal Chat API | 기존 `/api/chat/messages` 확장 (meta.mentionedAgent → 에이전트 응답 생성) | B-09 | ✅ |
+| **B-11** | Market Data API | 뉴스(RSS)/이벤트(온체인)/플로우(스마트머니) + DexScreener(boost/ads/takeover/search) 프록시 | — | ✅ |
 | **B-12** | PvP Matching Pool API | `/api/pvp/pool/create`, `/available`, `/:id/accept` + 4h 만료 watchdog | B-01, S-06 | ⬜ |
 | **B-13** | Tournament API | `/api/tournaments/active`, `/register`, `/bracket`, `/ban`, `/draft` | B-01, S-06 | ⬜ |
 | **B-14** | Competitive Settlement Engine | mode별 LP/ELO/FBS 정산 + `arena_matches`/`lp_transactions` 반영 | B-03, B-12, B-13 | ⬜ |

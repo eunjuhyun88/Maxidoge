@@ -5,10 +5,10 @@
 
 import { getCached, setCache } from './providers/cache';
 import { toBinanceInterval } from '$lib/utils/timeframe';
-import type { BinanceKline } from '$lib/engine/types';
+import type { BinanceKline, Binance24hr } from '$lib/engine/types';
 
 // Re-export for convenience (consumers can import from here or from engine/types)
-export type { BinanceKline } from '$lib/engine/types';
+export type { BinanceKline, Binance24hr } from '$lib/engine/types';
 
 const BASE = 'https://api.binance.com';
 const FETCH_TIMEOUT = 8_000;
@@ -47,30 +47,16 @@ export async function fetchKlinesServer(
 
 // ─── 24hr Ticker ─────────────────────────────────────────────
 
-export interface ServerBinance24hr {
-  symbol: string;
-  priceChange: string;
-  priceChangePercent: string;
-  lastPrice: string;
-  highPrice: string;
-  lowPrice: string;
-  volume: string;
-  quoteVolume: string;
-}
-
-// Alias for backward compatibility with modules that used the client type name
-export type Binance24hr = ServerBinance24hr;
-
-export async function fetch24hrServer(symbol: string): Promise<ServerBinance24hr> {
+export async function fetch24hrServer(symbol: string): Promise<Binance24hr> {
   const cacheKey = `binance:24hr:${symbol}`;
-  const cached = getCached<ServerBinance24hr>(cacheKey);
+  const cached = getCached<Binance24hr>(cacheKey);
   if (cached) return cached;
 
   const url = `${BASE}/api/v3/ticker/24hr?symbol=${symbol}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
   if (!res.ok) throw new Error(`Binance 24hr ${res.status}`);
 
-  const data: ServerBinance24hr = await res.json();
+  const data: Binance24hr = await res.json();
   setCache(cacheKey, data, TICKER_CACHE_TTL);
   return data;
 }
