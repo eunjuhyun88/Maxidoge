@@ -12,6 +12,15 @@ export type ViewMode = 'arena' | 'terminal' | 'passport';
 export type Direction = 'LONG' | 'SHORT' | 'NEUTRAL';
 export type RiskLevel = 'low' | 'mid' | 'aggro';
 export type SquadTimeframe = CanonicalTimeframe;
+export type ArenaMode = 'PVE' | 'PVP' | 'TOURNAMENT';
+
+export interface TournamentContext {
+  tournamentId: string | null;
+  round: number | null;
+  type: string | null;
+  pair: string | null;
+  entryFeeLp: number | null;
+}
 
 export interface SquadConfig {
   riskLevel: RiskLevel;
@@ -50,6 +59,8 @@ export interface GameState {
   currentView: ViewMode;
 
   // Arena state
+  arenaMode: ArenaMode;
+  tournament: TournamentContext;
   phase: Phase;
   running: boolean;
   matchN: number;
@@ -92,6 +103,14 @@ export interface GameState {
 
 const defaultState: GameState = {
   currentView: 'arena',
+  arenaMode: 'PVE',
+  tournament: {
+    tournamentId: null,
+    round: null,
+    type: null,
+    pair: null,
+    entryFeeLp: null,
+  },
   phase: 'DRAFT',
   running: false,
   matchN: 0,
@@ -132,6 +151,11 @@ function loadState(): GameState {
       return {
         ...defaultState,
         ...parsed,
+        arenaMode: parsed?.arenaMode === 'PVP' || parsed?.arenaMode === 'TOURNAMENT' ? parsed.arenaMode : 'PVE',
+        tournament: {
+          ...defaultState.tournament,
+          ...(parsed?.tournament ?? {}),
+        },
         squadConfig,
         timeframe: normalizeTimeframe(parsed?.timeframe),
         running: false,
@@ -152,6 +176,8 @@ gameState.subscribe(s => {
   if (typeof window === 'undefined') return;
   // Build persist object (excludes prices, phase, running, pos — transient fields)
   const persist = {
+    arenaMode: s.arenaMode,
+    tournament: s.tournament,
     matchN: s.matchN,
     wins: s.wins,
     losses: s.losses,

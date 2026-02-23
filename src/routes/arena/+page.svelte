@@ -27,6 +27,13 @@
   $: walletOk = $isWalletConnected;
 
   $: state = $gameState;
+  $: modeLabel = state.arenaMode;
+  $: tournamentInfo = state.tournament;
+  $: resultOverlayTitle = state.arenaMode === 'TOURNAMENT'
+    ? (resultData.win ? '🏆 TOURNAMENT WIN 🏆' : '☠ TOURNAMENT LOSS ☠')
+    : state.arenaMode === 'PVP'
+      ? (resultData.win ? '🏆 YOU WIN! 🏆' : '💀 YOU LOSE 💀')
+      : (resultData.win ? '🏁 PVE CLEAR' : '❌ PVE FAILED');
   // Active agents for this match
   $: activeAgents = AGDEFS.filter(a => state.selectedAgents.includes(a.id));
 
@@ -990,7 +997,20 @@
     floatDir = null;
     showChartPosition = false;
     if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
-    gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'DRAFT', timer: 0 }));
+    gameState.update(s => ({
+      ...s,
+      inLobby: true,
+      running: false,
+      phase: 'DRAFT',
+      timer: 0,
+      tournament: {
+        tournamentId: null,
+        round: null,
+        type: null,
+        pair: null,
+        entryFeeLp: null,
+      }
+    }));
   }
 
   function playAgain() {
@@ -1148,6 +1168,12 @@
             <span class="ss-item">🔥{state.streak}</span>
             <span class="ss-item">{state.wins}W-{state.losses}L</span>
             <span class="ss-item lp">⚡{state.lp} LP</span>
+          </div>
+          <div class="mode-badge" class:tour={state.arenaMode === 'TOURNAMENT'} class:pvp={state.arenaMode === 'PVP'}>
+            {modeLabel}
+            {#if state.arenaMode === 'TOURNAMENT' && tournamentInfo.tournamentId}
+              · R{tournamentInfo.round ?? 1}
+            {/if}
           </div>
           {#if state.hypothesis}
             <div class="hypo-badge {state.hypothesis.dir.toLowerCase()}">
@@ -1366,7 +1392,12 @@
         {#if pvpVisible}
           <div class="pvp-overlay">
             <div class="pvp-card">
-              <div class="pvp-title">{resultData.win ? '🏆 YOU WIN! 🏆' : '💀 YOU LOSE 💀'}</div>
+              <div class="pvp-title">{resultOverlayTitle}</div>
+              {#if state.arenaMode === 'TOURNAMENT' && tournamentInfo.tournamentId}
+                <div class="pvp-label tour-meta">
+                  {tournamentInfo.type ?? 'TOURNAMENT'} · {tournamentInfo.pair ?? state.pair} · ROUND {tournamentInfo.round ?? 1}
+                </div>
+              {/if}
               <div class="pvp-scores">
                 <div class="pvp-side">
                   <div class="pvp-label">YOUR SCORE</div>
@@ -1503,6 +1534,28 @@
   .score-stats { display: flex; gap: 8px; margin-left: auto; }
   .ss-item { font-size: 8px; font-weight: 700; font-family: var(--fm); color: #aaa; }
   .ss-item.lp { color: #ffe600; }
+  .mode-badge {
+    padding: 3px 8px;
+    border: 1.5px solid rgba(232,150,125,.55);
+    background: rgba(232,150,125,.09);
+    color: #e8967d;
+    font-size: 8px;
+    font-family: var(--fd);
+    font-weight: 900;
+    letter-spacing: 1px;
+    border-radius: 7px;
+    white-space: nowrap;
+  }
+  .mode-badge.pvp {
+    border-color: rgba(102,204,230,.55);
+    background: rgba(102,204,230,.1);
+    color: #66cce6;
+  }
+  .mode-badge.tour {
+    border-color: rgba(220,185,112,.65);
+    background: rgba(220,185,112,.12);
+    color: #dcb970;
+  }
 
   /* Hypothesis Badge in score bar */
   .hypo-badge {
@@ -2008,6 +2061,13 @@
   .pvp-scores { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 12px 0; }
   .pvp-side { text-align: center; }
   .pvp-label { font-size: 7px; color: #888; font-family: var(--fd); letter-spacing: 2px; }
+  .pvp-label.tour-meta {
+    margin-top: 2px;
+    margin-bottom: 8px;
+    font-size: 8px;
+    color: #8b6c27;
+    letter-spacing: 1px;
+  }
   .pvp-score { font-size: 28px; font-weight: 900; font-family: var(--fc); }
   .pvp-vs { font-size: 14px; font-weight: 900; font-family: var(--fc); color: #888; }
   .pvp-lp { font-size: 16px; font-weight: 900; font-family: var(--fd); margin: 8px 0; }

@@ -76,13 +76,31 @@
     }
   ];
 
-  function modeStart(mode: 'pve' | 'pvp' | 'tournament') {
+  function modeStart(mode: 'pve' | 'pvp' | 'tournament', tournament: TournamentActiveRecord | null = null) {
     sfx.enter();
     selectedMode = mode;
+    const arenaMode = mode === 'pve' ? 'PVE' : mode === 'pvp' ? 'PVP' : 'TOURNAMENT';
 
     gameState.update((s) => ({
       ...s,
+      arenaMode,
+      tournament: arenaMode === 'TOURNAMENT'
+        ? {
+            tournamentId: tournament?.tournamentId ?? null,
+            round: bracketRound ?? 1,
+            type: tournament?.type ?? null,
+            pair: tournament?.pair ?? null,
+            entryFeeLp: tournament?.entryFeeLp ?? null,
+          }
+        : {
+            tournamentId: null,
+            round: null,
+            type: null,
+            pair: null,
+            entryFeeLp: null,
+          },
       inLobby: false,
+      pair: arenaMode === 'TOURNAMENT' && tournament?.pair ? tournament.pair : s.pair,
       selectedAgents: ['structure', 'vpa', 'ict', 'deriv', 'valuation', 'flow', 'senti', 'macro'],
       speed: 3
     }));
@@ -186,8 +204,8 @@
   }
 
   function startTournamentRound() {
-    if (!selectedTournamentId) return;
-    modeStart('tournament');
+    if (!selectedTournament) return;
+    modeStart('tournament', selectedTournament);
   }
 
   onMount(() => {
