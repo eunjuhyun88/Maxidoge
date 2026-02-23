@@ -94,3 +94,24 @@ export async function getAuthenticatedUser(token: string, userId: string): Promi
 
   return result.rows[0] || null;
 }
+
+export async function findAuthUserForLogin(email: string, nickname: string): Promise<AuthUserRow | null> {
+  const result = await query<AuthUserRow>(
+    `
+      SELECT
+        id,
+        email,
+        nickname,
+        tier,
+        phase,
+        wallet_address
+      FROM users
+      WHERE lower(email) = lower($1)
+        AND lower(nickname) = lower($2)
+      LIMIT 1
+    `,
+    [email, nickname]
+  );
+
+  return result.rows[0] || null;
+}

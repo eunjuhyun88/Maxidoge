@@ -2,11 +2,11 @@
   import {
     walletStore,
     closeWalletModal, setWalletModalStep,
-    registerUser, completeDemoView,
+    applyAuthenticatedUser, clearAuthenticatedUser, completeDemoView,
     connectWallet, signMessage, skipWalletConnection,
     disconnectWallet
   } from '$lib/stores/walletStore';
-  import { registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
+  import { loginAuth, logoutAuth, registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
   import {
     WALLET_PROVIDER_LABEL,
     getPreferredEvmChainCode,
@@ -28,6 +28,7 @@
   let actionError = '';
   let connectingProvider = '';
   let signingMessage = false;
+  let authMode: 'signup' | 'login' = 'signup';
 
   const WALLET_SIGNATURE_RE = /^0x[0-9a-fA-F]{64,512}$/;
   const preferredEvmChain = getPreferredEvmChainCode();
@@ -43,16 +44,26 @@
     return address.startsWith('0x');
   }
 
-  async function handleSignup() {
+  async function handleAuthSubmit() {
     emailError = '';
     actionError = '';
     if (!emailInput.includes('@')) { emailError = 'Valid email required'; return; }
     if (nicknameInput.trim().length < 2) { emailError = 'Nickname: 2+ chars'; return; }
 
     try {
-      await registerAuth({
+      const payload = {
         email: emailInput.trim(),
         nickname: nicknameInput.trim(),
+      };
+
+      if (authMode === 'login') {
+        const res = await loginAuth(payload);
+        applyAuthenticatedUser(res.user);
+        return;
+      }
+
+      const res = await registerAuth({
+        ...payload,
         walletAddress: state.connected ? state.address || undefined : undefined,
         walletSignature: state.connected
           && typeof state.signature === 'string'
@@ -60,9 +71,9 @@
           ? state.signature
           : undefined,
       });
-      registerUser(emailInput.trim(), nicknameInput.trim());
+      applyAuthenticatedUser(res.user);
     } catch (error) {
-      emailError = error instanceof Error ? error.message : 'Failed to register account';
+      emailError = error instanceof Error ? error.message : authMode === 'login' ? 'Failed to login' : 'Failed to register account';
     }
   }
 
@@ -167,8 +178,14 @@
     skipWalletConnection();
   }
 
-  function handleDisconnect() {
+  async function handleDisconnect() {
+    try {
+      await logoutAuth();
+    } catch (error) {
+      console.warn('[WalletModal] logout api failed', error);
+    }
     disconnectWallet();
+    clearAuthenticatedUser();
     closeWalletModal();
   }
 
@@ -198,7 +215,7 @@
       </span>
       <span class="wht">
         {#if step === 'welcome'}WELCOME TO MAXI⚡DOGE
-        {:else if step === 'signup'}CREATE ACCOUNT
+        {:else if step === 'signup'}{authMode === 'login' ? 'LOGIN' : 'CREATE ACCOUNT'}
         {:else if step === 'demo-intro'}DEMO ROUND
         {:else if step === 'wallet-select'}CONNECT WALLET
         {:else if step === 'sign-message'}VERIFY OWNERSHIP
@@ -264,13 +281,27 @@
     {:else if step === 'signup'}
       <div class="wb step-signup">
         <div class="signup-desc">
-          {#if state.connected}
-            Wallet connected! Now set up your trader profile.<br/>
-            <span class="signup-note">Your email is used for notifications and recovery.</span>
+          {#if authMode === 'login'}
+            Enter email + nickname to restore your server session.<br/>
+            <span class="signup-note">MVP login uses email + nickname pair.</span>
           {:else}
-            Create your trader profile with email and nickname.<br/>
-            <span class="signup-note">You can connect a wallet later from settings.</span>
+            {#if state.connected}
+              Wallet connected! Now set up your trader profile.<br/>
+              <span class="signup-note">Your email is used for notifications and recovery.</span>
+            {:else}
+              Create your trader profile with email and nickname.<br/>
+              <span class="signup-note">You can connect a wallet later from settings.</span>
+            {/if}
           {/if}
+        </div>
+
+        <div class="auth-mode-toggle">
+          <button class="auth-mode-btn" class:active={authMode === 'signup'} on:click={() => (authMode = 'signup')}>
+            SIGN UP
+          </button>
+          <button class="auth-mode-btn" class:active={authMode === 'login'} on:click={() => (authMode = 'login')}>
+            LOG IN
+          </button>
         </div>
 
         <div class="form-group">
@@ -288,8 +319,8 @@
           <div class="form-error">{emailError}</div>
         {/if}
 
-        <button class="primary-btn" on:click={handleSignup}>
-          CREATE ACCOUNT →
+        <button class="primary-btn" on:click={handleAuthSubmit}>
+          {authMode === 'login' ? 'LOG IN →' : 'CREATE ACCOUNT →'}
         </button>
         <button class="back-btn" on:click={() => setWalletModalStep(state.connected ? 'connected' : 'wallet-select')}>
           ← Back
@@ -369,7 +400,7 @@
           </button>
         </div>
 
-        <button class="skip-btn" on:click={() => setWalletModalStep('signup')}>
+        <button class="skip-btn" on:click={() => { authMode = 'signup'; setWalletModalStep('signup'); }}>
           Skip wallet — register with email only
         </button>
 
@@ -453,8 +484,11 @@
             View Quick Profile
           </button>
         {:else}
-          <button class="primary-btn" on:click={() => setWalletModalStep('signup')}>
+          <button class="primary-btn" on:click={() => { authMode = 'signup'; setWalletModalStep('signup'); }}>
             CREATE ACCOUNT →
+          </button>
+          <button class="ghost-btn" on:click={() => { authMode = 'login'; setWalletModalStep('signup'); }}>
+            LOG IN →
           </button>
           <a class="ghost-btn passport-link" href="/passport" on:click={handleClose}>
             View Passport first
@@ -614,6 +648,34 @@
     line-height: 1.5; margin-bottom: 14px; text-align: center;
   }
   .signup-note { color: rgba(255,230,0,.5); font-weight: 700; }
+  .auth-mode-toggle {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .auth-mode-btn {
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.04);
+    color: rgba(255,255,255,.7);
+    font-family: var(--fm);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .6px;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .auth-mode-btn:hover {
+    border-color: rgba(255,255,255,.26);
+    color: #fff;
+  }
+  .auth-mode-btn.active {
+    border-color: rgba(255,230,0,.52);
+    background: rgba(255,230,0,.14);
+    color: #fff3bf;
+  }
 
   .form-group { margin-bottom: 10px; }
   .form-label {
