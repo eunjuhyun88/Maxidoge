@@ -2263,4 +2263,38 @@
   .pos-active { color: #ffba30; font-weight: 700; animation: pulse .8s infinite; }
   .draw-count { color: #ffe600; font-weight: 700; }
   .agent-feed-text { flex: 1; color: rgba(255,255,255,.62); font-size: 8px; font-weight: 600; letter-spacing: .5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Desktop resizable zones (x/y for chart-focused areas) */
+  @media (min-width: 1024px) and (pointer: fine) {
+    .chart-container {
+      min-height: 260px;
+      max-height: calc(100vh - 210px);
+      resize: vertical;
+      overflow: hidden;
+    }
+
+    .indicator-strip {
+      width: 100%;
+      max-width: 100%;
+      min-width: 240px;
+      align-self: flex-start;
+      flex-wrap: nowrap;
+      resize: horizontal;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: thin;
+    }
+    .indicator-strip::-webkit-scrollbar { height: 4px; }
+    .indicator-strip::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.22);
+      border-radius: 999px;
+    }
+  }
+
+  @media (max-width: 1023px), (pointer: coarse) {
+    .chart-container,
+    .indicator-strip {
+      resize: none;
+    }
+  }
 </style>

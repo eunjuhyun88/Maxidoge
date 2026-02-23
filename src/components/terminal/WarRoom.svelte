@@ -1393,4 +1393,36 @@
   .wr-conf-fill.long { background: linear-gradient(90deg, rgba(0,255,136,.4), rgba(0,255,136,.8)); }
   .wr-conf-fill.short { background: linear-gradient(90deg, rgba(255,45,85,.4), rgba(255,45,85,.8)); }
   .wr-conf-fill.neutral { background: linear-gradient(90deg, rgba(255,255,255,.15), rgba(255,255,255,.3)); }
+
+  /* Desktop resizable zones (x/y per panel section) */
+  @media (min-width: 1024px) and (pointer: fine) {
+    .ticker-flow,
+    .scan-tabs,
+    .token-tabs {
+      width: 100%;
+      max-width: 100%;
+      min-width: 170px;
+      align-self: flex-start;
+      resize: horizontal;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    .wr-msgs {
+      flex: 1 1 auto;
+      min-height: 180px;
+      max-height: 100%;
+      resize: vertical;
+      overflow-y: auto;
+    }
+  }
+
+  @media (max-width: 1023px), (pointer: coarse) {
+    .ticker-flow,
+    .scan-tabs,
+    .token-tabs,
+    .wr-msgs {
+      resize: none;
+    }
+  }
 </style>

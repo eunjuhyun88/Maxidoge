@@ -17,6 +17,7 @@
 
   // Derive isArena from page store (only actual /arena/* pages, not home /)
   const isArena = derived(page, $p => $p.url.pathname.startsWith('/arena'));
+  const isTerminal = derived(page, $p => $p.url.pathname.startsWith('/terminal'));
 
   // Sync currentView store from URL via effect
   $effect(() => {
@@ -164,7 +165,7 @@
 <div id="app">
   <Header />
   <P0Banner />
-  <div id="main-content">
+  <div id="main-content" class:terminal-route={$isTerminal}>
     {@render children()}
   </div>
   {#if $isArena}
@@ -198,10 +199,18 @@
   }
 
   @media (max-width: 900px) {
+    #app {
+      height: 100svh;
+      min-height: 100svh;
+    }
     #main-content {
       overflow: auto;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
+    }
+    #main-content.terminal-route {
+      overflow: hidden;
+      overscroll-behavior: none;
     }
   }
 </style>

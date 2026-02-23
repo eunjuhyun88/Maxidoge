@@ -20,11 +20,11 @@
 
   // Navigation items
   const NAV_ITEMS = [
-    { path: '/terminal', label: 'TERMINAL', icon: '//'},
-    { path: '/arena', label: 'ARENA', icon: '>>', accent: true },
-    { path: '/signals', label: 'COMMUNITY', icon: '::' },
-    { path: '/oracle', label: 'ORACLE', icon: '**' },
-    { path: '/passport', label: 'HOLDING', icon: '##' },
+    { path: '/terminal', label: 'TERMINAL', desc: '실시간 차트와 스캔' },
+    { path: '/arena', label: 'ARENA', desc: '드래프트와 배틀', accent: true },
+    { path: '/signals', label: 'COMMUNITY', desc: '시그널과 라이브 피드' },
+    { path: '/oracle', label: 'ORACLE', desc: '에이전트 성능 리더보드' },
+    { path: '/passport', label: 'PASSPORT', desc: '내 기록과 포트폴리오' },
   ];
 
   // ─── 페어 변경 시 priceStore에 없는 토큰 가격 자동 fetch ────
@@ -92,11 +92,11 @@
 
 <nav id="nav">
   {#if activePath !== '/'}
-    <button class="nav-back" on:click={handleBack}>←</button>
+    <button class="nav-back" on:click={handleBack}>BACK</button>
   {/if}
 
   <button class="nav-logo" on:click={() => nav('/')}>
-    MAXI<span class="bolt">⚡</span>DOGE
+    MAXIDOGE
   </button>
 
   <div class="nav-sep"></div>
@@ -113,16 +113,16 @@
       class="nav-tab"
       class:active={isActive(item.path)}
       class:arena-accent={item.accent}
+      title={`${item.label} · ${item.desc}`}
+      aria-label={`${item.label}: ${item.desc}`}
       on:click={() => nav(item.path)}
     >
-      <span class="tab-icon">{item.icon}</span>
       {item.label}
     </button>
   {/each}
 
   <div class="nav-right">
     <div class="score-badge">
-      <span class="score-bolt">⚡</span>
       SCORE <b>{Math.round(state.score)}</b>
     </div>
 
@@ -137,7 +137,7 @@
       </button>
     {/if}
 
-    <button class="settings-btn" on:click={() => nav('/settings')}>⚙</button>
+    <button class="settings-btn" title="SETTINGS" aria-label="SETTINGS" on:click={() => nav('/settings')}>SET</button>
   </div>
 </nav>
 
@@ -193,11 +193,6 @@
     transition: opacity .15s;
   }
   .nav-logo:hover { opacity: 0.8; }
-  .bolt {
-    color: #E8967D;
-    text-shadow: 0 0 8px rgba(232,150,125,0.5);
-  }
-
   .nav-sep {
     width: 1px;
     height: 18px;
@@ -236,7 +231,6 @@
     height: 100%;
     display: flex;
     align-items: center;
-    gap: 4px;
     border: none;
     border-right: 1px solid rgba(232,150,125,0.06);
     background: none;
@@ -267,13 +261,6 @@
     background: rgba(232,150,125,0.12);
   }
 
-  .tab-icon {
-    font-size: 8px;
-    opacity: 0.5;
-    line-height: 1;
-  }
-  .nav-tab.active .tab-icon { opacity: 1; }
-
   /* ── Right Section ── */
   .nav-right {
     margin-left: auto;
@@ -301,11 +288,6 @@
     font-size: 10px;
     color: #F0EDE4;
   }
-  .score-bolt {
-    font-size: 10px;
-    text-shadow: 0 0 6px rgba(232,150,125,0.5);
-  }
-
   /* ── Wallet ── */
   .wallet-btn {
     font-family: var(--fp);
@@ -342,17 +324,23 @@
   }
 
   .settings-btn {
-    font-size: 14px;
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: rgba(240,237,228,0.55);
     background: none;
-    border: none;
+    border: 1px solid rgba(232,150,125,0.2);
+    border-radius: 4px;
     cursor: pointer;
-    padding: 2px 4px;
+    padding: 3px 7px;
     transition: all .15s;
-    line-height: 1;
-    opacity: 0.4;
-    filter: grayscale(1);
+    line-height: 1.1;
   }
-  .settings-btn:hover { opacity: 0.8; filter: none; }
+  .settings-btn:hover {
+    color: #F0EDE4;
+    border-color: rgba(232,150,125,0.45);
+    background: rgba(232,150,125,0.08);
+  }
 
   /* Mobile/tablet: prevent header information from clipping */
   @media (max-width: 900px) {
@@ -388,9 +376,7 @@
       font-size: 7px;
       padding: 0 6px;
       letter-spacing: 0.8px;
-      gap: 3px;
     }
-    .tab-icon { display: none; }
 
     .score-badge { display: none; }
     .settings-btn { display: none; }
@@ -415,20 +401,11 @@
     }
 
     .nav-tab {
-      font-size: 0;
-      min-width: 20px;
+      font-size: 6px;
+      min-width: max-content;
       padding: 0 5px;
       justify-content: center;
       border-right-color: rgba(232, 150, 125, 0.03);
-    }
-    .tab-icon {
-      display: inline-block;
-      font-size: 8px;
-      line-height: 1;
-      opacity: 0.9;
-    }
-    .nav-tab.active .tab-icon {
-      opacity: 1;
     }
 
     .selected-ticker { gap: 3px; }
