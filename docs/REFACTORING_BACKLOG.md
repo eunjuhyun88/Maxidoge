@@ -13,11 +13,11 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 
 | ID | 제목 | 설명 | 상태 |
 |----|------|------|------|
-| **S-01** | Agent 브릿지 단일화 | `data/agents.ts`를 `AGENT_POOL` 기반 브릿지로 교체, `AGDEFS` export만 호환 유지 | ⬜ |
+| **S-01** | Agent 브릿지 단일화 | `data/agents.ts`를 `AGENT_POOL` 기반 브릿지로 교체, `AGDEFS` export만 호환 유지 | ✅ |
 | **S-02** | Progression 단일 규칙 확정 | `progressionStore` 신설 기준 계약 정의 (LP, matches, tier, unlockedSpecs) | ⬜ |
-| **S-03** | Price 계약 단일화 | `livePrice` 단일 스토어/이벤트 규약 정의 (심볼, 타임스탬프, source) | ⬜ |
-| **S-04** | Arena DraftSelection 계약 고정 | `{ agentId, specId, weight }[]` + 합계 100 검증 규칙 확정 | ⬜ |
-| **S-05** | Terminal Persistence Migration | `005_terminal_persistence.sql` (scan_runs/scan_signals/agent_chat_messages) | ⬜ |
+| **S-03** | Price 계약 단일화 | `livePrice` 단일 스토어/이벤트 규약 정의 (심볼, 타임스탬프, source) | ✅ |
+| **S-04** | Arena DraftSelection 계약 고정 | `{ agentId, specId, weight }[]` + 합계 100 검증 규칙 확정 | ✅ |
+| **S-05** | Terminal Persistence Migration | `005_terminal_persistence.sql` (scan_runs/scan_signals/agent_chat_messages) | ✅ |
 | **S-06** | Arena Competitive Contract | Arena `mode(PVE/PVP/TOURNAMENT)`, PvP pool 상태, Tournament Ban/Pick payload 계약 확정 | ⬜ |
 
 ### S-01 상세: Agent 브릿지 단일화
