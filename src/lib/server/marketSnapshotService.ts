@@ -13,6 +13,9 @@ import { fetchCoinGeckoGlobal, fetchStablecoinMcap } from '$lib/server/coingecko
 import { fetchDefiLlamaStableMcap } from '$lib/server/defillama';
 import { fetchYahooSeries } from '$lib/server/yahooFinance';
 import { fetchCoinMarketCapQuote } from '$lib/server/coinmarketcap';
+import { fetchCryptoQuantData } from '$lib/server/cryptoquant';
+import { estimateExchangeNetflow } from '$lib/server/etherscan';
+import { fetchTopicSocial } from '$lib/server/lunarcrush';
 import { withTransaction } from '$lib/server/db';
 
 const SNAPSHOT_UNAVAILABLE_CODES = new Set(['42P01', '42703', '23503']);
@@ -48,6 +51,9 @@ export type MarketSnapshotResult = {
     yahoo: boolean;
     coinmarketcap: boolean;
     news: boolean;
+    cryptoquant: boolean;
+    etherscan: boolean;
+    lunarcrush: boolean;
   };
 };
 
@@ -256,6 +262,9 @@ export async function collectMarketSnapshot(
     us10yRes,
     newsRes,
     cmcRes,
+    cryptoQuantRes,
+    ethNetflowRes,
+    lunarCrushRes,
   ] = await Promise.allSettled([
     fetchKlinesServer(symbol, timeframe, 300),
     fetchKlinesServer(symbol, '1h', 300),
@@ -271,6 +280,9 @@ export async function collectMarketSnapshot(
     fetchYahooSeries('^TNX', '1mo', '1d'),
     fetchNews(20),
     fetchCoinMarketCapQuote(token),
+    fetchCryptoQuantData(token.toLowerCase() === 'btc' || token.toLowerCase() === 'eth' ? token.toLowerCase() as 'btc' | 'eth' : 'btc'),
+    estimateExchangeNetflow(),
+    fetchTopicSocial(token.toLowerCase()),
   ]);
 
   const klines = requireKlines(klinesRes);
@@ -287,6 +299,9 @@ export async function collectMarketSnapshot(
   const us10y = us10yRes.status === 'fulfilled' ? us10yRes.value : null;
   const news = newsRes.status === 'fulfilled' ? newsRes.value : [];
   const cmc = cmcRes.status === 'fulfilled' ? cmcRes.value : null;
+  const cryptoQuant = cryptoQuantRes.status === 'fulfilled' ? cryptoQuantRes.value : null;
+  const ethNetflow = ethNetflowRes.status === 'fulfilled' ? ethNetflowRes.value : null;
+  const lunarCrush = lunarCrushRes.status === 'fulfilled' ? lunarCrushRes.value : null;
 
   const stableMcap = llamaStable?.totalMcapUsd ?? geckoStable?.totalMcapUsd ?? null;
   const stableMcapChange24h = llamaStable?.change24hPct ?? geckoStable?.change24hPct ?? null;
@@ -335,12 +350,24 @@ export async function collectMarketSnapshot(
         }
       : undefined,
     onchain: {
+      mvrv: cryptoQuant?.onchainMetrics?.mvrv ?? null,
+      nupl: cryptoQuant?.onchainMetrics?.nupl ?? null,
+      sopr: cryptoQuant?.onchainMetrics?.sopr ?? null,
+      exchangeNetflow: ethNetflow ?? null,
+      whaleActivity: cryptoQuant?.whaleData?.whaleNetflow ?? null,
+      minerFlow: cryptoQuant?.minerData ? (cryptoQuant.minerData as any).outflow24h ?? null : null,
       stablecoinFlow: stableMcapChange24h,
+      activeAddresses: null, // TODO: Etherscan active address count
+      etfFlow: null, // TODO: ETF 유출입 데이터 소스 연결
       realizedCap: cmc?.marketCap ?? null,
+      supplyInProfit: null, // TODO: Glassnode/CryptoQuant 연결
     },
     sentiment: {
       fearGreed: fearGreed.current?.value ?? null,
+      socialVolume: lunarCrush?.interactions24h ?? null,
+      socialSentiment: lunarCrush ? Math.round((lunarCrush.sentiment - 1) / 4 * 100) : null, // 1-5 → 0-100
       newsImpact: buildNewsImpact(news),
+      searchTrend: null, // TODO: Google Trends 연결
     },
     macro: {
       dxy: dxy?.points?.length ? dxy.points[dxy.points.length - 1].close : null,
@@ -435,6 +462,9 @@ export async function collectMarketSnapshot(
       ttlMs: 120_000,
     },
     { source: 'coinmarketcap', dataType: 'quote', payload: cmc, ttlMs: 180_000 },
+    { source: 'cryptoquant', dataType: 'onchain', payload: cryptoQuant, ttlMs: 300_000 },
+    { source: 'etherscan', dataType: 'netflow', payload: { netflow: ethNetflow }, ttlMs: 300_000 },
+    { source: 'lunarcrush', dataType: 'social', payload: lunarCrush, ttlMs: 300_000 },
   ];
 
   let updated = indicators.map((row) => row.indicator);
@@ -471,6 +501,9 @@ export async function collectMarketSnapshot(
       yahoo: Boolean(dxy || spx || us10y),
       coinmarketcap: Boolean(cmc),
       news: Array.isArray(news) && news.length > 0,
+      cryptoquant: Boolean(cryptoQuant?.onchainMetrics),
+      etherscan: ethNetflow !== null,
+      lunarcrush: Boolean(lunarCrush),
     },
   };
 }
