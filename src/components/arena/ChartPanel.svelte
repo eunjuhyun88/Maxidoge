@@ -1572,7 +1572,7 @@
         </div>
 
         <div class="pair-slot">
-          <TokenDropdown value={state.pair} compact on:select={e => changePair(e.detail.pair)} />
+          <TokenDropdown value={state.pair} compact={isCompactViewport()} on:select={e => changePair(e.detail.pair)} />
         </div>
       </div>
 

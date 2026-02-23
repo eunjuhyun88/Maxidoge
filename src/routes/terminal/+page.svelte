@@ -97,15 +97,77 @@
     startPct: number;
     basisPx: number;
   };
+  type MobileTouchResizeState = {
+    tab: MobileTab;
+    axis: MobileResizeAxis;
+    touchId: number;
+    startClient: number;
+    startPct: number;
+    basisPx: number;
+  };
   let mobileResizeState: MobileResizeState | null = null;
+  let mobileTouchResizeState: MobileTouchResizeState | null = null;
   let mobilePanelSizes: Record<MobileTab, MobilePanelSize> = {
     warroom: { widthPct: 100, heightPct: 100 },
     chart: { widthPct: 100, heightPct: 100 },
     intel: { widthPct: 100, heightPct: 100 },
   };
+  type DesktopPanelKey = 'left' | 'center' | 'right';
+  type DesktopPanelSize = { widthPct: number; heightPct: number };
+  const DESKTOP_PANEL_MIN_W = 72;
+  const DESKTOP_PANEL_MAX_W = 100;
+  const DESKTOP_PANEL_MIN_H = 64;
+  const DESKTOP_PANEL_MAX_H = 100;
+  const DESKTOP_PANEL_STEP = 3;
+  let desktopPanelSizes: Record<DesktopPanelKey, DesktopPanelSize> = {
+    left: { widthPct: 100, heightPct: 100 },
+    center: { widthPct: 100, heightPct: 100 },
+    right: { widthPct: 100, heightPct: 100 },
+  };
 
   function clampPercent(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value));
+  }
+
+  function getDesktopPanelStyle(panel: DesktopPanelKey) {
+    const size = desktopPanelSizes[panel];
+    return `--desk-panel-width: ${size.widthPct}%; --desk-panel-height: ${size.heightPct}%`;
+  }
+
+  function resizeDesktopPanelByWheel(panel: DesktopPanelKey, axis: 'x' | 'y', e: WheelEvent) {
+    if (!isDesktop) return;
+    const rawDelta = axis === 'x' ? (Math.abs(e.deltaX) > 0 ? e.deltaX : e.deltaY) : e.deltaY;
+    if (!Number.isFinite(rawDelta) || rawDelta === 0) return;
+
+    const step = e.shiftKey ? DESKTOP_PANEL_STEP * 2 : DESKTOP_PANEL_STEP;
+    const signed = rawDelta > 0 ? step : -step;
+    const current = desktopPanelSizes[panel];
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (axis === 'x') {
+      const nextWidth = clampPercent(current.widthPct + signed, DESKTOP_PANEL_MIN_W, DESKTOP_PANEL_MAX_W);
+      if (nextWidth === current.widthPct) return;
+      desktopPanelSizes = {
+        ...desktopPanelSizes,
+        [panel]: { ...current, widthPct: nextWidth },
+      };
+      return;
+    }
+
+    const nextHeight = clampPercent(current.heightPct + signed, DESKTOP_PANEL_MIN_H, DESKTOP_PANEL_MAX_H);
+    if (nextHeight === current.heightPct) return;
+    desktopPanelSizes = {
+      ...desktopPanelSizes,
+      [panel]: { ...current, heightPct: nextHeight },
+    };
+  }
+
+  function resetDesktopPanelSize(panel: DesktopPanelKey) {
+    desktopPanelSizes = {
+      ...desktopPanelSizes,
+      [panel]: { widthPct: 100, heightPct: 100 },
+    };
   }
 
   function getMobilePanelStyle(tab: MobileTab) {
@@ -149,6 +211,38 @@
     };
   }
 
+  function supportsPointerDrag() {
+    return typeof window !== 'undefined' && 'PointerEvent' in window;
+  }
+
+  function clearBodySelectionIfIdle() {
+    if (!mobileResizeState && !mobileTouchResizeState) {
+      document.body.style.userSelect = '';
+    }
+  }
+
+  function applyMobilePanelDrag(tab: MobileTab, axis: MobileResizeAxis, startPct: number, deltaPct: number) {
+    const current = mobilePanelSizes[tab];
+
+    if (axis === 'x') {
+      const nextWidth = clampPercent(startPct + deltaPct, MOBILE_PANEL_MIN_W, MOBILE_PANEL_MAX_W);
+      if (nextWidth === current.widthPct) return false;
+      mobilePanelSizes = {
+        ...mobilePanelSizes,
+        [tab]: { ...current, widthPct: nextWidth },
+      };
+      return true;
+    }
+
+    const nextHeight = clampPercent(startPct + deltaPct, MOBILE_PANEL_MIN_H, MOBILE_PANEL_MAX_H);
+    if (nextHeight === current.heightPct) return false;
+    mobilePanelSizes = {
+      ...mobilePanelSizes,
+      [tab]: { ...current, heightPct: nextHeight },
+    };
+    return true;
+  }
+
   function startMobilePanelDrag(tab: MobileTab, axis: MobileResizeAxis, e: PointerEvent) {
     if (!isMobile) return;
 
@@ -171,7 +265,7 @@
     };
 
     handle?.setPointerCapture?.(e.pointerId);
-    document.body.style.userSelect = 'none';
+    if (!mobileTouchResizeState) document.body.style.userSelect = 'none';
     e.preventDefault();
 
     gtmEvent('terminal_mobile_panel_resize_start', {
@@ -188,25 +282,8 @@
     const { tab, axis, startClient, startPct, basisPx } = mobileResizeState;
     const currentClient = axis === 'x' ? e.clientX : e.clientY;
     const deltaPct = ((currentClient - startClient) / basisPx) * 100;
-    const current = mobilePanelSizes[tab];
-
-    if (axis === 'x') {
-      const nextWidth = clampPercent(startPct + deltaPct, MOBILE_PANEL_MIN_W, MOBILE_PANEL_MAX_W);
-      if (nextWidth === current.widthPct) return;
-      mobilePanelSizes = {
-        ...mobilePanelSizes,
-        [tab]: { ...current, widthPct: nextWidth },
-      };
-      e.preventDefault();
-      return;
-    }
-
-    const nextHeight = clampPercent(startPct + deltaPct, MOBILE_PANEL_MIN_H, MOBILE_PANEL_MAX_H);
-    if (nextHeight === current.heightPct) return;
-    mobilePanelSizes = {
-      ...mobilePanelSizes,
-      [tab]: { ...current, heightPct: nextHeight },
-    };
+    const changed = applyMobilePanelDrag(tab, axis, startPct, deltaPct);
+    if (!changed) return;
     e.preventDefault();
   }
 
@@ -217,13 +294,83 @@
     const { tab, axis } = mobileResizeState;
     const current = mobilePanelSizes[tab];
     mobileResizeState = null;
-    document.body.style.userSelect = '';
+    clearBodySelectionIfIdle();
 
     gtmEvent('terminal_mobile_panel_resize_end', {
       tab,
       axis,
       width_pct: current.widthPct,
       height_pct: current.heightPct,
+      input: 'pointer',
+    });
+  }
+
+  function startMobilePanelTouchDrag(tab: MobileTab, axis: MobileResizeAxis, e: TouchEvent) {
+    if (!isMobile || supportsPointerDrag()) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    const handle = e.currentTarget as HTMLElement | null;
+    const panel = handle?.closest('.mob-panel-resizable') as HTMLElement | null;
+    if (!panel) return;
+
+    const rect = panel.getBoundingClientRect();
+    const basisPx = axis === 'x' ? rect.width : rect.height;
+    if (!Number.isFinite(basisPx) || basisPx <= 1) return;
+
+    const current = mobilePanelSizes[tab];
+    mobileTouchResizeState = {
+      tab,
+      axis,
+      touchId: touch.identifier,
+      startClient: axis === 'x' ? touch.clientX : touch.clientY,
+      startPct: axis === 'x' ? current.widthPct : current.heightPct,
+      basisPx,
+    };
+
+    if (!mobileResizeState) document.body.style.userSelect = 'none';
+    e.preventDefault();
+
+    gtmEvent('terminal_mobile_panel_resize_start', {
+      tab,
+      axis,
+      width_pct: current.widthPct,
+      height_pct: current.heightPct,
+      input: 'touch',
+    });
+  }
+
+  function onMobilePanelTouchMove(e: TouchEvent) {
+    if (!mobileTouchResizeState) return;
+    const touch = Array.from(e.touches).find(t => t.identifier === mobileTouchResizeState?.touchId);
+    if (!touch) return;
+
+    const { tab, axis, startClient, startPct, basisPx } = mobileTouchResizeState;
+    const currentClient = axis === 'x' ? touch.clientX : touch.clientY;
+    const deltaPct = ((currentClient - startClient) / basisPx) * 100;
+    const changed = applyMobilePanelDrag(tab, axis, startPct, deltaPct);
+    if (!changed) return;
+    e.preventDefault();
+  }
+
+  function finishMobilePanelTouchDrag(e?: TouchEvent) {
+    if (!mobileTouchResizeState) return;
+    if (e) {
+      const ended = Array.from(e.changedTouches).some(t => t.identifier === mobileTouchResizeState?.touchId);
+      if (!ended) return;
+    }
+
+    const { tab, axis } = mobileTouchResizeState;
+    const current = mobilePanelSizes[tab];
+    mobileTouchResizeState = null;
+    clearBodySelectionIfIdle();
+
+    gtmEvent('terminal_mobile_panel_resize_end', {
+      tab,
+      axis,
+      width_pct: current.widthPct,
+      height_pct: current.heightPct,
+      input: 'touch',
     });
   }
 
@@ -412,6 +559,9 @@
     window.addEventListener('pointermove', onMobilePanelPointerMove, { passive: false });
     window.addEventListener('pointerup', finishMobilePanelDrag);
     window.addEventListener('pointercancel', finishMobilePanelDrag);
+    window.addEventListener('touchmove', onMobilePanelTouchMove, { passive: false });
+    window.addEventListener('touchend', finishMobilePanelTouchDrag);
+    window.addEventListener('touchcancel', finishMobilePanelTouchDrag);
 
     // ── Hydrate quick trades (터미널 페이지에서만 호출) ──
     void hydrateQuickTrades();
@@ -463,12 +613,16 @@
 
   onDestroy(() => {
     finishMobilePanelDrag();
+    finishMobilePanelTouchDrag();
     alertEngine.stop();
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('pointermove', onMobilePanelPointerMove);
       window.removeEventListener('pointerup', finishMobilePanelDrag);
       window.removeEventListener('pointercancel', finishMobilePanelDrag);
+      window.removeEventListener('touchmove', onMobilePanelTouchMove);
+      window.removeEventListener('touchend', finishMobilePanelTouchDrag);
+      window.removeEventListener('touchcancel', finishMobilePanelTouchDrag);
     }
   });
 
@@ -667,25 +821,25 @@
   <!-- ═══ MOBILE LAYOUT ═══ -->
   {#if isMobile}
   <div class="terminal-mobile">
-    {#if mobileTab !== 'chart'}
-      <div class="mob-topbar">
-        <div class="mob-topline">
-          <div class="mob-title-wrap">
-            <span class="mob-eyebrow">TERMINAL MOBILE</span>
-            <span class="mob-title">{mobileMeta.label}</span>
-          </div>
-          <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
+    <div class="mob-topbar" class:chart-mode={mobileTab === 'chart'}>
+      <div class="mob-topline">
+        <div class="mob-title-wrap">
+          <span class="mob-eyebrow">TERMINAL MOBILE</span>
+          <span class="mob-title">{mobileMeta.label}</span>
         </div>
-        <div class="mob-meta">
-          <div class="mob-token">
-            <TokenDropdown value={pair} compact on:select={onTokenSelect} />
-          </div>
-          <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
-          <span class="mob-meta-chip subtle">{pair}</span>
-        </div>
-        <div class="mob-desc">{mobileMeta.desc}</div>
+        <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
       </div>
-    {/if}
+      <div class="mob-meta">
+        <div class="mob-token">
+          <TokenDropdown value={pair} compact on:select={onTokenSelect} />
+        </div>
+        <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
+        <span class="mob-meta-chip subtle">{pair}</span>
+      </div>
+      {#if mobileTab !== 'chart'}
+        <div class="mob-desc">{mobileMeta.desc}</div>
+      {/if}
+    </div>
 
     <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
       {#if mobileTab === 'warroom'}
@@ -698,6 +852,7 @@
             aria-label="Resize war room panel width with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'x', e)}
             on:pointerdown={(e) => startMobilePanelDrag('warroom', 'x', e)}
+            on:touchstart={(e) => startMobilePanelTouchDrag('warroom', 'x', e)}
             on:dblclick={() => resetMobilePanelSize('warroom')}
           ></button>
           <button
@@ -707,6 +862,7 @@
             aria-label="Resize war room panel height with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'y', e)}
             on:pointerdown={(e) => startMobilePanelDrag('warroom', 'y', e)}
+            on:touchstart={(e) => startMobilePanelTouchDrag('warroom', 'y', e)}
             on:dblclick={() => resetMobilePanelSize('warroom')}
           ></button>
         </div>
@@ -723,6 +879,7 @@
               aria-label="Resize chart panel width with scroll"
               on:wheel={(e) => resizeMobilePanelByWheel('chart', 'x', e)}
               on:pointerdown={(e) => startMobilePanelDrag('chart', 'x', e)}
+              on:touchstart={(e) => startMobilePanelTouchDrag('chart', 'x', e)}
               on:dblclick={() => resetMobilePanelSize('chart')}
             ></button>
             <button
@@ -732,6 +889,7 @@
               aria-label="Resize chart panel height with scroll"
               on:wheel={(e) => resizeMobilePanelByWheel('chart', 'y', e)}
               on:pointerdown={(e) => startMobilePanelDrag('chart', 'y', e)}
+              on:touchstart={(e) => startMobilePanelTouchDrag('chart', 'y', e)}
               on:dblclick={() => resetMobilePanelSize('chart')}
             ></button>
           </div>
@@ -755,6 +913,7 @@
             aria-label="Resize intel panel width with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('intel', 'x', e)}
             on:pointerdown={(e) => startMobilePanelDrag('intel', 'x', e)}
+            on:touchstart={(e) => startMobilePanelTouchDrag('intel', 'x', e)}
             on:dblclick={() => resetMobilePanelSize('intel')}
           ></button>
           <button
@@ -764,6 +923,7 @@
             aria-label="Resize intel panel height with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('intel', 'y', e)}
             on:pointerdown={(e) => startMobilePanelDrag('intel', 'y', e)}
+            on:touchstart={(e) => startMobilePanelTouchDrag('intel', 'y', e)}
             on:dblclick={() => resetMobilePanelSize('intel')}
           ></button>
         </div>
@@ -821,7 +981,27 @@
     <!-- Left: WAR ROOM or collapsed strip -->
     {#if !leftCollapsed}
       <div class="tl" on:wheel={(e) => resizePanelByWheel('left', e)}>
-        <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scancomplete={handleScanComplete} />
+        <div class="desk-panel-resizable" style={getDesktopPanelStyle('left')}>
+          <div class="desk-panel-body">
+            <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scancomplete={handleScanComplete} />
+          </div>
+          <button
+            type="button"
+            class="desk-resize-handle desk-resize-handle-x"
+            title="WAR ROOM 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize war room panel width with scroll"
+            on:wheel={(e) => resizeDesktopPanelByWheel('left', 'x', e)}
+            on:dblclick={() => resetDesktopPanelSize('left')}
+          ></button>
+          <button
+            type="button"
+            class="desk-resize-handle desk-resize-handle-y"
+            title="WAR ROOM 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize war room panel height with scroll"
+            on:wheel={(e) => resizeDesktopPanelByWheel('left', 'y', e)}
+            on:dblclick={() => resetDesktopPanelSize('left')}
+          ></button>
+        </div>
       </div>
     {:else}
       <button
@@ -850,8 +1030,28 @@
 
     <!-- Center: Chart -->
     <div class="tc">
-      <div class="chart-area chart-area-full">
-        <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
+      <div class="desk-panel-resizable" style={getDesktopPanelStyle('center')}>
+        <div class="desk-panel-body">
+          <div class="chart-area chart-area-full">
+            <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
+          </div>
+        </div>
+        <button
+          type="button"
+          class="desk-resize-handle desk-resize-handle-x"
+          title="CHART 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+          aria-label="Resize chart panel width with scroll"
+          on:wheel={(e) => resizeDesktopPanelByWheel('center', 'x', e)}
+          on:dblclick={() => resetDesktopPanelSize('center')}
+        ></button>
+        <button
+          type="button"
+          class="desk-resize-handle desk-resize-handle-y"
+          title="CHART 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+          aria-label="Resize chart panel height with scroll"
+          on:wheel={(e) => resizeDesktopPanelByWheel('center', 'y', e)}
+          on:dblclick={() => resetDesktopPanelSize('center')}
+        ></button>
       </div>
     </div>
 
@@ -868,7 +1068,27 @@
     <!-- Right: Intel Panel or collapsed strip -->
     {#if !rightCollapsed}
       <div class="tr" on:wheel={(e) => resizePanelByWheel('right', e)}>
-        <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} on:collapse={toggleRight} />
+        <div class="desk-panel-resizable" style={getDesktopPanelStyle('right')}>
+          <div class="desk-panel-body">
+            <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} on:collapse={toggleRight} />
+          </div>
+          <button
+            type="button"
+            class="desk-resize-handle desk-resize-handle-x"
+            title="INTEL 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize intel panel width with scroll"
+            on:wheel={(e) => resizeDesktopPanelByWheel('right', 'x', e)}
+            on:dblclick={() => resetDesktopPanelSize('right')}
+          ></button>
+          <button
+            type="button"
+            class="desk-resize-handle desk-resize-handle-y"
+            title="INTEL 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize intel panel height with scroll"
+            on:wheel={(e) => resizeDesktopPanelByWheel('right', 'y', e)}
+            on:dblclick={() => resetDesktopPanelSize('right')}
+          ></button>
+        </div>
       </div>
     {:else}
       <button
@@ -1031,6 +1251,14 @@
   }
   .tl,
   .tr,
+  .tc {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+  }
   .tab-left {
     overflow-y: auto;
     overflow-x: hidden;
@@ -1047,27 +1275,91 @@
     grid-row: 1;
     grid-column: 5;
   }
-  .tl::-webkit-scrollbar,
-  .tr::-webkit-scrollbar,
   .tab-left::-webkit-scrollbar { width: 3px; }
-  .tl::-webkit-scrollbar-track,
-  .tr::-webkit-scrollbar-track,
   .tab-left::-webkit-scrollbar-track { background: transparent; }
-  .tl::-webkit-scrollbar-thumb,
-  .tr::-webkit-scrollbar-thumb,
   .tab-left::-webkit-scrollbar-thumb {
     background: rgba(232, 150, 125, 0.45);
     border-radius: 3px;
   }
 
   .tc {
+    grid-row: 1;
+    grid-column: 3;
+    flex-direction: column;
+  }
+
+  .desk-panel-resizable {
+    --desk-panel-width: 100%;
+    --desk-panel-height: 100%;
+    position: relative;
+    width: min(100%, var(--desk-panel-width));
+    height: min(100%, var(--desk-panel-height));
+    min-width: 0;
+    min-height: 0;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    transition: width .16s ease, height .16s ease, box-shadow .16s ease, border-color .16s ease;
+    border: 1px solid transparent;
+    border-radius: 10px;
+  }
+  .desk-panel-resizable:hover,
+  .desk-panel-resizable:focus-within {
+    border-color: rgba(232, 150, 125, 0.24);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  }
+  .desk-panel-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    grid-row: 1;
-    grid-column: 3;
-    min-width: 0;
-    min-height: 0;
+  }
+  .desk-resize-handle {
+    position: absolute;
+    z-index: 18;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    opacity: 0.42;
+    transition: opacity .12s ease;
+  }
+  .desk-resize-handle::before {
+    content: '';
+    position: absolute;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: rgba(245, 196, 184, 0.45);
+  }
+  .desk-resize-handle:hover,
+  .desk-resize-handle:focus-visible {
+    opacity: 0.92;
+    outline: none;
+  }
+  .desk-resize-handle-x {
+    top: 12px;
+    right: 0;
+    width: 12px;
+    height: calc(100% - 24px);
+    cursor: ew-resize;
+  }
+  .desk-resize-handle-x::before {
+    width: 2px;
+    height: 46%;
+  }
+  .desk-resize-handle-y {
+    left: 12px;
+    bottom: 0;
+    width: calc(100% - 24px);
+    height: 12px;
+    cursor: ns-resize;
+  }
+  .desk-resize-handle-y::before {
+    width: 46%;
+    height: 2px;
   }
 
   /* Shared live status dot */
@@ -1208,10 +1500,11 @@
      MOBILE — Context header + bottom nav
      ═══════════════════════════════════════════ */
   .terminal-mobile {
+    --mob-nav-slot: calc(72px + env(safe-area-inset-bottom));
     position: absolute;
     inset: 0;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    display: flex;
+    flex-direction: column;
     height: 100%;
     min-height: 0;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
@@ -1227,6 +1520,9 @@
       linear-gradient(135deg, rgba(232, 150, 125, 0.14), rgba(232, 150, 125, 0.04)),
       linear-gradient(180deg, rgba(14, 36, 23, 0.92), rgba(10, 27, 17, 0.94));
     backdrop-filter: blur(8px);
+  }
+  .mob-topbar.chart-mode {
+    padding-bottom: 6px;
   }
   .mob-topline {
     display: flex;
@@ -1311,19 +1607,20 @@
     line-height: 1.35;
   }
   .mob-content {
+    flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     touch-action: pan-y;
-    padding: 10px 10px calc(12px + env(safe-area-inset-bottom));
-    scroll-padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    padding: 10px 10px calc(12px + var(--mob-nav-slot));
+    scroll-padding-bottom: calc(8px + var(--mob-nav-slot));
     display: flex;
     flex-direction: column;
   }
   .mob-content.chart-only {
-    padding: 4px 6px 6px;
+    padding: 4px 6px calc(6px + var(--mob-nav-slot));
   }
   .mob-chart-stack {
     display: flex;
@@ -1451,8 +1748,10 @@
     border-top: 1px solid var(--term-border);
     background: rgba(10, 26, 16, 0.92);
     backdrop-filter: blur(8px);
-    margin-top: auto;
-    position: sticky;
+    margin-top: 0;
+    position: absolute;
+    left: 0;
+    right: 0;
     bottom: 0;
     z-index: 4;
     overflow: hidden;
@@ -2038,7 +2337,7 @@
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-arrow) {
     font-size: 7px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-panel) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-panel:not(.mobile)) {
     width: min(92vw, 320px);
     max-height: min(62vh, 340px);
   }
@@ -2193,6 +2492,9 @@
   }
 
   @media (max-width: 768px) and (max-height: 760px) {
+    .terminal-mobile {
+      --mob-nav-slot: calc(64px + env(safe-area-inset-bottom));
+    }
     .mob-topbar {
       padding: 8px 10px 6px;
     }
@@ -2203,10 +2505,10 @@
       display: none;
     }
     .mob-content {
-      padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
+      padding: 8px 8px calc(10px + var(--mob-nav-slot));
     }
     .mob-content.chart-only {
-      padding: 4px 6px 6px;
+      padding: 4px 6px calc(6px + var(--mob-nav-slot));
     }
     .mob-quick-actions {
       gap: 6px;
