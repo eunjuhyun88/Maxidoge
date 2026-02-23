@@ -89,7 +89,9 @@ npm run preview
 - `npm run gate`: `check + build` 통합 게이트
 - `npm run safe:status`: 현재 브랜치/워크트리/변경 파일 점검
 - `npm run safe:worktree -- <task-name> [base-branch]`: `codex/<task-name>` 브랜치 + 분리 워킹트리 생성
-- `npm run safe:hooks`: 로컬 pre-push 훅 설치 (`.githooks/pre-push`)
+- `npm run safe:hooks`: 로컬 pre-push/post-merge 훅 설치 (`.githooks/*`)
+- `npm run safe:sync`: 브랜치 동기화 (`main`은 `pull --ff-only`, 작업 브랜치는 `origin/main` rebase + check)
+- `npm run safe:sync:gate`: 동기화 후 `check + build`까지 실행
 
 ### Solo Safety Routine (Recommended)
 
@@ -102,13 +104,18 @@ npm run preview
    npm run safe:status
    npm run safe:worktree -- ui-refresh main
    ```
-3. 작업 끝나기 전:
+3. 작업 중 pull/merge 전후:
    ```bash
-   npm run gate
+   npm run safe:sync
+   ```
+4. 작업 끝나기 전:
+   ```bash
+   npm run safe:sync:gate
    ```
 
 참고:
 - pre-push는 기본적으로 `npm run check` + `npm run build`를 자동 실행합니다.
+- post-merge는 pull/merge 직후 `npm run check`를 자동 실행합니다.
 - 긴급 상황에서만 `SKIP_PREPUSH=1 git push`로 일시 우회하세요.
 
 ## 5) Project Structure
