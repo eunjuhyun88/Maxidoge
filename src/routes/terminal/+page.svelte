@@ -25,8 +25,6 @@
   let rightW = 300;      // Intel Panel width
   let containerEl: HTMLDivElement;
   let windowWidth = 1200;
-  let viewportHeight = 0;
-  $: terminalShellStyle = viewportHeight > 0 ? `--term-vh: ${viewportHeight}px;` : '';
 
   const MIN_LEFT = 200;
   const MAX_LEFT = 450;
@@ -90,6 +88,16 @@
   const MOBILE_PANEL_MIN_H = 58;
   const MOBILE_PANEL_MAX_H = 100;
   const MOBILE_PANEL_STEP = 3;
+  type MobileResizeAxis = 'x' | 'y';
+  type MobileResizeState = {
+    tab: MobileTab;
+    axis: MobileResizeAxis;
+    pointerId: number;
+    startClient: number;
+    startPct: number;
+    basisPx: number;
+  };
+  let mobileResizeState: MobileResizeState | null = null;
   let mobilePanelSizes: Record<MobileTab, MobilePanelSize> = {
     warroom: { widthPct: 100, heightPct: 100 },
     chart: { widthPct: 100, heightPct: 100 },
@@ -139,6 +147,84 @@
       ...mobilePanelSizes,
       [tab]: { widthPct: 100, heightPct: 100 },
     };
+  }
+
+  function startMobilePanelDrag(tab: MobileTab, axis: MobileResizeAxis, e: PointerEvent) {
+    if (!isMobile) return;
+
+    const handle = e.currentTarget as HTMLElement | null;
+    const panel = handle?.closest('.mob-panel-resizable') as HTMLElement | null;
+    if (!panel) return;
+
+    const rect = panel.getBoundingClientRect();
+    const basisPx = axis === 'x' ? rect.width : rect.height;
+    if (!Number.isFinite(basisPx) || basisPx <= 1) return;
+
+    const current = mobilePanelSizes[tab];
+    mobileResizeState = {
+      tab,
+      axis,
+      pointerId: e.pointerId,
+      startClient: axis === 'x' ? e.clientX : e.clientY,
+      startPct: axis === 'x' ? current.widthPct : current.heightPct,
+      basisPx,
+    };
+
+    handle?.setPointerCapture?.(e.pointerId);
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+
+    gtmEvent('terminal_mobile_panel_resize_start', {
+      tab,
+      axis,
+      width_pct: current.widthPct,
+      height_pct: current.heightPct,
+    });
+  }
+
+  function onMobilePanelPointerMove(e: PointerEvent) {
+    if (!mobileResizeState || e.pointerId !== mobileResizeState.pointerId) return;
+
+    const { tab, axis, startClient, startPct, basisPx } = mobileResizeState;
+    const currentClient = axis === 'x' ? e.clientX : e.clientY;
+    const deltaPct = ((currentClient - startClient) / basisPx) * 100;
+    const current = mobilePanelSizes[tab];
+
+    if (axis === 'x') {
+      const nextWidth = clampPercent(startPct + deltaPct, MOBILE_PANEL_MIN_W, MOBILE_PANEL_MAX_W);
+      if (nextWidth === current.widthPct) return;
+      mobilePanelSizes = {
+        ...mobilePanelSizes,
+        [tab]: { ...current, widthPct: nextWidth },
+      };
+      e.preventDefault();
+      return;
+    }
+
+    const nextHeight = clampPercent(startPct + deltaPct, MOBILE_PANEL_MIN_H, MOBILE_PANEL_MAX_H);
+    if (nextHeight === current.heightPct) return;
+    mobilePanelSizes = {
+      ...mobilePanelSizes,
+      [tab]: { ...current, heightPct: nextHeight },
+    };
+    e.preventDefault();
+  }
+
+  function finishMobilePanelDrag(e?: PointerEvent) {
+    if (!mobileResizeState) return;
+    if (e && e.pointerId !== mobileResizeState.pointerId) return;
+
+    const { tab, axis } = mobileResizeState;
+    const current = mobilePanelSizes[tab];
+    mobileResizeState = null;
+    document.body.style.userSelect = '';
+
+    gtmEvent('terminal_mobile_panel_resize_end', {
+      tab,
+      axis,
+      width_pct: current.widthPct,
+      height_pct: current.heightPct,
+    });
   }
 
   function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
@@ -283,7 +369,6 @@
 
   function handleResize() {
     windowWidth = window.innerWidth;
-    viewportHeight = window.innerHeight;
   }
 
   async function fetchLiveTicker() {
@@ -323,8 +408,10 @@
 
   onMount(() => {
     windowWidth = window.innerWidth;
-    viewportHeight = window.innerHeight;
     window.addEventListener('resize', handleResize);
+    window.addEventListener('pointermove', onMobilePanelPointerMove, { passive: false });
+    window.addEventListener('pointerup', finishMobilePanelDrag);
+    window.addEventListener('pointercancel', finishMobilePanelDrag);
 
     // ── Hydrate quick trades (터미널 페이지에서만 호출) ──
     void hydrateQuickTrades();
@@ -375,9 +462,13 @@
   });
 
   onDestroy(() => {
+    finishMobilePanelDrag();
     alertEngine.stop();
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('pointermove', onMobilePanelPointerMove);
+      window.removeEventListener('pointerup', finishMobilePanelDrag);
+      window.removeEventListener('pointercancel', finishMobilePanelDrag);
     }
   });
 
@@ -568,7 +659,7 @@
   }
 </script>
 
-<div class="terminal-shell" style={terminalShellStyle}>
+<div class="terminal-shell">
   <div class="term-stars" aria-hidden="true"></div>
   <div class="term-stars term-stars-soft" aria-hidden="true"></div>
   <div class="term-grain" aria-hidden="true"></div>
@@ -606,6 +697,7 @@
             title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize war room panel width with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'x', e)}
+            on:pointerdown={(e) => startMobilePanelDrag('warroom', 'x', e)}
             on:dblclick={() => resetMobilePanelSize('warroom')}
           ></button>
           <button
@@ -614,6 +706,7 @@
             title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize war room panel height with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'y', e)}
+            on:pointerdown={(e) => startMobilePanelDrag('warroom', 'y', e)}
             on:dblclick={() => resetMobilePanelSize('warroom')}
           ></button>
         </div>
@@ -629,6 +722,7 @@
               title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
               aria-label="Resize chart panel width with scroll"
               on:wheel={(e) => resizeMobilePanelByWheel('chart', 'x', e)}
+              on:pointerdown={(e) => startMobilePanelDrag('chart', 'x', e)}
               on:dblclick={() => resetMobilePanelSize('chart')}
             ></button>
             <button
@@ -637,6 +731,7 @@
               title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
               aria-label="Resize chart panel height with scroll"
               on:wheel={(e) => resizeMobilePanelByWheel('chart', 'y', e)}
+              on:pointerdown={(e) => startMobilePanelDrag('chart', 'y', e)}
               on:dblclick={() => resetMobilePanelSize('chart')}
             ></button>
           </div>
@@ -659,6 +754,7 @@
             title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize intel panel width with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('intel', 'x', e)}
+            on:pointerdown={(e) => startMobilePanelDrag('intel', 'x', e)}
             on:dblclick={() => resetMobilePanelSize('intel')}
           ></button>
           <button
@@ -667,6 +763,7 @@
             title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize intel panel height with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('intel', 'y', e)}
+            on:pointerdown={(e) => startMobilePanelDrag('intel', 'y', e)}
             on:dblclick={() => resetMobilePanelSize('intel')}
           ></button>
         </div>
@@ -831,9 +928,10 @@
     --cyan: #9fd5cb;
     --blk: #0a1a0d;
 
-    position: relative;
-    width: 100%;
-    height: var(--term-vh, 100%);
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
     min-height: 0;
     overflow: hidden;
     overflow-x: clip;
@@ -1110,6 +1208,8 @@
      MOBILE — Context header + bottom nav
      ═══════════════════════════════════════════ */
   .terminal-mobile {
+    position: absolute;
+    inset: 0;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     height: 100%;
@@ -1266,6 +1366,8 @@
     margin: 0;
     opacity: 0.45;
     transition: opacity .12s ease;
+    touch-action: none;
+    user-select: none;
   }
   .mob-resize-handle::before {
     content: '';
@@ -1349,7 +1451,9 @@
     border-top: 1px solid var(--term-border);
     background: rgba(10, 26, 16, 0.92);
     backdrop-filter: blur(8px);
-    position: relative;
+    margin-top: auto;
+    position: sticky;
+    bottom: 0;
     z-index: 4;
     overflow: hidden;
   }
