@@ -3,7 +3,7 @@
     walletStore,
     closeWalletModal, setWalletModalStep,
     applyAuthenticatedUser, clearAuthenticatedUser, completeDemoView,
-    connectWallet, signMessage, skipWalletConnection,
+    connectWallet, signMessage,
     disconnectWallet
   } from '$lib/stores/walletStore';
   import { loginAuth, logoutAuth, registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
@@ -28,7 +28,7 @@
   let actionError = '';
   let connectingProvider = '';
   let signingMessage = false;
-  let authMode: 'signup' | 'login' = 'signup';
+  let preferredAuthStep: 'signup' | 'login' = 'signup';
 
   const WALLET_SIGNATURE_RE = /^0x[0-9a-fA-F]{64,512}$/;
   const preferredEvmChain = getPreferredEvmChainCode();
@@ -44,36 +44,69 @@
     return address.startsWith('0x');
   }
 
-  async function handleAuthSubmit() {
+  function clearAuthErrors() {
     emailError = '';
     actionError = '';
-    if (!emailInput.includes('@')) { emailError = 'Valid email required'; return; }
-    if (nicknameInput.trim().length < 2) { emailError = 'Nickname: 2+ chars'; return; }
+  }
 
+  function openWalletFirst(mode: 'signup' | 'login') {
+    preferredAuthStep = mode;
+    clearAuthErrors();
+    setWalletModalStep('wallet-select');
+  }
+
+  function openAuthStep(mode: 'signup' | 'login') {
+    preferredAuthStep = mode;
+    clearAuthErrors();
+    setWalletModalStep(mode);
+  }
+
+  function parseAuthInput(): { email: string; nickname: string } | null {
+    clearAuthErrors();
+    if (!emailInput.includes('@')) { emailError = 'Valid email required'; return null; }
+    if (nicknameInput.trim().length < 2) { emailError = 'Nickname: 2+ chars'; return null; }
+    return {
+      email: emailInput.trim(),
+      nickname: nicknameInput.trim(),
+    };
+  }
+
+  async function handleSignupSubmit() {
+    const payload = parseAuthInput();
+    if (!payload) return;
+    if (!state.connected || !state.address) {
+      actionError = 'Connect wallet first before signup.';
+      setWalletModalStep('wallet-select');
+      return;
+    }
     try {
-      const payload = {
-        email: emailInput.trim(),
-        nickname: nicknameInput.trim(),
-      };
-
-      if (authMode === 'login') {
-        const res = await loginAuth(payload);
-        applyAuthenticatedUser(res.user);
-        return;
-      }
-
       const res = await registerAuth({
         ...payload,
-        walletAddress: state.connected ? state.address || undefined : undefined,
-        walletSignature: state.connected
-          && typeof state.signature === 'string'
+        walletAddress: state.address || undefined,
+        walletSignature: typeof state.signature === 'string'
           && WALLET_SIGNATURE_RE.test(state.signature)
           ? state.signature
           : undefined,
       });
       applyAuthenticatedUser(res.user);
     } catch (error) {
-      emailError = error instanceof Error ? error.message : authMode === 'login' ? 'Failed to login' : 'Failed to register account';
+      emailError = error instanceof Error ? error.message : 'Failed to register account';
+    }
+  }
+
+  async function handleLoginSubmit() {
+    const payload = parseAuthInput();
+    if (!payload) return;
+    if (!state.connected || !state.address) {
+      actionError = 'Connect wallet first before login.';
+      setWalletModalStep('wallet-select');
+      return;
+    }
+    try {
+      const res = await loginAuth(payload);
+      applyAuthenticatedUser(res.user);
+    } catch (error) {
+      emailError = error instanceof Error ? error.message : 'Failed to login';
     }
   }
 
@@ -174,10 +207,6 @@
     }
   }
 
-  function handleSkip() {
-    skipWalletConnection();
-  }
-
   async function handleDisconnect() {
     try {
       await logoutAuth();
@@ -204,7 +233,7 @@
     <div class="wh">
       <span class="whi">
         {#if step === 'welcome'}🐕
-        {:else if step === 'signup'}📝
+        {:else if step === 'signup' || step === 'login'}📝
         {:else if step === 'demo-intro'}🎮
         {:else if step === 'wallet-select'}🔗
         {:else if step === 'sign-message'}✍️
@@ -215,7 +244,8 @@
       </span>
       <span class="wht">
         {#if step === 'welcome'}WELCOME TO MAXI⚡DOGE
-        {:else if step === 'signup'}{authMode === 'login' ? 'LOGIN' : 'CREATE ACCOUNT'}
+        {:else if step === 'signup'}CREATE ACCOUNT
+        {:else if step === 'login'}LOGIN
         {:else if step === 'demo-intro'}DEMO ROUND
         {:else if step === 'wallet-select'}CONNECT WALLET
         {:else if step === 'sign-message'}VERIFY OWNERSHIP
@@ -231,7 +261,7 @@
       <div class="global-error">{actionError}</div>
     {/if}
 
-    <!-- ═══ STEP: WELCOME (P0 - No wallet forced) ═══ -->
+    <!-- ═══ STEP: WELCOME (wallet-first auth) ═══ -->
     {#if step === 'welcome'}
       <div class="wb step-welcome">
         <div class="welcome-hero">
@@ -264,8 +294,11 @@
           </div>
         </div>
 
-        <button class="primary-btn" on:click={() => setWalletModalStep('wallet-select')}>
-          🔗 GET STARTED
+        <button class="primary-btn" on:click={() => openWalletFirst('signup')}>
+          🆕 SIGN UP WITH WALLET
+        </button>
+        <button class="primary-btn secondary" on:click={() => openWalletFirst('login')}>
+          🔐 LOG IN WITH WALLET
         </button>
         <button class="ghost-btn" on:click={handleClose}>
           Just Looking Around
@@ -273,35 +306,16 @@
 
         <div class="step-hint">
           <span class="hint-icon">💡</span>
-          Connect your wallet first, then create your trader profile.
+          Wallet connection is the default path for both login and signup.
         </div>
       </div>
 
-    <!-- ═══ STEP: SIGNUP (Email + Nickname — after wallet) ═══ -->
+    <!-- ═══ STEP: SIGNUP (wallet connected) ═══ -->
     {:else if step === 'signup'}
       <div class="wb step-signup">
         <div class="signup-desc">
-          {#if authMode === 'login'}
-            Enter email + nickname to restore your server session.<br/>
-            <span class="signup-note">MVP login uses email + nickname pair.</span>
-          {:else}
-            {#if state.connected}
-              Wallet connected! Now set up your trader profile.<br/>
-              <span class="signup-note">Your email is used for notifications and recovery.</span>
-            {:else}
-              Create your trader profile with email and nickname.<br/>
-              <span class="signup-note">You can connect a wallet later from settings.</span>
-            {/if}
-          {/if}
-        </div>
-
-        <div class="auth-mode-toggle">
-          <button class="auth-mode-btn" class:active={authMode === 'signup'} on:click={() => (authMode = 'signup')}>
-            SIGN UP
-          </button>
-          <button class="auth-mode-btn" class:active={authMode === 'login'} on:click={() => (authMode = 'login')}>
-            LOG IN
-          </button>
+          Wallet connected. Create your trader profile.<br/>
+          <span class="signup-note">Email + nickname are used as your account identity.</span>
         </div>
 
         <div class="form-group">
@@ -319,10 +333,46 @@
           <div class="form-error">{emailError}</div>
         {/if}
 
-        <button class="primary-btn" on:click={handleAuthSubmit}>
-          {authMode === 'login' ? 'LOG IN →' : 'CREATE ACCOUNT →'}
+        <button class="primary-btn" on:click={handleSignupSubmit}>
+          CREATE ACCOUNT →
         </button>
-        <button class="back-btn" on:click={() => setWalletModalStep(state.connected ? 'connected' : 'wallet-select')}>
+        <button class="ghost-btn" on:click={() => openAuthStep('login')}>
+          Already have account? LOG IN →
+        </button>
+        <button class="back-btn" on:click={() => setWalletModalStep('connected')}>
+          ← Back
+        </button>
+      </div>
+
+    <!-- ═══ STEP: LOGIN (wallet connected) ═══ -->
+    {:else if step === 'login'}
+      <div class="wb step-login">
+        <div class="signup-desc">
+          Wallet connected. Log in with your existing account.<br/>
+          <span class="signup-note">Current login format: email + nickname pair.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="login-email">EMAIL</label>
+          <input id="login-email" class="form-input" type="email" bind:value={emailInput} placeholder="your@email.com" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="login-nickname">NICKNAME</label>
+          <input id="login-nickname" class="form-input" type="text" bind:value={nicknameInput} placeholder="DogeTrader42" maxlength="16" />
+        </div>
+
+        {#if emailError}
+          <div class="form-error">{emailError}</div>
+        {/if}
+
+        <button class="primary-btn" on:click={handleLoginSubmit}>
+          LOG IN →
+        </button>
+        <button class="ghost-btn" on:click={() => openAuthStep('signup')}>
+          New here? CREATE ACCOUNT →
+        </button>
+        <button class="back-btn" on:click={() => setWalletModalStep('connected')}>
           ← Back
         </button>
       </div>
@@ -369,12 +419,12 @@
         </button>
       </div>
 
-    <!-- ═══ STEP: WALLET SELECT (P2 - Optional) ═══ -->
+    <!-- ═══ STEP: WALLET SELECT (required) ═══ -->
     {:else if step === 'wallet-select'}
       <div class="wb step-wallet">
-        <div class="wallet-header-note">
-          <span class="whn-badge">OPTIONAL</span>
-          <span class="whn-text">Connect a wallet to unlock DeFi features</span>
+        <div class="wallet-header-note required">
+          <span class="whn-badge">REQUIRED</span>
+          <span class="whn-text">Connect wallet first to continue {preferredAuthStep === 'login' ? 'login' : 'signup'}.</span>
         </div>
 
         <div class="wallet-list">
@@ -400,12 +450,8 @@
           </button>
         </div>
 
-        <button class="skip-btn" on:click={() => { authMode = 'signup'; setWalletModalStep('signup'); }}>
-          Skip wallet — register with email only
-        </button>
-
         <div class="wallet-note">
-          You can always connect a wallet from Settings or your Profile.
+          Wallet verification is the default authentication path.
         </div>
       </div>
 
@@ -460,7 +506,7 @@
         </button>
       </div>
 
-    <!-- ═══ STEP: CONNECTED (wallet done → now signup) ═══ -->
+    <!-- ═══ STEP: CONNECTED (wallet done → login/signup) ═══ -->
     {:else if step === 'connected'}
       <div class="wb step-connected">
         <div class="connected-hero">
@@ -484,19 +530,25 @@
             View Quick Profile
           </button>
         {:else}
-          <button class="primary-btn" on:click={() => { authMode = 'signup'; setWalletModalStep('signup'); }}>
-            CREATE ACCOUNT →
-          </button>
-          <button class="ghost-btn" on:click={() => { authMode = 'login'; setWalletModalStep('signup'); }}>
-            LOG IN →
-          </button>
-          <a class="ghost-btn passport-link" href="/passport" on:click={handleClose}>
-            View Passport first
-          </a>
-          <button class="ghost-btn" on:click={handleClose}>
-            Skip — I'll register later
-          </button>
+          {#if preferredAuthStep === 'login'}
+            <button class="primary-btn" on:click={() => openAuthStep('login')}>
+              LOG IN →
+            </button>
+            <button class="ghost-btn" on:click={() => openAuthStep('signup')}>
+              Need new account? CREATE ACCOUNT →
+            </button>
+          {:else}
+            <button class="primary-btn" on:click={() => openAuthStep('signup')}>
+              CREATE ACCOUNT →
+            </button>
+            <button class="ghost-btn" on:click={() => openAuthStep('login')}>
+              Already have account? LOG IN →
+            </button>
+          {/if}
         {/if}
+        <button class="disconnect-btn" on:click={handleDisconnect}>
+          LOG OUT & DISCONNECT
+        </button>
       </div>
 
     <!-- ═══ STEP: PROFILE (connected user) ═══ -->
@@ -546,7 +598,7 @@
             🐕 VIEW FULL PASSPORT →
           </a>
           <button class="disconnect-btn" on:click={handleDisconnect}>
-            Disconnect Wallet
+            LOG OUT & DISCONNECT
           </button>
         {:else}
           <button class="primary-btn" on:click={() => setWalletModalStep('wallet-select')}>
@@ -559,14 +611,14 @@
       </div>
     {/if}
 
-    <!-- Phase indicator (new flow: wallet → signup) -->
+    <!-- Phase indicator (wallet-first auth flow) -->
     <div class="phase-dots">
-      {#each ['welcome','wallet-select','connected','signup'] as s, i}
+      {#each ['welcome', 'wallet-select', 'connected', step === 'login' ? 'login' : 'signup'] as s, i}
         <div class="pdot" class:active={step === s} class:done={
           (s === 'welcome' && (state.connected || state.email !== null)) ||
           (s === 'wallet-select' && state.connected) ||
           (s === 'connected' && state.connected) ||
-          (s === 'signup' && state.email !== null)
+          ((s === 'signup' || s === 'login') && state.email !== null)
         }></div>
       {/each}
     </div>
@@ -648,34 +700,6 @@
     line-height: 1.5; margin-bottom: 14px; text-align: center;
   }
   .signup-note { color: rgba(255,230,0,.5); font-weight: 700; }
-  .auth-mode-toggle {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    margin-bottom: 12px;
-  }
-  .auth-mode-btn {
-    height: 32px;
-    border-radius: 8px;
-    border: 1px solid rgba(255,255,255,.14);
-    background: rgba(255,255,255,.04);
-    color: rgba(255,255,255,.7);
-    font-family: var(--fm);
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: .6px;
-    cursor: pointer;
-    transition: all .15s ease;
-  }
-  .auth-mode-btn:hover {
-    border-color: rgba(255,255,255,.26);
-    color: #fff;
-  }
-  .auth-mode-btn.active {
-    border-color: rgba(255,230,0,.52);
-    background: rgba(255,230,0,.14);
-    color: #fff3bf;
-  }
 
   .form-group { margin-bottom: 10px; }
   .form-label {
@@ -736,6 +760,11 @@
     display: flex; align-items: center; gap: 8px;
     margin-bottom: 12px;
   }
+  .wallet-header-note.required .whn-badge {
+    background: rgba(255,45,85,.16);
+    border-color: rgba(255,45,85,.35);
+    color: #ff8fa8;
+  }
   .whn-badge {
     font-family: var(--fm); font-size: 7px; font-weight: 700;
     background: rgba(0,255,136,.15); color: var(--grn);
@@ -760,14 +789,6 @@
     background: rgba(255,230,0,.1); color: var(--yel);
     font-weight: 700; letter-spacing: .5px;
   }
-
-  .skip-btn {
-    width: 100%; padding: 8px;
-    background: none; border: 1px dashed rgba(255,255,255,.15);
-    color: rgba(255,255,255,.35); font-family: var(--fm); font-size: 9px;
-    cursor: pointer; border-radius: 8px; transition: all .15s;
-  }
-  .skip-btn:hover { color: rgba(255,255,255,.6); border-color: rgba(255,255,255,.3); }
 
   .wallet-note {
     text-align: center; font-family: var(--fm); font-size: 7px;
@@ -923,6 +944,17 @@
     margin-top: 6px;
   }
   .primary-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 #000; }
+  .primary-btn.secondary {
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    border-color: rgba(255,255,255,.2);
+    box-shadow: none;
+  }
+  .primary-btn.secondary:hover {
+    transform: none;
+    box-shadow: none;
+    background: rgba(255,255,255,.2);
+  }
 
   .ghost-btn {
     width: 100%; padding: 8px;

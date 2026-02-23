@@ -37,7 +37,7 @@ export interface WalletState {
 
   // UI state
   showWalletModal: boolean;
-  walletModalStep: 'welcome' | 'wallet-select' | 'connecting' | 'sign-message' | 'connected' | 'signup' | 'demo-intro' | 'profile';
+  walletModalStep: 'welcome' | 'wallet-select' | 'connecting' | 'sign-message' | 'connected' | 'signup' | 'login' | 'demo-intro' | 'profile';
   signature: string | null;
 }
 
@@ -179,11 +179,13 @@ export async function hydrateAuthSession(force = false) {
 
 export function openWalletModal() {
   walletStore.update(w => {
-    // New flow: wallet first → then email
-    const step = w.connected && w.email ? 'profile'
-      : w.connected && !w.email ? 'signup'
-      : w.tier !== 'guest' && !w.connected ? 'wallet-select'
-      : 'welcome';
+    // Wallet-first flow:
+    // connected + account => profile
+    // connected only => choose login/signup from connected step
+    // account only (session restored) but no wallet => reconnect wallet first
+    const step = w.connected
+      ? (w.email ? 'profile' : 'connected')
+      : (w.email ? 'wallet-select' : 'welcome');
     return { ...w, showWalletModal: true, walletModalStep: step };
   });
 }
