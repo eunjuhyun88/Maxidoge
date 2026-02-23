@@ -1,13 +1,34 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { gameState } from '$lib/stores/gameState';
   import { sfx } from '$lib/audio/sfx';
   import { startMatch as engineStartMatch, resetPhaseInit } from '$lib/engine/gameLoop';
+  import {
+    listActiveTournaments,
+    registerTournament,
+    getTournamentBracket,
+    type TournamentActiveRecord,
+    type TournamentBracketMatch,
+    type TournamentType,
+  } from '$lib/api/arenaApi';
 
   const PVP_UNLOCK_MATCHES = 10;
   const TOURNAMENT_UNLOCK_LP = 500;
   const TOURNAMENT_UNLOCK_PVP_WINS = 5;
 
   let selectedMode: 'pve' | 'pvp' | 'tournament' = 'pve';
+  let tournaments: TournamentActiveRecord[] = [];
+  let tournamentsLoading = false;
+  let tournamentsError: string | null = null;
+  let selectedTournamentId: string | null = null;
+  let bracketLoading = false;
+  let bracketError: string | null = null;
+  let bracketRound = 1;
+  let bracketMatches: TournamentBracketMatch[] = [];
+  let registerLoading = false;
+  let registerMessage: string | null = null;
+  let selectedTournament: TournamentActiveRecord | null = null;
+  let canRegisterTournament = false;
 
   $: walletLabel = 'Silver';
   $: pveRecord = `${$gameState.wins}W-${$gameState.losses}L`;
@@ -17,6 +38,11 @@
   $: pvpUnlocked = $gameState.matchN >= PVP_UNLOCK_MATCHES;
   $: tournamentUnlocked = $gameState.lp >= TOURNAMENT_UNLOCK_LP && pvpWins >= TOURNAMENT_UNLOCK_PVP_WINS;
   $: activeCount = Math.min(5, Math.max(1, ($gameState.matchN % 5) + 1));
+  $: selectedTournament = tournaments.find((t) => t.tournamentId === selectedTournamentId) ?? tournaments[0] ?? null;
+  $: canRegisterTournament =
+    !!selectedTournament &&
+    selectedTournament.status === 'REG_OPEN' &&
+    selectedTournament.registeredPlayers < selectedTournament.maxPlayers;
 
   $: activeMatches = [
     {
@@ -50,12 +76,9 @@
     }
   ];
 
-  function enterMode(mode: 'pve' | 'pvp' | 'tournament') {
-    if (mode === 'pvp' && !pvpUnlocked) return;
-    if (mode === 'tournament' && !tournamentUnlocked) return;
-
-    selectedMode = mode;
+  function modeStart(mode: 'pve' | 'pvp' | 'tournament') {
     sfx.enter();
+    selectedMode = mode;
 
     gameState.update((s) => ({
       ...s,
@@ -67,6 +90,109 @@
     resetPhaseInit();
     engineStartMatch();
   }
+
+  async function loadTournaments() {
+    tournamentsLoading = true;
+    tournamentsError = null;
+    try {
+      const res = await listActiveTournaments(12);
+      tournaments = res.records;
+      if (!selectedTournamentId && tournaments.length > 0) {
+        selectedTournamentId = tournaments[0].tournamentId;
+      }
+    } catch (err) {
+      tournamentsError = err instanceof Error ? err.message : '토너먼트 목록 로드 실패';
+      tournaments = [];
+    } finally {
+      tournamentsLoading = false;
+    }
+  }
+
+  async function loadBracket(tournamentId: string) {
+    bracketLoading = true;
+    bracketError = null;
+    registerMessage = null;
+    try {
+      const res = await getTournamentBracket(tournamentId);
+      bracketRound = res.round;
+      bracketMatches = res.matches;
+    } catch (err) {
+      bracketError = err instanceof Error ? err.message : '브래킷 로드 실패';
+      bracketMatches = [];
+    } finally {
+      bracketLoading = false;
+    }
+  }
+
+  async function openTournamentPanel() {
+    selectedMode = 'tournament';
+    await loadTournaments();
+    if (selectedTournamentId) {
+      await loadBracket(selectedTournamentId);
+    }
+  }
+
+  async function chooseTournament(tournamentId: string) {
+    selectedTournamentId = tournamentId;
+    await loadBracket(tournamentId);
+  }
+
+  async function onTournamentRegister() {
+    if (!selectedTournamentId) return;
+    registerLoading = true;
+    registerMessage = null;
+    try {
+      const res = await registerTournament(selectedTournamentId);
+      const lpLabel = res.lpDelta === 0 ? '' : ` · ${res.lpDelta > 0 ? '+' : ''}${res.lpDelta} LP`;
+      registerMessage = `등록 완료 · Seed #${res.seed}${lpLabel}`;
+      await loadTournaments();
+      await loadBracket(selectedTournamentId);
+    } catch (err) {
+      registerMessage = err instanceof Error ? err.message : '토너먼트 등록 실패';
+    } finally {
+      registerLoading = false;
+    }
+  }
+
+  function formatStartAt(iso: string): string {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return '-';
+    return d.toLocaleString('ko-KR', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  }
+
+  function formatTournamentType(type: TournamentType): string {
+    if (type === 'DAILY_SPRINT') return 'Daily Sprint';
+    if (type === 'WEEKLY_CUP') return 'Weekly Cup';
+    if (type === 'SEASON_CHAMPIONSHIP') return 'Season Championship';
+    return type;
+  }
+
+  function enterMode(mode: 'pve' | 'pvp' | 'tournament') {
+    if (mode === 'pvp' && !pvpUnlocked) return;
+    if (mode === 'tournament' && !tournamentUnlocked) return;
+
+    if (mode === 'tournament') {
+      openTournamentPanel();
+      return;
+    }
+
+    modeStart(mode);
+  }
+
+  function startTournamentRound() {
+    if (!selectedTournamentId) return;
+    modeStart('tournament');
+  }
+
+  onMount(() => {
+    loadTournaments();
+  });
 </script>
 
 <div class="arena-lobby-v3">
@@ -130,6 +256,93 @@
         </div>
       </button>
     </section>
+
+    {#if selectedMode === 'tournament' && tournamentUnlocked}
+      <section class="panel panel-tournament">
+        <div class="panel-title panel-title-inline">
+          <span>WEEKLY TOURNAMENT</span>
+          <div class="tour-header-actions">
+            <button class="tour-action-btn" on:click={loadTournaments} disabled={tournamentsLoading}>새로고침</button>
+            <button class="tour-action-btn primary" on:click={startTournamentRound} disabled={!selectedTournamentId}>라운드 시작 →</button>
+          </div>
+        </div>
+
+        {#if tournamentsLoading}
+          <div class="tour-empty">토너먼트 목록 로딩 중...</div>
+        {:else if tournamentsError}
+          <div class="tour-empty tour-error">{tournamentsError}</div>
+        {:else if tournaments.length === 0}
+          <div class="tour-empty">현재 등록 가능한 토너먼트가 없습니다.</div>
+        {:else}
+          <div class="tour-layout">
+            <div class="tour-list">
+              {#each tournaments as t}
+                <button
+                  class="tour-item"
+                  class:active={selectedTournamentId === t.tournamentId}
+                  on:click={() => chooseTournament(t.tournamentId)}
+                >
+                  <div class="tour-row top">
+                    <span class="tour-type">{formatTournamentType(t.type)}</span>
+                    <span class="tour-status">{t.status}</span>
+                  </div>
+                  <div class="tour-row mid">
+                    <span class="tour-pair">{t.pair}</span>
+                    <span class="tour-time">{formatStartAt(t.startAt)}</span>
+                  </div>
+                  <div class="tour-row bottom">
+                    <span>{t.registeredPlayers}/{t.maxPlayers}명</span>
+                    <span>Entry {t.entryFeeLp} LP</span>
+                  </div>
+                </button>
+              {/each}
+            </div>
+
+            <div class="tour-bracket">
+              <div class="tour-bracket-head">
+                <div>
+                  <div class="tour-bracket-title">{selectedTournament ? selectedTournament.pair : '-'}</div>
+                  <div class="tour-bracket-sub">Round {bracketRound} · Bracket</div>
+                </div>
+                <button
+                  class="tour-register-btn"
+                  on:click={onTournamentRegister}
+                  disabled={!canRegisterTournament || registerLoading}
+                >
+                  {registerLoading ? '등록 중...' : canRegisterTournament ? '등록하기' : '등록 마감'}
+                </button>
+              </div>
+
+              {#if registerMessage}
+                <div class="tour-register-msg">{registerMessage}</div>
+              {/if}
+
+              {#if bracketLoading}
+                <div class="tour-empty">브래킷 로딩 중...</div>
+              {:else if bracketError}
+                <div class="tour-empty tour-error">{bracketError}</div>
+              {:else if bracketMatches.length === 0}
+                <div class="tour-empty">참가자가 모이면 브래킷이 생성됩니다.</div>
+              {:else}
+                <div class="tour-bracket-rows">
+                  {#each bracketMatches as m}
+                    <div class="tour-bracket-row">
+                      <div class="slot">{m.matchIndex}</div>
+                      <div class="players">
+                        <span>{m.userA ? m.userA.nickname : 'TBD'}</span>
+                        <span>vs</span>
+                        <span>{m.userB ? m.userB.nickname : 'BYE'}</span>
+                      </div>
+                      <div class="winner">{m.winnerId ? '완료' : '대기'}</div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      </section>
+    {/if}
 
     <section class="panel">
       <div class="panel-title">진행 중 매치 (2)</div>
@@ -513,6 +726,216 @@
     margin-bottom: 0;
   }
 
+  .panel-title-inline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .tour-header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .tour-action-btn {
+    border: 1px solid rgba(232, 150, 125, 0.45);
+    background: rgba(232, 150, 125, 0.08);
+    color: #e8967d;
+    font-family: var(--fd, monospace);
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    padding: 7px 11px;
+    cursor: pointer;
+  }
+
+  .tour-action-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .tour-action-btn.primary {
+    border-color: rgba(0, 212, 255, 0.55);
+    background: rgba(0, 212, 255, 0.09);
+    color: #66cce6;
+  }
+
+  .tour-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 12px;
+  }
+
+  .tour-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 210px;
+  }
+
+  .tour-item {
+    width: 100%;
+    text-align: left;
+    border: 1px solid rgba(220, 185, 112, 0.28);
+    background: rgba(16, 26, 22, 0.9);
+    padding: 10px;
+    color: rgba(240, 237, 228, 0.9);
+    cursor: pointer;
+  }
+
+  .tour-item.active {
+    border-color: rgba(232, 150, 125, 0.66);
+    box-shadow: inset 0 0 0 1px rgba(232, 150, 125, 0.18);
+  }
+
+  .tour-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tour-row + .tour-row {
+    margin-top: 6px;
+  }
+
+  .tour-type {
+    color: #dcb970;
+    font-family: var(--fd, monospace);
+    font-size: 12px;
+  }
+
+  .tour-status {
+    color: rgba(240, 237, 228, 0.58);
+    font-family: var(--fd, monospace);
+    font-size: 10px;
+  }
+
+  .tour-pair {
+    color: #f0ede4;
+    font-family: var(--fd, monospace);
+    font-size: 14px;
+  }
+
+  .tour-time,
+  .tour-row.bottom span {
+    color: rgba(240, 237, 228, 0.62);
+    font-family: var(--fd, monospace);
+    font-size: 11px;
+  }
+
+  .tour-bracket {
+    border: 1px solid rgba(0, 212, 255, 0.24);
+    background: rgba(12, 23, 19, 0.9);
+    padding: 10px;
+    min-height: 210px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tour-bracket-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .tour-bracket-title {
+    color: #66cce6;
+    font-family: var(--fd, monospace);
+    font-size: 16px;
+  }
+
+  .tour-bracket-sub {
+    color: rgba(240, 237, 228, 0.58);
+    font-family: var(--fd, monospace);
+    font-size: 11px;
+  }
+
+  .tour-register-btn {
+    border: 1px solid rgba(220, 185, 112, 0.62);
+    background: rgba(220, 185, 112, 0.12);
+    color: #dcb970;
+    font-family: var(--fd, monospace);
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+
+  .tour-register-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .tour-register-msg {
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    background: rgba(0, 255, 136, 0.08);
+    color: #00cc88;
+    padding: 7px 10px;
+    font-family: var(--fd, monospace);
+    font-size: 11px;
+  }
+
+  .tour-bracket-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .tour-bracket-row {
+    border: 1px solid rgba(102, 204, 230, 0.26);
+    background: rgba(17, 28, 24, 0.86);
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 48px;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 9px;
+  }
+
+  .tour-bracket-row .slot {
+    color: #66cce6;
+    font-family: var(--fd, monospace);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .tour-bracket-row .players {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: #f0ede4;
+    font-family: var(--fd, monospace);
+    font-size: 11px;
+    min-width: 0;
+  }
+
+  .tour-bracket-row .winner {
+    color: rgba(240, 237, 228, 0.62);
+    font-family: var(--fd, monospace);
+    font-size: 10px;
+    text-align: right;
+  }
+
+  .tour-empty {
+    color: rgba(240, 237, 228, 0.65);
+    font-family: var(--fd, monospace);
+    font-size: 12px;
+    padding: 14px 8px;
+    text-align: center;
+    border: 1px dashed rgba(240, 237, 228, 0.2);
+    background: rgba(13, 21, 18, 0.85);
+  }
+
+  .tour-error {
+    color: #ff5e7a;
+    border-color: rgba(255, 94, 122, 0.4);
+    background: rgba(255, 94, 122, 0.09);
+  }
+
   .status-footer {
     position: fixed;
     left: 0;
@@ -564,6 +987,10 @@
     .mode-grid {
       grid-template-columns: 1fr;
     }
+
+    .tour-layout {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 768px) {
@@ -587,6 +1014,16 @@
       font-size: 17px;
     }
 
+    .panel-title-inline {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .tour-header-actions {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+
     .row {
       flex-direction: column;
       align-items: flex-start;
@@ -595,6 +1032,15 @@
     .right {
       width: 100%;
       justify-content: flex-end;
+    }
+
+    .tour-bracket-row {
+      grid-template-columns: 24px minmax(0, 1fr) 38px;
+      padding: 7px 8px;
+    }
+
+    .tour-bracket-row .players {
+      font-size: 10px;
     }
   }
 </style>
