@@ -74,7 +74,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 
 | ID | 제목 | 설명 | depends | 상태 |
 |----|------|------|---------|------|
-| **B-01** | Arena API 스캐폴딩 | `/api/arena/match/*` 생성 (create/draft/analyze/hypothesis/result) | S-04 | ⬜ |
+| **B-01** | Arena API 스캐폴딩 | `/api/arena/match/*` 생성 (create/draft/analyze/hypothesis/result) | S-04 | ✅ |
 | **B-02** | 지표 엔진 분리 | `scanEngine.ts` 서버 분리, 타입 통합, 클라이언트 임포트 전면 제거 | — | ✅ |
 | **B-03** | agentPipeline 구현 | `agentPipeline.ts` + 8개 에이전트 scoring 모듈 + `computeFinalPrediction` | B-02 | ✅ |
 | **B-04** | exitOptimizer 구현 | SL/TP 3전략 + EV/R:R 계산 | B-02 | ✅ |
