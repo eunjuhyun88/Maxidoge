@@ -10,7 +10,7 @@ import type { EIP712TypedData } from '$lib/server/polymarketClob';
 
 export interface UnifiedPosition {
   id: string;
-  type: 'quick_trade' | 'polymarket';
+  type: 'quick_trade' | 'polymarket' | 'gmx';
   asset: string;
   direction: string;
   entryPrice: number;
@@ -186,7 +186,7 @@ export async function closePolymarketPosition(
  * Fetch unified positions (QuickTrades + Polymarket).
  */
 export async function fetchUnifiedPositions(params?: {
-  type?: 'all' | 'quick_trade' | 'polymarket';
+  type?: 'all' | 'quick_trade' | 'polymarket' | 'gmx';
   limit?: number;
 }): Promise<{ ok: boolean; positions: UnifiedPosition[]; total: number } | null> {
   const qs = new URLSearchParams();

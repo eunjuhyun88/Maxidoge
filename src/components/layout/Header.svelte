@@ -22,8 +22,7 @@
   const NAV_ITEMS = [
     { path: '/terminal', label: 'TERMINAL', desc: '실시간 차트와 스캔' },
     { path: '/arena', label: 'ARENA', desc: '드래프트와 배틀', accent: true },
-    { path: '/signals', label: 'COMMUNITY', desc: '시그널과 라이브 피드' },
-    { path: '/oracle', label: 'ORACLE', desc: '에이전트 성능 리더보드' },
+    { path: '/signals', label: 'COMMUNITY', desc: '시그널, 오라클 리더보드, 라이브 피드' },
     { path: '/passport', label: 'PASSPORT', desc: '내 기록과 포트폴리오' },
   ];
 

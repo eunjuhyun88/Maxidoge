@@ -117,3 +117,9 @@ export const polymarketOrderLimiter = createRateLimiter({ windowMs: 60_000, max:
 
 /** Polymarket status polling: 30 per minute per IP */
 export const polymarketStatusLimiter = createRateLimiter({ windowMs: 60_000, max: 30 });
+
+/** GMX order preparation: 10 per minute per IP */
+export const gmxOrderLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });
+
+/** GMX read operations (positions, balance, markets): 60 per minute per IP */
+export const gmxReadLimiter = createRateLimiter({ windowMs: 60_000, max: 60 });

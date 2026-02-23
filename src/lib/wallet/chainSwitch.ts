@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Chain Switching (Polygon for Polymarket)
+// MAXI⚡DOGE — Chain Switching (Polygon + Arbitrum)
 // ═══════════════════════════════════════════════════════════════
-// Ensures the user's wallet is on Polygon before signing
-// Polymarket orders. Falls back to add chain if not configured.
+// Ensures the user's wallet is on the correct chain before
+// executing transactions. Polygon for Polymarket, Arbitrum for GMX.
 
 import { resolveEvmProvider, type WalletProviderKey } from './providers';
 
@@ -82,4 +82,65 @@ export async function getCurrentChainId(providerKey: WalletProviderKey): Promise
 export async function isOnPolygon(providerKey: WalletProviderKey): Promise<boolean> {
   const chainId = await getCurrentChainId(providerKey);
   return chainId === 137;
+}
+
+// ═══ Arbitrum (for GMX V2) ═══════════════════════════════════
+
+const ARBITRUM_CHAIN_ID = '0xa4b1'; // 42161 in hex
+const ARBITRUM_CHAIN_CONFIG = {
+  chainId: ARBITRUM_CHAIN_ID,
+  chainName: 'Arbitrum One',
+  nativeCurrency: {
+    name: 'Ether',
+    symbol: 'ETH',
+    decimals: 18,
+  },
+  rpcUrls: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com'],
+  blockExplorerUrls: ['https://arbiscan.io'],
+};
+
+/**
+ * Ensure the user's wallet is connected to Arbitrum.
+ *
+ * @param providerKey Which wallet to use
+ * @returns true if successfully on Arbitrum, false if user rejected
+ */
+export async function ensureArbitrumChain(providerKey: WalletProviderKey): Promise<boolean> {
+  const provider = await resolveEvmProvider(providerKey);
+  if (!provider) return false;
+
+  try {
+    const currentChainId = await provider.request({ method: 'eth_chainId' }) as string;
+    if (currentChainId?.toLowerCase() === ARBITRUM_CHAIN_ID) {
+      return true; // Already on Arbitrum
+    }
+
+    await provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: ARBITRUM_CHAIN_ID }],
+    });
+    return true;
+  } catch (switchError: any) {
+    if (switchError?.code === 4902) {
+      try {
+        await provider.request({
+          method: 'wallet_addEthereumChain',
+          params: [ARBITRUM_CHAIN_CONFIG],
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    if (switchError?.code === 4001) return false;
+    return false;
+  }
+}
+
+/**
+ * Check if the wallet is currently on Arbitrum.
+ */
+export async function isOnArbitrum(providerKey: WalletProviderKey): Promise<boolean> {
+  const chainId = await getCurrentChainId(providerKey);
+  return chainId === 42161;
 }

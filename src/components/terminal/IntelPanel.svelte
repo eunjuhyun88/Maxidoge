@@ -4,10 +4,11 @@
   import { openTrades, closeQuickTrade } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
   import { predictMarkets, loadPolymarkets } from '$lib/stores/predictStore';
-  import { unifiedPositions, polymarketPositions, hydratePositions, positionsLoading } from '$lib/stores/positionStore';
+  import { unifiedPositions, polymarketPositions, gmxPositions, hydratePositions, positionsLoading } from '$lib/stores/positionStore';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import { parseOutcomePrices } from '$lib/api/polymarket';
   import PolymarketBetPanel from './PolymarketBetPanel.svelte';
+  import GmxTradePanel from './GmxTradePanel.svelte';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -37,8 +38,9 @@
 
   let activeTab = 'intel';
   let innerTab = 'chat';
-  let posSubTab: 'all' | 'trades' | 'markets' = 'all';
+  let posSubTab: 'all' | 'trades' | 'perps' | 'markets' = 'all';
   let betMarket: any = null; // market to open in BetPanel
+  let showGmxPanel = false;  // GmxTradePanel visibility
   let tabCollapsed = false;
   let _uiStateSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -812,10 +814,11 @@
 
       {:else if activeTab === 'positions'}
         <div class="rp-body">
-          <!-- Position sub-tabs: ALL / TRADES / MARKETS -->
+          <!-- Position sub-tabs: ALL / TRADES / PERPS / MARKETS -->
           <div class="pos-sub-tabs">
             <button class="pos-sub" class:active={posSubTab === 'all'} on:click={() => posSubTab = 'all'}>ALL</button>
             <button class="pos-sub" class:active={posSubTab === 'trades'} on:click={() => posSubTab = 'trades'}>TRADES</button>
+            <button class="pos-sub" class:active={posSubTab === 'perps'} on:click={() => posSubTab = 'perps'}>PERPS</button>
             <button class="pos-sub" class:active={posSubTab === 'markets'} on:click={() => posSubTab = 'markets'}>MARKETS</button>
           </div>
 
@@ -846,6 +849,53 @@
                 <span class="pos-empty-icon">📊</span>
                 <span class="pos-empty-txt">NO OPEN TRADES</span>
               </div>
+            {/if}
+          {/if}
+
+          <!-- ALL / PERPS: GMX On-chain Positions -->
+          {#if posSubTab === 'all' || posSubTab === 'perps'}
+            {#if $gmxPositions.length > 0}
+              <div class="pos-header">
+                <span class="pos-title">⚡ PERPS</span>
+                <span class="pos-cnt">{$gmxPositions.length}</span>
+              </div>
+              {#each $gmxPositions as pos (pos.id)}
+                <div class="pos-row gmx-row">
+                  <span class="pos-dir" class:long={pos.direction === 'LONG'} class:short={pos.direction === 'SHORT'}>
+                    {pos.direction === 'LONG' ? '▲' : '▼'}
+                  </span>
+                  <div class="pos-info">
+                    <span class="pos-pair">{pos.asset}</span>
+                    <span class="pos-entry">
+                      {pos.direction} · {pos.meta?.leverage ?? ''}x · ${pos.amountUsdc?.toFixed(0) ?? '0'} USDC
+                    </span>
+                  </div>
+                  <div class="gmx-pnl-col">
+                    <span class="pos-pnl" style="color:{pos.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                      {pos.pnlPercent >= 0 ? '+' : ''}{pos.pnlPercent.toFixed(2)}%
+                    </span>
+                    {#if pos.pnlUsdc != null}
+                      <span class="gmx-pnl-usd" style="color:{pos.pnlUsdc >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                        {pos.pnlUsdc >= 0 ? '+' : ''}{pos.pnlUsdc.toFixed(2)}$
+                      </span>
+                    {/if}
+                  </div>
+                  <span class="pos-status-badge gmx-status">{pos.status}</span>
+                </div>
+              {/each}
+            {/if}
+
+            <!-- Open Perp button -->
+            {#if posSubTab === 'perps'}
+              <button class="gmx-open-btn" on:click={() => showGmxPanel = true}>
+                ⚡ OPEN PERP POSITION
+              </button>
+              {#if $gmxPositions.length === 0}
+                <div class="pos-empty-mini">
+                  <span class="pos-empty-icon">⚡</span>
+                  <span class="pos-empty-txt">NO PERP POSITIONS</span>
+                </div>
+              {/if}
             {/if}
           {/if}
 
@@ -900,7 +950,7 @@
           {/if}
 
           <!-- Empty state for ALL tab -->
-          {#if posSubTab === 'all' && openCount === 0 && $polymarketPositions.length === 0}
+          {#if posSubTab === 'all' && openCount === 0 && $polymarketPositions.length === 0 && $gmxPositions.length === 0}
             <div class="pos-empty-mini">
               <span class="pos-empty-icon">📊</span>
               <span class="pos-empty-txt">NO OPEN POSITIONS</span>
@@ -910,6 +960,11 @@
 
         <!-- Polymarket Bet Panel (slide-up) -->
         <PolymarketBetPanel market={betMarket} onClose={() => { betMarket = null; }} />
+
+        <!-- GMX Trade Panel (slide-up) -->
+        {#if showGmxPanel}
+          <GmxTradePanel onClose={() => { showGmxPanel = false; }} />
+        {/if}
       {/if}
     </div>
   {/if}
@@ -1580,6 +1635,23 @@
     transition: all .15s;
   }
   .picks-rescan:hover { background: rgba(255,230,0,.12); color: var(--yel); border-color: rgba(255,230,0,.3); }
+
+  /* ── GMX Perps ── */
+  .gmx-row { border-left: 2px solid rgba(255,140,0,.25); }
+  .gmx-pnl-col { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; min-width: 50px; }
+  .gmx-pnl-usd { font-family: var(--fm); font-size: 8px; font-weight: 700; }
+  .gmx-status {
+    background: rgba(255,140,0,.1); color: rgba(255,140,0,.7);
+  }
+  .gmx-open-btn {
+    width: 100%; padding: 8px 12px; margin-top: 4px;
+    font-family: var(--fm); font-size: 10px; font-weight: 900;
+    letter-spacing: 1.5px; text-align: center;
+    background: rgba(255,140,0,.08); border: 1px solid rgba(255,140,0,.25);
+    border-radius: 5px; color: #ff8c00; cursor: pointer;
+    transition: all .15s;
+  }
+  .gmx-open-btn:hover { background: rgba(255,140,0,.15); border-color: rgba(255,140,0,.4); color: #ffa033; }
 
   /* Desktop resizable zones (x/y per intel section) */
   @media (min-width: 1024px) and (pointer: fine) {

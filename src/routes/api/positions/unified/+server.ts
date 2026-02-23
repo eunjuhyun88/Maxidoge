@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
 // MAXI⚡DOGE — Unified Positions API
 // ═══════════════════════════════════════════════════════════════
-// Returns QuickTrades + Polymarket positions in unified format.
+// Returns QuickTrades + Polymarket + GMX positions in unified format.
 //
-// GET /api/positions/unified?type=all|quick_trade|polymarket&limit=50
+// GET /api/positions/unified?type=all|quick_trade|polymarket|gmx&limit=50
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
@@ -12,7 +12,7 @@ import { query } from '$lib/server/db';
 
 interface UnifiedPosition {
   id: string;
-  type: 'quick_trade' | 'polymarket';
+  type: 'quick_trade' | 'polymarket' | 'gmx';
   asset: string;
   direction: string;
   entryPrice: number;
@@ -107,6 +107,56 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
             walletAddress: row.wallet_address,
           },
         });
+      }
+    }
+
+    // Fetch GMX positions
+    if (typeFilter === 'all' || typeFilter === 'gmx') {
+      try {
+        const gmxResult = await query(
+          `SELECT * FROM gmx_positions
+           WHERE user_id = $1 AND status = 'open'
+           ORDER BY created_at DESC
+           LIMIT $2`,
+          [user.id, limit],
+        );
+
+        for (const row of gmxResult.rows) {
+          const entry = row.entry_price ? Number(row.entry_price) : 0;
+          const mark = row.mark_price ? Number(row.mark_price) : entry;
+          const pnlUsd = row.pnl_usd ? Number(row.pnl_usd) : null;
+          const pnlPct = row.pnl_percent ? Number(row.pnl_percent) : (
+            entry > 0 ? ((mark - entry) / entry) * 100 * (row.direction === 'SHORT' ? -1 : 1) : 0
+          );
+
+          positions.push({
+            id: row.id,
+            type: 'gmx',
+            asset: row.market_label ?? 'GMX',
+            direction: row.direction,
+            entryPrice: entry,
+            currentPrice: mark,
+            pnlPercent: Math.round(pnlPct * 100) / 100,
+            pnlUsdc: pnlUsd,
+            amountUsdc: Number(row.collateral_usd),
+            status: row.order_status ?? row.status,
+            openedAt: new Date(row.created_at).getTime(),
+            meta: {
+              sizeUsd: Number(row.size_usd),
+              leverage: Number(row.leverage),
+              liquidationPrice: row.liquidation_price ? Number(row.liquidation_price) : null,
+              txHash: row.tx_hash,
+              orderKey: row.order_key,
+              positionKey: row.position_key,
+              marketAddress: row.market_address,
+              walletAddress: row.wallet_address,
+              slPrice: row.sl_price ? Number(row.sl_price) : null,
+              tpPrice: row.tp_price ? Number(row.tp_price) : null,
+            },
+          });
+        }
+      } catch {
+        // gmx_positions table might not exist yet — ignore
       }
     }
 
