@@ -3,13 +3,15 @@ import { updateAllPrices } from '$lib/stores/quickTradeStore';
 import { updateTrackedPrices } from '$lib/stores/trackedSignalStore';
 import { buildPriceMapHash, toNumericPriceMap } from '$lib/utils/price';
 
-const PERSIST_INTERVAL_MS = 30_000;
+const PERSIST_INTERVAL_VISIBLE_MS = 30_000;
+const PERSIST_INTERVAL_HIDDEN_MS = 120_000;
 
 let _started = false;
 let _unsubscribe: (() => void) | null = null;
 let _persistTimer: ReturnType<typeof setInterval> | null = null;
 let _latestSnapshot: LivePriceMap = {};
 let _lastPersistHash = '';
+let _visibilityHandler: (() => void) | null = null;
 
 function applyLocalSync(snapshot: LivePriceMap): void {
   updateAllPrices(snapshot, { syncServer: false });
@@ -25,6 +27,24 @@ function persistQuickTrades(snapshot: LivePriceMap): void {
   updateAllPrices(snapshot, { syncServer: true });
 }
 
+function getPersistIntervalMs(): number {
+  if (typeof document === 'undefined') return PERSIST_INTERVAL_VISIBLE_MS;
+  return document.visibilityState === 'visible'
+    ? PERSIST_INTERVAL_VISIBLE_MS
+    : PERSIST_INTERVAL_HIDDEN_MS;
+}
+
+function restartPersistTimer(): void {
+  if (_persistTimer) {
+    clearInterval(_persistTimer);
+    _persistTimer = null;
+  }
+
+  _persistTimer = setInterval(() => {
+    persistQuickTrades(_latestSnapshot);
+  }, getPersistIntervalMs());
+}
+
 export function ensureLivePriceSyncStarted(): void {
   if (typeof window === 'undefined') return;
   if (_started) return;
@@ -38,9 +58,17 @@ export function ensureLivePriceSyncStarted(): void {
     applyLocalSync(snapshot);
   });
 
-  _persistTimer = setInterval(() => {
-    persistQuickTrades(_latestSnapshot);
-  }, PERSIST_INTERVAL_MS);
+  restartPersistTimer();
+
+  if (typeof document !== 'undefined') {
+    _visibilityHandler = () => {
+      restartPersistTimer();
+      if (document.visibilityState === 'visible') {
+        persistQuickTrades(_latestSnapshot);
+      }
+    };
+    document.addEventListener('visibilitychange', _visibilityHandler);
+  }
 }
 
 export function stopLivePriceSync(): void {
@@ -54,5 +82,9 @@ export function stopLivePriceSync(): void {
   if (_persistTimer) {
     clearInterval(_persistTimer);
     _persistTimer = null;
+  }
+  if (_visibilityHandler && typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', _visibilityHandler);
+    _visibilityHandler = null;
   }
 }
