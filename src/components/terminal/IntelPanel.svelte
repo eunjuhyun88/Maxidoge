@@ -393,9 +393,11 @@
       _pairRefetchTimer = setTimeout(() => {
         headlineOffset = 0;
         headlineHasMore = true;
-        fetchLiveHeadlines(false);
-        fetchLiveEvents();
-        fetchLiveFlow();
+        void Promise.allSettled([
+          fetchLiveHeadlines(false),
+          fetchLiveEvents(),
+          fetchLiveFlow(),
+        ]);
       }, 300);
     }
     _prevPair = pair;
@@ -428,10 +430,12 @@
       }
     })();
 
-    // ── Load live market data ──
-    fetchLiveHeadlines();
-    fetchLiveEvents();
-    fetchLiveFlow();
+    // ── Load live market data (parallel) ──
+    void Promise.allSettled([
+      fetchLiveHeadlines(),
+      fetchLiveEvents(),
+      fetchLiveFlow(),
+    ]);
   });
 
   onDestroy(() => {

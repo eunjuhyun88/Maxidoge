@@ -32,7 +32,8 @@ export const GET: RequestHandler = async ({ url }) => {
       headers: {
         'Accept': 'application/json',
         'User-Agent': 'MAXI-DOGE/1.0'
-      }
+      },
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!res.ok) {
@@ -58,7 +59,7 @@ export const GET: RequestHandler = async ({ url }) => {
       icon: m.icon || ''
     }));
 
-    return json({ markets });
+    return json({ markets }, { headers: { 'Cache-Control': 'public, max-age=120' } });
   } catch (err) {
     console.error('[Polymarket proxy] Error:', err);
     return json({ error: 'Failed to fetch from Polymarket', markets: [] }, { status: 502 });

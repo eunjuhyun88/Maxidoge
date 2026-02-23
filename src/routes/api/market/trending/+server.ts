@@ -100,12 +100,26 @@ export const GET: RequestHandler = async ({ url }) => {
   try {
     const results: Partial<TrendingResponse> = {};
 
-    if (section === 'all' || section === 'trending') {
-      const [trendingRaw, mostVisitedRaw] = await Promise.allSettled([
-        fetchCMCTrending(limitParam),
-        fetchCMCMostVisited(limitParam),
-      ]);
+    // Launch ALL sections in parallel when section=all
+    const wantTrending = section === 'all' || section === 'trending';
+    const wantGainers = section === 'all' || section === 'gainers';
+    const wantDex = section === 'all' || section === 'dex';
 
+    const [trendingBatch, gainersBatch, dexBatch] = await Promise.allSettled([
+      wantTrending
+        ? Promise.allSettled([fetchCMCTrending(limitParam), fetchCMCMostVisited(limitParam)])
+        : Promise.resolve(null),
+      wantGainers
+        ? fetchCMCGainersLosers(Math.min(limitParam, 15))
+        : Promise.resolve(null),
+      wantDex
+        ? Promise.allSettled([fetchDexTokenBoostsTop(10), fetchDexTokenProfilesLatest(10)])
+        : Promise.resolve(null),
+    ]);
+
+    // Process trending results
+    if (wantTrending && trendingBatch.status === 'fulfilled' && trendingBatch.value) {
+      const [trendingRaw, mostVisitedRaw] = trendingBatch.value as PromiseSettledResult<CMCTrendingCoin[]>[];
       const trending = trendingRaw.status === 'fulfilled' ? trendingRaw.value : [];
       const mostVisited = mostVisitedRaw.status === 'fulfilled' ? mostVisitedRaw.value : [];
 
@@ -115,17 +129,16 @@ export const GET: RequestHandler = async ({ url }) => {
       }));
     }
 
-    if (section === 'all' || section === 'gainers') {
-      const glRes = await fetchCMCGainersLosers(Math.min(limitParam, 15));
+    // Process gainers/losers results
+    if (wantGainers && gainersBatch.status === 'fulfilled' && gainersBatch.value) {
+      const glRes = gainersBatch.value as { gainers: CMCGainerLoser[]; losers: CMCGainerLoser[] };
       results.gainers = glRes.gainers;
       results.losers = glRes.losers;
     }
 
-    if (section === 'all' || section === 'dex') {
-      const [boostsRaw, profilesRaw] = await Promise.allSettled([
-        fetchDexTokenBoostsTop(10),
-        fetchDexTokenProfilesLatest(10),
-      ]);
+    // Process DEX results
+    if (wantDex && dexBatch.status === 'fulfilled' && dexBatch.value) {
+      const [boostsRaw, profilesRaw] = dexBatch.value as PromiseSettledResult<any[]>[];
 
       const boosts = boostsRaw.status === 'fulfilled' ? (boostsRaw.value ?? []) : [];
       const profiles = profilesRaw.status === 'fulfilled' ? (profilesRaw.value ?? []) : [];

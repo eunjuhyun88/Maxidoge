@@ -8,6 +8,7 @@ import { toBinanceInterval } from '$lib/utils/timeframe';
 
 const BASE = 'https://api.binance.com';
 const DATA_BASE = 'https://data-api.binance.vision';
+const FETCH_TIMEOUT = 8000; // 8s timeout for all REST calls
 
 // ─── Types ───────────────────────────────────────────────────
 export interface BinanceKline {
@@ -66,7 +67,7 @@ export async function fetchKlines(
   const normalizedInterval = toBinanceInterval(interval);
   let url = `${BASE}/api/v3/klines?symbol=${symbol}&interval=${normalizedInterval}&limit=${limit}`;
   if (endTime) url += `&endTime=${endTime}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
   if (!res.ok) throw new Error(`Binance klines error: ${res.status}`);
 
   const data: any[][] = await res.json();
@@ -84,7 +85,7 @@ export async function fetchKlines(
 // ─── Fetch Current Price ─────────────────────────────────────
 export async function fetchPrice(symbol: string): Promise<number> {
   const url = `${BASE}/api/v3/ticker/price?symbol=${symbol}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
   if (!res.ok) throw new Error(`Binance price error: ${res.status}`);
   const data: BinanceTicker = await res.json();
   return parseFloat(data.price);
@@ -94,7 +95,7 @@ export async function fetchPrice(symbol: string): Promise<number> {
 export async function fetchPrices(symbols: string[]): Promise<Record<string, number>> {
   const query = symbols.map(s => `"${s}"`).join(',');
   const url = `${BASE}/api/v3/ticker/price?symbols=[${query}]`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
   if (!res.ok) throw new Error(`Binance prices error: ${res.status}`);
   const data: BinanceTicker[] = await res.json();
 
@@ -108,7 +109,7 @@ export async function fetchPrices(symbols: string[]): Promise<Record<string, num
 // ─── Fetch 24hr Ticker ───────────────────────────────────────
 export async function fetch24hr(symbol: string): Promise<Binance24hr> {
   const url = `${BASE}/api/v3/ticker/24hr?symbol=${symbol}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
   if (!res.ok) throw new Error(`Binance 24hr error: ${res.status}`);
   return await res.json();
 }
@@ -117,7 +118,7 @@ export async function fetch24hr(symbol: string): Promise<Binance24hr> {
 export async function fetch24hrMulti(symbols: string[]): Promise<Binance24hr[]> {
   const query = symbols.map(s => `"${s}"`).join(',');
   const url = `${BASE}/api/v3/ticker/24hr?symbols=[${query}]`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
   if (!res.ok) throw new Error(`Binance 24hr multi error: ${res.status}`);
   return await res.json();
 }

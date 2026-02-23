@@ -7,7 +7,7 @@ import { env } from '$env/dynamic/private';
 import { getCached, setCache } from './providers/cache';
 
 const BASE = 'https://api.dune.com/api/v1';
-const CACHE_TTL = 300_000; // 5 min (Dune queries are expensive)
+const CACHE_TTL = 7_200_000; // 2hr (Dune queries are expensive & pre-computed)
 
 function apiKey(): string {
   return env.DUNE_API_KEY ?? '';
@@ -33,6 +33,7 @@ async function duneFetch<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${BASE}${path}`, {
       headers: { 'X-Dune-API-Key': key },
+      signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) {
       console.error(`[Dune] ${res.status} ${res.statusText}`);
@@ -65,6 +66,7 @@ export async function executeQuery(
         'Content-Type': 'application/json',
       },
       body: params ? JSON.stringify({ query_parameters: params }) : '{}',
+      signal: AbortSignal.timeout(10000),
     });
     if (!execResponse.ok) return null;
     const exec = (await execResponse.json()) as { execution_id: string };

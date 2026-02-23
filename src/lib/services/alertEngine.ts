@@ -52,6 +52,7 @@ const NEW_ENTRY_NOTIFY = true;                    // notify when new coin enters
 // ── State ────────────────────────────────────────────────────
 
 let _timer: ReturnType<typeof setInterval> | null = null;
+let _initTimer: ReturnType<typeof setTimeout> | null = null;
 let _running = false;
 let _intervalMs = DEFAULT_INTERVAL_MS;
 let _previousSnapshot: ScanSnapshot | null = null;
@@ -202,7 +203,8 @@ export const alertEngine = {
     _intervalMs = Math.max(MIN_INTERVAL_MS, intervalMs ?? DEFAULT_INTERVAL_MS);
 
     // Initial scan after 30s delay (let the page load first)
-    setTimeout(() => {
+    _initTimer = setTimeout(() => {
+      _initTimer = null;
       if (!_running) return;
       void runScanCycle();
     }, 30_000);
@@ -218,6 +220,10 @@ export const alertEngine = {
   /** Stop background monitoring. */
   stop() {
     _running = false;
+    if (_initTimer) {
+      clearTimeout(_initTimer);
+      _initTimer = null;
+    }
     if (_timer) {
       clearInterval(_timer);
       _timer = null;

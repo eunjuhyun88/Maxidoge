@@ -8,27 +8,19 @@ export const GET: RequestHandler = async ({ cookies }) => {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
-    const userRow = await query(
-      `
-        SELECT id, email, nickname, wallet_address, tier, phase, avatar, created_at, updated_at
-        FROM users
-        WHERE id = $1
-        LIMIT 1
-      `,
-      [user.id]
-    );
-
-    const profileRow = await query(
-      `
-        SELECT
-          user_id, display_tier, total_matches, wins, losses,
-          streak, best_streak, total_lp, total_pnl, badges, updated_at
-        FROM user_profiles
-        WHERE user_id = $1
-        LIMIT 1
-      `,
-      [user.id]
-    );
+    const [userRow, profileRow] = await Promise.all([
+      query(
+        `SELECT id, email, nickname, wallet_address, tier, phase, avatar, created_at, updated_at
+         FROM users WHERE id = $1 LIMIT 1`,
+        [user.id]
+      ),
+      query(
+        `SELECT user_id, display_tier, total_matches, wins, losses,
+                streak, best_streak, total_lp, total_pnl, badges, updated_at
+         FROM user_profiles WHERE user_id = $1 LIMIT 1`,
+        [user.id]
+      ),
+    ]);
 
     const u: any = userRow.rows[0] || {};
     const p: any = profileRow.rows[0] || {};

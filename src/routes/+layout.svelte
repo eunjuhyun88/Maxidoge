@@ -36,6 +36,8 @@
   const SYMBOL_MAP: Record<string, string> = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', SOLUSDT: 'SOL' };
 
   let globalWsCleanup: (() => void) | null = null;
+  let _wsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  let _wsFullFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   onMount(async () => {
     // 1) REST bootstrap — 초기 가격 + 24h 통계 세팅
@@ -91,18 +93,16 @@
     // 2) WS 구독 — 실시간 가격 + 24h% 업데이트 → priceStore (단일 소스)
     try {
       let _pending: Record<string, number> = {};
-      let _flushTimer: ReturnType<typeof setTimeout> | null = null;
 
       // 24h 통계는 자주 바뀌지 않으므로 5초 간격으로 batch 처리
       type FullEntry = { price: number; change24h: number; high24h: number; low24h: number; volume24h: number };
       let _pendingFull: Record<string, FullEntry> = {};
-      let _fullFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
       globalWsCleanup = subscribeMiniTicker([...TRACKED_SYMBOLS], (update) => {
         Object.assign(_pending, update);
-        if (_flushTimer) return;
-        _flushTimer = setTimeout(() => {
-          _flushTimer = null;
+        if (_wsFlushTimer) return;
+        _wsFlushTimer = setTimeout(() => {
+          _wsFlushTimer = null;
           const batch = _pending;
           _pending = {};
           const mapped: Record<string, number> = {};
@@ -131,9 +131,9 @@
             _pendingFull[key] = data;
           }
         }
-        if (_fullFlushTimer) return;
-        _fullFlushTimer = setTimeout(() => {
-          _fullFlushTimer = null;
+        if (_wsFullFlushTimer) return;
+        _wsFullFlushTimer = setTimeout(() => {
+          _wsFullFlushTimer = null;
           const batch = _pendingFull;
           _pendingFull = {};
           for (const [key, data] of Object.entries(batch)) {
@@ -155,6 +155,8 @@
   });
 
   onDestroy(() => {
+    if (_wsFlushTimer) clearTimeout(_wsFlushTimer);
+    if (_wsFullFlushTimer) clearTimeout(_wsFullFlushTimer);
     if (globalWsCleanup) globalWsCleanup();
   });
 </script>
