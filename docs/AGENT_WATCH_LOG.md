@@ -216,6 +216,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 ### W-20260223-008
 
 - Start (KST): 2026-02-23 20:40
+- End (KST): 2026-02-23 21:05
 - Agent: 2-FE
 - Branch: `codex/fe-api-connect`
 - Scope (planned):
@@ -227,7 +228,19 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `git log -n 10` 및 WATCH_LOG 최신 항목 확인: Agent 1-BE는 서버 레이어, Agent 3-Glue는 stores/utils 범위
   - 이번 작업은 FE 소유 범위(`src/components/**`, `src/routes/**/+page.svelte`) 내에서만 진행
   - 서버 엔드포인트(`+server.ts`) 및 `src/lib/server/**` 미수정 원칙 준수
-- Status: IN_PROGRESS
+- Changes (actual):
+  - `src/components/arena/ChartPanel.svelte`
+    - 차트 헤더를 `bar-top / bar-left / bar-right / bar-meta` 구조로 재정렬해 PC/모바일 공통 기준 고정
+    - 페어/타임프레임/모드/드로잉/스캔/가격 영역 분리를 통해 줄바꿈 시 레이아웃 붕괴 완화
+    - 모바일 전용 반응형 규칙 추가(타임프레임 가로 스크롤, 가격/버튼 크기 축소, 토큰 드롭다운 가시성 유지)
+  - `src/routes/terminal/+page.svelte`
+    - 모바일 차트 오버라이드를 새 구조(`.bar-left/.bar-right`) 기준으로 교체하고 direct-child 선택자 의존 제거
+    - `live-indicator` 숨김 제거, 토큰 드롭다운(`pair-slot`) 노출 안정화
+    - 하단 모바일 네비 아이콘 제거(텍스트 중심), 탭 버튼 가독성/터치성 개선
+- Diff vs plan:
+  - 없음
+- Commit / Push: 미실행 (사용자 확인 후 진행)
+- Status: DONE
 
 ---
 
@@ -255,4 +268,64 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Diff vs plan:
   - 없음
 - Commit / Push: `1e8b616` — pushed to origin
+- Status: DONE
+
+---
+
+### W-20260223-010
+
+- Start (KST): 2026-02-23 21:30
+- End (KST): 2026-02-23 21:45
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - Terminal 차트 영역 UIUX 재정비 (PC/모바일 동시)
+  - `src/components/arena/ChartPanel.svelte`의 차트 상단 컨트롤 밀도 축소 및 정보 계층 재배치
+  - `src/routes/terminal/+page.svelte` 모바일 헤더/차트 탭 흐름 정리(중복 정보 축소, 코인 드롭다운 가시성 회복)
+  - 모바일 스크롤/터치 동작 안정화(세로/가로 스크롤 충돌 완화)
+- Overlap check (before work):
+  - `git status --short` 확인: 현재 BE 파일(`src/lib/server/**`, `src/lib/engine/**`, `src/lib/api/binance.ts`) 변경은 다른 에이전트 범위로 간주하고 미수정
+  - `docs/README.md` Section 7 역할 분리 규칙 재확인: 이번 작업은 FE 소유 파일(`src/components/**`, `src/routes/**/+page.svelte`)로 제한
+  - WATCH_LOG 최근 항목 확인: W-009(Agent3) stores/services 범위, W-008(Agent2) 차트 헤더 1차 조정 이후 후속 개선으로 중복/충돌 없음
+- Changes (actual):
+  - `src/components/arena/ChartPanel.svelte`
+    - 차트 상단 영역을 `bar-left / bar-controls / price-info` 구조로 재배치해 정보 밀집도 완화
+    - 모바일에서 컨트롤(모드/드로잉/스캔)을 가로 스크롤 가능한 단일 트랙으로 변경
+    - 페어 드롭다운 `pair-slot` 최소 폭 보장으로 코인 선택 UI가 숨지지 않게 수정
+    - 모바일 초기 진입 시 지표 스트립 기본 상태를 `collapsed`로 시작해 헤더 과대 점유 완화
+    - AGENT/TRADING 버튼에서 아이콘 제거(텍스트 중심)로 가독성 정리
+  - `src/routes/terminal/+page.svelte`
+    - 모바일 `chart` 탭에서 상단 메타(중복 pair/timeframe/desc) 숨김 처리해 차트 우선 레이아웃으로 축소
+    - 차트 바 글로벌 오버라이드를 새 구조(`.bar-controls`, `.pair-slot`, `.price-info`) 기준으로 재정렬
+    - 모바일 스캔 버튼/가격/컨트롤 크기 조정 및 순서 정리(`price-info` 하단 정렬)
+- Diff vs plan:
+  - 없음
+- Commit / Push: 미실행 (사용자 검수 후 진행)
+- Status: DONE
+
+---
+
+### W-20260223-011
+
+- Start (KST): 2026-02-23 21:41
+- End (KST): 2026-02-23 21:43
+- Agent: 3-Glue
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - `src/lib/stores/quickTradeStore.ts`의 가격 hash dedupe를 local/server 분리
+  - `livePrice` 서비스 동기화 + terminal 폴링 동시 실행 시 서버 업데이트 누락 방지
+  - Agent3 범위 파일(`stores/services/utils`)만 수정
+- Overlap check (before work):
+  - `git log -n 12` 확인: 최신은 FE/BE/docs 혼합 진행 중이나 Agent3 전용 IN_PROGRESS 항목 없음
+  - 현재 IN_PROGRESS인 `W-010`은 FE 컴포넌트 범위(`src/components/**`, `src/routes/**`)로 stores 수정과 직접 충돌 없음
+  - 워크트리의 타 에이전트 변경 파일(`src/components/**`, `src/lib/server/**`, `src/routes/api/**`)은 미수정 유지 예정
+- Changes (actual):
+  - `src/lib/stores/quickTradeStore.ts`
+    - local 업데이트 dedupe와 server sync dedupe 키를 분리
+    - 가격 hash 동일해도 open trade 집합이 달라지면 로컬 재평가하도록 개선
+    - server sync는 `priceHash + openTradeHash` 기준으로 중복 전송 방지
+    - 서버 sync 실패 시 dedupe 키 초기화로 다음 tick 재시도 가능하게 보강
+- Diff vs plan:
+  - 없음
+- Commit / Push: pending
 - Status: DONE

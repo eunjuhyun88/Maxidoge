@@ -444,22 +444,26 @@
   <!-- ═══ MOBILE LAYOUT ═══ -->
   {#if isMobile}
   <div class="terminal-mobile">
-    <div class="mob-topbar">
+    <div class="mob-topbar" class:chart-focus={mobileTab === 'chart'}>
       <div class="mob-topline">
         <div class="mob-title-wrap">
           <span class="mob-eyebrow">TERMINAL MOBILE</span>
-          <span class="mob-title">{mobileMeta.icon} {mobileMeta.label}</span>
+          <span class="mob-title">{mobileMeta.label}</span>
         </div>
         <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
       </div>
-      <div class="mob-meta">
-        <div class="mob-token">
-          <TokenDropdown value={pair} compact on:select={onTokenSelect} />
+      {#if mobileTab !== 'chart'}
+        <div class="mob-meta">
+          <div class="mob-token">
+            <TokenDropdown value={pair} compact on:select={onTokenSelect} />
+          </div>
+          <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
+          <span class="mob-meta-chip subtle">{pair}</span>
         </div>
-        <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
-        <span class="mob-meta-chip subtle">{pair}</span>
-      </div>
-      <div class="mob-desc">{mobileMeta.desc}</div>
+      {/if}
+      {#if mobileTab !== 'chart'}
+        <div class="mob-desc">{mobileMeta.desc}</div>
+      {/if}
     </div>
 
     <div class="mob-content">
@@ -482,15 +486,12 @@
 
     <div class="mob-bottom-nav">
       <button class="mob-nav-btn" class:active={mobileTab === 'warroom'} on:click={() => setMobileTab('warroom')}>
-        <span class="mob-nav-icon">🎖</span>
         <span class="mob-nav-label">WAR ROOM</span>
       </button>
       <button class="mob-nav-btn" class:active={mobileTab === 'chart'} on:click={() => setMobileTab('chart')}>
-        <span class="mob-nav-icon">📊</span>
         <span class="mob-nav-label">CHART</span>
       </button>
       <button class="mob-nav-btn" class:active={mobileTab === 'intel'} on:click={() => setMobileTab('intel')}>
-        <span class="mob-nav-icon">🧠</span>
         <span class="mob-nav-label">INTEL</span>
       </button>
     </div>
@@ -919,6 +920,12 @@
       linear-gradient(180deg, rgba(14, 36, 23, 0.92), rgba(10, 27, 17, 0.94));
     backdrop-filter: blur(8px);
   }
+  .mob-topbar.chart-focus {
+    padding: 8px 10px 6px;
+  }
+  .mob-topbar.chart-focus .mob-topline {
+    margin-bottom: 0;
+  }
   .mob-topline {
     display: flex;
     align-items: flex-start;
@@ -1052,10 +1059,10 @@
     background: rgba(240, 237, 228, 0.03);
     color: rgba(240, 237, 228, 0.62);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 0;
     font-family: var(--fm);
     cursor: pointer;
     transition: all .14s ease;
@@ -1066,9 +1073,8 @@
     background: linear-gradient(135deg, rgba(232, 150, 125, 0.2), rgba(232, 150, 125, 0.08));
     box-shadow: inset 0 0 0 1px rgba(245, 196, 184, 0.18);
   }
-  .mob-nav-icon { font-size: 12px; line-height: 1; }
   .mob-nav-label {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 800;
     letter-spacing: 1.1px;
     line-height: 1;
@@ -1571,53 +1577,43 @@
   }
 
   .terminal-mobile :global(.chart-wrapper .chart-bar) {
-    flex-wrap: wrap;
-    gap: 4px;
+    gap: 5px;
     padding: 6px 8px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .live-indicator) {
-    display: none;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-top) {
+    gap: 5px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tdd) {
-    display: flex;
-    order: 0;
-    min-width: 0;
-    flex: 0 1 auto;
-    margin-right: auto;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-left) {
+    gap: 5px;
+    width: 100%;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .scan-btn) {
-    order: 0;
-    min-height: 24px;
-    height: 24px;
-    padding: 0 8px;
-    font-size: 8px;
-    letter-spacing: .6px;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot) {
+    min-width: 136px;
+    flex: 1 1 148px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tdd .tdd-trigger) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-trigger) {
     min-height: 24px;
     padding: 2px 7px;
     gap: 3px;
     border-radius: 7px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tdd .tdd-sym) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-sym) {
     font-size: 9px;
     letter-spacing: .7px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tdd .tdd-pair),
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tdd .tdd-arrow) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-pair),
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-arrow) {
     font-size: 7px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tdd .tdd-panel) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-panel) {
     width: min(92vw, 320px);
     max-height: min(62vh, 340px);
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tf-btns) {
-    order: 1;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns) {
     width: 100%;
-    overflow-x: auto;
     padding-bottom: 1px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tf-btns .tfbtn) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns .tfbtn) {
     min-height: 22px;
     height: 22px;
     padding: 0 7px;
@@ -1625,30 +1621,60 @@
     letter-spacing: .5px;
     border-radius: 5px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .mode-toggle),
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .draw-tools),
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .price-info) {
-    order: 2;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-right) {
+    width: 100%;
+    gap: 4px;
+    row-gap: 4px;
+    align-items: center;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .mode-toggle .mode-btn) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls) {
+    width: 100%;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls::-webkit-scrollbar) {
+    height: 3px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls::-webkit-scrollbar-thumb) {
+    background: rgba(240, 237, 228, 0.2);
+    border-radius: 999px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .mode-toggle .mode-btn) {
     min-height: 22px;
     padding: 0 7px;
     font-size: 8px;
     letter-spacing: .55px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .draw-tools .draw-btn) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .draw-tools .draw-btn) {
     width: 22px;
     height: 22px;
     font-size: 9px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .price-info) {
-    margin-left: auto;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .scan-btn) {
+    min-height: 22px;
+    height: 22px;
+    padding: 0 7px;
+    font-size: 8px;
+    letter-spacing: .5px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .price-info .cprc) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .price-info) {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+    border-left: none;
+    padding-left: 0;
+    order: 99;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .cprc) {
     font-size: 12px;
     letter-spacing: .3px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .price-info .pchg) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .pchg) {
     font-size: 9px;
   }
   .terminal-mobile :global(.chart-wrapper .indicator-strip) {
@@ -1690,7 +1716,7 @@
   .terminal-mobile :global(.war-room .scan-tabs),
   .terminal-mobile :global(.war-room .token-tabs),
   .terminal-mobile :global(.chart-wrapper .indicator-strip),
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tf-btns) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns) {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     touch-action: pan-x;

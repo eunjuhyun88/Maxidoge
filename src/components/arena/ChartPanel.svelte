@@ -157,6 +157,10 @@
   let barSpacing = BAR_SPACING_DEFAULT;
   let autoScaleY = true;
 
+  function isCompactViewport(): boolean {
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+  }
+
   type ChartTheme = {
     bg: string;
     text: string;
@@ -1099,6 +1103,13 @@
     try {
       const lwc = await import('lightweight-charts');
       chartTheme = resolveChartTheme(chartContainer);
+
+      if (advancedMode && isCompactViewport() && indicatorStripState === 'expanded') {
+        indicatorStripState = 'collapsed';
+        showIndicatorLegend = false;
+        chartVisualMode = 'focus';
+      }
+
       if (_indicatorProfileApplied === null) {
         applyIndicatorProfile();
         _indicatorProfileApplied = advancedMode ? `advanced:${chartVisualMode}` : 'basic';
@@ -1506,66 +1517,79 @@
 
 <div class="chart-wrapper">
   <div class="chart-bar">
-    <div class="live-indicator">
-      <span class="live-dot" class:err={!!error}></span>
-      {error ? 'OFFLINE' : 'LIVE'}
-    </div>
+    <div class="bar-top">
+      <div class="bar-left">
+        <div class="live-indicator">
+          <span class="live-dot" class:err={!!error}></span>
+          {error ? 'OFFLINE' : 'LIVE'}
+        </div>
 
-    <TokenDropdown value={state.pair} compact on:select={e => changePair(e.detail.pair)} />
+        <div class="pair-slot">
+          <TokenDropdown value={state.pair} compact on:select={e => changePair(e.detail.pair)} />
+        </div>
 
-    <div class="tf-btns">
-      {#each CORE_TIMEFRAME_OPTIONS as tf}
-        <button
-          class="tfbtn"
-          class:active={normalizeTimeframe(state.timeframe) === tf.value}
-          on:click={() => changeTF(tf.value)}
-        >
-          {tf.label}
-        </button>
-      {/each}
-    </div>
-
-    <div class="mode-toggle">
-      <button class="mode-btn" class:active={chartMode === 'agent'} on:click={() => setChartMode('agent')}>
-        <span class="mode-icon">&#9889;</span> AGENT
-      </button>
-      <button class="mode-btn" class:active={chartMode === 'trading'} on:click={() => setChartMode('trading')}>
-        <span class="mode-icon">&#128208;</span> TRADING
-      </button>
-    </div>
-
-    <button class="scan-btn" on:click={requestAgentScan} title="Run agent scan for current market">
-      SCAN
-    </button>
-
-    {#if chartMode === 'agent'}
-      <div class="draw-tools">
-        <button class="draw-btn" class:active={drawingMode === 'hline'} on:click={() => setDrawingMode(drawingMode === 'hline' ? 'none' : 'hline')} title="Horizontal Line">&#x2500;</button>
-        <button class="draw-btn" class:active={drawingMode === 'trendline'} on:click={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
-        {#if enableTradeLineEntry}
-          <button class="draw-btn long-tool" class:active={drawingMode === 'longentry'} on:click={() => setDrawingMode(drawingMode === 'longentry' ? 'none' : 'longentry')} title="LONG RR Box (L) · drag once">L</button>
-          <button class="draw-btn short-tool" class:active={drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'shortentry' ? 'none' : 'shortentry')} title="SHORT RR Box (S) · drag once">S</button>
-        {/if}
-        <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
+        <div class="tf-btns">
+          {#each CORE_TIMEFRAME_OPTIONS as tf}
+            <button
+              class="tfbtn"
+              class:active={normalizeTimeframe(state.timeframe) === tf.value}
+              on:click={() => changeTF(tf.value)}
+            >
+              {tf.label}
+            </button>
+          {/each}
+        </div>
       </div>
-    {/if}
+
+      <div class="bar-right">
+        <div class="bar-controls">
+          <div class="mode-toggle">
+            <button class="mode-btn" class:active={chartMode === 'agent'} on:click={() => setChartMode('agent')}>
+              AGENT
+            </button>
+            <button class="mode-btn" class:active={chartMode === 'trading'} on:click={() => setChartMode('trading')}>
+              TRADING
+            </button>
+          </div>
+
+          {#if chartMode === 'agent'}
+            <div class="draw-tools">
+              <button class="draw-btn" class:active={drawingMode === 'hline'} on:click={() => setDrawingMode(drawingMode === 'hline' ? 'none' : 'hline')} title="Horizontal Line">&#x2500;</button>
+              <button class="draw-btn" class:active={drawingMode === 'trendline'} on:click={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
+              {#if enableTradeLineEntry}
+                <button class="draw-btn long-tool" class:active={drawingMode === 'longentry'} on:click={() => setDrawingMode(drawingMode === 'longentry' ? 'none' : 'longentry')} title="LONG RR Box (L) · drag once">L</button>
+                <button class="draw-btn short-tool" class:active={drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'shortentry' ? 'none' : 'shortentry')} title="SHORT RR Box (S) · drag once">S</button>
+              {/if}
+              <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
+            </div>
+          {/if}
+
+          <button class="scan-btn" on:click={requestAgentScan} title="Run agent scan for current market">
+            SCAN
+          </button>
+
+          {#if chartMode === 'agent' && advancedMode && indicatorStripState === 'hidden'}
+            <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>지표 ON</button>
+          {/if}
+        </div>
+
+        <div class="price-info">
+          <span class="cprc">${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span class="pchg" class:up={priceChange24h >= 0} class:down={priceChange24h < 0}>
+            {priceChange24h >= 0 ? '▲' : '▼'}{Math.abs(priceChange24h).toFixed(2)}%
+          </span>
+        </div>
+      </div>
+    </div>
 
     {#if chartMode === 'agent' && klineCache.length > 0 && !advancedMode}
-      <div class="ma-vals">
-        <span class="ma-tag" style="color:{chartTheme.ma7}">MA(7) {ma7Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
-        <span class="ma-tag" style="color:{chartTheme.ma25}">MA(25) {ma25Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
-        <span class="ma-tag" style="color:{chartTheme.ma99}">MA(99) {ma99Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+      <div class="bar-meta">
+        <div class="ma-vals">
+          <span class="ma-tag" style="color:{chartTheme.ma7}">MA(7) {ma7Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+          <span class="ma-tag" style="color:{chartTheme.ma25}">MA(25) {ma25Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+          <span class="ma-tag" style="color:{chartTheme.ma99}">MA(99) {ma99Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+        </div>
       </div>
-    {/if}
-
-    <div class="price-info">
-      <span class="cprc">${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-      <span class="pchg" class:up={priceChange24h >= 0} class:down={priceChange24h < 0}>
-        {priceChange24h >= 0 ? '▲' : '▼'}{Math.abs(priceChange24h).toFixed(2)}%
-      </span>
-    </div>
-    {#if chartMode === 'agent' && advancedMode && indicatorStripState === 'hidden'}
-      <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>지표 ON</button>
     {/if}
   </div>
 
@@ -1800,28 +1824,209 @@
 <style>
   .chart-wrapper { display: flex; flex-direction: column; height: 100%; background: #0a0a1a; overflow: hidden; }
   .chart-bar {
-    padding: 6px 10px; border-bottom: 3px solid #000; display: flex; align-items: center; gap: 7px;
-    background: linear-gradient(90deg, #1a1a3a, #0a0a2a); font-size: 10px; font-family: var(--fm);
-    flex-shrink: 0; flex-wrap: wrap; row-gap: 3px;
+    padding: 7px 10px 6px;
+    border-bottom: 3px solid #000;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: linear-gradient(90deg, #1a1a3a, #0a0a2a);
+    font-size: 10px;
+    font-family: var(--fm);
+    flex-shrink: 0;
   }
-  .live-indicator { font-size: 9px; font-weight: 700; color: var(--grn); display: flex; align-items: center; gap: 3px; letter-spacing: .9px; margin-right: 4px; }
+  .bar-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+  .bar-left {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .pair-slot {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  .bar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+  .bar-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .bar-meta {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+  .live-indicator { font-size: 9px; font-weight: 700; color: var(--grn); display: flex; align-items: center; gap: 3px; letter-spacing: .9px; }
   .live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--grn); animation: pulse .8s infinite; }
   .live-dot.err { background: #ff2d55; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-  .tf-btns { display: flex; gap: 2px; }
+  .tf-btns {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 1px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tf-btns::-webkit-scrollbar { height: 4px; }
+  .tf-btns::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+  }
   .tfbtn { padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #b8c0cc; font-size: 9px; font-family: var(--fd); font-weight: 700; letter-spacing: .8px; cursor: pointer; transition: all .15s; }
   .tfbtn:hover { background: rgba(255,255,255,.1); color: #fff; }
   .tfbtn.active { background: rgba(255,230,0,.15); color: #ffe600; border-color: rgba(255,230,0,.3); }
 
-  .ma-vals { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ma-vals { display: flex; gap: 8px; flex-wrap: wrap; }
   .ma-tag { font-size: 8px; font-family: var(--fm); font-weight: 700; letter-spacing: .3px; opacity: 1; }
 
-  .price-info { margin-left: auto; display: flex; align-items: baseline; gap: 6px; }
-  .cprc { font-size: 20px; font-weight: 700; color: #fff; font-family: var(--fd); }
+  .price-info {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-left: 2px;
+    padding-left: 8px;
+    border-left: 1px solid rgba(255,255,255,.12);
+    white-space: nowrap;
+  }
+  .cprc { font-size: 18px; font-weight: 700; color: #fff; font-family: var(--fd); line-height: 1; }
   .pchg { font-size: 12px; font-weight: 700; }
   .pchg.up { color: #00ff88; }
   .pchg.down { color: #ff2d55; }
+
+  @media (max-width: 1180px) {
+    .bar-top {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+    .bar-left,
+    .bar-right {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+    .bar-right {
+      justify-content: flex-start;
+      row-gap: 4px;
+    }
+    .bar-controls {
+      flex-wrap: wrap;
+    }
+    .price-info {
+      margin-left: auto;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .chart-bar {
+      padding: 6px 8px;
+      gap: 5px;
+    }
+    .bar-left {
+      gap: 5px;
+    }
+    .live-indicator {
+      font-size: 8px;
+      letter-spacing: .75px;
+    }
+    .pair-slot {
+      min-width: 136px;
+      flex: 1 1 148px;
+    }
+    .tf-btns {
+      width: 100%;
+      flex: 0 0 100%;
+      order: 3;
+    }
+    .tfbtn {
+      height: 22px;
+      padding: 0 7px;
+      font-size: 8px;
+      letter-spacing: .5px;
+      white-space: nowrap;
+    }
+    .bar-right {
+      display: flex;
+      width: 100%;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+    }
+    .bar-controls {
+      width: 100%;
+      gap: 4px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      flex-wrap: nowrap;
+      white-space: nowrap;
+      padding-bottom: 1px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .bar-controls::-webkit-scrollbar {
+      height: 3px;
+    }
+    .bar-controls::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+    }
+    .mode-toggle .mode-btn {
+      min-height: 22px;
+      padding: 0 7px;
+      font-size: 8px;
+      letter-spacing: .55px;
+    }
+    .draw-tools .draw-btn {
+      width: 22px;
+      height: 22px;
+      font-size: 9px;
+    }
+    .scan-btn {
+      min-height: 24px;
+      height: 24px;
+      padding: 0 8px;
+      font-size: 8px;
+      letter-spacing: .6px;
+    }
+    .price-info {
+      margin-left: 0;
+      width: 100%;
+      justify-content: flex-end;
+      border-left: none;
+      padding-left: 0;
+      gap: 5px;
+      order: 99;
+    }
+    .cprc {
+      font-size: 12px;
+      letter-spacing: .3px;
+    }
+    .pchg {
+      font-size: 9px;
+    }
+    .ma-vals {
+      gap: 6px;
+    }
+  }
 
   .chart-container { flex: 1; position: relative; overflow: hidden; }
   .chart-container.hidden-chart { display: none; }
@@ -1939,7 +2144,7 @@
     box-shadow: 0 0 6px var(--legend-color);
   }
 
-  .mode-toggle { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1.5px solid rgba(255,230,0,.25); margin-left: 4px; }
+  .mode-toggle { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1.5px solid rgba(255,230,0,.25); margin-left: 0; }
   .mode-btn { padding: 3px 10px; background: rgba(255,255,255,.03); border: none; color: #b2b9c5; font-size: 9px; font-family: var(--fd); font-weight: 800; letter-spacing: .9px; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
   .mode-btn:first-child { border-right: 1px solid rgba(255,230,0,.15); }
   .mode-btn:hover { background: rgba(255,230,0,.08); color: #ccc; }
@@ -1967,7 +2172,7 @@
     box-shadow: 0 0 10px rgba(255,230,0,.26);
   }
 
-  .draw-tools { display: flex; gap: 2px; margin-left: 2px; padding-left: 4px; border-left: 1px solid rgba(255,255,255,.06); }
+  .draw-tools { display: flex; gap: 2px; margin-left: 0; padding-left: 0; border-left: none; }
   .draw-btn { width: 24px; height: 20px; border-radius: 4px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: #b5bdc9; font-size: 11px; font-family: monospace; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
   .draw-btn:hover { background: rgba(255,230,0,.1); color: #ffe600; border-color: rgba(255,230,0,.3); }
   .draw-btn.active { background: rgba(255,230,0,.2); color: #ffe600; border-color: #ffe600; box-shadow: 0 0 6px rgba(255,230,0,.3); }
