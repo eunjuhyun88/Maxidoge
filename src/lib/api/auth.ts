@@ -8,6 +8,7 @@ export interface RegisterAuthPayload {
 export interface LoginAuthPayload {
   email: string;
   nickname: string;
+  walletAddress: string;
 }
 
 export interface AuthUserPayload {

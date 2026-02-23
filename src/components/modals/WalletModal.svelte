@@ -103,7 +103,10 @@
       return;
     }
     try {
-      const res = await loginAuth(payload);
+      const res = await loginAuth({
+        ...payload,
+        walletAddress: state.address,
+      });
       applyAuthenticatedUser(res.user);
     } catch (error) {
       emailError = error instanceof Error ? error.message : 'Failed to login';

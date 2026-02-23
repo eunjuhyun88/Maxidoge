@@ -13,6 +13,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     const body = await request.json();
     const email = typeof body?.email === 'string' ? body.email.trim() : '';
     const nickname = typeof body?.nickname === 'string' ? body.nickname.trim() : '';
+    const walletAddress = typeof body?.walletAddress === 'string' ? body.walletAddress.trim() : '';
 
     if (!email || !email.includes('@')) {
       return json({ error: 'Valid email required' }, { status: 400 });
@@ -20,10 +21,13 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     if (!nickname || nickname.length < 2) {
       return json({ error: 'Nickname must be 2+ characters' }, { status: 400 });
     }
+    if (!walletAddress) {
+      return json({ error: 'Wallet connection is required for login' }, { status: 400 });
+    }
 
-    const user = await findAuthUserForLogin(email, nickname);
+    const user = await findAuthUserForLogin(email, nickname, walletAddress);
     if (!user) {
-      return json({ error: 'Invalid login credentials' }, { status: 401 });
+      return json({ error: 'Invalid login credentials or wallet mismatch' }, { status: 401 });
     }
 
     const sessionToken = crypto.randomUUID().toLowerCase();
