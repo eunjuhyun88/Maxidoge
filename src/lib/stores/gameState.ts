@@ -6,7 +6,7 @@ import { writable, derived } from 'svelte/store';
 import type { CanonicalTimeframe } from '$lib/utils/timeframe';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
-import { getLivePriceSnapshot } from './priceStore';
+import { getLivePriceSnapshot, livePrice } from './priceStore';
 
 export type Phase = 'DRAFT' | 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE' | 'RESULT';
 export type ViewMode = 'arena' | 'terminal' | 'passport';
@@ -169,6 +169,36 @@ function loadState(): GameState {
 }
 
 export const gameState = writable<GameState>(loadState());
+
+// S-03 bridge: keep legacy gameState.prices synced from canonical livePrice.
+let _livePriceSyncStop: (() => void) | null = null;
+if (typeof window !== 'undefined' && !_livePriceSyncStop) {
+  let _lastHash = '';
+  _livePriceSyncStop = livePrice.subscribe((snapshot) => {
+    const btc = snapshot.BTC?.price;
+    const eth = snapshot.ETH?.price;
+    const sol = snapshot.SOL?.price;
+    const hash = `${btc ?? '-'}|${eth ?? '-'}|${sol ?? '-'}`;
+    if (hash === _lastHash) return;
+    _lastHash = hash;
+
+    gameState.update((s) => {
+      const nextBtc = btc ?? s.prices.BTC;
+      const nextEth = eth ?? s.prices.ETH;
+      const nextSol = sol ?? s.prices.SOL;
+      if (nextBtc === s.prices.BTC && nextEth === s.prices.ETH && nextSol === s.prices.SOL) return s;
+
+      return {
+        ...s,
+        prices: {
+          BTC: nextBtc,
+          ETH: nextEth,
+          SOL: nextSol,
+        },
+      };
+    });
+  });
+}
 
 // Auto-save persistent fields to localStorage (debounced — prices excluded intentionally)
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;

@@ -8,6 +8,7 @@ import { writable, derived } from 'svelte/store';
 import { openQuickTrade, replaceQuickTradeId, type TradeDirection } from './quickTradeStore';
 import { STORAGE_KEYS } from './storageKeys';
 import { convertSignalApi, fetchTrackedSignalsApi, trackSignalApi, type ApiTrackedSignal, untrackSignalApi } from '$lib/api/tradingApi';
+import { buildPriceMapHash, getBaseSymbolFromPair, toNumericPriceMap, type PriceLikeMap } from '$lib/utils/price';
 
 export type SignalStatus = 'tracking' | 'expired' | 'converted';
 
@@ -240,8 +241,9 @@ export function convertToTrade(signalId: string, currentPrice: number): string |
 }
 
 let _lastTrackedPriceSnap = '';
-export function updateTrackedPrices(prices: Record<string, number>) {
-  const snap = JSON.stringify(prices);
+export function updateTrackedPrices(priceInput: PriceLikeMap) {
+  const prices = toNumericPriceMap(priceInput);
+  const snap = buildPriceMapHash(prices);
   if (snap === _lastTrackedPriceSnap) return;
   _lastTrackedPriceSnap = snap;
 
@@ -258,7 +260,7 @@ export function updateTrackedPrices(prices: Record<string, number>) {
       }
       if (sig.status !== 'tracking') return sig;
 
-      const token = sig.pair.split('/')[0];
+      const token = getBaseSymbolFromPair(sig.pair);
       const price = prices[token];
       if (!price || price === sig.currentPrice) return sig;
 

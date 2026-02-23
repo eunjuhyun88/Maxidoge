@@ -13,6 +13,7 @@ import {
   updateQuickTradePricesApi,
   type ApiQuickTrade,
 } from '$lib/api/tradingApi';
+import { buildPriceMapHash, getBaseSymbolFromPair, toNumericPriceMap, type PriceLikeMap } from '$lib/utils/price';
 
 export type TradeDirection = 'LONG' | 'SHORT';
 export type TradeStatus = 'open' | 'closed' | 'stopped';
@@ -253,12 +254,14 @@ export function updateTradePrice(tradeId: string, currentPrice: number) {
 let _lastPriceSnapshot = '';
 let _priceSyncTimer: ReturnType<typeof setTimeout> | null = null;
 export function updateAllPrices(
-  prices: Record<string, number>,
+  priceInput: PriceLikeMap,
   options: { syncServer?: boolean } = {}
 ) {
   const syncServer = options.syncServer ?? true;
+  const prices = toNumericPriceMap(priceInput);
+
   // Skip if prices haven't changed
-  const snap = JSON.stringify(prices);
+  const snap = buildPriceMapHash(prices);
   if (snap === _lastPriceSnapshot) return;
   _lastPriceSnapshot = snap;
 
@@ -271,7 +274,7 @@ export function updateAllPrices(
     let changed = false;
     const trades = s.trades.map(t => {
       if (t.status !== 'open') return t;
-      const token = t.pair.split('/')[0];
+      const token = getBaseSymbolFromPair(t.pair);
       const price = prices[token];
       if (!price || price === t.currentPrice) return t;
       changed = true;

@@ -175,3 +175,38 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `git log -- src/components/terminal/WarRoom.svelte` 확인: 기존 WarRoom 변경 이력 파악
   - 현재 IN_PROGRESS `W-20260223-005`(Agent 1-BE)는 `src/lib/server/**`, `src/lib/services/**` 범위로 FE 컴포넌트 분해와 직접 충돌 없음
 - Status: IN_PROGRESS
+
+---
+
+### W-20260223-007
+
+- Start (KST): 2026-02-23 20:24
+- End (KST): 2026-02-23 20:27
+- Agent: 3-Glue
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - S-03 후속: `quickTradeStore`/`trackedSignalStore` 가격 동기화 입력을 `livePrice` 계약 기반으로 확장
+  - `Record<string, number>` 레거시 호출은 유지 (하위호환)
+  - pair→symbol 정규화 유틸 추가 (`src/lib/utils/**`) 및 `gameState`의 livePrice 동기화 보강
+- Overlap check (before work):
+  - `git log -n 8` 확인: 최신 `b6b6aa2`, 최근 Agent 3 IN_PROGRESS 없음
+  - 현재 변경 중 `W-006`은 `src/components/terminal/**` 범위, 이번 작업(`src/lib/stores/**`, `src/lib/utils/**`)과 직접 충돌 없음
+  - 워크트리의 WarRoom 변경은 건드리지 않고 stores/utils만 수정 예정
+- Changes (actual):
+  - `src/lib/utils/price.ts` 신규
+    - `toNumericPriceMap`, `getBaseSymbolFromPair`, `buildPriceMapHash` 유틸 추가
+    - `Record<string, number>`와 `livePrice` 형태 입력을 공통 정규화 가능하게 구성
+  - `src/lib/stores/quickTradeStore.ts`
+    - `updateAllPrices()` 입력 타입을 `PriceLikeMap`으로 확장
+    - pair 파싱을 `getBaseSymbolFromPair()`로 통일
+    - snapshot 비교를 `buildPriceMapHash()` 기반으로 변경
+  - `src/lib/stores/trackedSignalStore.ts`
+    - `updateTrackedPrices()` 입력 타입을 `PriceLikeMap`으로 확장
+    - pair 파싱을 `getBaseSymbolFromPair()`로 통일
+    - snapshot 비교를 `buildPriceMapHash()` 기반으로 변경
+  - `src/lib/stores/gameState.ts`
+    - `livePrice` 구독 브릿지 추가: `gameState.prices(BTC/ETH/SOL)`를 canonical livePrice와 동기화
+- Diff vs plan:
+  - 없음
+- Commit / Push: pending
+- Status: DONE
