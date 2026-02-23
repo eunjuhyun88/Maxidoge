@@ -928,7 +928,7 @@
     color: rgba(255,255,255,.82);
     word-break: break-word;
   }
-  .scan-brief-note span {
+  .scan-brief-note :global(span) {
     color: rgba(255,230,0,.86);
     font-weight: 700;
     letter-spacing: .3px;

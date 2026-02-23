@@ -47,7 +47,7 @@
 </script>
 
 {#if isOpen}
-  <div class="ct-overlay" on:click={handleOverlayClick} role="dialog">
+  <div class="ct-overlay" on:click={handleOverlayClick} on:keydown={(e) => { if (e.key === 'Escape') copyTradeStore.closeModal(); }} role="dialog" tabindex="-1">
     <div class="ct-modal">
       <!-- Header -->
       <div class="ct-header">
@@ -101,8 +101,8 @@
         <div class="ct-body">
           <!-- Pair -->
           <div class="ct-field">
-            <label class="ct-label">PAIR</label>
-            <select class="ct-select" bind:value={draft.pair} on:change={(e) => copyTradeStore.updateDraft({ pair: e.currentTarget.value })}>
+            <label class="ct-label" for="ct-pair">PAIR</label>
+            <select id="ct-pair" class="ct-select" bind:value={draft.pair} on:change={(e) => copyTradeStore.updateDraft({ pair: e.currentTarget.value })}>
               <option value="BTC/USDT">BTC/USDT</option>
               <option value="ETH/USDT">ETH/USDT</option>
               <option value="SOL/USDT">SOL/USDT</option>
@@ -110,8 +110,8 @@
           </div>
 
           <!-- Direction -->
-          <div class="ct-field">
-            <label class="ct-label">DIRECTION</label>
+          <div class="ct-field" role="group" aria-label="Direction">
+            <span class="ct-label">DIRECTION</span>
             <div class="ct-toggle-row">
               <button class="ct-dir-btn" class:active={draft.dir === 'LONG'} class:long-active={draft.dir === 'LONG'}
                 on:click={() => copyTradeStore.updateDraft({ dir: 'LONG' })}>▲ LONG</button>
@@ -121,8 +121,8 @@
           </div>
 
           <!-- Order Type -->
-          <div class="ct-field">
-            <label class="ct-label">ORDER TYPE</label>
+          <div class="ct-field" role="group" aria-label="Order type">
+            <span class="ct-label">ORDER TYPE</span>
             <div class="ct-toggle-row">
               <button class="ct-type-btn" class:active={draft.orderType === 'market'}
                 on:click={() => copyTradeStore.updateDraft({ orderType: 'market' })}>MARKET</button>
@@ -133,14 +133,14 @@
 
           <!-- Entry -->
           <div class="ct-field">
-            <label class="ct-label">ENTRY PRICE</label>
-            <input class="ct-input" type="number" value={draft.entry}
+            <label class="ct-label" for="ct-entry">ENTRY PRICE</label>
+            <input id="ct-entry" class="ct-input" type="number" value={draft.entry}
               on:change={(e) => copyTradeStore.updateDraft({ entry: +e.currentTarget.value })} />
           </div>
 
           <!-- TP Targets -->
-          <div class="ct-field">
-            <label class="ct-label">TAKE PROFIT</label>
+          <div class="ct-field" role="group" aria-label="Take profit targets">
+            <span class="ct-label">TAKE PROFIT</span>
             {#each draft.tp as tp, i}
               <div class="ct-tp-row">
                 <span class="ct-tp-label">TP {i + 1}</span>
@@ -162,8 +162,8 @@
           </div>
 
           <!-- SL -->
-          <div class="ct-field">
-            <label class="ct-label">STOP LOSS</label>
+          <div class="ct-field" role="group" aria-label="Stop loss">
+            <span class="ct-label">STOP LOSS</span>
             <div class="ct-tp-row">
               <span class="ct-tp-label">SL</span>
               <input class="ct-input ct-input-sm" type="number" value={draft.sl}
@@ -173,8 +173,8 @@
           </div>
 
           <!-- Leverage -->
-          <div class="ct-field">
-            <label class="ct-label">LEVERAGE</label>
+          <div class="ct-field" role="group" aria-label="Leverage">
+            <span class="ct-label">LEVERAGE</span>
             <div class="ct-lev-row">
               {#each leverageOptions as lev}
                 <button class="ct-lev-btn" class:active={draft.leverage === lev}
@@ -184,8 +184,8 @@
           </div>
 
           <!-- Position Size -->
-          <div class="ct-field">
-            <label class="ct-label">POSITION SIZE</label>
+          <div class="ct-field" role="group" aria-label="Position size">
+            <span class="ct-label">POSITION SIZE</span>
             <div class="ct-size-row">
               {#each sizeOptions as sz}
                 <button class="ct-size-btn" class:active={draft.sizePercent === sz}
@@ -195,8 +195,8 @@
           </div>
 
           <!-- Margin Mode -->
-          <div class="ct-field">
-            <label class="ct-label">MARGIN MODE</label>
+          <div class="ct-field" role="group" aria-label="Margin mode">
+            <span class="ct-label">MARGIN MODE</span>
             <div class="ct-toggle-row">
               <button class="ct-type-btn" class:active={draft.marginMode === 'isolated'}
                 on:click={() => copyTradeStore.updateDraft({ marginMode: 'isolated' })}>ISOLATED</button>
@@ -258,8 +258,8 @@
 
           <!-- Notes -->
           <div class="ct-field">
-            <label class="ct-label">NOTES</label>
-            <textarea class="ct-textarea" placeholder="Add your trade reasoning..."
+            <label class="ct-label" for="ct-notes">NOTES</label>
+            <textarea id="ct-notes" class="ct-textarea" placeholder="Add your trade reasoning..."
               value={draft.note}
               on:input={(e) => copyTradeStore.updateDraft({ note: e.currentTarget.value })}></textarea>
           </div>

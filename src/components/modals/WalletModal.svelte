@@ -274,13 +274,13 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">EMAIL</label>
-          <input class="form-input" type="email" bind:value={emailInput} placeholder="your@email.com" />
+          <label class="form-label" for="signup-email">EMAIL</label>
+          <input id="signup-email" class="form-input" type="email" bind:value={emailInput} placeholder="your@email.com" />
         </div>
 
         <div class="form-group">
-          <label class="form-label">NICKNAME</label>
-          <input class="form-input" type="text" bind:value={nicknameInput} placeholder="DogeTrader42" maxlength="16" />
+          <label class="form-label" for="signup-nickname">NICKNAME</label>
+          <input id="signup-nickname" class="form-input" type="text" bind:value={nicknameInput} placeholder="DogeTrader42" maxlength="16" />
           <div class="form-hint">{nicknameInput.length}/16 characters</div>
         </div>
 
