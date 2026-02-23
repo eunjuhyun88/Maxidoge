@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Etherscan On-chain Data Proxy
+// MAXI⚡DOGE — On-chain Data Proxy (Etherscan + Dune)
 // ═══════════════════════════════════════════════════════════════
-// Exposes server-side Etherscan data to client via REST
-// Gas oracle + exchange netflow + ETH supply/price
+// Exposes server-side on-chain data to client via REST
+// Gas oracle + exchange netflow + ETH supply/price + Dune whale/active addr
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
@@ -12,20 +12,32 @@ import {
   fetchEthPrice,
   estimateExchangeNetflow
 } from '$lib/server/etherscan';
+import {
+  fetchWhaleActivity,
+  fetchActiveAddresses,
+  fetchExchangeBalance
+} from '$lib/server/dune';
 
 export const GET: RequestHandler = async () => {
   try {
-    const [gasRes, supplyRes, priceRes, netflowRes] = await Promise.allSettled([
-      fetchGasOracle(),
-      fetchEthSupply(),
-      fetchEthPrice(),
-      estimateExchangeNetflow()
-    ]);
+    const [gasRes, supplyRes, priceRes, netflowRes, whaleRes, activeAddrRes, exchBalRes] =
+      await Promise.allSettled([
+        fetchGasOracle(),
+        fetchEthSupply(),
+        fetchEthPrice(),
+        estimateExchangeNetflow(),
+        fetchWhaleActivity(),
+        fetchActiveAddresses(),
+        fetchExchangeBalance('ETH')
+      ]);
 
     const gas = gasRes.status === 'fulfilled' ? gasRes.value : null;
     const supply = supplyRes.status === 'fulfilled' ? supplyRes.value : null;
     const price = priceRes.status === 'fulfilled' ? priceRes.value : null;
     const netflow = netflowRes.status === 'fulfilled' ? netflowRes.value : null;
+    const whaleActivity = whaleRes.status === 'fulfilled' ? whaleRes.value : null;
+    const activeAddresses = activeAddrRes.status === 'fulfilled' ? activeAddrRes.value : null;
+    const exchangeBalance = exchBalRes.status === 'fulfilled' ? exchBalRes.value : null;
 
     return json(
       {
@@ -42,6 +54,10 @@ export const GET: RequestHandler = async () => {
           ethSupply: supply,
           ethPrice: price,
           exchangeNetflowEth: netflow,
+          // Dune Analytics data
+          whaleActivity,       // large tx count (>$100k)
+          activeAddresses,     // daily active addresses
+          exchangeBalance,     // ETH held on exchanges (from Dune)
           updatedAt: Date.now()
         }
       },

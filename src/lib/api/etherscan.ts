@@ -14,6 +14,10 @@ export interface EthOnchainData {
   ethSupply: number | null;
   ethPrice: { ethbtc: number; ethusd: number } | null;
   exchangeNetflowEth: number | null;
+  // Dune Analytics on-chain metrics
+  whaleActivity: number | null;     // large tx count (>$100k) last 24h
+  activeAddresses: number | null;   // daily active addresses
+  exchangeBalance: number | null;   // ETH held on exchanges (Dune)
   updatedAt: number;
 }
 
@@ -61,4 +65,47 @@ export function netflowToScore(netflowEth: number): number {
   const midpoint = 2_000_000; // 2M ETH as neutral benchmark
   const deviation = (netflowEth - midpoint) / midpoint;
   return Math.round(Math.max(-50, Math.min(50, -deviation * 80)));
+}
+
+/**
+ * Whale activity score (Dune).
+ * High whale tx count → big money moving → volatility signal
+ * Very high = potential distribution (bearish), moderate = accumulation (bullish)
+ * Returns -30 to +30
+ */
+export function whaleActivityToScore(txCount: number): number {
+  if (txCount > 500) return -20;  // extreme whale activity → distribution risk
+  if (txCount > 300) return -10;  // elevated activity → caution
+  if (txCount > 100) return 10;   // moderate activity → healthy accumulation
+  if (txCount > 50) return 5;     // normal activity
+  return -5;                       // very low → low liquidity risk
+}
+
+/**
+ * Active addresses score (Dune).
+ * Growing active addresses = network adoption = bullish
+ * Declining = waning interest = bearish
+ * Returns -25 to +25
+ */
+export function activeAddressesToScore(activeAddr: number): number {
+  // ETH typical range: 300K-600K daily active addresses
+  if (activeAddr > 600_000) return 25;   // extremely high adoption
+  if (activeAddr > 500_000) return 15;   // strong adoption
+  if (activeAddr > 400_000) return 5;    // healthy
+  if (activeAddr > 300_000) return 0;    // normal
+  if (activeAddr > 200_000) return -10;  // declining
+  return -20;                             // very low = bearish
+}
+
+/**
+ * Exchange balance delta score (Dune ETH exchange balance).
+ * High exchange reserves → potential sell pressure → bearish
+ * Low exchange reserves → holders withdrawing → bullish
+ * Returns -40 to +40
+ */
+export function exchangeBalanceToScore(balanceEth: number): number {
+  // ETH exchange reserves benchmarks (2024-2026): ~15-25M ETH
+  const midpoint = 18_000_000; // 18M ETH neutral
+  const deviation = (balanceEth - midpoint) / midpoint;
+  return Math.round(Math.max(-40, Math.min(40, -deviation * 60)));
 }

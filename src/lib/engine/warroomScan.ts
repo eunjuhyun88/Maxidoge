@@ -9,6 +9,7 @@ import {
   fetchPredictedFunding,
   fetchLiquidationHistory,
   fetchLSRatioHistory,
+  fetchOIHistory,
   formatFunding,
   formatOI
 } from '$lib/api/coinalyze';
@@ -16,7 +17,26 @@ import type { AgentSignal } from '$lib/data/warroom';
 import { AGENT_POOL } from './agents';
 import { fetchFearGreed, fngToScore } from '$lib/api/feargreed';
 import { fetchGlobal, btcDominanceToScore } from '$lib/api/coingecko';
-import { fetchEthOnchain, gasToActivityScore, netflowToScore } from '$lib/api/etherscan';
+import {
+  fetchEthOnchain,
+  gasToActivityScore,
+  netflowToScore,
+  whaleActivityToScore,
+  activeAddressesToScore,
+  exchangeBalanceToScore
+} from '$lib/api/etherscan';
+import {
+  fetchMacroIndicators,
+  dxyToScore,
+  equityToScore,
+  yieldToScore
+} from '$lib/api/macroIndicators';
+import {
+  fetchSocialData,
+  sentimentToScore,
+  dominanceToScore,
+  galaxyToConfBoost
+} from '$lib/api/lunarcrush';
 
 type Vote = AgentSignal['vote'];
 
@@ -173,7 +193,11 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
     throw new Error('캔들 데이터가 부족해서 스캔을 완료할 수 없습니다.');
   }
 
-  const [oiRaw, fundingRaw, predFundingRaw, lsRaw, liqRaw, fngRaw, cgGlobalRaw, ethOnchainRaw] = await Promise.allSettled([
+  const [
+    oiRaw, fundingRaw, predFundingRaw, lsRaw, liqRaw,
+    fngRaw, cgGlobalRaw, ethOnchainRaw,
+    macroRaw, socialRaw, oiHistRaw
+  ] = await Promise.allSettled([
     fetchCurrentOI(marketPair),
     fetchCurrentFunding(marketPair),
     fetchPredictedFunding(marketPair),
@@ -181,7 +205,10 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
     fetchLiquidationHistory(marketPair, tf, 24),
     fetchFearGreed(),
     fetchGlobal(),
-    fetchEthOnchain()
+    fetchEthOnchain(),
+    fetchMacroIndicators(),
+    fetchSocialData(token),
+    fetchOIHistory(marketPair, tf, 24)
   ]);
 
   const now = Date.now();
@@ -215,6 +242,9 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
   const fng = fngRaw.status === 'fulfilled' ? fngRaw.value : null;
   const cgGlobal = cgGlobalRaw.status === 'fulfilled' ? cgGlobalRaw.value : null;
   const ethOnchain = ethOnchainRaw.status === 'fulfilled' ? ethOnchainRaw.value : null;
+  const macro = macroRaw.status === 'fulfilled' ? macroRaw.value : null;
+  const social = socialRaw.status === 'fulfilled' ? socialRaw.value : null;
+  const oiHist = oiHistRaw.status === 'fulfilled' ? oiHistRaw.value : null;
 
   let structureScore = 0;
   if (sma20 != null) structureScore += latestClose >= sma20 ? 0.26 : -0.26;
@@ -227,79 +257,154 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
   }
 
   let flowScore = 0;
-  if (change24 > 0) flowScore += 0.16;
-  else if (change24 < 0) flowScore -= 0.16;
-  if (volumeRatio > 1.35) flowScore += change24 >= 0 ? 0.18 : -0.18;
+  if (change24 > 0) flowScore += 0.12;
+  else if (change24 < 0) flowScore -= 0.12;
+  if (volumeRatio > 1.35) flowScore += change24 >= 0 ? 0.14 : -0.14;
   else if (volumeRatio < 0.85) flowScore -= 0.06;
-  if (quoteVolume24 > 1_000_000_000) flowScore += 0.06;
+  if (quoteVolume24 > 1_000_000_000) flowScore += 0.04;
   else if (quoteVolume24 < 120_000_000) flowScore -= 0.04;
-  // On-chain exchange netflow (Etherscan)
+  // On-chain exchange netflow (Etherscan snapshot)
   if (ethOnchain?.exchangeNetflowEth != null) {
     const nfScore = netflowToScore(ethOnchain.exchangeNetflowEth);
-    flowScore += (nfScore / 100) * 0.2;
+    flowScore += (nfScore / 100) * 0.15;
+  }
+  // Dune: whale activity (large txs >$100k)
+  if (ethOnchain?.whaleActivity != null) {
+    const wScore = whaleActivityToScore(ethOnchain.whaleActivity);
+    flowScore += (wScore / 100) * 0.15;
+  }
+  // Dune: active addresses (network adoption)
+  if (ethOnchain?.activeAddresses != null) {
+    const aaScore = activeAddressesToScore(ethOnchain.activeAddresses);
+    flowScore += (aaScore / 100) * 0.1;
+  }
+  // Dune: exchange balance (ETH reserves on exchanges)
+  if (ethOnchain?.exchangeBalance != null) {
+    const ebScore = exchangeBalanceToScore(ethOnchain.exchangeBalance);
+    flowScore += (ebScore / 100) * 0.15;
   }
 
   let derivScore = 0;
   let derivDataPoints = 0;
+  let squeezeDetected = false;
+  let oiDivergence = false;
+
   if (funding != null) {
     derivDataPoints++;
-    if (funding > 0.0006) derivScore -= 0.24;
-    else if (funding < -0.0006) derivScore += 0.24;
+    if (funding > 0.0006) derivScore -= 0.2;
+    else if (funding < -0.0006) derivScore += 0.2;
   }
   if (predFunding != null) {
     derivDataPoints++;
-    if (predFunding > 0.0006) derivScore -= 0.12;
-    else if (predFunding < -0.0006) derivScore += 0.12;
+    if (predFunding > 0.0006) derivScore -= 0.1;
+    else if (predFunding < -0.0006) derivScore += 0.1;
   }
   if (lsRatio != null) {
     derivDataPoints++;
-    if (lsRatio > 1.12) derivScore -= 0.17;
-    else if (lsRatio < 0.9) derivScore += 0.17;
+    if (lsRatio > 1.12) derivScore -= 0.14;
+    else if (lsRatio < 0.9) derivScore += 0.14;
   }
   if (liqLong > 0 || liqShort > 0) {
     derivDataPoints++;
     const liqBias = (liqShort - liqLong) / Math.max(liqShort + liqLong, 1);
-    derivScore += liqBias * 0.22;
+    derivScore += liqBias * 0.18;
+  }
+
+  // ── SQUEEZE DETECTION ──
+  // Squeeze = extreme funding + skewed L/S + low volatility → violent move incoming
+  if (funding != null && lsRatio != null && atrPct != null) {
+    const highFunding = Math.abs(funding) > 0.0008;
+    const skewedLS = lsRatio > 1.2 || lsRatio < 0.8;
+    const lowVol = atrPct < 2.5;
+    if (highFunding && skewedLS && lowVol) {
+      squeezeDetected = true;
+      // Squeeze direction: opposite of crowd positioning
+      const squeezeDir = lsRatio > 1 ? 1 : -1; // crowd long → squeeze short, vice versa
+      derivScore += squeezeDir * 0.15;
+      derivDataPoints++;
+    }
+  }
+
+  // ── OI DIVERGENCE DETECTION ──
+  // Price rising but OI falling (or vice versa) → weak trend, potential reversal
+  if (oi != null && oiHist != null && Array.isArray(oiHist) && oiHist.length >= 2) {
+    const oiFirst = oiHist[0]?.value ?? null;
+    const oiLast = oiHist[oiHist.length - 1]?.value ?? null;
+    if (oiFirst != null && oiLast != null && oiFirst > 0) {
+      const oiChangePct = ((oiLast - oiFirst) / oiFirst) * 100;
+      // Price up but OI down → bearish divergence
+      if (change24 > 1 && oiChangePct < -3) {
+        oiDivergence = true;
+        derivScore -= 0.12;
+        derivDataPoints++;
+      }
+      // Price down but OI up → bullish divergence (short squeeze building)
+      if (change24 < -1 && oiChangePct > 5) {
+        oiDivergence = true;
+        derivScore += 0.12;
+        derivDataPoints++;
+      }
+    }
   }
 
   let sentiScore = 0;
   if (fng) {
     // Real Fear & Greed data — contrarian scoring
     const fngScoreVal = fngToScore(fng.value);
-    sentiScore += (fngScoreVal / 100) * 0.35;
+    sentiScore += (fngScoreVal / 100) * 0.25;
   } else {
     // Fallback: price momentum proxy
-    if (change24 >= 2.0) sentiScore += 0.22;
-    else if (change24 <= -2.0) sentiScore -= 0.22;
-    else sentiScore += change24 / 15;
+    if (change24 >= 2.0) sentiScore += 0.15;
+    else if (change24 <= -2.0) sentiScore -= 0.15;
+    else sentiScore += change24 / 20;
+  }
+  // LunarCrush social sentiment (contrarian)
+  if (social) {
+    const lcSentiScore = sentimentToScore(social.sentiment);
+    sentiScore += (lcSentiScore / 100) * 0.2;
+    // Social dominance — overhyped = bearish
+    const domScore = dominanceToScore(social.socialDominance);
+    sentiScore += (domScore / 100) * 0.12;
+    // Galaxy score → confidence boost (not direction, but conviction)
+    const confBoost = galaxyToConfBoost(social.galaxyScore);
+    // We'll use confBoost in the confidence calculation below
+    sentiScore += (confBoost / 100) * 0.05;
   }
   if (rsi14 != null) {
-    if (rsi14 > 62) sentiScore += 0.12;
-    else if (rsi14 < 38) sentiScore -= 0.12;
+    if (rsi14 > 62) sentiScore += 0.1;
+    else if (rsi14 < 38) sentiScore -= 0.1;
   }
   if (funding != null) {
-    if (funding > 0.0007) sentiScore -= 0.08;
-    else if (funding < -0.0007) sentiScore += 0.08;
+    if (funding > 0.0007) sentiScore -= 0.06;
+    else if (funding < -0.0007) sentiScore += 0.06;
   }
 
   let macroScore = 0;
+  // Yahoo Finance macro indicators (DXY, SPX, US10Y)
+  if (macro?.dxy?.changePct != null) {
+    const dxyScore = dxyToScore(macro.dxy.changePct, macro.dxy.trend1m);
+    macroScore += (dxyScore / 100) * 0.2;
+  }
+  if (macro?.spx?.changePct != null) {
+    const spxScore = equityToScore(macro.spx.changePct, macro.spx.trend1m);
+    macroScore += (spxScore / 100) * 0.15;
+  }
+  if (macro?.us10y?.changePct != null) {
+    const yScore = yieldToScore(macro.us10y.changePct);
+    macroScore += (yScore / 100) * 0.12;
+  }
+  // CoinGecko global: BTC dominance, market cap change
   if (cgGlobal) {
-    // Real CoinGecko global data
     const domScore = btcDominanceToScore(cgGlobal.btcDominance);
-    macroScore += (domScore / 100) * 0.16;
-    if (cgGlobal.marketCapChange24h > 2) macroScore += 0.12;
-    else if (cgGlobal.marketCapChange24h < -2) macroScore -= 0.12;
-    else macroScore += cgGlobal.marketCapChange24h / 25;
+    macroScore += (domScore / 100) * 0.12;
+    if (cgGlobal.marketCapChange24h > 2) macroScore += 0.08;
+    else if (cgGlobal.marketCapChange24h < -2) macroScore -= 0.08;
+    else macroScore += cgGlobal.marketCapChange24h / 35;
   }
-  if (sma120 != null) macroScore += latestClose >= sma120 ? 0.14 : -0.14;
-  if (Math.abs(change24) > 4) macroScore += change24 > 0 ? 0.1 : -0.1;
-  if (funding != null && change24 > 0 && funding > 0.0006) macroScore -= 0.12;
-  if (funding != null && change24 < 0 && funding < -0.0006) macroScore += 0.12;
-  if (atrPct != null && atrPct > 4) macroScore += change24 > 0 ? -0.08 : 0.08;
-  if (lsRatio != null) {
-    if (lsRatio > 1.15) macroScore -= 0.08;
-    if (lsRatio < 0.88) macroScore += 0.08;
-  }
+  if (sma120 != null) macroScore += latestClose >= sma120 ? 0.1 : -0.1;
+  if (Math.abs(change24) > 4) macroScore += change24 > 0 ? 0.06 : -0.06;
+  if (funding != null && change24 > 0 && funding > 0.0006) macroScore -= 0.08;
+  if (funding != null && change24 < 0 && funding < -0.0006) macroScore += 0.08;
 
   // ── VPA Agent (Volume Price Analysis) ──
   const recentK20 = klines.slice(-20);
@@ -418,8 +523,18 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
       pair: marketPair,
       vote: flowVote,
       conf: scoreToConfidence(flowScore, 56),
-      text: `Volume x${volumeRatio.toFixed(2)} vs 20-bar avg · 24h vol $${fmtCompact(quoteVolume24)} · ${fmtSignedPct(change24)}${ethOnchain?.exchangeNetflowEth != null ? ` · Exchange ETH ${fmtCompact(ethOnchain.exchangeNetflowEth)}` : ''}.`,
-      src: ethOnchain?.exchangeNetflowEth != null ? 'BINANCE+ETHERSCAN:FLOW' : 'BINANCE:VOLUME/FLOW',
+      text: [
+        `Vol x${volumeRatio.toFixed(2)} · 24h $${fmtCompact(quoteVolume24)} · ${fmtSignedPct(change24)}`,
+        ethOnchain?.exchangeNetflowEth != null ? `Exch ETH ${fmtCompact(ethOnchain.exchangeNetflowEth)}` : null,
+        ethOnchain?.whaleActivity != null ? `Whale txs ${ethOnchain.whaleActivity}` : null,
+        ethOnchain?.activeAddresses != null ? `Active ${fmtCompact(ethOnchain.activeAddresses)}` : null,
+        ethOnchain?.exchangeBalance != null ? `Exch Bal ${fmtCompact(ethOnchain.exchangeBalance)}` : null
+      ].filter(Boolean).join(' · ') + '.',
+      src: [
+        'BINANCE',
+        ethOnchain?.exchangeNetflowEth != null ? 'ETHERSCAN' : null,
+        ethOnchain?.whaleActivity != null ? 'DUNE' : null
+      ].filter(Boolean).join('+'),
       time: timeLabel,
       entry: flowPlan.entry,
       tp: flowPlan.tp,
@@ -437,7 +552,7 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
       conf: derivDataPoints === 0 ? 48 : scoreToConfidence(derivScore, 58),
       text: derivDataPoints === 0
         ? 'Derivatives API unavailable. Fallback to neutral stance until funding/OI stream recovers.'
-        : `OI ${oi != null ? formatOI(oi) : '—'} · Funding ${funding != null ? formatFunding(funding) : '—'} · Pred ${predFunding != null ? formatFunding(predFunding) : '—'} · L/S ${lsRatio != null ? lsRatio.toFixed(2) : '—'} · Liq L ${formatOI(liqLong)} / S ${formatOI(liqShort)}.`,
+        : `OI ${oi != null ? formatOI(oi) : '—'} · Funding ${funding != null ? formatFunding(funding) : '—'} · Pred ${predFunding != null ? formatFunding(predFunding) : '—'} · L/S ${lsRatio != null ? lsRatio.toFixed(2) : '—'} · Liq L ${formatOI(liqLong)} / S ${formatOI(liqShort)}${squeezeDetected ? ' · ⚡SQUEEZE' : ''}${oiDivergence ? ' · ⚠OI-DIV' : ''}.`,
       src: 'COINALYZE:PERP',
       time: timeLabel,
       entry: derivPlan.entry,
@@ -453,11 +568,17 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
       token,
       pair: marketPair,
       vote: sentiVote,
-      conf: scoreToConfidence(sentiScore, 54),
-      text: fng
-        ? `F&G ${fng.value} ${fng.classification} · 24h ${fmtSignedPct(change24)} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · volume x${volumeRatio.toFixed(2)}.`
-        : `Sentiment proxy · 24h ${fmtSignedPct(change24)} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · volume x${volumeRatio.toFixed(2)}.`,
-      src: fng ? 'ALTERNATIVE.ME:F&G' : 'PROXY:PRICE/MOMENTUM',
+      conf: scoreToConfidence(sentiScore, social ? 56 : 54) + (social ? Math.min(galaxyToConfBoost(social.galaxyScore), 8) : 0),
+      text: [
+        fng ? `F&G ${fng.value} ${fng.classification}` : null,
+        social ? `Social ${social.sentiment.toFixed(1)}/5 · ${fmtCompact(social.interactions24h)} engagements · Dom ${social.socialDominance.toFixed(2)}% · Galaxy ${social.galaxyScore}` : null,
+        `24h ${fmtSignedPct(change24)} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'}`
+      ].filter(Boolean).join(' · ') + '.',
+      src: [
+        fng ? 'F&G' : null,
+        social ? 'LUNARCRUSH' : null,
+        'PROXY'
+      ].filter(Boolean).join('+'),
       time: timeLabel,
       entry: sentiPlan.entry,
       tp: sentiPlan.tp,
@@ -472,11 +593,19 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
       token,
       pair: marketPair,
       vote: macroVote,
-      conf: scoreToConfidence(macroScore, 57),
-      text: cgGlobal
-        ? `BTC Dom ${cgGlobal.btcDominance.toFixed(1)}% · MktCap 24h ${fmtSignedPct(cgGlobal.marketCapChange24h)} · trend ${sma120 != null ? (latestClose >= sma120 ? 'risk-on' : 'risk-off') : 'unknown'} · funding ${funding != null ? formatFunding(funding) : '—'} · vol ${atrPct != null ? atrPct.toFixed(2) : '—'}%.`
-        : `Macro regime proxy · trend ${sma120 != null ? (latestClose >= sma120 ? 'risk-on' : 'risk-off') : 'unknown'} · funding ${funding != null ? formatFunding(funding) : '—'} · volatility ${atrPct != null ? atrPct.toFixed(2) : '—'}%.`,
-      src: cgGlobal ? 'COINGECKO:GLOBAL' : 'MACRO:REGIME',
+      conf: scoreToConfidence(macroScore, macro ? 60 : 54),
+      text: [
+        macro?.dxy ? `DXY ${macro.dxy.price.toFixed(2)} ${fmtSignedPct(macro.dxy.changePct ?? 0)}` : null,
+        macro?.spx ? `SPX ${fmtCompact(macro.spx.price)} ${fmtSignedPct(macro.spx.changePct ?? 0)}` : null,
+        macro?.us10y ? `US10Y ${macro.us10y.price.toFixed(2)}%` : null,
+        cgGlobal ? `BTC Dom ${cgGlobal.btcDominance.toFixed(1)}% · MktCap ${fmtSignedPct(cgGlobal.marketCapChange24h)}` : null,
+        `Regime ${sma120 != null ? (latestClose >= sma120 ? 'risk-on' : 'risk-off') : '—'}`
+      ].filter(Boolean).join(' · ') + '.',
+      src: [
+        macro ? 'YAHOO' : null,
+        cgGlobal ? 'COINGECKO' : null,
+        'MACRO'
+      ].filter(Boolean).join('+'),
       time: timeLabel,
       entry: macroPlan.entry,
       tp: macroPlan.tp,
