@@ -76,12 +76,6 @@
     // Hero must be mostly visible (top half still on screen)
     if (rect.bottom <= 100 || rect.top >= window.innerHeight - 100) return;
 
-    const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
-    const targetNode = e.target instanceof Node ? e.target : null;
-    const pointerInsideHeroRight = path.includes(heroRightEl)
-      || (targetNode ? heroRightEl.contains(targetNode) : false);
-    if (!pointerInsideHeroRight) return;
-
     const el = heroRightEl;
     const maxScroll = el.scrollHeight - el.clientHeight;
     if (maxScroll <= 0) return; // nothing to scroll

@@ -707,6 +707,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ---
 
+### W-20260224-024
+
+- Start (KST): 2026-02-24 02:02
+- End (KST): 2026-02-24 02:03
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 홈 1페이지 스크롤 우선순위 원복 (features 패널 먼저 소진 후 다음 섹션 이동)
+  - `src/routes/+page.svelte`의 wheel 게이트 조건 최소 수정
+- Overlap check (before work):
+  - FE 소유 파일만 수정 (`src/routes/+page.svelte`)
+  - 서버/API/스토어 파일 미수정
+  - 사용자 요청이 기존 홈 스크롤 UX 회귀 복구에 해당
+- Changes (actual):
+  - `src/routes/+page.svelte`
+    - `onWheel`의 `pointerInsideHeroRight` 조건 제거
+    - hero가 화면에 보일 때는 포인터 위치와 무관하게 feature 패널(`hero-right`)이 먼저 스크롤되도록 원복
+    - 패널 경계 도달 시 기존처럼 페이지 스크롤로 자연 전환 유지
+- Diff vs plan:
+  - 없음
+- Commit / Push: pending
+- Status: DONE
+
+---
+
 ### W-20260224-023
 
 - Start (KST): 2026-02-24 01:48
