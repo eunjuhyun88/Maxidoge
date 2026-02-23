@@ -47,9 +47,12 @@ async function duneFetch<T>(path: string): Promise<T | null> {
 }
 
 // Execute a saved query and return results
+// Accepts optional AbortSignal to cancel the polling loop early
+// (e.g., when the HTTP request that triggered this is disconnected)
 export async function executeQuery(
   queryId: number,
   params?: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<DuneQueryResult | null> {
   const cacheKey = `dune:query:${queryId}:${JSON.stringify(params ?? {})}`;
   const cached = getCached<DuneQueryResult>(cacheKey);
@@ -66,15 +69,18 @@ export async function executeQuery(
         'Content-Type': 'application/json',
       },
       body: params ? JSON.stringify({ query_parameters: params }) : '{}',
-      signal: AbortSignal.timeout(10000),
+      signal: signal ?? AbortSignal.timeout(10000),
     });
     if (!execResponse.ok) return null;
     const exec = (await execResponse.json()) as { execution_id: string };
 
-    // Poll for results (max 30s)
+    // Poll for results (max 30s, abortable)
     const maxWait = 30_000;
     const start = Date.now();
     while (Date.now() - start < maxWait) {
+      // Check abort before each poll iteration
+      if (signal?.aborted) return null;
+
       const statusRes = await duneFetch<DuneQueryResult>(
         `/execution/${exec.execution_id}/results`,
       );
@@ -83,10 +89,17 @@ export async function executeQuery(
         return statusRes;
       }
       if (statusRes?.state === 'QUERY_STATE_FAILED') return null;
-      await new Promise((r) => setTimeout(r, 2000));
+
+      // Abortable sleep: resolve on timeout OR abort
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 2000);
+        signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+      });
     }
     return null;
   } catch (err) {
+    // Don't log abort errors — they're intentional
+    if (err instanceof DOMException && err.name === 'AbortError') return null;
     console.error('[Dune] execute error:', err);
     return null;
   }

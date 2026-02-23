@@ -913,7 +913,18 @@
 
   /* ── Tab Content Wrapper ── */
   .rp-body-wrap { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; min-height: 72px; }
-  .rp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .rp-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
   .rp-body.chat-mode { padding: 0; overflow: hidden; }
 
   /* ── Headlines ── */
@@ -936,7 +947,13 @@
   }
   .hl-sort-btn:hover { background: rgba(255,230,0,.12); color: var(--yel); }
   .hl-list { display: flex; flex-direction: column; }
-  .hl-scrollable { overflow-y: auto; max-height: calc(100vh - 300px); }
+  .hl-scrollable {
+    overflow-y: auto;
+    max-height: calc(100vh - 300px);
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
   .hl-scrollable::-webkit-scrollbar { width: 2px; }
   .hl-scrollable::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
   .hl-row { display: flex; gap: 6px; padding: 7px 8px; border-bottom: 1px solid rgba(255,230,0,.08); cursor: pointer; align-items: flex-start; }
@@ -1088,11 +1105,14 @@
     padding: 1px 5px; border-radius: 8px;
   }
   .pp-scroll {
-    display: flex; gap: 6px;
+    display: flex;
+    gap: 6px;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
   }
   .pp-scroll::-webkit-scrollbar { display: none; }
   .pp-card {
@@ -1223,8 +1243,16 @@
     letter-spacing: 2px; color: var(--yel);
   }
   .ac-msgs {
-    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
-    padding: 4px 8px; min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 8px;
+    min-height: 0;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
   }
   .ac-msgs::-webkit-scrollbar { width: 2px; }
   .ac-msgs::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
@@ -1290,7 +1318,14 @@
   .trend-sub:hover { background: rgba(255,255,255,.04); color: rgba(255,255,255,.8); }
   .trend-sub.active { background: rgba(255,230,0,.08); color: var(--yel); border-color: rgba(255,230,0,.25); }
 
-  .trend-list { flex: 1; overflow-y: auto; padding: 4px 6px; }
+  .trend-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 6px;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
   .trend-loading, .trend-empty {
     padding: 20px; text-align: center; color: rgba(255,255,255,.35); font-size: 10px; font-family: var(--fm);
   }
@@ -1333,9 +1368,45 @@
   .dex-link { color: rgba(255,230,0,.5); font-size: 10px; flex-shrink: 0; }
 
   /* ── TOP PICKS (Opportunity Scanner) ── */
-  .picks-panel { flex: 1; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .picks-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
   .picks-panel::-webkit-scrollbar { width: 2px; }
   .picks-panel::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  @supports (animation-timeline: view()) {
+    .hl-row,
+    .ev-card,
+    .comm-post,
+    .pos-row,
+    .pick-card {
+      animation-name: intelReveal;
+      animation-duration: 1ms;
+      animation-fill-mode: both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 24%;
+    }
+  }
+  @keyframes intelReveal {
+    from {
+      opacity: 0.4;
+      transform: translateY(10px) scale(0.985);
+      filter: saturate(0.88);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: saturate(1);
+    }
+  }
 
   .picks-macro {
     display: flex; align-items: center; gap: 6px;

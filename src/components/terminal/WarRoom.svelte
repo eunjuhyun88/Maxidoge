@@ -837,6 +837,8 @@
     scrollbar-color: rgba(0,0,0,.35) rgba(0,0,0,.08);
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
   }
   .wr-header-right::-webkit-scrollbar { height: 4px; }
   .wr-header-right::-webkit-scrollbar-thumb {
@@ -905,6 +907,8 @@
     scrollbar-color: rgba(255,230,0,.35) transparent;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
   }
   .ticker-flow::-webkit-scrollbar { height: 4px; }
   .ticker-flow::-webkit-scrollbar-thumb { background: rgba(255,230,0,.35); border-radius: 999px; }
@@ -968,6 +972,8 @@
     scrollbar-color: rgba(255,230,0,.35) transparent;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
   }
   .scan-tabs::-webkit-scrollbar { height: 4px; }
   .scan-tabs::-webkit-scrollbar-thumb { background: rgba(255,230,0,.35); border-radius: 999px; }
@@ -1026,6 +1032,8 @@
     scrollbar-color: rgba(255,230,0,.35) transparent;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
   }
   .token-tabs::-webkit-scrollbar { height: 4px; }
   .token-tabs::-webkit-scrollbar-thumb { background: rgba(255,230,0,.35); border-radius: 999px; }
@@ -1139,7 +1147,15 @@
   }
 
   /* Signal Feed */
-  .wr-msgs { flex: 1; overflow-y: auto; position: relative; z-index: 1; }
+  .wr-msgs {
+    flex: 1;
+    overflow-y: auto;
+    position: relative;
+    z-index: 1;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
   .wr-msgs::-webkit-scrollbar { width: 2px; }
   .wr-msgs::-webkit-scrollbar-thumb { background: var(--yel); }
   .wr-msg {
@@ -1148,6 +1164,28 @@
   }
   .wr-msg:hover { background: rgba(255,255,255,.02); }
   .wr-msg.selected { background: rgba(255,230,0,.04); border-left: 2px solid var(--yel); }
+
+  @supports (animation-timeline: view()) {
+    .wr-msg {
+      animation-name: wrReveal;
+      animation-duration: 1ms;
+      animation-fill-mode: both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 24%;
+    }
+  }
+  @keyframes wrReveal {
+    from {
+      opacity: 0.4;
+      transform: translateY(10px) scale(0.985);
+      filter: saturate(0.85);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: saturate(1);
+    }
+  }
   .wr-msg-strip { width: 2px; flex-shrink: 0; }
   .wr-msg.selected .wr-msg-strip { width: 0; }
   .wr-msg-checkbox { display: flex; align-items: flex-start; padding: 8px 2px 0 6px; flex-shrink: 0; }

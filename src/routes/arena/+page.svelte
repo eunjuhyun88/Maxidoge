@@ -370,6 +370,9 @@
   }
 
   let feedCursorTimer: ReturnType<typeof setTimeout> | null = null;
+  let compareAutoTimer: ReturnType<typeof setTimeout> | null = null;
+  let pvpShowTimer: ReturnType<typeof setTimeout> | null = null;
+  let _arenaDestroyed = false; // guard for fire-and-forget timers after unmount
 
   function addFeed(icon: string, name: string, color: string, text: string, dir?: string) {
     // Add with 'new' flag for slide-in animation + blinking cursor
@@ -658,6 +661,7 @@
       const targetSource = pair?.source || SOURCES[i % SOURCES.length];
 
       setTimeout(() => {
+        if (_arenaDestroyed) return;
         // Phase 1: Walk toward data source — move agent position
         setAgentState(ag.id, 'walk');
         if (targetSource) {
@@ -671,17 +675,20 @@
         sfx.scan();
 
         setTimeout(() => {
+          if (_arenaDestroyed) return;
           // Phase 2: Arrive at source + charge up energy
           setAgentState(ag.id, 'charge');
           setAgentEnergy(ag.id, 30);
           setSpeech(ag.id, ag.speech.scout, 800 / speed);
 
           setTimeout(() => {
+            if (_arenaDestroyed) return;
             // Phase 3: Energy full → show finding (at source)
             setAgentEnergy(ag.id, 75);
             addFeed(ag.icon, ag.name, ag.color, ag.finding.title, ag.dir);
 
             setTimeout(() => {
+              if (_arenaDestroyed) return;
               // Phase 4: Full charge + decision — return to original position
               setAgentEnergy(ag.id, 100);
               sfx.charge();
@@ -700,7 +707,7 @@
 
               // Phase 5: Return to idle stance
               setTimeout(() => {
-                setAgentState(ag.id, 'idle');
+                if (!_arenaDestroyed) setAgentState(ag.id, 'idle');
               }, 500 / speed);
             }, 300 / speed);
           }, 300 / speed);
@@ -812,7 +819,10 @@
 
     // Auto-advance after compare display
     const speed = state.speed || 3;
-    setTimeout(() => {
+    if (compareAutoTimer) clearTimeout(compareAutoTimer);
+    compareAutoTimer = setTimeout(() => {
+      compareAutoTimer = null;
+      if (_arenaDestroyed) return;
       compareVisible = false;
       advancePhase();
     }, 4000 / speed);
@@ -969,7 +979,8 @@
     addFeed(win ? '🏆' : '💀', 'RESULT', win ? '#00CC88' : '#FF5E7A',
       win ? `WIN! +${lpChange} LP [${resultTag}]` : `LOSE [${resultTag}] ${lpChange} LP`);
 
-    setTimeout(() => { pvpVisible = true; }, 1500);
+    if (pvpShowTimer) clearTimeout(pvpShowTimer);
+    pvpShowTimer = setTimeout(() => { pvpShowTimer = null; if (!_arenaDestroyed) pvpVisible = true; }, 1500);
     gameState.update((s) => ({ ...s, running: false, timer: 0 }));
   }
 
@@ -1038,9 +1049,13 @@
   });
 
   onDestroy(() => {
+    _arenaDestroyed = true;
     if (hypothesisInterval) clearInterval(hypothesisInterval);
     if (previewAutoTimer) clearTimeout(previewAutoTimer);
     if (replayTimer) clearTimeout(replayTimer);
+    if (feedCursorTimer) clearTimeout(feedCursorTimer);
+    if (compareAutoTimer) clearTimeout(compareAutoTimer);
+    if (pvpShowTimer) clearTimeout(pvpShowTimer);
     // Clean up typing timers
     Object.values(speechTimers).forEach(t => clearInterval(t));
   });
