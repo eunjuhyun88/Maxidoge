@@ -5,6 +5,7 @@ import { hydrateUserProfile } from './userProfileStore';
 import { hydrateCommunityPosts } from './communityStore';
 import { notifications } from './notificationStore';
 import { ensureLivePriceSyncStarted } from '$lib/services/livePriceSyncService';
+import { hydrateAgentStats } from './agentData';
 
 let _domainHydrationPromise: Promise<void> | null = null;
 let _backgroundHydrationPromise: Promise<void> | null = null;
@@ -17,6 +18,7 @@ function runBackgroundHydration(force = false): Promise<void> {
   _backgroundHydrationPromise = Promise.allSettled([
     hydrateMatchHistory(force),
     hydrateUserProfile(force),
+    hydrateAgentStats(force),
     hydrateCommunityPosts(force),
     notifications.hydrate(force)
   ]).then(() => undefined);
