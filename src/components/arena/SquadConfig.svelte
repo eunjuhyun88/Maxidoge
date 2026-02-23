@@ -9,15 +9,15 @@
     back: void;
   }>();
 
-  export let selectedAgents: string[] = [];
+  let { selectedAgents = [] as string[] }: { selectedAgents?: string[] } = $props();
 
   // Squad-wide config (v2 parameters)
-  let riskLevel: RiskLevel = 'mid';
-  let timeframe: SquadTimeframe = '4h';
-  let leverageBias = 5;
-  let confidenceWeight = 5;
+  let riskLevel: RiskLevel = $state('mid');
+  let timeframe: SquadTimeframe = $state('4h');
+  let leverageBias = $state(5);
+  let confidenceWeight = $state(5);
 
-  $: activeAgents = AGDEFS.filter(a => selectedAgents.includes(a.id));
+  let activeAgents = $derived(AGDEFS.filter(a => selectedAgents.includes(a.id)));
 
   const RISK_OPTIONS: { value: RiskLevel; label: string; emoji: string; desc: string; color: string }[] = [
     { value: 'low', label: 'LOW', emoji: '🛡', desc: 'Conservative. Tight SL, low leverage.', color: '#00cc66' },

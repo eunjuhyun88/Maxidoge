@@ -8,7 +8,7 @@
   import { onMount } from 'svelte';
   import EmptyState from '../shared/EmptyState.svelte';
 
-  export let embedded = false;
+  let { embedded = false }: { embedded?: boolean } = $props();
 
   type SortBy = 'wilson' | 'accuracy' | 'sample' | 'calibration';
   type Period = '7d' | '30d' | 'all';
@@ -45,12 +45,12 @@
     recentVotes: VoteSnapshot[];
   };
 
-  $: stats = $agentStats;
-  $: records = $matchHistoryStore.records;
+  let stats = $derived($agentStats);
+  let records = $derived($matchHistoryStore.records);
 
-  let sortBy: SortBy = 'wilson';
-  let period: Period = 'all';
-  let selectedAgent: OracleRow | null = null;
+  let sortBy: SortBy = $state<SortBy>('wilson');
+  let period: Period = $state<Period>('all');
+  let selectedAgent: OracleRow | null = $state(null);
 
   function inferMarketDirection(record: (typeof records)[number]): 'LONG' | 'SHORT' | null {
     const userDir = String(record.hypothesis?.dir || '').toUpperCase();
@@ -72,14 +72,14 @@
     };
   }
 
-  $: filteredRecords = (() => {
+  let filteredRecords = $derived.by(() => {
     const now = Date.now();
     if (period === '7d') return records.filter((r) => now - r.timestamp < 7 * 86400000);
     if (period === '30d') return records.filter((r) => now - r.timestamp < 30 * 86400000);
     return records;
-  })();
+  });
 
-  $: oracleData = (Object.values(AGENT_POOL) as Array<(typeof AGENT_POOL)[AgentId]>).map((agent) => {
+  let oracleData = $derived.by(() => (Object.values(AGENT_POOL) as Array<(typeof AGENT_POOL)[AgentId]>).map((agent) => {
     const statKey = agent.id.toLowerCase();
     const s = stats[statKey] || { level: 1, xp: 0 };
     let wins = 0;
@@ -156,9 +156,9 @@
     if (sortBy === 'sample') return b.sample - a.sample;
     if (sortBy === 'calibration') return b.calibration - a.calibration;
     return b.wilson - a.wilson;
-  });
+  }));
 
-  $: consistentRows = oracleData.filter((row) => row.sample >= 5 && row.wilson >= 55);
+  let consistentRows = $derived(oracleData.filter((row) => row.sample >= 5 && row.wilson >= 55));
 
   function selectAgent(ag: OracleRow) {
     selectedAgent = ag;

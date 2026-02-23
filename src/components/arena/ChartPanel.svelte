@@ -66,13 +66,13 @@
   let latestVolume = 0;
 
   // ═══ Chart Mode ═══
-  let chartMode: 'agent' | 'trading' = 'agent';
+  let chartMode: 'agent' | 'trading' = $state('agent');
   let tvWidget: any = null;
   let tvContainer: HTMLDivElement;
   let tvScriptLoaded = false;
-  let tvLoading = false;
-  let tvError = '';
-  let tvSafeMode = false;
+  let tvLoading = $state(false);
+  let tvError = $state('');
+  let tvSafeMode = $state(false);
   let _tvFallbackTried = false;
   let _tvLoadTimer: ReturnType<typeof setTimeout> | null = null;
   let _tvReinitKey = '';
@@ -96,12 +96,12 @@
       riskPct: number;
     };
   let drawingCanvas: HTMLCanvasElement;
-  let drawingMode: DrawingMode = 'none';
-  let drawings: DrawingItem[] = [];
-  let currentDrawing: { type: 'trendline'; points: Array<{ x: number; y: number }> } | null = null;
-  let tradePreview: { mode: 'longentry' | 'shortentry'; startX: number; startY: number; cursorX: number; cursorY: number } | null = null;
-  let isDrawing = false;
-  let chartNotice = '';
+  let drawingMode: DrawingMode = $state('none');
+  let drawings: DrawingItem[] = $state([]);
+  let currentDrawing: { type: 'trendline'; points: Array<{ x: number; y: number }> } | null = $state(null);
+  let tradePreview: { mode: 'longentry' | 'shortentry'; startX: number; startY: number; cursorX: number; cursorY: number } | null = $state(null);
+  let isDrawing = $state(false);
+  let chartNotice = $state('');
   let _chartNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Position lines
@@ -109,34 +109,50 @@
   let entryLine: any = null;
   let slLine: any = null;
 
-  export let posEntry: number | null = null;
-  export let posTp: number | null = null;
-  export let posSl: number | null = null;
-  export let posDir: string = 'LONG';
-  export let showPosition = false;
-  export let advancedMode = false;
-  export let enableTradeLineEntry = false;
+  let {
+    posEntry = null as number | null,
+    posTp = null as number | null,
+    posSl = null as number | null,
+    posDir = 'LONG',
+    showPosition = false,
+    advancedMode = false,
+    enableTradeLineEntry = false,
+    agentMarkers = [] as Array<{
+      time: number; position: 'aboveBar' | 'belowBar'; color: string;
+      shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'; text: string;
+    }>,
+    agentAnnotations = [] as Array<{
+      id: string; icon: string; name: string; color: string; label: string;
+      detail: string; yPercent: number; xPercent: number;
+      type: 'ob' | 'funding' | 'whale' | 'signal';
+    }>,
+  }: {
+    posEntry?: number | null;
+    posTp?: number | null;
+    posSl?: number | null;
+    posDir?: string;
+    showPosition?: boolean;
+    advancedMode?: boolean;
+    enableTradeLineEntry?: boolean;
+    agentMarkers?: Array<{
+      time: number; position: 'aboveBar' | 'belowBar'; color: string;
+      shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'; text: string;
+    }>;
+    agentAnnotations?: Array<{
+      id: string; icon: string; name: string; color: string; label: string;
+      detail: string; yPercent: number; xPercent: number;
+      type: 'ob' | 'funding' | 'whale' | 'signal';
+    }>;
+  } = $props();
 
-  export let agentMarkers: Array<{
-    time: number; position: 'aboveBar' | 'belowBar'; color: string;
-    shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'; text: string;
-  }> = [];
+  let selectedAnnotation: typeof agentAnnotations[0] | null = $state(null);
 
-  export let agentAnnotations: Array<{
-    id: string; icon: string; name: string; color: string; label: string;
-    detail: string; yPercent: number; xPercent: number;
-    type: 'ob' | 'funding' | 'whale' | 'signal';
-  }> = [];
-
-  let selectedAnnotation: typeof agentAnnotations[0] | null = null;
-
-  let state = $gameState;
-  $: state = $gameState;
-  $: symbol = pairToSymbol(state.pair);
-  $: interval = toBinanceInterval(state.timeframe);
+  let state = $derived($gameState);
+  let symbol = $derived(pairToSymbol(state.pair));
+  let interval = $derived(toBinanceInterval(state.timeframe));
 
   type IndicatorKey = 'ma20' | 'ma60' | 'ma120' | 'ma7' | 'ma25' | 'ma99' | 'rsi' | 'vol';
-  let indicatorEnabled: Record<IndicatorKey, boolean> = {
+  let indicatorEnabled: Record<IndicatorKey, boolean> = $state({
     ma20: true,
     ma60: true,
     ma120: true,
@@ -145,10 +161,10 @@
     ma99: true,
     rsi: true,
     vol: true,
-  };
-  let chartVisualMode: 'focus' | 'full' = 'focus';
-  let showIndicatorLegend = true;
-  let indicatorStripState: 'expanded' | 'collapsed' | 'hidden' = 'expanded';
+  });
+  let chartVisualMode: 'focus' | 'full' = $state('focus');
+  let showIndicatorLegend = $state(true);
+  let indicatorStripState: 'expanded' | 'collapsed' | 'hidden' = $state('expanded');
   let _indicatorProfileApplied: string | null = null;
   const BAR_SPACING_MIN = 5;
   const BAR_SPACING_MAX = 28;
@@ -615,14 +631,14 @@
     gtmEvent('terminal_indicator_strip_state', { state: next });
   }
 
-  $: {
+  $effect(() => {
     const profileKey = advancedMode ? `advanced:${chartVisualMode}` : 'basic';
     if (_indicatorProfileApplied !== profileKey) {
       _indicatorProfileApplied = profileKey;
       applyIndicatorProfile();
       applyIndicatorVisibility();
     }
-  }
+  });
 
   function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
     if (typeof window === 'undefined') return;
@@ -794,17 +810,19 @@
 
   // Debounced TradingView init/re-init only when pair/TF key changes.
   let _tvInitTimer: ReturnType<typeof setTimeout> | null = null;
-  $: if (chartMode === 'trading' && tvContainer && state.pair && state.timeframe) {
-    const key = `${state.pair}|${state.timeframe}`;
-    if (key !== _tvReinitKey) {
-      _tvReinitKey = key;
-      if (_tvInitTimer) clearTimeout(_tvInitTimer);
-      _tvInitTimer = setTimeout(() => {
-        _tvFallbackTried = false;
-        initTradingView(false);
-      }, 220);
+  $effect(() => {
+    if (chartMode === 'trading' && tvContainer && state.pair && state.timeframe) {
+      const key = `${state.pair}|${state.timeframe}`;
+      if (key !== _tvReinitKey) {
+        _tvReinitKey = key;
+        if (_tvInitTimer) clearTimeout(_tvInitTimer);
+        _tvInitTimer = setTimeout(() => {
+          _tvFallbackTried = false;
+          initTradingView(false);
+        }, 220);
+      }
     }
-  }
+  });
 
   function retryTradingView() {
     _tvFallbackTried = false;
@@ -1024,8 +1042,10 @@
     }, 2000);
   }
 
-  $: if (series && showPosition && posEntry !== null && posTp !== null && posSl !== null) { updatePositionLines(posEntry, posTp, posSl, posDir); }
-  $: if (series && !showPosition) { clearPositionLines(); }
+  $effect(() => {
+    if (series && showPosition && posEntry !== null && posTp !== null && posSl !== null) { updatePositionLines(posEntry, posTp, posSl, posDir); }
+    if (series && !showPosition) { clearPositionLines(); }
+  });
 
   function updatePositionLines(entry: number, tp: number, sl: number, dir: string) {
     if (!series) return;
@@ -1091,7 +1111,7 @@
 
   function priceFromY(y: number): number | null { if (!series) return null; try { return series.coordinateToPrice(y); } catch { return null; } }
 
-  $: if (series && agentMarkers.length > 0) { try { series.setMarkers(agentMarkers); } catch {} }
+  $effect(() => { if (series && agentMarkers.length > 0) { try { series.setMarkers(agentMarkers); } catch {} } });
 
   export function getCurrentPrice() { return livePrice; }
 

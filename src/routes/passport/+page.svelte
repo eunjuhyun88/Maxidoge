@@ -14,43 +14,43 @@
   import { livePrices } from '$lib/stores/priceStore';
   import EmptyState from '../../components/shared/EmptyState.svelte';
 
-  $: profile = $userProfileStore;
-  $: wallet = $walletStore;
-  $: stats = $profileStats;
-  $: tier = $profileTier;
-  $: earned = $earnedBadges;
-  $: locked = $lockedBadges;
-  $: agStats = $agentStats;
-  $: gState = $gameState;
-  $: openPos = $openTradeCount;
-  $: trackedCount = $activeSignalCount;
-  $: pnl = $totalQuickPnL;
-  $: opens = $openTrades;
-  $: closed = $closedTrades;
-  $: tracked = $activeSignals;
-  $: expired = $expiredSignals;
-  $: records = $matchHistoryStore.records;
-  $: wr = $winRate;
-  $: bStreak = $bestStreak;
+  let profile = $derived($userProfileStore);
+  let wallet = $derived($walletStore);
+  let stats = $derived($profileStats);
+  let tier = $derived($profileTier);
+  let earned = $derived($earnedBadges);
+  let locked = $derived($lockedBadges);
+  let agStats = $derived($agentStats);
+  let gState = $derived($gameState);
+  let openPos = $derived($openTradeCount);
+  let trackedCount = $derived($activeSignalCount);
+  let pnl = $derived($totalQuickPnL);
+  let opens = $derived($openTrades);
+  let closed = $derived($closedTrades);
+  let tracked = $derived($activeSignals);
+  let expired = $derived($expiredSignals);
+  let records = $derived($matchHistoryStore.records);
+  let wr = $derived($winRate);
+  let bStreak = $derived($bestStreak);
 
   // Holdings: live API data with static fallback
-  let liveHoldings: HoldingAsset[] = [];
-  let holdingsLoaded = false;
-  $: liveP = $livePrices;
+  let liveHoldings: HoldingAsset[] = $state([]);
+  let holdingsLoaded = $state(false);
+  let liveP = $derived($livePrices);
 
   // Build effective holdings array: live API → static fallback
-  $: effectiveHoldings = holdingsLoaded && liveHoldings.length > 0 ? liveHoldings : HOLDINGS_DATA;
+  let effectiveHoldings = $derived(holdingsLoaded && liveHoldings.length > 0 ? liveHoldings : HOLDINGS_DATA);
 
   // Holdings calculations
-  $: total = effectiveHoldings.reduce((s, h) => s + h.amount * h.currentPrice, 0);
-  $: totalCost = effectiveHoldings.reduce((s, h) => s + h.amount * h.avgPrice, 0);
-  $: totalPnl = total - totalCost;
-  $: totalPnlPct = totalCost > 0 ? ((totalPnl / totalCost) * 100) : 0;
-  $: unrealizedPnl = opens.reduce((s, t) => s + t.pnlPercent, 0);
+  let total = $derived(effectiveHoldings.reduce((s, h) => s + h.amount * h.currentPrice, 0));
+  let totalCost = $derived(effectiveHoldings.reduce((s, h) => s + h.amount * h.avgPrice, 0));
+  let totalPnl = $derived(total - totalCost);
+  let totalPnlPct = $derived(totalCost > 0 ? ((totalPnl / totalCost) * 100) : 0);
+  let unrealizedPnl = $derived(opens.reduce((s, t) => s + t.pnlPercent, 0));
 
   // Tab state
   type TabType = 'profile' | 'wallet' | 'positions' | 'arena';
-  let activeTab: TabType = 'profile';
+  let activeTab: TabType = $state('profile');
 
   const TABS: { id: TabType; label: string; icon: string }[] = [
     { id: 'profile', label: 'PROFILE', icon: '📋' },
@@ -68,9 +68,9 @@
     '/doge/badge-verified.png', '/doge/badge-shield.png', '/doge/badge-rocket.png', '/doge/badge-diamond.png',
   ];
 
-  let showAvatarPicker = false;
-  let editingName = false;
-  let nameInput = '';
+  let showAvatarPicker = $state(false);
+  let editingName = $state(false);
+  let nameInput = $state('');
 
   function pickAvatar(path: string) { setAvatar(path); showAvatarPicker = false; }
   function startEditName() { nameInput = profile.username; editingName = true; }

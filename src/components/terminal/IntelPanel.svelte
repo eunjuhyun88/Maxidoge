@@ -14,9 +14,6 @@
   const dispatch = createEventDispatcher();
 
   // Chat props (passed from terminal page)
-  export let chatMessages: { from: string; icon: string; color: string; text: string; time: string; isUser: boolean; isSystem?: boolean }[] = [];
-  export let isTyping = false;
-  export let prioritizeChat = false;
   type ScanHighlight = {
     agent: string;
     vote: 'long' | 'short' | 'neutral';
@@ -34,14 +31,24 @@
     summary: string;
     highlights: ScanHighlight[];
   };
-  export let latestScan: ScanBrief | null = null;
+  let {
+    chatMessages = [],
+    isTyping = false,
+    prioritizeChat = false,
+    latestScan = null as ScanBrief | null,
+  }: {
+    chatMessages?: { from: string; icon: string; color: string; text: string; time: string; isUser: boolean; isSystem?: boolean }[];
+    isTyping?: boolean;
+    prioritizeChat?: boolean;
+    latestScan?: ScanBrief | null;
+  } = $props();
 
-  let activeTab = 'intel';
-  let innerTab = 'chat';
-  let posSubTab: 'all' | 'trades' | 'perps' | 'markets' = 'all';
-  let betMarket: any = null; // market to open in BetPanel
-  let showGmxPanel = false;  // GmxTradePanel visibility
-  let tabCollapsed = false;
+  let activeTab = $state('intel');
+  let innerTab = $state('chat');
+  let posSubTab: 'all' | 'trades' | 'perps' | 'markets' = $state('all');
+  let betMarket: any = $state(null); // market to open in BetPanel
+  let showGmxPanel = $state(false);  // GmxTradePanel visibility
+  let tabCollapsed = $state(false);
   let _uiStateSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ═══ Live data from API (replaces hardcoded) ═══
@@ -51,25 +58,25 @@
     network?: string;
     creator?: string;
   }
-  let liveHeadlines: HeadlineEx[] = [];
-  let headlineOffset = 0;
-  let headlineHasMore = true;
-  let headlineLoading = false;
-  let headlineSortBy: 'importance' | 'time' = 'importance';
-  let liveEvents: Array<{ id: string; tag: string; level: string; text: string; source: string; createdAt: number }> = [];
-  let liveFlows: Array<{ id: string; label: string; addr: string; amt: string; isBuy: boolean }> = [];
-  let dataLoaded = { headlines: false, events: false, flow: false, trending: false };
+  let liveHeadlines: HeadlineEx[] = $state([]);
+  let headlineOffset = $state(0);
+  let headlineHasMore = $state(true);
+  let headlineLoading = $state(false);
+  let headlineSortBy: 'importance' | 'time' = $state('importance');
+  let liveEvents: Array<{ id: string; tag: string; level: string; text: string; source: string; createdAt: number }> = $state([]);
+  let liveFlows: Array<{ id: string; label: string; addr: string; amt: string; isBuy: boolean }> = $state([]);
+  let dataLoaded = $state({ headlines: false, events: false, flow: false, trending: false });
 
   // ═══ Trending data ═══
   interface TrendingCoin { rank: number; symbol: string; name: string; price: number; change1h: number; change24h: number; change7d: number; volume24h: number; sentiment?: number | null; socialVolume?: number | null; galaxyScore?: number | null; }
   interface GainerLoser extends TrendingCoin { direction: 'gainer' | 'loser'; }
   interface DexHot { chainId: string; tokenAddress: string; url: string; description: string | null; icon: string | null; }
-  let trendingCoins: TrendingCoin[] = [];
-  let trendGainers: GainerLoser[] = [];
-  let trendLosers: GainerLoser[] = [];
-  let trendDexHot: DexHot[] = [];
-  let trendSubTab: 'hot' | 'gainers' | 'dex' | 'picks' = 'picks';
-  let trendLoading = false;
+  let trendingCoins: TrendingCoin[] = $state([]);
+  let trendGainers: GainerLoser[] = $state([]);
+  let trendLosers: GainerLoser[] = $state([]);
+  let trendDexHot: DexHot[] = $state([]);
+  let trendSubTab: 'hot' | 'gainers' | 'dex' | 'picks' = $state('picks');
+  let trendLoading = $state(false);
 
   // ═══ Opportunity Scanner (TOP PICKS) ═══
   interface OpScore {
@@ -83,15 +90,15 @@
     sentiment?: number | null; galaxyScore?: number | null;
   }
   interface OpAlert { symbol: string; type: string; severity: string; message: string; score: number; }
-  let topPicks: OpScore[] = [];
-  let opAlerts: OpAlert[] = [];
-  let macroRegime = '';
-  let picksLoading = false;
-  let picksScanTime = 0;
-  let picksLoaded = false;
+  let topPicks: OpScore[] = $state([]);
+  let opAlerts: OpAlert[] = $state([]);
+  let macroRegime = $state('');
+  let picksLoading = $state(false);
+  let picksScanTime = $state(0);
+  let picksLoaded = $state(false);
 
   // Chat input (local)
-  let chatInput = '';
+  let chatInput = $state('');
   let chatEl: HTMLDivElement;
 
   function setTab(tab: string) {
@@ -146,26 +153,28 @@
   }
 
   // Auto-scroll chat when messages change
-  $: if (chatMessages.length && chatEl) {
-    setTimeout(() => { if (chatEl) chatEl.scrollTop = chatEl.scrollHeight; }, 50);
-  }
+  $effect(() => {
+    if (chatMessages.length && chatEl) {
+      setTimeout(() => { if (chatEl) chatEl.scrollTop = chatEl.scrollHeight; }, 50);
+    }
+  });
 
-  $: opens = $openTrades;
-  $: openCount = opens.length;
-  $: latestScanTime = latestScan ? new Date(latestScan.createdAt).toTimeString().slice(0, 5) : '';
+  let opens = $derived($openTrades);
+  let openCount = $derived(opens.length);
+  let latestScanTime = $derived(latestScan ? new Date(latestScan.createdAt).toTimeString().slice(0, 5) : '');
 
   // ═══ Filter headlines by current chart ticker ═══
-  $: currentToken = $gameState.pair.split('/')[0] || 'BTC';
-  $: tokenAliases = getTokenAliases(currentToken);
-  $: headlineSource = liveHeadlines;
-  $: filteredHeadlines = headlineSource.filter(hl =>
+  let currentToken = $derived($gameState.pair.split('/')[0] || 'BTC');
+  let tokenAliases = $derived(getTokenAliases(currentToken));
+  let headlineSource = $derived(liveHeadlines);
+  let filteredHeadlines = $derived.by(() => headlineSource.filter(hl =>
     tokenAliases.some(alias => hl.text.toLowerCase().includes(alias)) ||
     hl.text.toLowerCase().includes('crypto') ||
     hl.text.toLowerCase().includes('exchange') ||
     hl.text.toLowerCase().includes('market')
-  );
+  ));
   // Show all if no matches
-  $: displayHeadlines = filteredHeadlines.length >= 2 ? filteredHeadlines : headlineSource;
+  let displayHeadlines = $derived(filteredHeadlines.length >= 2 ? filteredHeadlines : headlineSource);
 
   async function fetchLiveHeadlines(append = false) {
     if (headlineLoading) return;
@@ -391,7 +400,7 @@
   // ═══ Pair 변경 시 Events/Flow 자동 refetch ═══
   let _prevPair = '';
   let _pairRefetchTimer: ReturnType<typeof setTimeout> | null = null;
-  $: {
+  $effect(() => {
     const pair = $gameState.pair || 'BTC/USDT';
     if (_prevPair && pair !== _prevPair) {
       // pair 바뀌면 debounce 후 refetch (빠른 전환 스팸 방지)
@@ -407,13 +416,13 @@
       }, 300);
     }
     _prevPair = pair;
-  }
+  });
 
   // Crypto prediction markets for POSITIONS tab
   const CRYPTO_RX = /\b(bitcoin|btc|ethereum|eth|solana|sol|crypto|defi|web3)\b/i;
-  $: cryptoMarkets = $predictMarkets
+  let cryptoMarkets = $derived.by(() => $predictMarkets
     .filter(m => CRYPTO_RX.test(m.question))
-    .slice(0, 8);
+    .slice(0, 8));
 
   onMount(() => {
     loadPolymarkets();

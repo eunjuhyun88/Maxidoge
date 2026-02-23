@@ -7,14 +7,12 @@
   import { activeSignalCount } from '$lib/stores/trackedSignalStore';
   import { goto } from '$app/navigation';
 
-  let state = $gameState;
-  $: state = $gameState;
-
-  $: feed = $latestFeed;
-  $: phaseLabel = PHASE_LABELS[state.phase] || PHASE_LABELS.DRAFT;
-  $: openPos = $openTradeCount;
-  $: trackedSigs = $activeSignalCount;
-  $: finalDir = state.score >= 60 ? 'LONG' : 'SHORT';
+  let state = $derived($gameState);
+  let feed = $derived($latestFeed);
+  let phaseLabel = $derived(PHASE_LABELS[state.phase] || PHASE_LABELS.DRAFT);
+  let openPos = $derived($openTradeCount);
+  let trackedSigs = $derived($activeSignalCount);
+  let finalDir = $derived(state.score >= 60 ? 'LONG' : 'SHORT');
 </script>
 
 <div id="bot">

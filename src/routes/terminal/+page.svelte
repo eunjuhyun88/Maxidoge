@@ -6,11 +6,11 @@
   import CopyTradeModal from '../../components/modals/CopyTradeModal.svelte';
   import { AGDEFS } from '$lib/data/agents';
 
-  let liveTickerStr = '';
-  let tickerLoaded = false;
-  $: TICKER_STR = tickerLoaded && liveTickerStr
+  let liveTickerStr = $state('');
+  let tickerLoaded = $state(false);
+  let TICKER_STR = $derived(tickerLoaded && liveTickerStr
     ? `${liveTickerStr}  \u00a0|\u00a0  ${liveTickerStr}`
-    : 'Loading market data...';
+    : 'Loading market data...');
   import { gameState } from '$lib/stores/gameState';
   import { livePrices } from '$lib/stores/priceStore';
   import { updateAllPrices, hydrateQuickTrades } from '$lib/stores/quickTradeStore';
@@ -21,10 +21,10 @@
   import { onMount, onDestroy } from 'svelte';
 
   // ── Panel resize state ──
-  let leftW = 280;       // War Room width
-  let rightW = 300;      // Intel Panel width
+  let leftW = $state(280);       // War Room width
+  let rightW = $state(300);      // Intel Panel width
   let containerEl: HTMLDivElement;
-  let windowWidth = 1200;
+  let windowWidth = $state(1200);
 
   const MIN_LEFT = 200;
   const MAX_LEFT = 450;
@@ -32,8 +32,8 @@
   const MAX_RIGHT = 500;
 
   // Collapse state
-  let leftCollapsed = false;
-  let rightCollapsed = false;
+  let leftCollapsed = $state(false);
+  let rightCollapsed = $state(false);
   let savedLeftW = 280;
   let savedRightW = 300;
 
@@ -68,9 +68,9 @@
   let dragStartVal = 0;
 
   // Responsive layout mode
-  $: isMobile = windowWidth < BP_MOBILE;
-  $: isTablet = windowWidth >= BP_MOBILE && windowWidth < BP_TABLET;
-  $: isDesktop = windowWidth >= BP_TABLET;
+  let isMobile = $derived(windowWidth < BP_MOBILE);
+  let isTablet = $derived(windowWidth >= BP_MOBILE && windowWidth < BP_TABLET);
+  let isDesktop = $derived(windowWidth >= BP_TABLET);
 
   // Mobile tab control
   type MobileTab = 'warroom' | 'chart' | 'intel';
@@ -79,8 +79,8 @@
     chart: { label: 'Chart', icon: '📊', desc: 'Execution chart with drawing and indicators' },
     intel: { label: 'Intel', icon: '🧠', desc: 'News, community and agent chat' },
   };
-  let mobileTab: MobileTab = 'chart';
-  let mobileViewTracked = false;
+  let mobileTab: MobileTab = $state<MobileTab>('chart');
+  let mobileViewTracked = $state(false);
 
   function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
     if (typeof window === 'undefined') return;
@@ -105,15 +105,17 @@
     });
   }
 
-  $: if (isMobile && !mobileViewTracked) {
-    mobileViewTracked = true;
-    gtmEvent('terminal_mobile_view', {
-      tab: mobileTab,
-      pair: $gameState.pair,
-      timeframe: $gameState.timeframe,
-    });
-  }
-  $: if (!isMobile && mobileViewTracked) mobileViewTracked = false;
+  $effect.pre(() => {
+    if (isMobile && !mobileViewTracked) {
+      mobileViewTracked = true;
+      gtmEvent('terminal_mobile_view', {
+        tab: mobileTab,
+        pair: $gameState.pair,
+        timeframe: $gameState.timeframe,
+      });
+    }
+    if (!isMobile && mobileViewTracked) mobileViewTracked = false;
+  });
 
   function startDrag(target: DragTarget, e: MouseEvent) {
     if (isMobile || isTablet) return;
@@ -272,8 +274,8 @@
   });
 
   // Selected pair display
-  $: pair = $gameState.pair || 'BTC/USDT';
-  $: mobileMeta = MOBILE_TAB_META[mobileTab];
+  let pair = $derived($gameState.pair || 'BTC/USDT');
+  let mobileMeta = $derived(MOBILE_TAB_META[mobileTab]);
 
   function onTokenSelect(e: CustomEvent<{ pair: string }>) {
     gameState.update(s => ({ ...s, pair: e.detail.pair }));
@@ -288,7 +290,7 @@
     triggerScanFromChart?: () => void;
   };
   let warRoomRef: WarRoomHandle | null = null;
-  let pendingChartScan = false;
+  let pendingChartScan = $state(false);
 
   function tryTriggerWarRoomScan(): boolean {
     if (!warRoomRef || typeof warRoomRef.triggerScanFromChart !== 'function') return false;
@@ -315,9 +317,11 @@
     }
   }
 
-  $: if (pendingChartScan && tryTriggerWarRoomScan()) {
-    pendingChartScan = false;
-  }
+  $effect.pre(() => {
+    if (pendingChartScan && tryTriggerWarRoomScan()) {
+      pendingChartScan = false;
+    }
+  });
 
   // ── Agent Chat State ──
   interface ChatMsg {

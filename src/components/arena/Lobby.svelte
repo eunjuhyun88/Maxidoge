@@ -16,35 +16,33 @@
   const TOURNAMENT_UNLOCK_LP = 500;
   const TOURNAMENT_UNLOCK_PVP_WINS = 5;
 
-  let selectedMode: 'pve' | 'pvp' | 'tournament' = 'pve';
-  let tournaments: TournamentActiveRecord[] = [];
-  let tournamentsLoading = false;
-  let tournamentsError: string | null = null;
-  let selectedTournamentId: string | null = null;
-  let bracketLoading = false;
-  let bracketError: string | null = null;
-  let bracketRound = 1;
-  let bracketMatches: TournamentBracketMatch[] = [];
-  let registerLoading = false;
-  let registerMessage: string | null = null;
-  let selectedTournament: TournamentActiveRecord | null = null;
-  let canRegisterTournament = false;
+  let selectedMode: 'pve' | 'pvp' | 'tournament' = $state('pve');
+  let tournaments: TournamentActiveRecord[] = $state([]);
+  let tournamentsLoading = $state(false);
+  let tournamentsError: string | null = $state(null);
+  let selectedTournamentId: string | null = $state(null);
+  let bracketLoading = $state(false);
+  let bracketError: string | null = $state(null);
+  let bracketRound = $state(1);
+  let bracketMatches: TournamentBracketMatch[] = $state([]);
+  let registerLoading = $state(false);
+  let registerMessage: string | null = $state(null);
 
-  $: walletLabel = 'Silver';
-  $: pveRecord = `${$gameState.wins}W-${$gameState.losses}L`;
-  $: pvpWins = Math.max(0, Math.floor($gameState.wins * 0.65));
-  $: pvpLosses = Math.max(0, Math.floor($gameState.losses * 0.35));
-  $: pvpRecord = `${pvpWins}W-${pvpLosses}L`;
-  $: pvpUnlocked = $gameState.matchN >= PVP_UNLOCK_MATCHES;
-  $: tournamentUnlocked = $gameState.lp >= TOURNAMENT_UNLOCK_LP && pvpWins >= TOURNAMENT_UNLOCK_PVP_WINS;
-  $: activeCount = Math.min(5, Math.max(1, ($gameState.matchN % 5) + 1));
-  $: selectedTournament = tournaments.find((t) => t.tournamentId === selectedTournamentId) ?? tournaments[0] ?? null;
-  $: canRegisterTournament =
+  const walletLabel = 'Silver';
+  let pveRecord = $derived(`${$gameState.wins}W-${$gameState.losses}L`);
+  let pvpWins = $derived(Math.max(0, Math.floor($gameState.wins * 0.65)));
+  let pvpLosses = $derived(Math.max(0, Math.floor($gameState.losses * 0.35)));
+  let pvpRecord = $derived(`${pvpWins}W-${pvpLosses}L`);
+  let pvpUnlocked = $derived($gameState.matchN >= PVP_UNLOCK_MATCHES);
+  let tournamentUnlocked = $derived($gameState.lp >= TOURNAMENT_UNLOCK_LP && pvpWins >= TOURNAMENT_UNLOCK_PVP_WINS);
+  let activeCount = $derived(Math.min(5, Math.max(1, ($gameState.matchN % 5) + 1)));
+  let selectedTournament = $derived(tournaments.find((t) => t.tournamentId === selectedTournamentId) ?? tournaments[0] ?? null);
+  let canRegisterTournament = $derived(
     !!selectedTournament &&
     selectedTournament.status === 'REG_OPEN' &&
-    selectedTournament.registeredPlayers < selectedTournament.maxPlayers;
+    selectedTournament.registeredPlayers < selectedTournament.maxPlayers);
 
-  $: activeMatches = [
+  const activeMatches = [
     {
       id: '#42',
       type: 'PVP',
@@ -63,7 +61,7 @@
     }
   ];
 
-  $: recent = [
+  let recent = $derived.by(() => [
     {
       id: `#${Math.max(1, $gameState.matchN)}`,
       result: $gameState.wins >= $gameState.losses ? 'WIN' : 'LOSS',
@@ -74,7 +72,7 @@
       fbs: Math.max(40, Math.min(99, Math.round($gameState.score + 8))),
       age: '2h'
     }
-  ];
+  ]);
 
   function modeStart(mode: 'pve' | 'pvp' | 'tournament', tournament: TournamentActiveRecord | null = null) {
     sfx.enter();

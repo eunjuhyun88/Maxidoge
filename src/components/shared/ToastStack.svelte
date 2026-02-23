@@ -2,14 +2,13 @@
   import { onDestroy } from 'svelte';
   import { toasts, type Toast, type ToastLevel } from '$lib/stores/notificationStore';
 
-  let items: Toast[] = [];
-  $: items = $toasts;
+  let items = $derived($toasts);
 
   // Auto-dismiss timer map
   let timers: Record<string, ReturnType<typeof setTimeout>> = {};
 
   // Set auto-dismiss timers when items change
-  $: {
+  $effect(() => {
     for (const toast of items) {
       if (!timers[toast.id]) {
         timers[toast.id] = setTimeout(() => {
@@ -18,7 +17,7 @@
         }, 7000);
       }
     }
-  }
+  });
 
   onDestroy(() => {
     for (const id of Object.keys(timers)) {

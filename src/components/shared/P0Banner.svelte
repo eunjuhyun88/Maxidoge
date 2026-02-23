@@ -1,8 +1,7 @@
 <script lang="ts">
   import { p0Override } from '$lib/stores/notificationStore';
 
-  let p0 = $p0Override;
-  $: p0 = $p0Override;
+  let p0 = $derived($p0Override);
 
   function dismiss() {
     p0Override.clear();

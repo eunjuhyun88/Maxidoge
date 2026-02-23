@@ -2,14 +2,12 @@
   import { AGDEFS } from '$lib/data/agents';
   import { agentStats, getWinRate } from '$lib/stores/agentData';
 
-  export let onClose: () => void = () => {};
+  let { onClose = () => {} }: { onClose?: () => void } = $props();
 
-  let stats = $agentStats;
-  $: stats = $agentStats;
+  let stats = $derived($agentStats);
+  let activeTab = $state('leaderboard');
 
-  let activeTab = 'leaderboard';
-
-  $: leaderboard = AGDEFS.map(ag => {
+  let leaderboard = $derived.by(() => AGDEFS.map(ag => {
     const st = stats[ag.id];
     return {
       ...ag,
@@ -19,7 +17,7 @@
       winRate: st ? getWinRate(st) : 0,
       streak: st?.bestStreak || 0,
     };
-  }).sort((a, b) => b.wins - a.wins);
+  }).sort((a, b) => b.wins - a.wins));
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->

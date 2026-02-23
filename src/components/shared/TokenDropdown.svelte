@@ -4,16 +4,15 @@
 
   const dispatch = createEventDispatcher<{ select: { pair: string; token: TokenDef } }>();
 
-  export let value = 'BTC/USDT';
-  export let compact = false; // compact mode for tight spaces
+  let { value = 'BTC/USDT', compact = false }: { value?: string; compact?: boolean } = $props();
 
-  let open = false;
-  let filter = '';
+  let open = $state(false);
+  let filter = $state('');
   let dropdownEl: HTMLDivElement;
 
   // Current token from pair
-  $: currentSymbol = value.split('/')[0];
-  $: currentToken = TOKEN_MAP.get(currentSymbol) || TOKENS[0];
+  let currentSymbol = $derived(value.split('/')[0]);
+  let currentToken = $derived(TOKEN_MAP.get(currentSymbol) || TOKENS[0]);
 
   // Category display names
   const CAT_LABELS: Record<string, string> = {
@@ -26,7 +25,7 @@
   };
 
   // Filtered tokens
-  $: filteredCategories = Object.entries(TOKEN_CATEGORIES).map(([cat, symbols]) => {
+  let filteredCategories = $derived.by(() => Object.entries(TOKEN_CATEGORIES).map(([cat, symbols]) => {
     const filtered = symbols.filter(sym => {
       if (!filter) return true;
       const f = filter.toLowerCase();
@@ -35,7 +34,7 @@
       return tok.symbol.toLowerCase().includes(f) || tok.name.toLowerCase().includes(f);
     });
     return { cat, label: CAT_LABELS[cat] || cat.toUpperCase(), tokens: filtered };
-  }).filter(c => c.tokens.length > 0);
+  }).filter(c => c.tokens.length > 0));
 
   function selectToken(sym: string) {
     const pair = `${sym}/USDT`;

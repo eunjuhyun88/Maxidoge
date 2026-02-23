@@ -3,10 +3,9 @@
   import { RESETTABLE_STORAGE_KEYS } from '$lib/stores/storageKeys';
   import { CORE_TIMEFRAME_OPTIONS, normalizeTimeframe } from '$lib/utils/timeframe';
 
-  export let onClose: () => void = () => {};
+  let { onClose = () => {} }: { onClose?: () => void } = $props();
 
-  let state = $gameState;
-  $: state = $gameState;
+  let state = $derived($gameState);
 
   let speed = state.speed;
   let audioOn = true;

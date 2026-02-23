@@ -9,13 +9,12 @@
   } from '$lib/utils/timeframe';
   import { fetchPreferencesApi, updatePreferencesApi } from '$lib/api/preferencesApi';
 
-  let state = $gameState;
-  $: state = $gameState;
-  let saving = false;
-  let loadedRemote = false;
+  let state = $derived($gameState);
+  let saving = $state(false);
+  let loadedRemote = $state(false);
 
   // Settings
-  let settings = {
+  let settings = $state({
     defaultTF: normalizeTimeframe(state.timeframe),
     signals: true,
     sfx: true,
@@ -23,13 +22,13 @@
     chartTheme: 'dark',
     speed: state.speed || 3,
     language: 'kr'
-  };
-  $: {
+  });
+  $effect.pre(() => {
     const normalized = normalizeTimeframe(state.timeframe);
     if (settings.defaultTF !== normalized) {
       settings = { ...settings, defaultTF: normalized };
     }
-  }
+  });
 
   async function persistPreferences(currentSettings = settings) {
     saving = true;

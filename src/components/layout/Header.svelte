@@ -10,13 +10,13 @@
   import { fetchPrice } from '$lib/api/binance';
   import { TOKEN_MAP } from '$lib/data/tokens';
 
-  $: state = $gameState;
-  $: wallet = $walletStore;
-  $: connected = $isWalletConnected;
-  $: liveP = $livePrices;
+  let state = $derived($gameState);
+  let wallet = $derived($walletStore);
+  let connected = $derived($isWalletConnected);
+  let liveP = $derived($livePrices);
 
   // Derive active route from actual URL
-  $: activePath = $page.url.pathname;
+  let activePath = $derived($page.url.pathname);
 
   // Navigation items
   const NAV_ITEMS = [
@@ -27,8 +27,8 @@
   ];
 
   // ─── 페어 변경 시 priceStore에 없는 토큰 가격 자동 fetch ────
-  let _lastFetchedToken = '';
-  $: {
+  let _lastFetchedToken = $state('');
+  $effect(() => {
     const token = state.pair.split('/')[0] || 'BTC';
     if (token !== _lastFetchedToken && !(token in liveP)) {
       _lastFetchedToken = token;
@@ -41,7 +41,7 @@
         }).catch(() => {/* 실패 시 ChartPanel에서 kline 로드 후 업데이트됨 */});
       }
     }
-  }
+  });
 
   onMount(() => {
     void hydrateDomainStores();
@@ -77,16 +77,16 @@
     return (Number(pct) >= 0 ? '+' : '') + pct + '%';
   }
 
-  $: selectedToken = state.pair.split('/')[0] || 'BTC';
+  let selectedToken = $derived(state.pair.split('/')[0] || 'BTC');
   // 선택된 토큰의 가격만 표시. 없으면 0 (BTC 가격으로 폴백하지 않음)
-  $: selectedPrice = liveP[selectedToken] || 0;
-  $: selectedBase = state.bases[selectedToken as keyof typeof state.bases] || state.bases.BTC;
-  $: selectedPriceText = selectedPrice > 0
+  let selectedPrice = $derived(liveP[selectedToken] || 0);
+  let selectedBase = $derived(state.bases[selectedToken as keyof typeof state.bases] || state.bases.BTC);
+  let selectedPriceText = $derived.by(() => selectedPrice > 0
     ? Number(selectedPrice).toLocaleString('en-US', {
         minimumFractionDigits: selectedPrice >= 1000 ? 2 : 4,
         maximumFractionDigits: selectedPrice >= 1000 ? 2 : 4
       })
-    : '---';
+    : '---');
 </script>
 
 <nav id="nav">

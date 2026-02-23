@@ -2,13 +2,13 @@
   import { quickTradeStore, openTrades, closedTrades, totalQuickPnL, closeQuickTrade, clearClosedTrades, toggleTradePanel } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
 
-  $: state = $gameState;
-  $: panel = $quickTradeStore;
-  $: opens = $openTrades;
-  $: closed = $closedTrades;
-  $: totalPnl = $totalQuickPnL;
+  let state = $derived($gameState);
+  let panel = $derived($quickTradeStore);
+  let opens = $derived($openTrades);
+  let closed = $derived($closedTrades);
+  let totalPnl = $derived($totalQuickPnL);
 
-  let showClosed = false;
+  let showClosed = $state(false);
 
   function handleClose(tradeId: string) {
     const trade = opens.find(t => t.id === tradeId);

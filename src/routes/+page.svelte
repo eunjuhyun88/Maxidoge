@@ -8,15 +8,15 @@
   import { openTradeCount } from '$lib/stores/quickTradeStore';
   import { activeSignalCount } from '$lib/stores/trackedSignalStore';
 
-  $: state = $gameState;
-  $: connected = $isWalletConnected;
-  $: wallet = $walletStore;
-  $: profile = $userProfileStore;
-  $: trackedSigs = $activeSignalCount;
+  let state = $derived($gameState);
+  let connected = $derived($isWalletConnected);
+  let wallet = $derived($walletStore);
+  let profile = $derived($userProfileStore);
+  let trackedSigs = $derived($activeSignalCount);
 
-  $: btcPrice = state.prices.BTC;
-  $: ethPrice = state.prices.ETH;
-  $: solPrice = state.prices.SOL;
+  let btcPrice = $derived(state.prices.BTC);
+  let ethPrice = $derived(state.prices.ETH);
+  let solPrice = $derived(state.prices.SOL);
 
   function enterArena() { goto('/arena'); }
   function enterTerminal() { goto('/terminal'); }
@@ -46,7 +46,7 @@
     { id: 'G', icon: '🎯', label: 'DIRECT QUERY', desc: '"IS ETH SAFE TO BUY?" — ASK IN PLAIN ENGLISH, GET AI ANALYSIS', count: 4 },
   ];
 
-  let selectedFeature: number | null = null;
+  let selectedFeature: number | null = $state(null);
   let heroRightEl: HTMLDivElement;
   let heroLeftEl: HTMLDivElement;
 

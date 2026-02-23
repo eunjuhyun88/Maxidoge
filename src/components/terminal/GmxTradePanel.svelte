@@ -13,26 +13,26 @@
   import { ensureArbitrumChain } from '$lib/wallet/chainSwitch';
 
   // ── Props ──────────────────────────────────────────
-  export let onClose: () => void = () => {};
+  let { onClose = () => {} }: { onClose?: () => void } = $props();
 
   // ── State ──────────────────────────────────────────
-  let markets: GmxMarket[] = [];
-  let selectedMarket: GmxMarket | null = null;
-  let direction: 'LONG' | 'SHORT' = 'LONG';
-  let collateral = '';
-  let leverage = 10;
-  let step: 'input' | 'loading' | 'approving' | 'signing' | 'confirming' | 'done' | 'error' = 'input';
-  let errorMsg = '';
-  let balance: GmxBalanceInfo | null = null;
-  let resultTxHash = '';
+  let markets: GmxMarket[] = $state([]);
+  let selectedMarket: GmxMarket | null = $state(null);
+  let direction: 'LONG' | 'SHORT' = $state('LONG');
+  let collateral = $state('');
+  let leverage = $state(10);
+  let step: 'input' | 'loading' | 'approving' | 'signing' | 'confirming' | 'done' | 'error' = $state('input');
+  let errorMsg = $state('');
+  let balance: GmxBalanceInfo | null = $state(null);
+  let resultTxHash = $state('');
 
   // ── Derived ────────────────────────────────────────
-  $: collateralNum = parseFloat(collateral) || 0;
-  $: sizeUsd = collateralNum * leverage;
-  $: walletConnected = $walletStore.connected;
-  $: isValid = collateralNum >= 1 && collateralNum <= 100_000 && leverage >= 1 && leverage <= 100 && selectedMarket;
-  $: hasEnoughUsdc = balance ? collateralNum <= balance.usdcBalance : true;
-  $: hasEnoughEth = balance ? balance.ethBalance > 0.001 : true;
+  let collateralNum = $derived(parseFloat(collateral) || 0);
+  let sizeUsd = $derived(collateralNum * leverage);
+  let walletConnected = $derived($walletStore.connected);
+  let isValid = $derived(collateralNum >= 1 && collateralNum <= 100_000 && leverage >= 1 && leverage <= 100 && selectedMarket);
+  let hasEnoughUsdc = $derived(balance ? collateralNum <= balance.usdcBalance : true);
+  let hasEnoughEth = $derived(balance ? balance.ethBalance > 0.001 : true);
 
   // ── Init ───────────────────────────────────────────
   async function loadMarkets() {

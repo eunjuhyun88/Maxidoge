@@ -1,7 +1,4 @@
 <script lang="ts">
-  export let embedded = false;
-  export let variant: 'full' | 'stream' = 'full';
-
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
   import { gameState } from '$lib/stores/gameState';
   import { matchHistoryStore } from '$lib/stores/matchHistoryStore';
@@ -13,14 +10,16 @@
   import EmptyState from '../shared/EmptyState.svelte';
   import ContextBanner from '../shared/ContextBanner.svelte';
 
-  $: state = $gameState;
-  $: records = $matchHistoryStore.records;
-  $: trades = $openTrades;
-  $: tracked = $activeSignals;
-  $: profile = $userProfileStore;
-  $: isStream = embedded && variant === 'stream';
-  $: liveP = $livePrices;
-  $: changes = $priceChanges;
+  let { embedded = false, variant = 'full' as 'full' | 'stream' }: { embedded?: boolean; variant?: 'full' | 'stream' } = $props();
+
+  let state = $derived($gameState);
+  let records = $derived($matchHistoryStore.records);
+  let trades = $derived($openTrades);
+  let tracked = $derived($activeSignals);
+  let profile = $derived($userProfileStore);
+  let isStream = $derived(embedded && variant === 'stream');
+  let liveP = $derived($livePrices);
+  let changes = $derived($priceChanges);
 
   function fmtChange(pct: number): string {
     if (!Number.isFinite(pct) || pct === 0) return '+0.00%';
@@ -28,11 +27,11 @@
   }
 
   // S-03: priceStore에서 실시간 가격 + 24h% 구독
-  $: prices = [
+  let prices = $derived.by(() => [
     { symbol: 'BTC', price: `$${Math.round(liveP.BTC || 97420).toLocaleString()}`, change: fmtChange(changes.BTC), up: (changes.BTC || 0) >= 0 },
     { symbol: 'ETH', price: `$${Math.round(liveP.ETH || 3481).toLocaleString()}`, change: fmtChange(changes.ETH), up: (changes.ETH || 0) >= 0 },
     { symbol: 'SOL', price: `$${(liveP.SOL || 198).toFixed(2)}`, change: fmtChange(changes.SOL), up: (changes.SOL || 0) >= 0 },
-  ];
+  ]);
 
   // Build activity timeline from all sources
   interface ActivityItem {
@@ -45,7 +44,7 @@
     type: 'match' | 'trade' | 'signal' | 'agent';
   }
 
-  $: activityFeed = buildActivityFeed();
+  let activityFeed = $derived(buildActivityFeed());
 
   function buildActivityFeed(): ActivityItem[] {
     const items: ActivityItem[] = [];

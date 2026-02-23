@@ -11,37 +11,41 @@
   import { ensurePolygonChain } from '$lib/wallet/chainSwitch';
 
   // ── Props ──────────────────────────────────────────
-  export let market: {
-    id: string;
-    question: string;
-    slug: string;
-    outcomes: string[];
-    outcomePrices: string[];
-    volume: number;
-    liquidity: number;
-  } | null = null;
-
-  export let onClose: () => void = () => {};
+  let {
+    market = null as {
+      id: string;
+      question: string;
+      slug: string;
+      outcomes: string[];
+      outcomePrices: string[];
+      volume: number;
+      liquidity: number;
+    } | null,
+    onClose = () => {},
+  }: {
+    market?: { id: string; question: string; slug: string; outcomes: string[]; outcomePrices: string[]; volume: number; liquidity: number } | null;
+    onClose?: () => void;
+  } = $props();
 
   // ── State ──────────────────────────────────────────
-  let direction: 'YES' | 'NO' = 'YES';
-  let amount = '';
-  let customPrice = '';
-  let step: 'input' | 'signing' | 'submitting' | 'done' | 'error' = 'input';
-  let errorMsg = '';
-  let resultOrderId = '';
+  let direction: 'YES' | 'NO' = $state('YES');
+  let amount = $state('');
+  let customPrice = $state('');
+  let step: 'input' | 'signing' | 'submitting' | 'done' | 'error' = $state('input');
+  let errorMsg = $state('');
+  let resultOrderId = $state('');
 
   // ── Derived ────────────────────────────────────────
-  $: yesPrice = market?.outcomePrices?.[0] ? parseFloat(market.outcomePrices[0]) : 0.5;
-  $: noPrice = market?.outcomePrices?.[1] ? parseFloat(market.outcomePrices[1]) : 0.5;
-  $: selectedPrice = direction === 'YES' ? yesPrice : noPrice;
-  $: effectivePrice = customPrice ? parseFloat(customPrice) : selectedPrice;
-  $: amountNum = parseFloat(amount) || 0;
-  $: estimatedShares = effectivePrice > 0 ? amountNum / effectivePrice : 0;
-  $: estimatedPayout = estimatedShares; // Each share pays $1 if outcome is correct
-  $: estimatedProfit = estimatedPayout - amountNum;
-  $: isValid = amountNum >= 1 && amountNum <= 10000 && effectivePrice > 0 && effectivePrice < 1;
-  $: walletConnected = $walletStore.connected;
+  let yesPrice = $derived(market?.outcomePrices?.[0] ? parseFloat(market.outcomePrices[0]) : 0.5);
+  let noPrice = $derived(market?.outcomePrices?.[1] ? parseFloat(market.outcomePrices[1]) : 0.5);
+  let selectedPrice = $derived(direction === 'YES' ? yesPrice : noPrice);
+  let effectivePrice = $derived(customPrice ? parseFloat(customPrice) : selectedPrice);
+  let amountNum = $derived(parseFloat(amount) || 0);
+  let estimatedShares = $derived(effectivePrice > 0 ? amountNum / effectivePrice : 0);
+  let estimatedPayout = $derived(estimatedShares); // Each share pays $1 if outcome is correct
+  let estimatedProfit = $derived(estimatedPayout - amountNum);
+  let isValid = $derived(amountNum >= 1 && amountNum <= 10000 && effectivePrice > 0 && effectivePrice < 1);
+  let walletConnected = $derived($walletStore.connected);
 
   // ── Handlers ───────────────────────────────────────
   function toggleDirection() {

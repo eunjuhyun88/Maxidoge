@@ -2,14 +2,12 @@
   import { AGDEFS } from '$lib/data/agents';
   import { agentStats, getWinRate } from '$lib/stores/agentData';
 
-  export let agentId: string = AGDEFS[0].id;
-  export let onClose: () => void = () => {};
+  let { agentId = AGDEFS[0].id, onClose = () => {} }: { agentId?: string; onClose?: () => void } = $props();
 
-  let stats = $agentStats;
-  $: stats = $agentStats;
-  $: agent = AGDEFS.find(a => a.id === agentId) || AGDEFS[0];
-  $: st = stats[agentId] || { level: 1, xp: 0, xpMax: 100, wins: 0, losses: 0, bestStreak: 0, curStreak: 0, avgConf: 0, bestConf: 0, matches: [], stamps: { win: 0, lose: 0, streak: 0, diamond: 0, crown: 0 } };
-  $: wr = getWinRate(st);
+  let stats = $derived($agentStats);
+  let agent = $derived(AGDEFS.find(a => a.id === agentId) || AGDEFS[0]);
+  let st = $derived(stats[agentId] || { level: 1, xp: 0, xpMax: 100, wins: 0, losses: 0, bestStreak: 0, curStreak: 0, avgConf: 0, bestConf: 0, matches: [], stamps: { win: 0, lose: 0, streak: 0, diamond: 0, crown: 0 } });
+  let wr = $derived(getWinRate(st));
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
