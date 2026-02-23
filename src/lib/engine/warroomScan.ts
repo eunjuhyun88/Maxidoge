@@ -37,6 +37,19 @@ import {
   dominanceToScore,
   galaxyToConfBoost
 } from '$lib/api/lunarcrush';
+import {
+  fetchFredData,
+  fedFundsToScore,
+  yieldCurveToScore,
+  m2ToScore
+} from '$lib/api/fred';
+import {
+  fetchCryptoQuantData,
+  mvrvToScore,
+  nuplToScore,
+  exchangeReserveToScore,
+  minerFlowToScore
+} from '$lib/api/cryptoquant';
 
 type Vote = AgentSignal['vote'];
 
@@ -196,7 +209,8 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
   const [
     oiRaw, fundingRaw, predFundingRaw, lsRaw, liqRaw,
     fngRaw, cgGlobalRaw, ethOnchainRaw,
-    macroRaw, socialRaw, oiHistRaw
+    macroRaw, socialRaw, oiHistRaw,
+    fredRaw, cqRaw
   ] = await Promise.allSettled([
     fetchCurrentOI(marketPair),
     fetchCurrentFunding(marketPair),
@@ -208,7 +222,9 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
     fetchEthOnchain(),
     fetchMacroIndicators(),
     fetchSocialData(token),
-    fetchOIHistory(marketPair, tf, 24)
+    fetchOIHistory(marketPair, tf, 24),
+    fetchFredData(),
+    fetchCryptoQuantData(token === 'ETH' ? 'eth' : 'btc')
   ]);
 
   const now = Date.now();
@@ -245,6 +261,8 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
   const macro = macroRaw.status === 'fulfilled' ? macroRaw.value : null;
   const social = socialRaw.status === 'fulfilled' ? socialRaw.value : null;
   const oiHist = oiHistRaw.status === 'fulfilled' ? oiHistRaw.value : null;
+  const fred = fredRaw.status === 'fulfilled' ? fredRaw.value : null;
+  const cq = cqRaw.status === 'fulfilled' ? cqRaw.value : null;
 
   let structureScore = 0;
   if (sma20 != null) structureScore += latestClose >= sma20 ? 0.26 : -0.26;
@@ -282,6 +300,21 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
   if (ethOnchain?.exchangeBalance != null) {
     const ebScore = exchangeBalanceToScore(ethOnchain.exchangeBalance);
     flowScore += (ebScore / 100) * 0.15;
+  }
+  // CryptoQuant: exchange reserves + netflow
+  if (cq?.exchangeReserve) {
+    const cqResScore = exchangeReserveToScore(cq.exchangeReserve.change7dPct, cq.exchangeReserve.netflow24h);
+    flowScore += (cqResScore / 100) * 0.18;
+  }
+  // CryptoQuant: whale netflow
+  if (cq?.whaleData?.whaleNetflow != null) {
+    const whaleDir = cq.whaleData.whaleNetflow < -500 ? 0.12 : cq.whaleData.whaleNetflow > 500 ? -0.12 : 0;
+    flowScore += whaleDir;
+  }
+  // CryptoQuant: miner flows
+  if (cq?.minerData?.minerOutflow24h != null) {
+    const mScore = minerFlowToScore(cq.minerData.minerOutflow24h);
+    flowScore += (mScore / 100) * 0.1;
   }
 
   let derivScore = 0;
@@ -393,6 +426,21 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
     const yScore = yieldToScore(macro.us10y.changePct);
     macroScore += (yScore / 100) * 0.12;
   }
+  // FRED: Fed Funds Rate
+  if (fred?.fedFundsRate?.latest) {
+    const ffScore = fedFundsToScore(fred.fedFundsRate.latest.value, fred.fedFundsRate.change);
+    macroScore += (ffScore / 100) * 0.15;
+  }
+  // FRED: Yield curve (T10Y2Y spread)
+  if (fred?.yieldCurve?.latest) {
+    const ycScore = yieldCurveToScore(fred.yieldCurve.latest.value);
+    macroScore += (ycScore / 100) * 0.12;
+  }
+  // FRED: M2 money supply
+  if (fred?.m2?.changePct != null) {
+    const m2Score = m2ToScore(fred.m2.changePct);
+    macroScore += (m2Score / 100) * 0.1;
+  }
   // CoinGecko global: BTC dominance, market cap change
   if (cgGlobal) {
     const domScore = btcDominanceToScore(cgGlobal.btcDominance);
@@ -476,6 +524,16 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
     const gasScore = gasToActivityScore(ethOnchain.gas.standard);
     valuationScore += (gasScore / 100) * 0.12;
   }
+  // CryptoQuant: MVRV ratio (most powerful on-chain valuation metric)
+  if (cq?.onchainMetrics?.mvrv != null) {
+    const mvScore = mvrvToScore(cq.onchainMetrics.mvrv);
+    valuationScore += (mvScore / 100) * 0.25;
+  }
+  // CryptoQuant: NUPL (Net Unrealized Profit/Loss)
+  if (cq?.onchainMetrics?.nupl != null) {
+    const nuplScore = nuplToScore(cq.onchainMetrics.nupl);
+    valuationScore += (nuplScore / 100) * 0.2;
+  }
 
   const structureVote = scoreToVote(structureScore, 0.1);
   const flowVote = scoreToVote(flowScore, 0.08);
@@ -528,12 +586,16 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
         ethOnchain?.exchangeNetflowEth != null ? `Exch ETH ${fmtCompact(ethOnchain.exchangeNetflowEth)}` : null,
         ethOnchain?.whaleActivity != null ? `Whale txs ${ethOnchain.whaleActivity}` : null,
         ethOnchain?.activeAddresses != null ? `Active ${fmtCompact(ethOnchain.activeAddresses)}` : null,
-        ethOnchain?.exchangeBalance != null ? `Exch Bal ${fmtCompact(ethOnchain.exchangeBalance)}` : null
+        ethOnchain?.exchangeBalance != null ? `Exch Bal ${fmtCompact(ethOnchain.exchangeBalance)}` : null,
+        cq?.exchangeReserve?.change7dPct != null ? `CQ Rsv 7d ${fmtSignedPct(cq.exchangeReserve.change7dPct)}` : null,
+        cq?.whaleData?.whaleNetflow != null ? `Whale NF ${fmtCompact(cq.whaleData.whaleNetflow)}` : null,
+        cq?.minerData?.minerOutflow24h != null ? `Miner Out ${fmtCompact(cq.minerData.minerOutflow24h)}` : null
       ].filter(Boolean).join(' · ') + '.',
       src: [
         'BINANCE',
         ethOnchain?.exchangeNetflowEth != null ? 'ETHERSCAN' : null,
-        ethOnchain?.whaleActivity != null ? 'DUNE' : null
+        ethOnchain?.whaleActivity != null ? 'DUNE' : null,
+        cq ? 'CRYPTOQUANT' : null
       ].filter(Boolean).join('+'),
       time: timeLabel,
       entry: flowPlan.entry,
@@ -598,11 +660,15 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
         macro?.dxy ? `DXY ${macro.dxy.price.toFixed(2)} ${fmtSignedPct(macro.dxy.changePct ?? 0)}` : null,
         macro?.spx ? `SPX ${fmtCompact(macro.spx.price)} ${fmtSignedPct(macro.spx.changePct ?? 0)}` : null,
         macro?.us10y ? `US10Y ${macro.us10y.price.toFixed(2)}%` : null,
+        fred?.fedFundsRate?.latest ? `FedRate ${fred.fedFundsRate.latest.value.toFixed(2)}%` : null,
+        fred?.yieldCurve?.latest ? `YC ${fred.yieldCurve.latest.value > 0 ? '+' : ''}${fred.yieldCurve.latest.value.toFixed(2)}` : null,
+        fred?.m2?.changePct != null ? `M2 ${fmtSignedPct(fred.m2.changePct)}` : null,
         cgGlobal ? `BTC Dom ${cgGlobal.btcDominance.toFixed(1)}% · MktCap ${fmtSignedPct(cgGlobal.marketCapChange24h)}` : null,
         `Regime ${sma120 != null ? (latestClose >= sma120 ? 'risk-on' : 'risk-off') : '—'}`
       ].filter(Boolean).join(' · ') + '.',
       src: [
         macro ? 'YAHOO' : null,
+        fred ? 'FRED' : null,
         cgGlobal ? 'COINGECKO' : null,
         'MACRO'
       ].filter(Boolean).join('+'),
@@ -655,8 +721,21 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
       pair: marketPair,
       vote: valuationVote,
       conf: scoreToConfidence(valuationScore, 54),
-      text: `${sma120 != null ? `MA120 dev ${fmtSignedPct(((latestClose - sma120) / sma120) * 100)}` : 'MA120 —'} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · Vol x${volumeRatio.toFixed(2)}${ethOnchain?.gas ? ` · Gas ${ethOnchain.gas.standard} Gwei` : ''}${cgGlobal ? ` · MktCap ${fmtSignedPct(cgGlobal.marketCapChange24h)}` : ''}.`,
-      src: ethOnchain?.gas ? 'ETHERSCAN+COINGECKO:VALUATION' : cgGlobal ? 'COINGECKO:VALUATION' : 'PROXY:VALUATION',
+      text: [
+        sma120 != null ? `MA120 dev ${fmtSignedPct(((latestClose - sma120) / sma120) * 100)}` : 'MA120 —',
+        `RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'}`,
+        `Vol x${volumeRatio.toFixed(2)}`,
+        ethOnchain?.gas ? `Gas ${ethOnchain.gas.standard} Gwei` : null,
+        cq?.onchainMetrics?.mvrv != null ? `MVRV ${cq.onchainMetrics.mvrv.toFixed(2)}` : null,
+        cq?.onchainMetrics?.nupl != null ? `NUPL ${cq.onchainMetrics.nupl.toFixed(3)}` : null,
+        cgGlobal ? `MktCap ${fmtSignedPct(cgGlobal.marketCapChange24h)}` : null,
+      ].filter(Boolean).join(' · ') + '.',
+      src: [
+        ethOnchain?.gas ? 'ETHERSCAN' : null,
+        cq?.onchainMetrics ? 'CRYPTOQUANT' : null,
+        cgGlobal ? 'COINGECKO' : null,
+        'VALUATION'
+      ].filter(Boolean).join('+'),
       time: timeLabel,
       entry: valuationPlan.entry,
       tp: valuationPlan.tp,

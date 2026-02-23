@@ -52,7 +52,18 @@
   let headlineSortBy: 'importance' | 'time' = 'importance';
   let liveEvents: Array<{ id: string; tag: string; level: string; text: string; source: string; createdAt: number }> = [];
   let liveFlows: Array<{ id: string; label: string; addr: string; amt: string; isBuy: boolean }> = [];
-  let dataLoaded = { headlines: false, events: false, flow: false };
+  let dataLoaded = { headlines: false, events: false, flow: false, trending: false };
+
+  // ═══ Trending data ═══
+  interface TrendingCoin { rank: number; symbol: string; name: string; price: number; change1h: number; change24h: number; change7d: number; volume24h: number; sentiment?: number | null; socialVolume?: number | null; galaxyScore?: number | null; }
+  interface GainerLoser extends TrendingCoin { direction: 'gainer' | 'loser'; }
+  interface DexHot { chainId: string; tokenAddress: string; url: string; description: string | null; icon: string | null; }
+  let trendingCoins: TrendingCoin[] = [];
+  let trendGainers: GainerLoser[] = [];
+  let trendLosers: GainerLoser[] = [];
+  let trendDexHot: DexHot[] = [];
+  let trendSubTab: 'hot' | 'gainers' | 'dex' = 'hot';
+  let trendLoading = false;
 
   // Chat input (local)
   let chatInput = '';
@@ -74,6 +85,7 @@
   function setInnerTab(tab: string) {
     innerTab = tab;
     queueUiStateSave({ terminalInnerTab: innerTab });
+    if (tab === 'trending') fetchTrendingData();
   }
 
   function queueUiStateSave(partial: Record<string, unknown>) {
@@ -257,6 +269,42 @@
     }
   }
 
+  async function fetchTrendingData() {
+    if (dataLoaded.trending || trendLoading) return;
+    trendLoading = true;
+    try {
+      const res = await fetch('/api/market/trending?section=all&limit=15');
+      const json = await res.json();
+      if (json.ok && json.data) {
+        trendingCoins = json.data.trending ?? [];
+        trendGainers = json.data.gainers ?? [];
+        trendLosers = json.data.losers ?? [];
+        trendDexHot = json.data.dexHot ?? [];
+        dataLoaded.trending = true;
+        dataLoaded = dataLoaded;
+      }
+    } catch (e) {
+      console.warn('[IntelPanel] Trending API unavailable');
+    } finally {
+      trendLoading = false;
+    }
+  }
+
+  function fmtTrendPrice(p: number): string {
+    if (!Number.isFinite(p)) return '$0';
+    if (p >= 1000) return '$' + p.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    if (p >= 1) return '$' + p.toFixed(2);
+    if (p >= 0.001) return '$' + p.toFixed(4);
+    return '$' + p.toFixed(6);
+  }
+
+  function fmtTrendVol(v: number): string {
+    if (v >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
+    return '$' + v.toFixed(0);
+  }
+
   function formatRelativeTime(ts: number): string {
     const mins = Math.round((Date.now() - ts) / 60000);
     if (mins < 1) return 'now';
@@ -356,7 +404,7 @@
     <div class="rp-body-wrap">
       {#if activeTab === 'intel'}
         <div class="rp-inner-tabs">
-          {#each ['chat', 'headlines', 'events', 'flow'] as tab}
+          {#each ['chat', 'headlines', 'trending', 'events', 'flow'] as tab}
             <button class="rp-inner-tab" class:active={innerTab === tab} on:click={() => setInnerTab(tab)}>
               {tab.toUpperCase()}
             </button>
@@ -473,6 +521,113 @@
                   <span class="ev-src">{ev.source}</span>
                 </div>
               {/each}
+            </div>
+
+          {:else if innerTab === 'trending'}
+            <div class="trend-panel">
+              <div class="trend-sub-tabs">
+                <button class="trend-sub" class:active={trendSubTab === 'hot'} on:click={() => trendSubTab = 'hot'}>🔥 HOT</button>
+                <button class="trend-sub" class:active={trendSubTab === 'gainers'} on:click={() => trendSubTab = 'gainers'}>📈 GAINERS</button>
+                <button class="trend-sub" class:active={trendSubTab === 'dex'} on:click={() => trendSubTab = 'dex'}>💎 DEX</button>
+              </div>
+
+              {#if trendLoading}
+                <div class="trend-loading">Loading trending data...</div>
+              {:else if trendSubTab === 'hot'}
+                <div class="trend-list">
+                  {#each trendingCoins as coin, i (coin.symbol + i)}
+                    <div class="trend-row">
+                      <span class="trend-rank">#{coin.rank}</span>
+                      <div class="trend-coin">
+                        <span class="trend-sym">{coin.symbol}</span>
+                        <span class="trend-name">{coin.name}</span>
+                      </div>
+                      <div class="trend-data">
+                        <span class="trend-price">{fmtTrendPrice(coin.price)}</span>
+                        <span class="trend-chg" class:up={coin.change24h >= 0} class:dn={coin.change24h < 0}>
+                          {coin.change24h >= 0 ? '+' : ''}{coin.change24h.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div class="trend-social">
+                        {#if coin.socialVolume != null && coin.socialVolume > 0}
+                          <span class="trend-soc" title="Social volume">💬 {coin.socialVolume > 1000 ? (coin.socialVolume / 1000).toFixed(0) + 'K' : coin.socialVolume}</span>
+                        {/if}
+                        {#if coin.galaxyScore != null && coin.galaxyScore > 0}
+                          <span class="trend-galaxy" title="Galaxy Score">⭐ {coin.galaxyScore}</span>
+                        {/if}
+                      </div>
+                    </div>
+                  {/each}
+                  {#if trendingCoins.length === 0}
+                    <div class="trend-empty">No trending data available</div>
+                  {/if}
+                </div>
+
+              {:else if trendSubTab === 'gainers'}
+                <div class="trend-list">
+                  {#if trendGainers.length > 0}
+                    <div class="trend-section-lbl up">▲ TOP GAINERS 24H</div>
+                    {#each trendGainers as coin, i (coin.symbol + '-g-' + i)}
+                      <div class="trend-row gainer">
+                        <span class="trend-rank">#{i + 1}</span>
+                        <div class="trend-coin">
+                          <span class="trend-sym">{coin.symbol}</span>
+                          <span class="trend-name">{coin.name}</span>
+                        </div>
+                        <div class="trend-data">
+                          <span class="trend-price">{fmtTrendPrice(coin.price)}</span>
+                          <span class="trend-chg up">+{coin.change24h.toFixed(1)}%</span>
+                        </div>
+                        <span class="trend-vol">{fmtTrendVol(coin.volume24h)}</span>
+                      </div>
+                    {/each}
+                  {/if}
+                  {#if trendLosers.length > 0}
+                    <div class="trend-section-lbl dn">▼ TOP LOSERS 24H</div>
+                    {#each trendLosers as coin, i (coin.symbol + '-l-' + i)}
+                      <div class="trend-row loser">
+                        <span class="trend-rank">#{i + 1}</span>
+                        <div class="trend-coin">
+                          <span class="trend-sym">{coin.symbol}</span>
+                          <span class="trend-name">{coin.name}</span>
+                        </div>
+                        <div class="trend-data">
+                          <span class="trend-price">{fmtTrendPrice(coin.price)}</span>
+                          <span class="trend-chg dn">{coin.change24h.toFixed(1)}%</span>
+                        </div>
+                        <span class="trend-vol">{fmtTrendVol(coin.volume24h)}</span>
+                      </div>
+                    {/each}
+                  {/if}
+                  {#if trendGainers.length === 0 && trendLosers.length === 0}
+                    <div class="trend-empty">No gainers/losers data</div>
+                  {/if}
+                </div>
+
+              {:else if trendSubTab === 'dex'}
+                <div class="trend-list">
+                  <div class="trend-section-lbl">💎 DEX HOT TOKENS</div>
+                  {#each trendDexHot as token, i (token.chainId + token.tokenAddress)}
+                    <a class="trend-row dex-row" href={token.url} target="_blank" rel="noopener">
+                      <span class="trend-rank">#{i + 1}</span>
+                      {#if token.icon}
+                        <img class="dex-icon" src={token.icon} alt="" width="18" height="18" />
+                      {/if}
+                      <div class="trend-coin">
+                        <span class="trend-sym">{token.chainId}</span>
+                        <span class="trend-name dex-addr">{token.tokenAddress.slice(0, 6)}...{token.tokenAddress.slice(-4)}</span>
+                      </div>
+                      {#if token.description}
+                        <span class="dex-desc">{token.description.slice(0, 40)}{token.description.length > 40 ? '...' : ''}</span>
+                      {/if}
+                      <span class="dex-link">↗</span>
+                    </a>
+                  {/each}
+                  {#if trendDexHot.length === 0}
+                    <div class="trend-empty">No DEX trending data</div>
+                  {/if}
+                </div>
+              {/if}
             </div>
 
           {:else if innerTab === 'flow'}
@@ -991,4 +1146,59 @@
     align-items: center; justify-content: center;
   }
   .ac-send:disabled { opacity: .3; cursor: not-allowed; }
+
+  /* ── Trending Panel ── */
+  .trend-panel { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+  .trend-sub-tabs {
+    display: flex; gap: 2px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .trend-sub {
+    flex: 1; background: transparent; border: 1px solid rgba(255,255,255,.08); border-radius: 4px;
+    color: rgba(255,255,255,.55); font-size: 9px; font-family: var(--fm); font-weight: 700;
+    letter-spacing: .5px; padding: 4px 0; cursor: pointer; transition: all .15s;
+  }
+  .trend-sub:hover { background: rgba(255,255,255,.04); color: rgba(255,255,255,.8); }
+  .trend-sub.active { background: rgba(255,230,0,.08); color: var(--yel); border-color: rgba(255,230,0,.25); }
+
+  .trend-list { flex: 1; overflow-y: auto; padding: 4px 6px; }
+  .trend-loading, .trend-empty {
+    padding: 20px; text-align: center; color: rgba(255,255,255,.35); font-size: 10px; font-family: var(--fm);
+  }
+
+  .trend-row {
+    display: flex; align-items: center; gap: 6px; padding: 5px 4px;
+    border-bottom: 1px solid rgba(255,255,255,.03); transition: background .1s;
+  }
+  .trend-row:hover { background: rgba(255,255,255,.03); }
+  .trend-rank {
+    width: 22px; flex-shrink: 0; font-family: var(--fm); font-size: 9px; font-weight: 700;
+    color: rgba(255,255,255,.3); text-align: right;
+  }
+  .trend-coin { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .trend-sym { font-family: var(--fm); font-size: 10px; font-weight: 800; color: #fff; letter-spacing: .3px; }
+  .trend-name { font-size: 8px; color: rgba(255,255,255,.35); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trend-data { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
+  .trend-price { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.8); }
+  .trend-chg { font-family: var(--fm); font-size: 9px; font-weight: 700; }
+  .trend-chg.up { color: #00e676; }
+  .trend-chg.dn { color: #ff1744; }
+  .trend-vol { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.3); flex-shrink: 0; width: 48px; text-align: right; }
+  .trend-social { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 1px; }
+  .trend-soc, .trend-galaxy { font-size: 8px; color: rgba(255,255,255,.4); white-space: nowrap; }
+  .trend-section-lbl {
+    font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: 1px;
+    padding: 6px 2px 3px; color: rgba(255,255,255,.45);
+  }
+  .trend-section-lbl.up { color: #00e676; }
+  .trend-section-lbl.dn { color: #ff1744; }
+  .trend-row.gainer { border-left: 2px solid rgba(0,230,118,.2); }
+  .trend-row.loser { border-left: 2px solid rgba(255,23,68,.2); }
+
+  /* DEX trending */
+  .dex-row { text-decoration: none; color: inherit; }
+  .dex-row:hover { background: rgba(255,230,0,.04); }
+  .dex-icon { border-radius: 50%; flex-shrink: 0; }
+  .dex-addr { font-family: var(--fm); font-size: 8px; }
+  .dex-desc { font-size: 8px; color: rgba(255,255,255,.3); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dex-link { color: rgba(255,230,0,.5); font-size: 10px; flex-shrink: 0; }
 </style>
