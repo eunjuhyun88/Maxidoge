@@ -105,7 +105,10 @@
           class="notif-item"
           class:unread={!notif.read}
           style="border-left-color: {typeColor(notif.type)}"
+          role="button"
+          tabindex="0"
           on:click={() => handleMarkRead(notif.id)}
+          on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleMarkRead(notif.id); }}
         >
           <div class="notif-icon">{typeIcon(notif.type)}</div>
           <div class="notif-content">

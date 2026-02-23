@@ -148,7 +148,7 @@
   };
   let chartVisualMode: 'focus' | 'full' = 'focus';
   let showIndicatorLegend = true;
-  let indicatorStripState: 'expanded' | 'collapsed' | 'hidden' = 'expanded';
+  let indicatorStripState: 'expanded' | 'collapsed' | 'hidden' = 'collapsed';
   let _indicatorProfileApplied: string | null = null;
   const BAR_SPACING_MIN = 5;
   const BAR_SPACING_MAX = 28;
@@ -156,6 +156,10 @@
   const BAR_SPACING_DEFAULT = 14;
   let barSpacing = BAR_SPACING_DEFAULT;
   let autoScaleY = true;
+
+  function isCompactViewport(): boolean {
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+  }
 
   type ChartTheme = {
     bg: string;
@@ -977,11 +981,15 @@
 
   let livePrice = 0;
   let priceChange24h = 0;
+  let high24h = 0;
+  let low24h = 0;
+  let quoteVolume24h = 0;
   let isLoading = true;
   let error = '';
 
   let _priceUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   let _pendingPrice: number | null = null;
+  let _pendingPairBase: string | null = null;
   function normalizeMarketPrice(price: number): number {
     if (!Number.isFinite(price)) return 0;
     const abs = Math.abs(price);
@@ -990,21 +998,40 @@
     return Number(price.toFixed(6));
   }
 
+  /** priceStore에 즉시 반영 (초기 로드 시 호출) */
+  function flushPriceUpdate(price: number, pairBase: string) {
+    const normalized = normalizeMarketPrice(price);
+    updatePrice(pairBase, normalized, 'rest');
+  }
+
+  /** WS 실시간 업데이트용 2초 스로틀 (pairBase도 함께 저장하여 클로저 버그 방지) */
   function throttledPriceUpdate(price: number, pairBase: string) {
     _pendingPrice = price;
+    _pendingPairBase = pairBase;
     if (_priceUpdateTimer) return;
     _priceUpdateTimer = setTimeout(() => {
-      if (_pendingPrice !== null) {
+      if (_pendingPrice !== null && _pendingPairBase !== null) {
         const normalized = normalizeMarketPrice(_pendingPrice!);
-        // S-03: priceStore가 단일 소스, gameState는 레거시 호환
-        updatePrice(pairBase, normalized, 'ws');
-        gameState.update(s => ({
-          ...s,
-          prices: { ...s.prices, [pairBase]: normalized }
-        }));
+        // S-03: priceStore가 단일 소스
+        updatePrice(_pendingPairBase!, normalized, 'ws');
       }
-      _priceUpdateTimer = null; _pendingPrice = null;
+      _priceUpdateTimer = null; _pendingPrice = null; _pendingPairBase = null;
     }, 2000);
+  }
+
+  function hydrate24hStatsFromKlines(klines: BinanceKline[]) {
+    if (!Array.isArray(klines) || klines.length === 0) return;
+    let hi = Number.NEGATIVE_INFINITY;
+    let lo = Number.POSITIVE_INFINITY;
+    let qv = 0;
+    for (const k of klines) {
+      if (Number.isFinite(k.high)) hi = Math.max(hi, k.high);
+      if (Number.isFinite(k.low)) lo = Math.min(lo, k.low);
+      if (Number.isFinite(k.volume) && Number.isFinite(k.close)) qv += k.volume * k.close;
+    }
+    if (Number.isFinite(hi) && hi > 0) high24h = hi;
+    if (Number.isFinite(lo) && lo > 0) low24h = lo;
+    if (Number.isFinite(qv) && qv > 0) quoteVolume24h = qv;
   }
 
   $: if (series && showPosition && posEntry !== null && posTp !== null && posSl !== null) { updatePositionLines(posEntry, posTp, posSl, posDir); }
@@ -1086,6 +1113,13 @@
     try {
       const lwc = await import('lightweight-charts');
       chartTheme = resolveChartTheme(chartContainer);
+
+      if (advancedMode && indicatorStripState === 'expanded') {
+        indicatorStripState = 'collapsed';
+        showIndicatorLegend = false;
+        chartVisualMode = 'focus';
+      }
+
       if (_indicatorProfileApplied === null) {
         applyIndicatorProfile();
         _indicatorProfileApplied = advancedMode ? `advanced:${chartVisualMode}` : 'basic';
@@ -1323,11 +1357,21 @@
       livePrice = lastKline.close;
       if (ticker24 && Number.isFinite(Number(ticker24.priceChangePercent))) {
         priceChange24h = Number(ticker24.priceChangePercent);
+        const parsedHigh = Number((ticker24 as any).highPrice);
+        const parsedLow = Number((ticker24 as any).lowPrice);
+        const parsedQuoteVol = Number((ticker24 as any).quoteVolume);
+        if (Number.isFinite(parsedHigh) && parsedHigh > 0) high24h = parsedHigh;
+        if (Number.isFinite(parsedLow) && parsedLow > 0) low24h = parsedLow;
+        if (Number.isFinite(parsedQuoteVol) && parsedQuoteVol > 0) quoteVolume24h = parsedQuoteVol;
       } else if (len > 6) {
         priceChange24h = ((lastKline.close - klines[len - 7].close) / klines[len - 7].close) * 100;
+        hydrate24hStatsFromKlines(klines);
+      } else {
+        hydrate24hStatsFromKlines(klines);
       }
 
-      throttledPriceUpdate(lastKline.close, pairBase);
+      // 초기 kline 로드 시 즉시 priceStore에 반영 (Header 즉시 업데이트)
+      flushPriceUpdate(lastKline.close, pairBase);
       dispatch('priceUpdate', { price: lastKline.close });
       chart.timeScale().fitContent();
 
@@ -1399,13 +1443,24 @@
       });
 
       // Keep displayed price synced to trade ticker (closer match with TradingView quote).
-      priceWsCleanup = subscribeMiniTicker([sym], (update) => {
-        const tick = update[sym];
-        if (!Number.isFinite(tick) || tick <= 0) return;
-        livePrice = tick;
-        throttledPriceUpdate(tick, pairBase);
-        dispatch('priceUpdate', { price: tick });
-      });
+      priceWsCleanup = subscribeMiniTicker(
+        [sym],
+        (update) => {
+          const tick = update[sym];
+          if (!Number.isFinite(tick) || tick <= 0) return;
+          livePrice = tick;
+          throttledPriceUpdate(tick, pairBase);
+          dispatch('priceUpdate', { price: tick });
+        },
+        (updates) => {
+          const full = updates[sym];
+          if (!full) return;
+          if (Number.isFinite(full.change24h)) priceChange24h = full.change24h;
+          if (Number.isFinite(full.high24h) && full.high24h > 0) high24h = full.high24h;
+          if (Number.isFinite(full.low24h) && full.low24h > 0) low24h = full.low24h;
+          if (Number.isFinite(full.volume24h) && full.volume24h > 0) quoteVolume24h = full.volume24h;
+        }
+      );
 
       isLoading = false;
     } catch (e: any) {
@@ -1492,66 +1547,96 @@
 
 <div class="chart-wrapper">
   <div class="chart-bar">
-    <div class="live-indicator">
-      <span class="live-dot" class:err={!!error}></span>
-      {error ? 'OFFLINE' : 'LIVE'}
-    </div>
-
-    <TokenDropdown value={state.pair} compact on:select={e => changePair(e.detail.pair)} />
-
-    <div class="tf-btns">
-      {#each CORE_TIMEFRAME_OPTIONS as tf}
-        <button
-          class="tfbtn"
-          class:active={normalizeTimeframe(state.timeframe) === tf.value}
-          on:click={() => changeTF(tf.value)}
-        >
-          {tf.label}
-        </button>
-      {/each}
-    </div>
-
-    <div class="mode-toggle">
-      <button class="mode-btn" class:active={chartMode === 'agent'} on:click={() => setChartMode('agent')}>
-        <span class="mode-icon">&#9889;</span> AGENT
-      </button>
-      <button class="mode-btn" class:active={chartMode === 'trading'} on:click={() => setChartMode('trading')}>
-        <span class="mode-icon">&#128208;</span> TRADING
-      </button>
-    </div>
-
-    <button class="scan-btn" on:click={requestAgentScan} title="Run agent scan for current market">
-      SCAN
-    </button>
-
-    {#if chartMode === 'agent'}
-      <div class="draw-tools">
-        <button class="draw-btn" class:active={drawingMode === 'hline'} on:click={() => setDrawingMode(drawingMode === 'hline' ? 'none' : 'hline')} title="Horizontal Line">&#x2500;</button>
-        <button class="draw-btn" class:active={drawingMode === 'trendline'} on:click={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
-        {#if enableTradeLineEntry}
-          <button class="draw-btn long-tool" class:active={drawingMode === 'longentry'} on:click={() => setDrawingMode(drawingMode === 'longentry' ? 'none' : 'longentry')} title="LONG RR Box (L) · drag once">L</button>
-          <button class="draw-btn short-tool" class:active={drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'shortentry' ? 'none' : 'shortentry')} title="SHORT RR Box (S) · drag once">S</button>
-        {/if}
-        <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
+    <div class="bar-top top-meta">
+      <div class="market-stats">
+        <div class="mstat">
+          <span class="mstat-k">24H LOW</span>
+          <span class="mstat-v">{low24h > 0 ? formatPrice(low24h) : '—'}</span>
+        </div>
+        <div class="mstat">
+          <span class="mstat-k">24H HIGH</span>
+          <span class="mstat-v">{high24h > 0 ? formatPrice(high24h) : '—'}</span>
+        </div>
+        <div class="mstat wide">
+          <span class="mstat-k">24H VOL(USDT)</span>
+          <span class="mstat-v">{quoteVolume24h > 0 ? formatCompact(quoteVolume24h) : '—'}</span>
+        </div>
       </div>
-    {/if}
+    </div>
+
+    <div class="bar-tools">
+      <div class="bar-left">
+        <div class="live-indicator">
+          <span class="live-dot" class:err={!!error}></span>
+          {error ? 'OFFLINE' : 'LIVE'}
+        </div>
+
+        <div class="pair-slot">
+          <TokenDropdown value={state.pair} compact on:select={e => changePair(e.detail.pair)} />
+        </div>
+      </div>
+
+      <div class="tf-btns">
+        {#each CORE_TIMEFRAME_OPTIONS as tf}
+          <button
+            class="tfbtn"
+            class:active={normalizeTimeframe(state.timeframe) === tf.value}
+            on:click={() => changeTF(tf.value)}
+          >
+            {tf.label}
+          </button>
+        {/each}
+      </div>
+
+      <div class="bar-controls">
+        <div class="mode-toggle">
+          <button class="mode-btn" class:active={chartMode === 'agent'} on:click={() => setChartMode('agent')}>
+            AGENT
+          </button>
+          <button class="mode-btn" class:active={chartMode === 'trading'} on:click={() => setChartMode('trading')}>
+            TRADING
+          </button>
+        </div>
+
+        {#if chartMode === 'agent'}
+          <div class="draw-tools">
+            <button class="draw-btn" class:active={drawingMode === 'hline'} on:click={() => setDrawingMode(drawingMode === 'hline' ? 'none' : 'hline')} title="Horizontal Line">&#x2500;</button>
+            <button class="draw-btn" class:active={drawingMode === 'trendline'} on:click={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
+            {#if enableTradeLineEntry}
+              <button class="draw-btn long-tool" class:active={drawingMode === 'longentry'} on:click={() => setDrawingMode(drawingMode === 'longentry' ? 'none' : 'longentry')} title="LONG RR Box (L) · drag once">L</button>
+              <button class="draw-btn short-tool" class:active={drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'shortentry' ? 'none' : 'shortentry')} title="SHORT RR Box (S) · drag once">S</button>
+            {/if}
+            <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
+          </div>
+        {/if}
+
+        <button class="scan-btn" on:click={requestAgentScan} title="Run agent scan for current market">
+          SCAN
+        </button>
+
+        {#if chartMode === 'agent' && advancedMode && indicatorStripState === 'hidden'}
+          <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>지표 ON</button>
+        {/if}
+
+        <div class="price-info compact">
+          <span class="cprc">${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span class="pchg" class:up={priceChange24h >= 0} class:down={priceChange24h < 0}>
+            {priceChange24h >= 0 ? '▲' : '▼'}{Math.abs(priceChange24h).toFixed(2)}%
+          </span>
+        </div>
+      </div>
+    </div>
 
     {#if chartMode === 'agent' && klineCache.length > 0 && !advancedMode}
-      <div class="ma-vals">
-        <span class="ma-tag" style="color:{chartTheme.ma7}">MA(7) {ma7Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
-        <span class="ma-tag" style="color:{chartTheme.ma25}">MA(25) {ma25Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
-        <span class="ma-tag" style="color:{chartTheme.ma99}">MA(99) {ma99Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+      <div class="bar-meta">
+        <div class="ma-vals">
+          <span class="ma-tag" style="color:{chartTheme.ma7}">MA(7) {ma7Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+          <span class="ma-tag" style="color:{chartTheme.ma25}">MA(25) {ma25Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+          <span class="ma-tag" style="color:{chartTheme.ma99}">MA(99) {ma99Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+          <span class="ma-tag">RSI14 {Number.isFinite(rsiVal) ? rsiVal.toFixed(2) : '—'}</span>
+          <span class="ma-tag">VOL {formatCompact(latestVolume)}</span>
+        </div>
       </div>
-    {/if}
-
-    <div class="price-info">
-      <span class="cprc">${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-      <span class="pchg" class:up={priceChange24h >= 0} class:down={priceChange24h < 0}>
-        {priceChange24h >= 0 ? '▲' : '▼'}{Math.abs(priceChange24h).toFixed(2)}%
-      </span>
-    </div>
-    {#if chartMode === 'agent' && advancedMode && indicatorStripState === 'hidden'}
-      <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>지표 ON</button>
     {/if}
   </div>
 
@@ -1568,7 +1653,7 @@
         <button class="ind-chip" class:on={indicatorEnabled.ma60} on:click={() => toggleIndicator('ma60')} style="--ind-color:{chartTheme.ma60}">
           MA60 <span>{formatPrice(ma60Val)}</span>
         </button>
-        <button class="ind-chip" class:on={indicatorEnabled.ma120} on:click={() => toggleIndicator('ma120')} style="--ind-color:{chartTheme.ma120}">
+        <button class="ind-chip optional" class:on={indicatorEnabled.ma120} on:click={() => toggleIndicator('ma120')} style="--ind-color:{chartTheme.ma120}">
           MA120 <span>{formatPrice(ma120Val)}</span>
         </button>
         {#if chartVisualMode === 'full'}
@@ -1583,25 +1668,25 @@
           </button>
         {/if}
         <button class="ind-chip" class:on={indicatorEnabled.rsi} on:click={() => toggleIndicator('rsi')} style="--ind-color:{chartTheme.rsi}">
-          RSI14(상대강도) <span>{Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
+          RSI14 <span>{Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
         </button>
         <button class="ind-chip" class:on={indicatorEnabled.vol} on:click={() => toggleIndicator('vol')} style="--ind-color:{chartTheme.candleUp}">
-          VOL(거래량) <span>{formatCompact(latestVolume)}</span>
+          VOL <span>{formatCompact(latestVolume)}</span>
         </button>
         <button class="legend-chip" class:on={showIndicatorLegend} on:click={toggleIndicatorLegend}>LABELS</button>
         <button class="legend-chip" on:click={() => setIndicatorStripState('collapsed')}>접기</button>
         <button class="legend-chip danger" on:click={() => setIndicatorStripState('hidden')}>끄기</button>
         {#if enableTradeLineEntry}
-          <span class="ind-hint">H/T/L/S · L/S는 드래그 1회로 ENTRY/SL/TP 생성 · +/- 줌 · F 맞춤 · 0 리셋 · Esc 취소</span>
+          <span class="ind-hint">L/S 드래그 · +/- 줌 · 0 리셋</span>
         {/if}
       {:else}
         <div class="collapsed-summary">
           <span class="sum-title">INDICATORS</span>
           <span class="sum-item">MA20 {formatPrice(ma20Val)}</span>
           <span class="sum-item">MA60 {formatPrice(ma60Val)}</span>
-          <span class="sum-item">MA120 {formatPrice(ma120Val)}</span>
-          <span class="sum-item">RSI14(상대강도) {Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
-          <span class="sum-item">VOL(거래량) {formatCompact(latestVolume)}</span>
+          <span class="sum-item optional">MA120 {formatPrice(ma120Val)}</span>
+          <span class="sum-item">RSI14 {Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
+          <span class="sum-item">VOL {formatCompact(latestVolume)}</span>
         </div>
         <div class="strip-actions">
           <button class="legend-chip" class:on={showIndicatorLegend} on:click={toggleIndicatorLegend}>LABELS</button>
@@ -1786,28 +1871,245 @@
 <style>
   .chart-wrapper { display: flex; flex-direction: column; height: 100%; background: #0a0a1a; overflow: hidden; }
   .chart-bar {
-    padding: 6px 10px; border-bottom: 3px solid #000; display: flex; align-items: center; gap: 7px;
-    background: linear-gradient(90deg, #1a1a3a, #0a0a2a); font-size: 10px; font-family: var(--fm);
-    flex-shrink: 0; flex-wrap: wrap; row-gap: 3px;
+    padding: 3px 8px 3px;
+    border-bottom: 3px solid #000;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: linear-gradient(90deg, #1a1a3a, #0a0a2a);
+    font-size: 10px;
+    font-family: var(--fm);
+    flex-shrink: 0;
   }
-  .live-indicator { font-size: 9px; font-weight: 700; color: var(--grn); display: flex; align-items: center; gap: 3px; letter-spacing: .9px; margin-right: 4px; }
+  .bar-top {
+    display: none;
+  }
+  .bar-top.top-meta {
+    align-items: center;
+    min-width: 0;
+  }
+  .bar-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: max-content;
+    flex: 0 0 auto;
+  }
+  .pair-slot {
+    min-width: 128px;
+    flex: 0 1 auto;
+  }
+  .market-stats {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 1px;
+  }
+  .market-stats::-webkit-scrollbar { height: 3px; }
+  .market-stats::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+  }
+  .mstat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.04);
+    white-space: nowrap;
+  }
+  .mstat.wide {
+    min-width: 160px;
+    justify-content: space-between;
+  }
+  .mstat-k {
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    color: rgba(255,255,255,.58);
+  }
+  .mstat-v {
+    font-family: var(--fd);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .35px;
+    color: rgba(255,255,255,.92);
+  }
+  .bar-tools {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 1px;
+  }
+  .bar-tools::-webkit-scrollbar { height: 3px; }
+  .bar-tools::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+  }
+  .bar-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: max-content;
+    flex: 0 0 auto;
+  }
+  .bar-meta {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 1px;
+  }
+  .bar-meta::-webkit-scrollbar { height: 3px; }
+  .bar-meta::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+  }
+  .live-indicator { font-size: 9px; font-weight: 700; color: var(--grn); display: flex; align-items: center; gap: 3px; letter-spacing: .9px; }
   .live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--grn); animation: pulse .8s infinite; }
   .live-dot.err { background: #ff2d55; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-  .tf-btns { display: flex; gap: 2px; }
+  .tf-btns {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 1px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tf-btns::-webkit-scrollbar { height: 4px; }
+  .tf-btns::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+  }
   .tfbtn { padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #b8c0cc; font-size: 9px; font-family: var(--fd); font-weight: 700; letter-spacing: .8px; cursor: pointer; transition: all .15s; }
   .tfbtn:hover { background: rgba(255,255,255,.1); color: #fff; }
   .tfbtn.active { background: rgba(255,230,0,.15); color: #ffe600; border-color: rgba(255,230,0,.3); }
 
-  .ma-vals { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ma-vals { display: flex; gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
   .ma-tag { font-size: 8px; font-family: var(--fm); font-weight: 700; letter-spacing: .3px; opacity: 1; }
 
-  .price-info { margin-left: auto; display: flex; align-items: baseline; gap: 6px; }
-  .cprc { font-size: 20px; font-weight: 700; color: #fff; font-family: var(--fd); }
-  .pchg { font-size: 12px; font-weight: 700; }
+  .price-info {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-left: 5px;
+    padding-left: 5px;
+    border-left: 1px solid rgba(255,255,255,.12);
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+  .price-info.compact {
+    margin-left: 8px;
+  }
+  .cprc { font-size: 15px; font-weight: 700; color: #fff; font-family: var(--fd); line-height: 1; }
+  .pchg { font-size: 11px; font-weight: 700; }
   .pchg.up { color: #00ff88; }
   .pchg.down { color: #ff2d55; }
+
+  @media (max-width: 1280px) {
+    .cprc { font-size: 14px; }
+    .mstat-v { font-size: 9px; }
+    .mstat.wide { min-width: 146px; }
+  }
+
+  @media (min-width: 1900px) {
+    .bar-top.top-meta {
+      display: flex;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .chart-bar {
+      padding: 4px 6px;
+      gap: 3px;
+    }
+    .bar-left {
+      gap: 4px;
+    }
+    .live-indicator {
+      font-size: 8px;
+      letter-spacing: .75px;
+    }
+    .pair-slot {
+      min-width: 124px;
+      flex: 0 0 auto;
+    }
+    .bar-tools {
+      gap: 4px;
+    }
+    .tf-btns {
+      width: auto;
+      flex: 0 0 auto;
+    }
+    .tfbtn {
+      height: 20px;
+      padding: 0 6px;
+      font-size: 8px;
+      letter-spacing: .4px;
+      white-space: nowrap;
+    }
+    .bar-controls {
+      gap: 3px;
+    }
+    .mode-toggle .mode-btn {
+      min-height: 20px;
+      padding: 0 6px;
+      font-size: 8px;
+      letter-spacing: .45px;
+    }
+    .draw-tools .draw-btn {
+      width: 20px;
+      height: 20px;
+      font-size: 8px;
+    }
+    .scan-btn {
+      min-height: 20px;
+      height: 20px;
+      padding: 0 6px;
+      font-size: 8px;
+      letter-spacing: .4px;
+    }
+    .price-info {
+      margin-left: 5px;
+      width: auto;
+      border-left: 1px solid rgba(255,255,255,.12);
+      padding-left: 5px;
+      gap: 4px;
+    }
+    .cprc {
+      font-size: 11px;
+      letter-spacing: .2px;
+    }
+    .pchg {
+      font-size: 8px;
+    }
+    .ma-vals {
+      gap: 6px;
+    }
+  }
 
   .chart-container { flex: 1; position: relative; overflow: hidden; }
   .chart-container.hidden-chart { display: none; }
@@ -1925,7 +2227,7 @@
     box-shadow: 0 0 6px var(--legend-color);
   }
 
-  .mode-toggle { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1.5px solid rgba(255,230,0,.25); margin-left: 4px; }
+  .mode-toggle { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1.5px solid rgba(255,230,0,.25); margin-left: 0; }
   .mode-btn { padding: 3px 10px; background: rgba(255,255,255,.03); border: none; color: #b2b9c5; font-size: 9px; font-family: var(--fd); font-weight: 800; letter-spacing: .9px; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
   .mode-btn:first-child { border-right: 1px solid rgba(255,230,0,.15); }
   .mode-btn:hover { background: rgba(255,230,0,.08); color: #ccc; }
@@ -1953,7 +2255,7 @@
     box-shadow: 0 0 10px rgba(255,230,0,.26);
   }
 
-  .draw-tools { display: flex; gap: 2px; margin-left: 2px; padding-left: 4px; border-left: 1px solid rgba(255,255,255,.06); }
+  .draw-tools { display: flex; gap: 2px; margin-left: 0; padding-left: 0; border-left: none; }
   .draw-btn { width: 24px; height: 20px; border-radius: 4px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: #b5bdc9; font-size: 11px; font-family: monospace; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
   .draw-btn:hover { background: rgba(255,230,0,.1); color: #ffe600; border-color: rgba(255,230,0,.3); }
   .draw-btn.active { background: rgba(255,230,0,.2); color: #ffe600; border-color: #ffe600; box-shadow: 0 0 6px rgba(255,230,0,.3); }
@@ -1967,23 +2269,34 @@
 
   .indicator-strip {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
+    gap: 4px;
+    padding: 4px 8px;
     border-bottom: 1px solid rgba(255,255,255,.06);
     background: rgba(255,255,255,.03);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
   }
   .indicator-strip.collapsed {
-    justify-content: space-between;
-    gap: 8px;
+    justify-content: flex-start;
+    gap: 6px;
   }
   .collapsed-summary {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
     min-width: 0;
-    flex-wrap: wrap;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 1px;
   }
   .sum-title {
     font-family: var(--fd);
@@ -1994,16 +2307,17 @@
   }
   .sum-item {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 7px;
     color: rgba(255,255,255,.74);
-    letter-spacing: .35px;
+    letter-spacing: .25px;
     white-space: nowrap;
   }
   .strip-actions {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    margin-left: auto;
+    margin-left: 0;
+    flex: 0 0 auto;
   }
   .view-mode {
     display: inline-flex;
@@ -2042,7 +2356,7 @@
     background: rgba(255,255,255,.05);
     color: rgba(255,255,255,.74);
     border-radius: 12px;
-    padding: 3px 8px;
+    padding: 2px 7px;
     font-family: var(--fm);
     font-size: 9px;
     font-weight: 800;
@@ -2061,6 +2375,7 @@
     box-shadow: inset 0 0 0 1px rgba(255,255,255,.1);
   }
   .ind-chip.muted { opacity: .72; }
+  .ind-chip.optional { opacity: .88; }
   .ind-chip:hover {
     color: #fff;
     border-color: rgba(255,255,255,.24);
@@ -2077,7 +2392,7 @@
     background: rgba(255,255,255,.04);
     color: rgba(255,255,255,.78);
     border-radius: 10px;
-    padding: 3px 8px;
+    padding: 2px 7px;
     font-family: var(--fd);
     font-size: 8px;
     font-weight: 800;
@@ -2249,4 +2564,27 @@
   .pos-active { color: #ffba30; font-weight: 700; animation: pulse .8s infinite; }
   .draw-count { color: #ffe600; font-weight: 700; }
   .agent-feed-text { flex: 1; color: rgba(255,255,255,.62); font-size: 8px; font-weight: 600; letter-spacing: .5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Keep internal sections fixed-height friendly; pane resizing is handled at terminal layout level. */
+  .chart-container,
+  .indicator-strip {
+    resize: none;
+  }
+
+  @media (max-width: 1580px) {
+    .ind-hint { display: none; }
+  }
+
+  @media (max-width: 1450px) {
+    .ind-chip.optional { display: none; }
+  }
+
+  @media (max-width: 520px) {
+    .sum-title {
+      display: none;
+    }
+    .sum-item.optional {
+      display: none;
+    }
+  }
 </style>

@@ -4,7 +4,7 @@
 // Arena와 완전 분리 — 빠른 시그널 기반 트레이딩
 // ═══════════════════════════════════════════════════════════════
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
 import {
   closeQuickTradeApi,
@@ -13,6 +13,7 @@ import {
   updateQuickTradePricesApi,
   type ApiQuickTrade,
 } from '$lib/api/tradingApi';
+import { buildPriceMapHash, getBaseSymbolFromPair, toNumericPriceMap, type PriceLikeMap } from '$lib/utils/price';
 
 export type TradeDirection = 'LONG' | 'SHORT';
 export type TradeStatus = 'open' | 'closed' | 'stopped';
@@ -43,6 +44,7 @@ const STORAGE_KEY = STORAGE_KEYS.quickTrades;
 const MAX_TRADES = 200;
 const PRICE_SYNC_DEBOUNCE_MS = 1200;
 let _quickTradesHydrated = false;
+let _quickTradesHydratePromise: Promise<void> | null = null;
 
 function loadState(): QuickTradeState {
   if (typeof window === 'undefined') return { trades: [], showPanel: false };
@@ -117,16 +119,25 @@ function mergeServerAndLocalTrades(serverTrades: QuickTrade[], localTrades: Quic
 export async function hydrateQuickTrades(force = false): Promise<void> {
   if (typeof window === 'undefined') return;
   if (_quickTradesHydrated && !force) return;
+  if (_quickTradesHydratePromise) return _quickTradesHydratePromise;
 
-  const records = await fetchQuickTradesApi({ limit: MAX_TRADES, offset: 0 });
-  if (!records) return;
+  _quickTradesHydratePromise = (async () => {
+    const records = await fetchQuickTradesApi({ limit: MAX_TRADES, offset: 0 });
+    if (!records) return;
 
-  quickTradeStore.update((s) => ({
-    ...s,
-    trades: mergeServerAndLocalTrades(records.map(mapApiQuickTrade), s.trades),
-  }));
+    quickTradeStore.update((s) => ({
+      ...s,
+      trades: mergeServerAndLocalTrades(records.map(mapApiQuickTrade), s.trades),
+    }));
 
-  _quickTradesHydrated = true;
+    _quickTradesHydrated = true;
+  })();
+
+  try {
+    await _quickTradesHydratePromise;
+  } finally {
+    _quickTradesHydratePromise = null;
+  }
 }
 
 // ═══ Actions ═══
@@ -250,28 +261,36 @@ export function updateTradePrice(tradeId: string, currentPrice: number) {
   }));
 }
 
-let _lastPriceSnapshot = '';
+let _lastLocalPriceSnapshot = '';
+let _lastOpenTradeHash = '';
+let _lastServerSyncSnapshot = '';
 let _priceSyncTimer: ReturnType<typeof setTimeout> | null = null;
 export function updateAllPrices(
-  prices: Record<string, number>,
+  priceInput: PriceLikeMap,
   options: { syncServer?: boolean } = {}
 ) {
   const syncServer = options.syncServer ?? true;
-  // Skip if prices haven't changed
-  const snap = JSON.stringify(prices);
-  if (snap === _lastPriceSnapshot) return;
-  _lastPriceSnapshot = snap;
 
-  let hasOpenTrades = false;
-  quickTradeStore.update(s => {
-    // Skip if no open trades
-    hasOpenTrades = s.trades.some(t => t.status === 'open');
-    if (!hasOpenTrades) return s;
+  const state = get(quickTradeStore);
+  const openIds = state.trades.filter((t) => t.status === 'open').map((t) => t.id);
+  const hasOpenTrades = openIds.length > 0;
+  const openTradeHash = openIds.join('|');
+  if (!hasOpenTrades) {
+    _lastOpenTradeHash = '';
+    _lastServerSyncSnapshot = '';
+    return;
+  }
 
+  const prices = toNumericPriceMap(priceInput);
+  const snap = buildPriceMapHash(prices);
+
+  // Skip only when both prices and open-trade set are unchanged.
+  // This prevents missing updates when a new trade opens at the same price snapshot.
+  if (!(snap === _lastLocalPriceSnapshot && openTradeHash === _lastOpenTradeHash)) {
     let changed = false;
-    const trades = s.trades.map(t => {
+    const trades = state.trades.map((t) => {
       if (t.status !== 'open') return t;
-      const token = t.pair.split('/')[0];
+      const token = getBaseSymbolFromPair(t.pair);
       const price = prices[token];
       if (!price || price === t.currentPrice) return t;
       changed = true;
@@ -280,13 +299,30 @@ export function updateAllPrices(
         : +((t.entry - price) / t.entry * 100).toFixed(2);
       return { ...t, currentPrice: price, pnlPercent: pnl };
     });
-    return changed ? { ...s, trades } : s;
-  });
 
-  if (syncServer && hasOpenTrades && typeof window !== 'undefined') {
+    if (changed) {
+      quickTradeStore.set({
+        ...state,
+        trades,
+      });
+    }
+  }
+
+  _lastLocalPriceSnapshot = snap;
+  _lastOpenTradeHash = openTradeHash;
+
+  if (syncServer && typeof window !== 'undefined') {
+    const serverSyncHash = `${snap}::${openTradeHash}`;
+    if (serverSyncHash === _lastServerSyncSnapshot) return;
+    _lastServerSyncSnapshot = serverSyncHash;
+
+    const payload = { ...prices };
     if (_priceSyncTimer) clearTimeout(_priceSyncTimer);
     _priceSyncTimer = setTimeout(() => {
-      void updateQuickTradePricesApi({ prices });
+      void updateQuickTradePricesApi({ prices: payload }).catch(() => {
+        // allow retry on next sync tick if request failed
+        _lastServerSyncSnapshot = '';
+      });
     }, PRICE_SYNC_DEBOUNCE_MS);
   }
 }
@@ -302,6 +338,6 @@ export function clearClosedTrades() {
   }));
 }
 
-if (typeof window !== 'undefined') {
-  void hydrateQuickTrades();
-}
+// 모듈 import 시 자동 hydration 제거 — terminal 페이지 onMount에서 호출하도록 변경
+// 모든 페이지에서 불필요한 API 호출 방지
+// if (typeof window !== 'undefined') { void hydrateQuickTrades(); }

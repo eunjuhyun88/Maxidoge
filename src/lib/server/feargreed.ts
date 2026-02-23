@@ -2,7 +2,10 @@
 // MAXI⚡DOGE — Fear & Greed server client
 // ═══════════════════════════════════════════════════════════════
 
+import { getCached, setCache } from './providers/cache';
+
 const FNG_ENDPOINT = 'https://api.alternative.me/fng/';
+const CACHE_TTL = 5 * 60_000; // 5분 (일 1회 갱신되는 인덱스)
 
 export type FearGreedPoint = {
   value: number;
@@ -40,16 +43,22 @@ async function fetchJson(url: string, timeoutMs = 6000): Promise<any> {
 
 export async function fetchFearGreed(limit = 30): Promise<FearGreedSnapshot> {
   const bounded = Math.max(1, Math.min(365, Math.trunc(limit)));
-  const url = `${FNG_ENDPOINT}?limit=${bounded}`;
+  const cacheKey = `feargreed:${bounded}`;
+
+  const cached = getCached<FearGreedSnapshot>(cacheKey);
+  if (cached) return cached;
 
   try {
+    const url = `${FNG_ENDPOINT}?limit=${bounded}`;
     const payload = await fetchJson(url);
     const listRaw = Array.isArray(payload?.data) ? payload.data : [];
     const points = listRaw.map(toPoint).filter((row): row is FearGreedPoint => row !== null);
-    return {
+    const result: FearGreedSnapshot = {
       current: points[0] ?? null,
       points,
     };
+    setCache(cacheKey, result, CACHE_TTL);
+    return result;
   } catch (error) {
     console.error('[feargreed] fetch failed:', error);
     return { current: null, points: [] };

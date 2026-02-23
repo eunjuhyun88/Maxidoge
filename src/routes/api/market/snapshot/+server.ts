@@ -33,7 +33,7 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
       },
       {
         headers: {
-          'Cache-Control': 'public, max-age=15',
+          'Cache-Control': 'public, max-age=30',
         },
       }
     );

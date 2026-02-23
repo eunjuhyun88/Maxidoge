@@ -14,30 +14,18 @@ export const GET: RequestHandler = async ({ cookies }) => {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
-    const totalResult = await query<{ total: string; count: string }>(
-      `
-        SELECT
-          COALESCE(sum(pnl), 0)::text AS total,
-          count(*)::text AS count
-        FROM pnl_entries
-        WHERE user_id = $1
-      `,
-      [user.id]
-    );
-
-    const bySource = await query<AggregateRow>(
-      `
-        SELECT
-          source,
-          COALESCE(sum(pnl), 0)::text AS total,
-          count(*)::text AS count
-        FROM pnl_entries
-        WHERE user_id = $1
-        GROUP BY source
-        ORDER BY source
-      `,
-      [user.id]
-    );
+    const [totalResult, bySource] = await Promise.all([
+      query<{ total: string; count: string }>(
+        `SELECT COALESCE(sum(pnl), 0)::text AS total, count(*)::text AS count
+         FROM pnl_entries WHERE user_id = $1`,
+        [user.id]
+      ),
+      query<AggregateRow>(
+        `SELECT source, COALESCE(sum(pnl), 0)::text AS total, count(*)::text AS count
+         FROM pnl_entries WHERE user_id = $1 GROUP BY source ORDER BY source`,
+        [user.id]
+      ),
+    ]);
 
     return json({
       success: true,

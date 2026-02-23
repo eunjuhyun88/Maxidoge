@@ -53,6 +53,7 @@ interface MatchHistoryState {
 const STORAGE_KEY = STORAGE_KEYS.matchHistory;
 const MAX_RECORDS = 100;
 let _matchHistoryHydrated = false;
+let _matchHistoryHydratePromise: Promise<void> | null = null;
 
 function loadHistory(): MatchHistoryState {
   if (typeof window === 'undefined') return { records: [] };
@@ -125,15 +126,24 @@ function mergeServerAndLocalRecords(serverRecords: MatchRecord[], localRecords: 
 export async function hydrateMatchHistory(force = false): Promise<void> {
   if (typeof window === 'undefined') return;
   if (_matchHistoryHydrated && !force) return;
+  if (_matchHistoryHydratePromise) return _matchHistoryHydratePromise;
 
-  const records = await fetchMatchesApi({ limit: MAX_RECORDS, offset: 0 });
-  if (!records) return;
+  _matchHistoryHydratePromise = (async () => {
+    const records = await fetchMatchesApi({ limit: MAX_RECORDS, offset: 0 });
+    if (!records) return;
 
-  matchHistoryStore.update((s) => ({
-    records: mergeServerAndLocalRecords(records.map(mapApiMatch), s.records)
-  }));
+    matchHistoryStore.update((s) => ({
+      records: mergeServerAndLocalRecords(records.map(mapApiMatch), s.records)
+    }));
 
-  _matchHistoryHydrated = true;
+    _matchHistoryHydrated = true;
+  })();
+
+  try {
+    await _matchHistoryHydratePromise;
+  } finally {
+    _matchHistoryHydratePromise = null;
+  }
 }
 
 function replaceLocalMatchRecord(localId: string, record: MatchRecord) {
@@ -173,6 +183,4 @@ export function addMatchRecord(record: Omit<MatchRecord, 'id' | 'timestamp'>, sy
   return localId;
 }
 
-if (typeof window !== 'undefined') {
-  void hydrateMatchHistory();
-}
+// 자동 hydration은 hydrateDomainStores() 단일 진입점에서 수행한다.

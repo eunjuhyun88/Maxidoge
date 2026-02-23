@@ -202,9 +202,18 @@ export const AGENT_POOL: Record<AgentId, AgentDefinition> = {
 
 // ─── Helpers ────────────────────────────────────────────────
 
-/** 에이전트 ID로 정의 조회 */
-export function getAgent(id: AgentId): AgentDefinition {
-  return AGENT_POOL[id];
+/** FE 소문자 ID → 엔진 대문자 ID 정규화 (F-01) */
+export function normalizeAgentId(id: string): AgentId {
+  const upper = id.toUpperCase() as AgentId;
+  if (!(upper in AGENT_POOL)) {
+    throw new Error(`[agents] Unknown agent ID: ${id}`);
+  }
+  return upper;
+}
+
+/** 에이전트 ID로 정의 조회 (대소문자 무관) */
+export function getAgent(id: string): AgentDefinition {
+  return AGENT_POOL[normalizeAgentId(id)];
 }
 
 /** 역할별 에이전트 목록 */
@@ -217,7 +226,7 @@ export function getAllAgents(): AgentDefinition[] {
   return Object.values(AGENT_POOL);
 }
 
-/** 에이전트의 팩터 ID 목록 */
-export function getFactorIds(agentId: AgentId): string[] {
-  return AGENT_POOL[agentId].factors.map(f => f.id);
+/** 에이전트의 팩터 ID 목록 (대소문자 무관) */
+export function getFactorIds(agentId: string): string[] {
+  return AGENT_POOL[normalizeAgentId(agentId)].factors.map(f => f.id);
 }

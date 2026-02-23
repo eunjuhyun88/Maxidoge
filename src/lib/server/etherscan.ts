@@ -27,7 +27,7 @@ async function etherscanFetch<T>(
 
   const qs = new URLSearchParams({ module, action, apikey: key, ...params });
   try {
-    const res = await fetch(`${BASE}?${qs}`);
+    const res = await fetch(`${BASE}?${qs}`, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     const json = await res.json();
     if (json.status !== '1' && json.message !== 'OK') return null;

@@ -5,10 +5,9 @@
 
 import type { MarketContext } from '$lib/engine/factorEngine';
 import type { TrendAnalysis } from '$lib/engine/types';
-import type { BinanceKline } from '$lib/api/binance';
 import type { ProviderHealth, OnchainMetrics, SentimentMetrics } from './types';
 import { getCached, setCache } from './cache';
-import { fetchKlines, fetch24hr, pairToSymbol, type Binance24hr } from '$lib/api/binance';
+import { fetchKlinesServer, fetch24hrServer, pairToSymbol, type Binance24hr, type BinanceKline } from '$lib/server/binance';
 import { fetchDerivatives, fetchNews, normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
 import { fetchFearGreed } from '$lib/server/feargreed';
 import { fetchCoinGeckoGlobal, fetchStablecoinMcap } from '$lib/server/coingecko';
@@ -166,10 +165,10 @@ export async function assembleMarketContext(
     us10yRes,
     cmcRes,
   ] = await Promise.allSettled([
-    timedFetch('binance:klines', () => fetchKlines(symbol, timeframe, 300)),
-    timedFetch('binance:klines1h', () => fetchKlines(symbol, '1h', 300)),
-    timedFetch('binance:klines1d', () => fetchKlines(symbol, '1d', 300)),
-    timedFetch('binance:ticker', () => fetch24hr(symbol)),
+    timedFetch('binance:klines', () => fetchKlinesServer(symbol, timeframe, 300)),
+    timedFetch('binance:klines1h', () => fetchKlinesServer(symbol, '1h', 300)),
+    timedFetch('binance:klines1d', () => fetchKlinesServer(symbol, '1d', 300)),
+    timedFetch('binance:ticker', () => fetch24hrServer(symbol)),
     timedFetch('coinalyze', () => fetchDerivatives(eventFetch, pair, timeframe)),
     fetchSentimentMetrics(),
     fetchOnchainMetrics(token),

@@ -19,7 +19,7 @@ export function tfToCoinalyzeInterval(tf: string): string {
 /** Generic proxy fetch */
 async function coinalyzeFetch(endpoint: string, params: Record<string, string>): Promise<any> {
   const qs = new URLSearchParams({ endpoint, ...params });
-  const res = await fetch(`/api/coinalyze?${qs.toString()}`);
+  const res = await fetch(`/api/coinalyze?${qs.toString()}`, { signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error(`Coinalyze ${res.status}`);
   return res.json();
 }

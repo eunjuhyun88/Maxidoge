@@ -4,19 +4,19 @@
   import IntelPanel from '../../components/terminal/IntelPanel.svelte';
   import TokenDropdown from '../../components/shared/TokenDropdown.svelte';
   import CopyTradeModal from '../../components/modals/CopyTradeModal.svelte';
-  import { TICKER_DATA } from '$lib/data/warroom';
   import { AGDEFS } from '$lib/data/agents';
 
   let liveTickerStr = '';
   let tickerLoaded = false;
   $: TICKER_STR = tickerLoaded && liveTickerStr
     ? `${liveTickerStr}  \u00a0|\u00a0  ${liveTickerStr}`
-    : `${TICKER_DATA}  \u00a0|\u00a0  ${TICKER_DATA}`;
+    : 'Loading market data...';
   import { gameState } from '$lib/stores/gameState';
-  import { updateAllPrices } from '$lib/stores/quickTradeStore';
-  import { updateTrackedPrices } from '$lib/stores/trackedSignalStore';
+  import { livePrices } from '$lib/stores/priceStore';
+  import { hydrateQuickTrades } from '$lib/stores/quickTradeStore';
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
+  import { alertEngine } from '$lib/services/alertEngine';
   import { onMount, onDestroy } from 'svelte';
 
   // ── Panel resize state ──
@@ -80,6 +80,62 @@
   };
   let mobileTab: MobileTab = 'chart';
   let mobileViewTracked = false;
+  type MobilePanelSize = { widthPct: number; heightPct: number };
+  const MOBILE_PANEL_MIN_W = 72;
+  const MOBILE_PANEL_MAX_W = 100;
+  const MOBILE_PANEL_MIN_H = 58;
+  const MOBILE_PANEL_MAX_H = 100;
+  const MOBILE_PANEL_STEP = 3;
+  let mobilePanelSizes: Record<MobileTab, MobilePanelSize> = {
+    warroom: { widthPct: 100, heightPct: 100 },
+    chart: { widthPct: 100, heightPct: 100 },
+    intel: { widthPct: 100, heightPct: 100 },
+  };
+
+  function clampPercent(value: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function getMobilePanelStyle(tab: MobileTab) {
+    const panel = mobilePanelSizes[tab];
+    return `--mob-panel-width: ${panel.widthPct}%; --mob-panel-height: ${panel.heightPct}%`;
+  }
+
+  function resizeMobilePanelByWheel(tab: MobileTab, axis: 'x' | 'y', e: WheelEvent) {
+    if (!isMobile) return;
+    const rawDelta = axis === 'x' ? (Math.abs(e.deltaX) > 0 ? e.deltaX : e.deltaY) : e.deltaY;
+    if (!Number.isFinite(rawDelta) || rawDelta === 0) return;
+
+    const step = e.shiftKey ? MOBILE_PANEL_STEP * 2 : MOBILE_PANEL_STEP;
+    const signed = rawDelta > 0 ? step : -step;
+    const current = mobilePanelSizes[tab];
+
+    if (axis === 'x') {
+      const nextWidth = clampPercent(current.widthPct + signed, MOBILE_PANEL_MIN_W, MOBILE_PANEL_MAX_W);
+      if (nextWidth === current.widthPct) return;
+      e.preventDefault();
+      mobilePanelSizes = {
+        ...mobilePanelSizes,
+        [tab]: { ...current, widthPct: nextWidth },
+      };
+      return;
+    }
+
+    const nextHeight = clampPercent(current.heightPct + signed, MOBILE_PANEL_MIN_H, MOBILE_PANEL_MAX_H);
+    if (nextHeight === current.heightPct) return;
+    e.preventDefault();
+    mobilePanelSizes = {
+      ...mobilePanelSizes,
+      [tab]: { ...current, heightPct: nextHeight },
+    };
+  }
+
+  function resetMobilePanelSize(tab: MobileTab) {
+    mobilePanelSizes = {
+      ...mobilePanelSizes,
+      [tab]: { widthPct: 100, heightPct: 100 },
+    };
+  }
 
   function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
     if (typeof window === 'undefined') return;
@@ -147,6 +203,68 @@
     window.removeEventListener('mouseup', onMouseUp);
   }
 
+  function clampLeftWidth(next: number) {
+    return Math.min(MAX_LEFT, Math.max(MIN_LEFT, next));
+  }
+
+  function clampRightWidth(next: number) {
+    return Math.min(MAX_RIGHT, Math.max(MIN_RIGHT, next));
+  }
+
+  function isHorizontalResizeGesture(e: WheelEvent) {
+    const absX = Math.abs(e.deltaX);
+    const absY = Math.abs(e.deltaY);
+    return absX >= 10 && absX > absY * 1.2;
+  }
+
+  function resizePanelByWheel(target: 'left' | 'right' | 'center', e: WheelEvent, options?: { force?: boolean }) {
+    if (!isDesktop) return;
+
+    const force = options?.force === true;
+    const horizontalGesture = isHorizontalResizeGesture(e);
+    const wantsResize = force || horizontalGesture || e.altKey || e.ctrlKey || e.metaKey;
+    if (!wantsResize) return;
+
+    const delta = horizontalGesture ? e.deltaX : (e.deltaY === 0 ? e.deltaX : e.deltaY);
+    if (!Number.isFinite(delta) || delta === 0) return;
+    e.preventDefault();
+
+    const step = e.shiftKey ? 26 : 14;
+    const signed = delta > 0 ? step : -step;
+
+    if (target === 'left') {
+      if (leftCollapsed) {
+        leftCollapsed = false;
+        leftW = savedLeftW;
+      }
+      leftW = clampLeftWidth(leftW + signed);
+      savedLeftW = leftW;
+      return;
+    }
+
+    if (target === 'right') {
+      if (rightCollapsed) {
+        rightCollapsed = false;
+        rightW = savedRightW;
+      }
+      rightW = clampRightWidth(rightW + signed);
+      savedRightW = rightW;
+      return;
+    }
+
+    if (target === 'center') {
+      if (leftCollapsed || rightCollapsed) return;
+      const half = Math.round(signed / 2);
+      // Wheel down: widen side panels (center narrower). Wheel up: opposite.
+      const nextLeft = clampLeftWidth(leftW + half);
+      const nextRight = clampRightWidth(rightW + half);
+      leftW = nextLeft;
+      rightW = nextRight;
+      savedLeftW = leftW;
+      savedRightW = rightW;
+    }
+  }
+
   function handleResize() {
     windowWidth = window.innerWidth;
   }
@@ -154,8 +272,8 @@
   async function fetchLiveTicker() {
     try {
       const [fgRes, cgRes] = await Promise.all([
-        fetch('/api/feargreed?limit=1').then(r => r.json()).catch(() => null),
-        fetch('/api/coingecko/global').then(r => r.json()).catch(() => null),
+        fetch('/api/feargreed?limit=1', { signal: AbortSignal.timeout(5000) }).then(r => r.json()).catch(() => null),
+        fetch('/api/coingecko/global', { signal: AbortSignal.timeout(5000) }).then(r => r.json()).catch(() => null),
       ]);
 
       const parts: string[] = [];
@@ -186,31 +304,18 @@
     }
   }
 
-  // Fast local updates + slower server persistence (keeps UI snappy without hammering DB)
-  let priceUiSync: ReturnType<typeof setInterval> | null = null;
-  let pricePersistSync: ReturnType<typeof setInterval> | null = null;
-
   onMount(() => {
     windowWidth = window.innerWidth;
     window.addEventListener('resize', handleResize);
 
+    // ── Hydrate quick trades (터미널 페이지에서만 호출) ──
+    void hydrateQuickTrades();
+
     // ── Load live ticker data ──
     fetchLiveTicker();
 
-    // 1) Near real-time local UI refresh
-    priceUiSync = setInterval(() => {
-      const s = $gameState;
-      const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
-      updateAllPrices(prices, { syncServer: false });
-      updateTrackedPrices(prices);
-    }, 1000);
-
-    // 2) Periodic server persistence (batched in store debounce)
-    pricePersistSync = setInterval(() => {
-      const s = $gameState;
-      const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
-      updateAllPrices(prices, { syncServer: true });
-    }, 30000);
+    // Background alert engine — scans every 5min, fires notifications
+    alertEngine.start();
 
     const params = new URLSearchParams(window.location.search);
     if (params.get('copyTrade') === '1') {
@@ -252,8 +357,7 @@
   });
 
   onDestroy(() => {
-    if (priceUiSync) clearInterval(priceUiSync);
-    if (pricePersistSync) clearInterval(pricePersistSync);
+    alertEngine.stop();
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', handleResize);
     }
@@ -338,65 +442,89 @@
   };
 
   let chatMessages: ChatMsg[] = [
-    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'MAXI⚡DOGE Orchestrator v8 online. Type @AGENT to query.', time: '—', isUser: false, isSystem: true },
+    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'MAXI⚡DOGE Orchestrator v8 online. 8 agents standing by. Scan first, then ask questions about the results.', time: '—', isUser: false, isSystem: true },
+    { from: 'ORCHESTRATOR', icon: '🧠', color: '#ff2d9b',
+      text: '💡 Try these:\n• "BTC 전망 분석해줘" — I\'ll route to the right agents\n• "@STRUCTURE MA, RSI 분석" — Direct to Structure agent\n• "@DERIV 펀딩 + OI 어때?" — Derivatives analysis\n• "@FLOW 고래 움직임?" — On-chain + whale flow\n• "@SENTI 소셜 센티먼트" — F&G + LunarCrush social\n• "@MACRO DXY, 금리 영향?" — Macro regime check',
+      time: '—', isUser: false },
   ];
   let isTyping = false;
   let latestScan: ScanIntelDetail | null = null;
 
-  const agentResponses: Record<string, string[]> = {
-    ORCHESTRATOR: ['Analyzing across 7 agents...', 'Running backtest... 68% win rate detected.', 'Consensus updated — SHORT bias.'],
-    STRUCTURE: ['CHoCH on 4H confirmed. OB zone at $95,400.', 'BOS above $97,800. Bullish structure intact.'],
-    VPA: ['CVD rising with bullish absorption at POC.', 'Volume climax detected — potential reversal signal.'],
-    ICT: ['Liquidity pool swept below $96,200. FVG at $97,400.', 'Bullish OB reaction with displacement confirmation.'],
-    DERIV: ['OI +4.2% with positive delta. Longs building.', 'FR at +0.082% — extreme. Liquidation cluster near $96.8K.'],
-    VALUATION: ['MVRV at 1.8 — mid-range healthy zone.', 'NUPL rising, supply in profit stable at 72%.'],
-    FLOW: ['Net flow: -$128M accumulation. Whales increasing positions.', 'Exchange outflows rising — bullish signal.'],
-    SENTI: ['Fear & Greed: 42 (Fear). Social sentiment shifting bearish.', 'Whale wallets accumulating despite price drop.'],
-    MACRO: ['DXY weakening — risk-on environment.', 'SPX rally + yield drop favoring BTC correlation.'],
-  };
+  // 에이전트 정보 맵 (아이콘/컬러 lookup)
+  const AGENT_META: Record<string, { icon: string; color: string }> = {};
+  for (const ag of AGDEFS) AGENT_META[ag.name] = { icon: ag.icon, color: ag.color };
+  AGENT_META['ORCHESTRATOR'] = { icon: '🧠', color: '#ff2d9b' };
 
-  function handleSendChat(e: CustomEvent<{ text: string }>) {
+  async function handleSendChat(e: CustomEvent<{ text: string }>) {
     const text = e.detail.text;
     if (!text.trim()) return;
     const now = new Date();
     const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // 유저 메시지 즉시 표시
     chatMessages = [...chatMessages, { from: 'YOU', icon: '🐕', color: '#ffe600', text, time, isUser: true }];
     isTyping = true;
 
+    // 멘션된 에이전트 감지 (없으면 서버에서 ORCHESTRATOR로 기본 처리)
     const agent = AGDEFS.find(ag => text.toLowerCase().includes(`@${ag.name.toLowerCase()}`));
-    setTimeout(() => {
+    const mentionedAgent = agent?.name || undefined;
+
+    try {
+      const res = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: 'terminal',
+          senderKind: 'user',
+          senderName: 'YOU',
+          message: text,
+          meta: {
+            pair: $gameState.pair || 'BTC/USDT',
+            timeframe: $gameState.timeframe || '4h',
+            mentionedAgent,
+            livePrices: { ...$livePrices },
+          },
+        }),
+        signal: AbortSignal.timeout(15000), // 15s timeout for LLM responses
+      });
+
       isTyping = false;
-      const pool = agent ? (agentResponses[agent.name] || agentResponses.ORCHESTRATOR) : agentResponses.ORCHESTRATOR;
-      const resp = pool[Math.floor(Math.random() * pool.length)];
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.agentResponse) {
+          const r = data.agentResponse;
+          const agMeta = AGENT_META[r.senderName] || AGENT_META['ORCHESTRATOR'];
+          chatMessages = [...chatMessages, {
+            from: r.senderName,
+            icon: agMeta.icon,
+            color: agMeta.color,
+            text: r.message,
+            time,
+            isUser: false,
+          }];
+        }
+      } else {
+        chatMessages = [...chatMessages, {
+          from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
+          text: 'Connection error. Try again or check server status.',
+          time, isUser: false, isSystem: true
+        }];
+      }
+    } catch (err) {
+      isTyping = false;
       chatMessages = [...chatMessages, {
-        from: agent?.name || 'ORCHESTRATOR',
-        icon: agent?.icon || '🧠',
-        color: agent?.color || '#ff2d9b',
-        text: resp, time, isUser: false
+        from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
+        text: 'Network error. Please check your connection.',
+        time, isUser: false, isSystem: true
       }];
-    }, 600 + Math.random() * 500);
+    }
   }
 
   function handleScanComplete(e: CustomEvent<ScanIntelDetail>) {
-    const detail = e.detail;
-    latestScan = detail;
-    const stamp = new Date(detail.createdAt);
-    const time = `${stamp.getHours()}:${String(stamp.getMinutes()).padStart(2, '0')}`;
-    const highlights = detail.highlights
-      .slice(0, 3)
-      .map((h) => `${h.agent} ${h.vote.toUpperCase()} ${h.conf}%`)
-      .join(' · ');
-    chatMessages = [
-      ...chatMessages,
-      {
-        from: 'ORCHESTRATOR',
-        icon: '📡',
-        color: '#5ecbff',
-        text: `${detail.token} ${detail.timeframe.toUpperCase()} scan done. ${detail.summary}${highlights ? ` · ${highlights}` : ''}`,
-        time,
-        isUser: false
-      }
-    ];
+    // 스캔 컨텍스트만 저장 (채팅에 LLM이 참조할 수 있도록)
+    // 스캔 결과를 채팅에 직접 표시하지 않음
+    latestScan = e.detail;
   }
 </script>
 
@@ -408,53 +536,100 @@
   <!-- ═══ MOBILE LAYOUT ═══ -->
   {#if isMobile}
   <div class="terminal-mobile">
-    <div class="mob-topbar">
-      <div class="mob-topline">
-        <div class="mob-title-wrap">
-          <span class="mob-eyebrow">TERMINAL MOBILE</span>
-          <span class="mob-title">{mobileMeta.icon} {mobileMeta.label}</span>
+    {#if mobileTab !== 'chart'}
+      <div class="mob-topbar">
+        <div class="mob-topline">
+          <div class="mob-title-wrap">
+            <span class="mob-eyebrow">TERMINAL MOBILE</span>
+            <span class="mob-title">{mobileMeta.label}</span>
+          </div>
+          <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
         </div>
-        <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
-      </div>
-      <div class="mob-meta">
-        <div class="mob-token">
-          <TokenDropdown value={pair} compact on:select={onTokenSelect} />
+        <div class="mob-meta">
+          <div class="mob-token">
+            <TokenDropdown value={pair} compact on:select={onTokenSelect} />
+          </div>
+          <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
+          <span class="mob-meta-chip subtle">{pair}</span>
         </div>
-        <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
-        <span class="mob-meta-chip subtle">{pair}</span>
+        <div class="mob-desc">{mobileMeta.desc}</div>
       </div>
-      <div class="mob-desc">{mobileMeta.desc}</div>
-    </div>
+    {/if}
 
-    <div class="mob-content">
+    <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
       {#if mobileTab === 'warroom'}
-        <div class="mob-panel-wrap">
+        <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('warroom')}>
           <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-x"
+            title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize war room panel width with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'x', e)}
+            on:dblclick={() => resetMobilePanelSize('warroom')}
+          ></button>
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-y"
+            title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize war room panel height with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'y', e)}
+            on:dblclick={() => resetMobilePanelSize('warroom')}
+          ></button>
         </div>
       {:else if mobileTab === 'chart'}
-        <div class="mob-chart-section">
+        <div class="mob-chart-section mob-panel-resizable" style={getMobilePanelStyle('chart')}>
           <div class="mob-chart-area">
             <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
           </div>
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-x"
+            title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize chart panel width with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('chart', 'x', e)}
+            on:dblclick={() => resetMobilePanelSize('chart')}
+          ></button>
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-y"
+            title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize chart panel height with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('chart', 'y', e)}
+            on:dblclick={() => resetMobilePanelSize('chart')}
+          ></button>
         </div>
       {:else if mobileTab === 'intel'}
-        <div class="mob-panel-wrap">
+        <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('intel')}>
           <IntelPanel {chatMessages} {isTyping} {latestScan} prioritizeChat on:sendchat={handleSendChat} />
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-x"
+            title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize intel panel width with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('intel', 'x', e)}
+            on:dblclick={() => resetMobilePanelSize('intel')}
+          ></button>
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-y"
+            title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize intel panel height with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('intel', 'y', e)}
+            on:dblclick={() => resetMobilePanelSize('intel')}
+          ></button>
         </div>
       {/if}
     </div>
 
     <div class="mob-bottom-nav">
       <button class="mob-nav-btn" class:active={mobileTab === 'warroom'} on:click={() => setMobileTab('warroom')}>
-        <span class="mob-nav-icon">🎖</span>
         <span class="mob-nav-label">WAR ROOM</span>
       </button>
       <button class="mob-nav-btn" class:active={mobileTab === 'chart'} on:click={() => setMobileTab('chart')}>
-        <span class="mob-nav-icon">📊</span>
         <span class="mob-nav-label">CHART</span>
       </button>
       <button class="mob-nav-btn" class:active={mobileTab === 'intel'} on:click={() => setMobileTab('intel')}>
-        <span class="mob-nav-icon">🧠</span>
         <span class="mob-nav-label">INTEL</span>
       </button>
     </div>
@@ -491,11 +666,16 @@
 
     <!-- Left: WAR ROOM or collapsed strip -->
     {#if !leftCollapsed}
-      <div class="tl">
+      <div class="tl" on:wheel={(e) => resizePanelByWheel('left', e)}>
         <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scancomplete={handleScanComplete} />
       </div>
     {:else}
-      <button class="panel-strip panel-strip-left" on:click={toggleLeft} title="Show War Room">
+      <button
+        class="panel-strip panel-strip-left"
+        on:click={toggleLeft}
+        on:wheel={(e) => resizePanelByWheel('left', e, { force: true })}
+        title="Show War Room"
+      >
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="1" y="2" width="14" height="12" rx="1.5"/>
           <line x1="6" y1="2" x2="6" y2="14"/>
@@ -507,7 +687,7 @@
     <!-- Left Resizer (drag only, no toggle) -->
     {#if !leftCollapsed}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="resizer resizer-h resizer-left">
+      <div class="resizer resizer-h resizer-left" on:wheel={(e) => resizePanelByWheel('left', e, { force: true })} title="스크롤/드래그로 WAR ROOM 너비 조절">
         <div class="resizer-drag" on:mousedown={(e) => startDrag('left', e)}></div>
       </div>
     {:else}
@@ -524,7 +704,7 @@
     <!-- Right Resizer (drag only, no toggle) -->
     {#if !rightCollapsed}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="resizer resizer-h resizer-right">
+      <div class="resizer resizer-h resizer-right" on:wheel={(e) => resizePanelByWheel('right', e, { force: true })} title="스크롤/드래그로 INTEL 너비 조절">
         <div class="resizer-drag" on:mousedown={(e) => startDrag('right', e)}></div>
       </div>
     {:else}
@@ -533,11 +713,16 @@
 
     <!-- Right: Intel Panel or collapsed strip -->
     {#if !rightCollapsed}
-      <div class="tr">
+      <div class="tr" on:wheel={(e) => resizePanelByWheel('right', e)}>
         <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} on:collapse={toggleRight} />
       </div>
     {:else}
-      <button class="panel-strip panel-strip-right" on:click={toggleRight} title="Show Intel">
+      <button
+        class="panel-strip panel-strip-right"
+        on:click={toggleRight}
+        on:wheel={(e) => resizePanelByWheel('right', e, { force: true })}
+        title="Show Intel"
+      >
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="1" y="2" width="14" height="12" rx="1.5"/>
           <line x1="10" y1="2" x2="10" y2="14"/>
@@ -593,6 +778,8 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
+    overflow-x: clip;
+    overscroll-behavior: none;
     isolation: isolate;
     background:
       radial-gradient(110% 72% at 15% 0%, rgba(232, 150, 125, 0.1) 0%, rgba(232, 150, 125, 0) 58%),
@@ -679,6 +866,7 @@
     grid-template-rows: 1fr auto;
     height: 100%;
     overflow: hidden;
+    overflow-x: clip;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
   }
@@ -690,6 +878,9 @@
   .tab-left {
     overflow-y: auto;
     overflow-x: hidden;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
     min-width: 0;
   }
   .tl {
@@ -862,12 +1053,13 @@
      ═══════════════════════════════════════════ */
   .terminal-mobile {
     display: grid;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     height: 100%;
+    min-height: 0;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
     overflow: hidden;
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    overscroll-behavior-y: contain;
   }
   .mob-topbar {
     flex-shrink: 0;
@@ -962,44 +1154,127 @@
   }
   .mob-content {
     min-height: 0;
-    overflow: hidden;
-    padding: 10px 10px 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    padding: 10px 10px calc(12px + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+  }
+  .mob-content.chart-only {
+    padding: 6px 8px calc(10px + env(safe-area-inset-bottom));
   }
   .mob-panel-wrap,
   .mob-chart-section {
-    height: 100%;
+    height: auto;
     min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
     border-radius: 12px;
     border: 1px solid rgba(232, 150, 125, 0.16);
     overflow: hidden;
     background: rgba(8, 22, 14, 0.58);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
   }
+  .mob-panel-resizable {
+    position: relative;
+    width: min(100%, var(--mob-panel-width, 100%));
+    height: min(100%, var(--mob-panel-height, 100%));
+    margin-inline: auto;
+    transition: width .16s ease, height .16s ease, box-shadow .16s ease, border-color .16s ease;
+  }
+  .mob-panel-resizable:focus-within,
+  .mob-panel-resizable:hover {
+    border-color: rgba(232, 150, 125, 0.28);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+  .mob-resize-handle {
+    position: absolute;
+    z-index: 8;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    opacity: 0.45;
+    transition: opacity .12s ease;
+  }
+  .mob-resize-handle::before {
+    content: '';
+    position: absolute;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: rgba(245, 196, 184, 0.44);
+  }
+  .mob-resize-handle:hover,
+  .mob-resize-handle:focus-visible {
+    opacity: 0.95;
+    outline: none;
+  }
+  .mob-resize-handle-x {
+    top: 10px;
+    right: 0;
+    width: 12px;
+    height: calc(100% - 20px);
+    cursor: ew-resize;
+  }
+  .mob-resize-handle-x::before {
+    width: 2px;
+    height: 42%;
+  }
+  .mob-resize-handle-y {
+    left: 10px;
+    bottom: 0;
+    width: calc(100% - 20px);
+    height: 12px;
+    cursor: ns-resize;
+  }
+  .mob-resize-handle-y::before {
+    width: 42%;
+    height: 2px;
+  }
   .mob-chart-area {
-    flex: 1;
-    min-height: 220px;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .mob-bottom-nav {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: minmax(44px, 44px);
+    align-items: center;
     gap: 8px;
-    padding: 8px 10px 4px;
+    padding: 8px 10px calc(6px + env(safe-area-inset-bottom));
+    min-height: calc(60px + env(safe-area-inset-bottom));
+    max-height: calc(72px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--term-border);
     background: rgba(10, 26, 16, 0.92);
     backdrop-filter: blur(8px);
+    position: relative;
+    z-index: 4;
+    overflow: hidden;
   }
   .mob-nav-btn {
-    min-height: 50px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    align-self: center;
     border-radius: 12px;
     border: 1px solid rgba(232, 150, 125, 0.16);
     background: rgba(240, 237, 228, 0.03);
     color: rgba(240, 237, 228, 0.62);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 0;
     font-family: var(--fm);
     cursor: pointer;
     transition: all .14s ease;
@@ -1010,9 +1285,8 @@
     background: linear-gradient(135deg, rgba(232, 150, 125, 0.2), rgba(232, 150, 125, 0.08));
     box-shadow: inset 0 0 0 1px rgba(245, 196, 184, 0.18);
   }
-  .mob-nav-icon { font-size: 12px; line-height: 1; }
   .mob-nav-label {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 800;
     letter-spacing: 1.1px;
     line-height: 1;
@@ -1083,6 +1357,16 @@
     color: #132418;
     background: rgba(240, 237, 228, 0.55);
     border-color: rgba(10, 26, 13, 0.28);
+  }
+  .terminal-shell :global(.war-room .arena-trigger) {
+    color: var(--term-accent-soft);
+    background: rgba(10, 26, 16, 0.78);
+    border-color: rgba(245, 196, 184, 0.34);
+  }
+  .terminal-shell :global(.war-room .arena-trigger:hover) {
+    color: #fff4e9;
+    background: rgba(10, 26, 16, 0.94);
+    border-color: rgba(245, 196, 184, 0.58);
   }
   .terminal-shell :global(.war-room .ticker-flow) {
     border-bottom-color: var(--term-border-soft);
@@ -1316,9 +1600,26 @@
     border-radius: 12px;
     overflow: hidden;
   }
+  .terminal-mobile :global(.chart-wrapper) {
+    height: 100%;
+    min-height: 0;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-container) {
+    min-height: max(180px, 36vh);
+  }
   .terminal-mobile :global(.war-room .wr-header) {
     height: 38px;
     padding: 0 12px;
+  }
+  .terminal-mobile :global(.war-room .wr-header-right) {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding-right: 0;
+    margin-left: auto;
+    scrollbar-width: none;
+  }
+  .terminal-mobile :global(.war-room .wr-header-right::-webkit-scrollbar) {
+    display: none;
   }
   .terminal-mobile :global(.war-room .wr-title) {
     font-size: 13px;
@@ -1329,9 +1630,23 @@
     display: none;
   }
   .terminal-mobile :global(.war-room .arena-trigger) {
-    min-height: 28px;
-    padding: 4px 8px;
+    min-height: 26px;
+    height: 26px;
+    min-width: 70px;
+    padding: 0 10px;
     font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .8px;
+    color: rgba(245,196,184,.96);
+    background: rgba(10,26,16,.8);
+    border: 1px solid rgba(245,196,184,.35);
+    box-shadow: inset 0 0 0 1px rgba(10,26,16,.45);
+  }
+  .terminal-mobile :global(.war-room .arena-trigger:hover),
+  .terminal-mobile :global(.war-room .arena-trigger:active) {
+    color: #fff4e9;
+    background: rgba(10,26,16,.95);
+    border-color: rgba(245,196,184,.62);
   }
   .terminal-mobile :global(.scan-btn) {
     min-height: 28px;
@@ -1350,6 +1665,33 @@
   }
   .terminal-mobile :global(.war-room .deriv-strip) {
     padding: 6px 8px;
+  }
+  .terminal-mobile :global(.war-room .ticker-flow) {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+  .terminal-mobile :global(.war-room .ticker-chip) {
+    height: 18px;
+    padding: 0 6px;
+    font-size: 7px;
+    letter-spacing: .4px;
+  }
+  .terminal-mobile :global(.war-room .scan-tabs),
+  .terminal-mobile :global(.war-room .token-tabs) {
+    padding: 3px 6px;
+    gap: 3px;
+  }
+  .terminal-mobile :global(.war-room .scan-tab),
+  .terminal-mobile :global(.war-room .token-tab) {
+    min-height: 28px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 12px;
+    font-size: 9px;
+  }
+  .terminal-mobile :global(.war-room .scan-tab-meta),
+  .terminal-mobile :global(.war-room .token-tab-count) {
+    font-size: 7px;
   }
   .terminal-mobile :global(.war-room .deriv-val) {
     font-size: 12px;
@@ -1447,33 +1789,151 @@
   }
 
   .terminal-mobile :global(.chart-wrapper .chart-bar) {
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 8px 10px;
+    gap: 2px;
+    padding: 3px 5px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .live-indicator),
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tdd) {
-    display: none;
-  }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .tf-btns) {
-    order: 1;
-    width: 100%;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-top) { gap: 5px; }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-tools) {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
     overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    gap: 3px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-left) {
+    gap: 4px;
+    width: auto;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot) {
+    min-width: 124px;
+    flex: 0 0 auto;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-trigger) {
+    min-height: 20px;
+    padding: 1px 6px;
+    gap: 3px;
+    border-radius: 7px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-sym) {
+    font-size: 9px;
+    letter-spacing: .7px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-pair),
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-arrow) {
+    font-size: 7px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-panel) {
+    width: min(92vw, 320px);
+    max-height: min(62vh, 340px);
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns) {
+    width: auto;
+    flex: 0 0 auto;
+    min-width: max-content;
     padding-bottom: 1px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .mode-toggle),
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .draw-tools),
-  .terminal-mobile :global(.chart-wrapper .chart-bar > .price-info) {
-    order: 2;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns .tfbtn) {
+    min-height: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-size: 8px;
+    letter-spacing: .4px;
+    border-radius: 5px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats) {
+    width: 100%;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat) {
+    height: 20px;
+    padding: 0 6px;
+    gap: 4px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-k) {
+    font-size: 7px;
+    letter-spacing: .45px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-v) {
+    font-size: 8px;
+    letter-spacing: .25px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-right) {
+    width: auto;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls) {
+    width: auto;
+    flex: 0 0 auto;
+    min-width: max-content;
+    gap: 4px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .draw-tools) {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 2px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .mode-toggle .mode-btn) {
+    min-height: 20px;
+    padding: 0 6px;
+    font-size: 8px;
+    letter-spacing: .45px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .draw-tools .draw-btn) {
+    width: 20px;
+    height: 20px;
+    font-size: 8px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .scan-btn) {
+    min-height: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-size: 8px;
+    letter-spacing: .4px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .price-info) {
+    margin-left: auto;
+    width: auto;
+    justify-content: flex-end;
+    border-left: 1px solid rgba(240, 237, 228, 0.12);
+    padding-left: 4px;
+    gap: 3px;
+    order: initial;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .cprc) {
+    font-size: 11px;
+    letter-spacing: .2px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .pchg) {
+    font-size: 8px;
   }
   .terminal-mobile :global(.chart-wrapper .indicator-strip) {
-    padding: 6px 8px;
-    gap: 5px;
+    padding: 3px 5px;
+    gap: 3px;
+    max-height: none;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
   }
   .terminal-mobile :global(.chart-wrapper .ind-chip),
   .terminal-mobile :global(.chart-wrapper .legend-chip),
   .terminal-mobile :global(.chart-wrapper .view-chip) {
-    min-height: 24px;
+    min-height: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 7px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-footer) {
     gap: 6px;
@@ -1481,14 +1941,84 @@
     padding: 4px 8px;
   }
 
+  .terminal-mobile :global(.war-room .wr-msgs),
+  .terminal-mobile :global(.intel-panel .rp-body),
+  .terminal-mobile :global(.intel-panel .hl-scrollable),
+  .terminal-mobile :global(.intel-panel .ac-msgs),
+  .terminal-mobile :global(.intel-panel .trend-list),
+  .terminal-mobile :global(.intel-panel .picks-panel) {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+
+  .terminal-mobile :global(.war-room .ticker-flow),
+  .terminal-mobile :global(.war-room .scan-tabs),
+  .terminal-mobile :global(.war-room .token-tabs),
+  .terminal-mobile :global(.chart-wrapper .indicator-strip),
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-tools),
+  .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns) {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+  }
+
+  .terminal-mobile :global(.chart-wrapper .chart-container),
+  .terminal-mobile :global(.chart-wrapper .tv-container) {
+    touch-action: pan-y pinch-zoom;
+  }
+
   @media (max-width: 768px) {
-    .terminal-shell::before,
+    .terminal-shell::before { opacity: 0.2; }
     .term-stars-soft,
-    .term-grain {
-      opacity: 0.2;
-    }
+    .term-grain { display: none; }
     .term-stars {
       opacity: 0.28;
+      animation: none;
+      background-size: 420px 420px;
+    }
+  }
+
+  @media (max-width: 768px) and (max-height: 760px) {
+    .mob-topbar {
+      padding: 8px 10px 6px;
+    }
+    .mob-topline {
+      margin-bottom: 6px;
+    }
+    .mob-desc {
+      display: none;
+    }
+    .mob-content {
+      padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
+    }
+    .mob-bottom-nav {
+      padding: 6px 8px calc(4px + env(safe-area-inset-bottom));
+      min-height: calc(54px + env(safe-area-inset-bottom));
+      max-height: calc(64px + env(safe-area-inset-bottom));
+      grid-auto-rows: minmax(40px, 40px);
+    }
+    .mob-nav-btn {
+      height: 40px;
+      min-height: 40px;
+      max-height: 40px;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .mob-title {
+      font-size: 13px;
+    }
+    .mob-meta {
+      gap: 4px;
+    }
+    .mob-meta-chip {
+      max-width: 36vw;
+      padding: 4px 7px;
+      font-size: 8px;
+    }
+    .mob-meta-chip.subtle {
+      display: none;
     }
   }
 </style>

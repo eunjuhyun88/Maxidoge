@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { EVENTS } from '$lib/data/warroom';
 import { fetchDerivatives, normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
 import {
   fetchDexAdsLatest,
@@ -34,15 +33,6 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
           },
         ]
       : [];
-
-    const mappedStatic = EVENTS.map((event, idx) => ({
-      id: `event-${idx}`,
-      tag: event.tag,
-      level: event.tag === 'SOCIAL' ? 'info' : 'warning',
-      text: event.text,
-      source: event.src,
-      createdAt: Date.now() - (idx + 1) * 300_000,
-    }));
 
     const mappedTakeovers = takeovers.map((row, idx) => ({
       id: `dex-takeover-${row.chainId}-${row.tokenAddress}-${idx}`.slice(0, 80),
@@ -79,7 +69,7 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
         data: {
           pair,
           timeframe,
-          records: [...dynamic, ...mappedTakeovers, ...mappedBoosts, ...mappedAds, ...mappedStatic].slice(0, 24),
+          records: [...dynamic, ...mappedTakeovers, ...mappedBoosts, ...mappedAds].slice(0, 24),
         },
       },
       {

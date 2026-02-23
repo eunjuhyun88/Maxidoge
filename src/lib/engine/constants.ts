@@ -34,16 +34,16 @@ export function validateDraft(selections: DraftSelection[]): DraftValidationResu
     errors.push(`에이전트 ${DRAFT_AGENT_COUNT}개 필요 (현재 ${selections.length}개)`);
   }
 
-  // 2. 중복 에이전트 없음
-  const ids = selections.map(s => s.agentId);
+  // 2. 중복 에이전트 없음 (대소문자 정규화)
+  const ids = selections.map(s => s.agentId.toUpperCase());
   const unique = new Set(ids);
   if (unique.size !== ids.length) {
     errors.push('중복 에이전트 선택 불가');
   }
 
-  // 3. 유효한 에이전트 ID
+  // 3. 유효한 에이전트 ID (대소문자 무관)
   for (const s of selections) {
-    if (!AGENT_IDS.includes(s.agentId as AgentId)) {
+    if (!AGENT_IDS.includes(s.agentId.toUpperCase() as AgentId)) {
       errors.push(`유효하지 않은 에이전트: ${s.agentId}`);
     }
   }

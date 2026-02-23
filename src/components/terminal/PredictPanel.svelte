@@ -77,7 +77,7 @@
         {@const noPct = Math.round(prices.no * 100)}
         {@const userVote = null}
 
-        <div class="pm-card">
+        <a class="pm-card pm-linked" href="https://polymarket.com/event/{market.slug}" target="_blank" rel="noopener noreferrer">
           <!-- Header with category + end date -->
           <div class="pm-card-head">
             {#if market.category}
@@ -111,18 +111,19 @@
             {/if}
           </div>
 
-          <!-- Vote buttons -->
+          <!-- Vote buttons + Polymarket link -->
           <div class="pm-vote-row">
             <button
               class="pm-vote-btn yes"
-              on:click={() => handleVote(market.id, 'YES')}
+              on:click|preventDefault|stopPropagation={() => handleVote(market.id, 'YES')}
             >↑ YES</button>
             <button
               class="pm-vote-btn no"
-              on:click={() => handleVote(market.id, 'NO')}
+              on:click|preventDefault|stopPropagation={() => handleVote(market.id, 'NO')}
             >↓ NO</button>
           </div>
-        </div>
+          <div class="pm-polylink">&#8599; TRADE ON POLYMARKET</div>
+        </a>
       {/each}
     </div>
 
@@ -233,6 +234,24 @@
   .pm-card:hover {
     border-color: rgba(255,230,0,.2);
   }
+  .pm-linked {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+  }
+  .pm-linked:hover .pm-question { text-decoration: underline; }
+  .pm-polylink {
+    margin-top: 6px;
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: rgba(139,92,246,.45);
+    text-align: right;
+    transition: color .15s;
+  }
+  .pm-linked:hover .pm-polylink { color: rgba(139,92,246,.9); }
 
   .pm-card-head {
     display: flex;

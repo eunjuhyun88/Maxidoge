@@ -31,6 +31,9 @@ export function getPool(): pg.Pool {
   const connectionTimeoutMillis = envInt('PGPOOL_CONN_TIMEOUT_MS', 5000, 500, 60000);
   const maxUses = envInt('PGPOOL_MAX_USES', 7500, 0, 1000000);
 
+  // Statement timeout: kill any query running longer than this (default 15s)
+  const statementTimeoutMs = envInt('PGPOOL_STATEMENT_TIMEOUT_MS', 15000, 1000, 120000);
+
   _pool = new Pool({
     connectionString,
     ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : false,
@@ -38,6 +41,16 @@ export function getPool(): pg.Pool {
     idleTimeoutMillis,
     connectionTimeoutMillis,
     maxUses,
+  });
+
+  // Set statement_timeout on every new connection to prevent runaway queries
+  _pool.on('connect', (client: pg.PoolClient) => {
+    client.query(`SET statement_timeout = ${statementTimeoutMs}`).catch(() => {});
+  });
+
+  // Log pool errors (connection drops, etc.) instead of crashing
+  _pool.on('error', (err: Error) => {
+    console.error('[DB Pool] Unexpected error on idle client:', err.message);
   });
 
   return _pool;

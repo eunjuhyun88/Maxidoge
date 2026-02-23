@@ -346,3 +346,31 @@ src/
 ## 17) License
 
 Private project.
+
+## 18) Performance Change Log
+
+### 2026-02-23 (Deployment latency fix)
+
+- 변경 파일: `src/hooks.server.ts`
+- 변경 내용: 앱 레벨 수동 gzip(`gzipSync` + `response.arrayBuffer()`) 제거
+- 이유: 모든 응답을 서버에서 동기 압축하면 CPU 사용량/TTFB가 증가하고 스트리밍 이점이 사라짐
+- 운영 정책: 압축은 앱 코드가 아닌 CDN/리버스 프록시에서 처리 (`br`/`gzip`)
+
+검증 방법:
+
+```bash
+curl -I -H 'Accept-Encoding: br,gzip' https://<your-domain>/
+```
+
+- `Content-Encoding: br` 또는 `Content-Encoding: gzip` 헤더가 보이면 정상
+
+### 2026-02-23 — Server Performance Hardening (`9ddc4b3`)
+
+- 서버 모듈 캐싱 5건 추가 (yahoo/feargreed/defillama/coingecko/marketFeed)
+- persistSnapshots N+1 → 배치 INSERT (24쿼리 → 2쿼리)
+- battleInterval 메모리 누수 수정 (onDestroy cleanup)
+- walletStore localStorage 디바운스 300ms
+- quickTradeStore 즉시 hydration 제거 → terminal onMount
+- 터미널 3초 폴링 최적화 (가격 해시 비교)
+
+상세 변경 파일: `docs/AGENT_WATCH_LOG.md` → W-20260223-002 참조

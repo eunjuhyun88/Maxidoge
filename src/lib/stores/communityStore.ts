@@ -2,7 +2,7 @@
 // MAXI⚡DOGE — Community Posts Store (localStorage persisted)
 // ═══════════════════════════════════════════════════════════════
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
 import {
   createCommunityPostApi,
@@ -39,6 +39,7 @@ function loadPosts(): CommunityState {
 }
 
 export const communityStore = writable<CommunityState>(loadPosts());
+let _communityHydratePromise: Promise<void> | null = null;
 
 // Persist to localStorage (debounced)
 let _commSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -67,22 +68,27 @@ function mapApiPost(post: ApiCommunityPost): CommunityPost {
 
 export async function hydrateCommunityPosts(force = false) {
   if (typeof window === 'undefined') return;
+  if (_communityHydratePromise) return _communityHydratePromise;
 
-  let shouldLoad = force;
-  communityStore.update((s) => {
-    shouldLoad = shouldLoad || !s.hydrated;
-    return s;
-  });
-  if (!shouldLoad) return;
+  const state = get(communityStore);
+  if (state.hydrated && !force) return;
 
-  const records = await fetchCommunityPostsApi({ limit: 100, offset: 0 });
-  if (!records) return;
+  _communityHydratePromise = (async () => {
+    const records = await fetchCommunityPostsApi({ limit: 100, offset: 0 });
+    if (!records) return;
 
-  communityStore.update((s) => ({
-    ...s,
-    posts: records.map(mapApiPost),
-    hydrated: true
-  }));
+    communityStore.update((s) => ({
+      ...s,
+      posts: records.map(mapApiPost),
+      hydrated: true
+    }));
+  })();
+
+  try {
+    await _communityHydratePromise;
+  } finally {
+    _communityHydratePromise = null;
+  }
 }
 
 export async function addCommunityPost(text: string, signal: 'long' | 'short' | null) {

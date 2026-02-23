@@ -195,6 +195,7 @@
         <button
           class="toggle-btn"
           class:on={settings.signals}
+          aria-label="Toggle signal alerts"
           on:click={() => { settings.signals = !settings.signals; updateSetting('signals', settings.signals); }}
         >
           <div class="toggle-dot"></div>
@@ -209,6 +210,7 @@
         <button
           class="toggle-btn"
           class:on={settings.sfx}
+          aria-label="Toggle sound effects"
           on:click={() => { settings.sfx = !settings.sfx; updateSetting('sfx', settings.sfx); }}
         >
           <div class="toggle-dot"></div>

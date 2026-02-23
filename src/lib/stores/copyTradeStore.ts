@@ -4,7 +4,8 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
-import { AGENT_SIGNALS, getConsensus } from '$lib/data/warroom';
+import type { AgentSignal } from '$lib/data/warroom';
+import { getConsensus } from '$lib/data/warroom';
 import { openQuickTrade, replaceQuickTradeId } from './quickTradeStore';
 import { replaceTrackedSignalId, trackSignal } from './trackedSignalStore';
 import { incrementTrackedSignals } from './userProfileStore';
@@ -45,17 +46,23 @@ export interface ExternalCopySignal {
 
 const defaultDraft: CopyTradeDraft = {
   pair: 'BTC/USDT',
-  dir: 'SHORT',
+  dir: 'LONG',
   orderType: 'market',
-  entry: 68200,
-  tp: [66100],
-  sl: 69500,
+  entry: 0,
+  tp: [0],
+  sl: 0,
   leverage: 5,
   sizePercent: 50,
   marginMode: 'isolated',
   evidence: [],
   note: '',
 };
+
+/** WarRoom에서 현재 스캔 시그널 등록 (CopyTrade에서 참조) */
+let _registeredSignals: AgentSignal[] = [];
+export function registerScanSignals(signals: AgentSignal[]) {
+  _registeredSignals = signals;
+}
 
 function createCopyTradeStore() {
   const store = writable<CopyTradeState>({
@@ -68,8 +75,10 @@ function createCopyTradeStore() {
   return {
     subscribe: store.subscribe,
 
-    openModal(selectedIds: string[]) {
-      const signals = AGENT_SIGNALS.filter(s => selectedIds.includes(s.id));
+    /** signals를 직접 전달 (실제 스캔 데이터 사용) */
+    openModal(selectedIds: string[], signalPool?: AgentSignal[]) {
+      const pool = signalPool ?? _registeredSignals;
+      const signals = pool.filter(s => selectedIds.includes(s.id));
       if (signals.length === 0) return;
 
       const consensus = getConsensus(signals);

@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { AGENT_SIGNALS } from '$lib/data/warroom';
-import { fetch24hr, pairToSymbol } from '$lib/api/binance';
+import { fetch24hrServer, pairToSymbol } from '$lib/server/binance';
 import { fetchDerivatives, normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
 import { fetchCoinMarketCapQuote, hasCoinMarketCapApiKey } from '$lib/server/coinmarketcap';
 
@@ -22,7 +21,7 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
     const token = pair.split('/')[0];
 
     const [tickerRes, derivRes, cmcRes] = await Promise.allSettled([
-      fetch24hr(pairToSymbol(pair)),
+      fetch24hrServer(pairToSymbol(pair)),
       fetchDerivatives(fetch, pair, timeframe),
       fetchCoinMarketCapQuote(token),
     ]);
@@ -31,27 +30,34 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
     const deriv = derivRes.status === 'fulfilled' ? derivRes.value : null;
     const cmc = cmcRes.status === 'fulfilled' ? cmcRes.value : null;
 
-    const records = AGENT_SIGNALS.filter((s) => s.pair === pair && (s.agentId === 'flow' || s.agentId === 'deriv')).map(
-      (s) => ({
-        id: s.id,
-        pair: s.pair,
-        token: s.token,
-        agentId: s.agentId,
-        agent: s.name,
-        vote: s.vote.toUpperCase(),
-        confidence: s.conf,
-        text: s.text,
-        source: s.src,
-        createdAt: Date.now(),
-      })
-    );
-
     const bias = pickBias(
       deriv?.funding ?? null,
       deriv?.lsRatio ?? null,
       deriv?.liqLong24h ?? 0,
       deriv?.liqShort24h ?? 0
     );
+
+    // records는 실제 파생/플로우 데이터에서 구성 (하드코딩 제거)
+    const records: Array<{id:string;pair:string;token:string;agentId:string;agent:string;vote:string;confidence:number;text:string;source:string;createdAt:number}> = [];
+    const now = Date.now();
+    if (deriv) {
+      records.push({
+        id: `deriv-flow-${pair}-${now}`, pair, token, agentId: 'deriv', agent: 'DERIV',
+        vote: bias, confidence: 70,
+        text: `Funding ${deriv.funding != null ? (deriv.funding * 100).toFixed(4) + '%' : 'n/a'} · OI ${deriv.oi != null ? '$' + (deriv.oi / 1e9).toFixed(2) + 'B' : 'n/a'} · L/S ${deriv.lsRatio?.toFixed(2) ?? 'n/a'} · Liq L $${Math.round(deriv.liqLong24h).toLocaleString()} / S $${Math.round(deriv.liqShort24h).toLocaleString()}`,
+        source: 'COINALYZE', createdAt: now,
+      });
+    }
+    if (ticker) {
+      const pctChg = Number(ticker.priceChangePercent || 0);
+      const vol = Number(ticker.quoteVolume || 0);
+      records.push({
+        id: `flow-ticker-${pair}-${now}`, pair, token, agentId: 'flow', agent: 'FLOW',
+        vote: pctChg >= 0 ? 'LONG' : 'SHORT', confidence: 60,
+        text: `24h ${pctChg >= 0 ? '+' : ''}${pctChg.toFixed(2)}% · Vol $${(vol / 1e9).toFixed(2)}B`,
+        source: 'BINANCE', createdAt: now,
+      });
+    }
 
     return json(
       {

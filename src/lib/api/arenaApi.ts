@@ -64,6 +64,48 @@ export interface ResolveResponse {
   priceChange: string;
 }
 
+export type TournamentType = 'DAILY_SPRINT' | 'WEEKLY_CUP' | 'SEASON_CHAMPIONSHIP';
+export type TournamentStatus = 'REG_OPEN' | 'REG_CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+export interface TournamentActiveRecord {
+  tournamentId: string;
+  type: TournamentType;
+  pair: string;
+  status: TournamentStatus;
+  maxPlayers: number;
+  registeredPlayers: number;
+  entryFeeLp: number;
+  startAt: string;
+}
+
+export interface ListActiveTournamentsResponse {
+  success: boolean;
+  records: TournamentActiveRecord[];
+}
+
+export interface RegisterTournamentResponse {
+  success: boolean;
+  tournamentId: string;
+  registered: boolean;
+  seed: number;
+  lpDelta: number;
+}
+
+export interface TournamentBracketMatch {
+  matchIndex: number;
+  userA: { userId: string; nickname: string } | null;
+  userB: { userId: string; nickname: string } | null;
+  winnerId: string | null;
+  matchId: string | null;
+}
+
+export interface TournamentBracketResponse {
+  success: boolean;
+  tournamentId: string;
+  round: number;
+  matches: TournamentBracketMatch[];
+}
+
 // ─── Helper ─────────────────────────────────────────────────
 
 async function apiCall<T>(url: string, options?: RequestInit): Promise<T> {
@@ -145,4 +187,27 @@ export async function resolveArenaMatch(
     method: 'POST',
     body: JSON.stringify({ matchId, exitPrice }),
   });
+}
+
+/** List active tournaments (lobby widget) */
+export async function listActiveTournaments(
+  limit = 20,
+): Promise<ListActiveTournamentsResponse> {
+  return apiCall<ListActiveTournamentsResponse>(`/api/tournaments/active?limit=${limit}`);
+}
+
+/** Register current user for a tournament */
+export async function registerTournament(
+  tournamentId: string,
+): Promise<RegisterTournamentResponse> {
+  return apiCall<RegisterTournamentResponse>(`/api/tournaments/${tournamentId}/register`, {
+    method: 'POST',
+  });
+}
+
+/** Fetch bracket for tournament */
+export async function getTournamentBracket(
+  tournamentId: string,
+): Promise<TournamentBracketResponse> {
+  return apiCall<TournamentBracketResponse>(`/api/tournaments/${tournamentId}/bracket`);
 }

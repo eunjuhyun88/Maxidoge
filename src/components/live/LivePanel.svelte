@@ -8,7 +8,7 @@
   import { openTrades } from '$lib/stores/quickTradeStore';
   import { activeSignals } from '$lib/stores/trackedSignalStore';
   import { userProfileStore } from '$lib/stores/userProfileStore';
-  import { livePrices } from '$lib/stores/priceStore';
+  import { livePrices, priceChanges } from '$lib/stores/priceStore';
   import { goto } from '$app/navigation';
   import EmptyState from '../shared/EmptyState.svelte';
   import ContextBanner from '../shared/ContextBanner.svelte';
@@ -20,12 +20,18 @@
   $: profile = $userProfileStore;
   $: isStream = embedded && variant === 'stream';
   $: liveP = $livePrices;
+  $: changes = $priceChanges;
 
-  // S-03: priceStore에서 실시간 가격 구독 (3초 polling 제거)
+  function fmtChange(pct: number): string {
+    if (!Number.isFinite(pct) || pct === 0) return '+0.00%';
+    return (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+  }
+
+  // S-03: priceStore에서 실시간 가격 + 24h% 구독
   $: prices = [
-    { symbol: 'BTC', price: `$${Math.round(liveP.BTC || 97420).toLocaleString()}`, change: '+1.2%', up: true },
-    { symbol: 'ETH', price: `$${Math.round(liveP.ETH || 3481).toLocaleString()}`, change: '+0.8%', up: true },
-    { symbol: 'SOL', price: `$${(liveP.SOL || 198).toFixed(2)}`, change: '-0.3%', up: false },
+    { symbol: 'BTC', price: `$${Math.round(liveP.BTC || 97420).toLocaleString()}`, change: fmtChange(changes.BTC), up: (changes.BTC || 0) >= 0 },
+    { symbol: 'ETH', price: `$${Math.round(liveP.ETH || 3481).toLocaleString()}`, change: fmtChange(changes.ETH), up: (changes.ETH || 0) >= 0 },
+    { symbol: 'SOL', price: `$${(liveP.SOL || 198).toFixed(2)}`, change: fmtChange(changes.SOL), up: (changes.SOL || 0) >= 0 },
   ];
 
   // Build activity timeline from all sources

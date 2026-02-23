@@ -2,8 +2,11 @@
 // MAXI⚡DOGE — CoinGecko server client
 // ═══════════════════════════════════════════════════════════════
 
+import { getCached, setCache } from './providers/cache';
+
 const CG_BASE = 'https://api.coingecko.com/api/v3';
 const STABLE_IDS = ['tether', 'usd-coin', 'dai', 'ethena-usde', 'first-digital-usd'];
+const CACHE_TTL = 3 * 60_000; // 3분
 
 export type CoinGeckoGlobal = {
   totalMarketCapUsd: number;
@@ -41,13 +44,17 @@ async function fetchJson(path: string, params: Record<string, string>, timeoutMs
 }
 
 export async function fetchCoinGeckoGlobal(): Promise<CoinGeckoGlobal | null> {
+  const cacheKey = 'coingecko:global';
+  const cached = getCached<CoinGeckoGlobal>(cacheKey);
+  if (cached) return cached;
+
   try {
     const payload = await fetchJson('/global', {});
     const data = payload?.data;
     if (!data) return null;
 
     const updatedSec = Number(data.updated_at);
-    return {
+    const result: CoinGeckoGlobal = {
       totalMarketCapUsd: Number(data.total_market_cap?.usd ?? 0),
       totalVolumeUsd: Number(data.total_volume?.usd ?? 0),
       btcDominance: Number(data.market_cap_percentage?.btc ?? 0),
@@ -56,6 +63,8 @@ export async function fetchCoinGeckoGlobal(): Promise<CoinGeckoGlobal | null> {
       activeCryptocurrencies: Number(data.active_cryptocurrencies ?? 0),
       updatedAt: Number.isFinite(updatedSec) ? updatedSec * 1000 : Date.now(),
     };
+    setCache(cacheKey, result, CACHE_TTL);
+    return result;
   } catch (error) {
     console.error('[coingecko/global] fetch failed:', error);
     return null;
@@ -63,6 +72,10 @@ export async function fetchCoinGeckoGlobal(): Promise<CoinGeckoGlobal | null> {
 }
 
 export async function fetchStablecoinMcap(): Promise<StablecoinMcap | null> {
+  const cacheKey = 'coingecko:stableMcap';
+  const cached = getCached<StablecoinMcap>(cacheKey);
+  if (cached) return cached;
+
   try {
     const payload = await fetchJson('/coins/markets', {
       vs_currency: 'usd',
@@ -84,12 +97,14 @@ export async function fetchStablecoinMcap(): Promise<StablecoinMcap | null> {
       payload.reduce((sum: number, row: any) => sum + Number(row?.market_cap_change_percentage_24h ?? 0), 0) /
       payload.length;
 
-    return {
+    const result: StablecoinMcap = {
       totalMcapUsd,
       change24hPct: Number.isFinite(change24hPct) ? change24hPct : 0,
       top,
       updatedAt: Date.now(),
     };
+    setCache(cacheKey, result, CACHE_TTL);
+    return result;
   } catch (error) {
     console.error('[coingecko/stablecoins] fetch failed:', error);
     return null;

@@ -2,7 +2,10 @@
 // MAXI⚡DOGE — Yahoo Finance server client
 // ═══════════════════════════════════════════════════════════════
 
+import { getCached, setCache } from './providers/cache';
+
 const YAHOO_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
+const CACHE_TTL = 5 * 60_000; // 5분 (DXY/SPX/수익률은 느리게 변동)
 
 export type YahooPoint = {
   timestampMs: number;
@@ -53,6 +56,10 @@ export async function fetchYahooSeries(rawSymbol: string, range = '1mo', interva
   const symbol = normalizeSymbol(rawSymbol);
   if (!isAllowedSymbol(symbol)) return null;
 
+  const cacheKey = `yahoo:${symbol}:${range}:${interval}`;
+  const cached = getCached<YahooSeries>(cacheKey);
+  if (cached) return cached;
+
   try {
     const payload = await fetchJson(symbol, range, interval);
     const result = payload?.chart?.result?.[0];
@@ -80,7 +87,7 @@ export async function fetchYahooSeries(rawSymbol: string, range = '1mo', interva
 
     const meta = result?.meta ?? {};
     const nowSec = Number(meta?.regularMarketTime);
-    return {
+    const series: YahooSeries = {
       symbol,
       points,
       previousClose: Number.isFinite(Number(meta?.previousClose)) ? Number(meta.previousClose) : null,
@@ -90,6 +97,8 @@ export async function fetchYahooSeries(rawSymbol: string, range = '1mo', interva
         : null,
       updatedAt: Number.isFinite(nowSec) ? nowSec * 1000 : Date.now(),
     };
+    setCache(cacheKey, series, CACHE_TTL);
+    return series;
   } catch (error) {
     console.error(`[yahoo/${symbol}] fetch failed:`, error);
     return null;

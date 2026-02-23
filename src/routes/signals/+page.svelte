@@ -20,6 +20,7 @@
   import LivePanel from '../../components/live/LivePanel.svelte';
   import EmptyState from '../../components/shared/EmptyState.svelte';
   import ContextBanner from '../../components/shared/ContextBanner.svelte';
+  import OracleLeaderboard from '../../components/community/OracleLeaderboard.svelte';
 
   $: state = $gameState;
   $: records = $matchHistoryStore.records;
@@ -27,7 +28,7 @@
   $: tracked = $activeSignals;
 
   let filter: string = 'all';
-  let signalsView: 'community' | 'signals' = 'community';
+  let signalsView: 'community' | 'signals' | 'oracle' = 'community';
   let communityFilter: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked' = 'all';
   const COMMUNITY_FILTERS: Array<{ key: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked'; label: string }> = [
     { key: 'all', label: 'All' },
@@ -95,11 +96,11 @@
     return s === 'arena' ? '#ff2d9b' : s === 'trade' ? '#3b9eff' : s === 'tracked' ? '#ff8c3b' : '#8b5cf6';
   }
 
-  function setSignalsView(next: 'community' | 'signals') {
+  function setSignalsView(next: 'community' | 'signals' | 'oracle') {
     signalsView = next;
     const query = new URLSearchParams($page.url.searchParams);
     if (next === 'community') query.delete('view');
-    else query.set('view', 'signals');
+    else query.set('view', next);
     const qs = query.toString();
     goto(`/signals${qs ? `?${qs}` : ''}`, {
       replaceState: true,
@@ -111,7 +112,7 @@
 
   onMount(() => {
     const v = $page.url.searchParams.get('view');
-    signalsView = v === 'signals' ? 'signals' : 'community';
+    signalsView = v === 'signals' || v === 'oracle' ? v : 'community';
     if (v === 'live') {
       const query = new URLSearchParams($page.url.searchParams);
       query.delete('view');
@@ -154,10 +155,13 @@
 
   <div class="view-switch">
     <button class="vs-btn" class:active={signalsView === 'community'} on:click={() => setSignalsView('community')}>
-      💡 COMMUNITY HUB
+      COMMUNITY HUB
     </button>
     <button class="vs-btn" class:active={signalsView === 'signals'} on:click={() => setSignalsView('signals')}>
-      📡 SIGNAL LIST
+      SIGNAL LIST
+    </button>
+    <button class="vs-btn" class:active={signalsView === 'oracle'} on:click={() => setSignalsView('oracle')}>
+      ORACLE
     </button>
   </div>
 
@@ -249,7 +253,7 @@
       </aside>
     </div>
 
-  {:else}
+  {:else if signalsView === 'signals'}
     <div class="filter-bar">
       {#each SIGNAL_FILTERS as item}
         <button class="filter-btn" class:active={filter === item.key} on:click={() => filter = item.key}>{item.label}</button>
@@ -318,6 +322,10 @@
         {/each}
       {/if}
     </div>
+  {:else}
+    <section class="community-oracle">
+      <OracleLeaderboard embedded={true} />
+    </section>
   {/if}
 </div>
 
@@ -748,6 +756,12 @@
   }
   .cl-btn:hover {
     background: rgba(255,255,255,.11);
+  }
+
+  .community-oracle {
+    min-height: 560px;
+    padding: 12px 16px 20px;
+    background: linear-gradient(180deg, #151525 0%, #090914 100%);
   }
 
   .filter-bar {

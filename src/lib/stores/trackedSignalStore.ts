@@ -4,10 +4,11 @@
 // 24h 자동 만료, QuickTrade로 전환 가능
 // ═══════════════════════════════════════════════════════════════
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { openQuickTrade, replaceQuickTradeId, type TradeDirection } from './quickTradeStore';
 import { STORAGE_KEYS } from './storageKeys';
 import { convertSignalApi, fetchTrackedSignalsApi, trackSignalApi, type ApiTrackedSignal, untrackSignalApi } from '$lib/api/tradingApi';
+import { buildPriceMapHash, getBaseSymbolFromPair, toNumericPriceMap, type PriceLikeMap } from '$lib/utils/price';
 
 export type SignalStatus = 'tracking' | 'expired' | 'converted';
 
@@ -34,6 +35,7 @@ const STORAGE_KEY = STORAGE_KEYS.trackedSignals;
 const MAX_SIGNALS = 50;
 const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24 hours
 let _trackedSignalsHydrated = false;
+let _trackedSignalsHydratePromise: Promise<void> | null = null;
 
 function loadState(): TrackedSignalState {
   if (typeof window === 'undefined') return { signals: [] };
@@ -113,15 +115,24 @@ function mergeServerAndLocalSignals(serverSignals: TrackedSignal[], localSignals
 export async function hydrateTrackedSignals(force = false): Promise<void> {
   if (typeof window === 'undefined') return;
   if (_trackedSignalsHydrated && !force) return;
+  if (_trackedSignalsHydratePromise) return _trackedSignalsHydratePromise;
 
-  const records = await fetchTrackedSignalsApi({ limit: MAX_SIGNALS, offset: 0 });
-  if (!records) return;
+  _trackedSignalsHydratePromise = (async () => {
+    const records = await fetchTrackedSignalsApi({ limit: MAX_SIGNALS, offset: 0 });
+    if (!records) return;
 
-  trackedSignalStore.update((s) => ({
-    signals: mergeServerAndLocalSignals(records.map(mapApiTrackedSignal), s.signals)
-  }));
+    trackedSignalStore.update((s) => ({
+      signals: mergeServerAndLocalSignals(records.map(mapApiTrackedSignal), s.signals)
+    }));
 
-  _trackedSignalsHydrated = true;
+    _trackedSignalsHydrated = true;
+  })();
+
+  try {
+    await _trackedSignalsHydratePromise;
+  } finally {
+    _trackedSignalsHydratePromise = null;
+  }
 }
 
 // ═══ Actions ═══
@@ -240,37 +251,41 @@ export function convertToTrade(signalId: string, currentPrice: number): string |
 }
 
 let _lastTrackedPriceSnap = '';
-export function updateTrackedPrices(prices: Record<string, number>) {
-  const snap = JSON.stringify(prices);
-  if (snap === _lastTrackedPriceSnap) return;
+export function updateTrackedPrices(priceInput: PriceLikeMap) {
+  const state = get(trackedSignalStore);
+  const hasTracking = state.signals.some((sig) => sig.status === 'tracking');
+  if (!hasTracking) return;
+  const now = Date.now();
+  const hasExpired = state.signals.some((sig) => sig.status === 'tracking' && sig.expiresAt < now);
+
+  const prices = toNumericPriceMap(priceInput);
+  const snap = buildPriceMapHash(prices);
+  if (!hasExpired && snap === _lastTrackedPriceSnap) return;
   _lastTrackedPriceSnap = snap;
 
-  const now = Date.now();
-  trackedSignalStore.update(s => {
-    const hasTracking = s.signals.some(sig => sig.status === 'tracking');
-    if (!hasTracking) return s;
-
-    let changed = false;
-    const signals = s.signals.map(sig => {
-      if (sig.status === 'tracking' && sig.expiresAt < now) {
-        changed = true;
-        return { ...sig, status: 'expired' as SignalStatus };
-      }
-      if (sig.status !== 'tracking') return sig;
-
-      const token = sig.pair.split('/')[0];
-      const price = prices[token];
-      if (!price || price === sig.currentPrice) return sig;
-
+  let changed = false;
+  const signals = state.signals.map((sig) => {
+    if (sig.status === 'tracking' && sig.expiresAt < now) {
       changed = true;
-      const pnl = sig.dir === 'LONG'
-        ? +((price - sig.entryPrice) / sig.entryPrice * 100).toFixed(2)
-        : +((sig.entryPrice - price) / sig.entryPrice * 100).toFixed(2);
+      return { ...sig, status: 'expired' as SignalStatus };
+    }
+    if (sig.status !== 'tracking') return sig;
 
-      return { ...sig, currentPrice: price, pnlPercent: pnl };
-    });
-    return changed ? { signals } : s;
+    const token = getBaseSymbolFromPair(sig.pair);
+    const price = prices[token];
+    if (!price || price === sig.currentPrice) return sig;
+
+    changed = true;
+    const pnl = sig.dir === 'LONG'
+      ? +((price - sig.entryPrice) / sig.entryPrice * 100).toFixed(2)
+      : +((sig.entryPrice - price) / sig.entryPrice * 100).toFixed(2);
+
+    return { ...sig, currentPrice: price, pnlPercent: pnl };
   });
+
+  if (changed) {
+    trackedSignalStore.set({ signals });
+  }
 }
 
 export function clearExpired() {
@@ -283,6 +298,4 @@ export function clearAll() {
   trackedSignalStore.update(() => ({ signals: [] }));
 }
 
-if (typeof window !== 'undefined') {
-  void hydrateTrackedSignals();
-}
+// 자동 hydration은 hydrateDomainStores() 단일 진입점에서 수행한다.
