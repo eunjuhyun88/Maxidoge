@@ -732,6 +732,68 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ---
 
+### W-20260224-025
+
+- Start (KST): 2026-02-24 02:18
+- End (KST): 2026-02-24 02:20
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 모든 에이전트 공통 강제 규칙 문구를 README 계열 문서에 추가
+  - 매 작업마다 `docs/README.md` 재열람 + WATCH_LOG 기록 의무 명시
+  - 머지 게이트(`npm run check` + `npm run build` before/after merge) 강제 규칙 명시
+- Overlap check (before work):
+  - 문서 파일만 수정: `README.md`, `docs/README.md`
+  - 서버/API/스토어/컴포넌트 코드 미수정
+  - 기존 작업 충돌 없이 정책 문서 강화 범위
+- Changes (actual):
+  - `docs/README.md`
+    - Section 0 Mandatory Rule에 hard gate 추가:
+      - 매 요청 시작 시 `docs/README.md` 재열람
+      - 수정 전 `AGENT_WATCH_LOG` 시작 기록 필수
+      - push 전 `npm run check` + `npm run build` 필수
+      - main merge 후 main에서 `npm run check` + `npm run build` 재실행 필수
+      - 종료 시 검증 결과/commit/merge hash 기록 필수
+    - Pre/Post checklist에 위 규칙 반영
+  - `README.md`
+    - 문서 최상단에 multi-agent hard rule + merge gate 문구 추가
+- Diff vs plan:
+  - 없음
+- Commit / Push: pending
+- Status: DONE
+
+---
+
+### W-20260224-026
+
+- Start (KST): 2026-02-24 02:26
+- End (KST): 2026-02-24 02:29
+- Agent: 2-FE
+- Branch: `codex/frontend-polish`
+- Scope (planned):
+  - 모든 참여자가 헷갈리지 않도록 문서 구조를 단일 정본 체계로 정리
+  - README 이중 구조 혼선 제거(정본 1개 + 리다이렉트 1개)
+  - 에이전트 강제 규칙 파일(`AGENTS.md`) 추가
+- Overlap check (before work):
+  - 문서 파일만 수정 (`README.md`, `docs/README.md`, `AGENTS.md`, `docs/AGENT_WATCH_LOG.md`)
+  - 앱 코드/서버/API/스토어 파일 미수정
+- Changes (actual):
+  - `README.md`
+    - `Agent Collaboration Protocol (SSOT)` 섹션 신설
+    - 단일 정본 선언 + check/build/merge 게이트 규칙 명시
+  - `docs/README.md`
+    - 기존 장문 규칙 문서를 리다이렉트 문서로 축소
+    - 정본 위치(`README.md`)와 필수 절차만 안내
+  - `AGENTS.md` (신규)
+    - 모든 코딩 에이전트용 강제 실행 규칙 추가
+    - 매 작업 시작/검증/종료 절차와 로그 필수 항목 명시
+- Diff vs plan:
+  - 없음
+- Commit / Push: pending
+- Status: DONE
+
+---
+
 ### W-20260224-023
 
 - Start (KST): 2026-02-24 01:48

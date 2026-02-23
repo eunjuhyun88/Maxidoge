@@ -1,9 +1,25 @@
 # MAXI⚡DOGE Unified
 
-> Multi-agent collaboration rule: before any work, read `docs/README.md` first.
+> Single source of truth: this `README.md` is the canonical collaboration and project guide for all humans and agents.
+> Mandatory gate: every task must log start/end in `docs/AGENT_WATCH_LOG.md` and pass `npm run check` + `npm run build` before push/merge.
 
 AI 에이전트 기반 트레이딩 시뮬레이션 웹앱입니다.  
 SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signals`, `Passport` 경험을 제공합니다.
+
+## 0) Agent Collaboration Protocol (SSOT)
+
+아래 규칙은 모든 에이전트/기여자 공통 강제 규칙입니다.
+
+1. 매 작업(매 요청) 시작 시, 이 `README.md`를 다시 읽는다.
+2. 코드/문서 수정 전에 `docs/AGENT_WATCH_LOG.md`에 시작 기록을 남긴다.
+3. 작업 브랜치에서 `npm run check`와 `npm run build`를 모두 통과시킨다.
+4. 둘 중 하나라도 실패하면 push/merge를 중단하고 먼저 에러를 수정한다.
+5. push/merge 후에도 `docs/AGENT_WATCH_LOG.md`에 완료 기록(검증 결과, commit hash, merge hash, push 상태)을 남긴다.
+6. `main` 머지 후 `main`에서 다시 `npm run check` + `npm run build`를 실행한다.
+
+참고:
+- 에이전트 자동 실행 규칙 파일은 `AGENTS.md`다.
+- `docs/README.md`는 호환성 유지를 위한 리다이렉트 문서다.
 
 ## 1) Overview
 
