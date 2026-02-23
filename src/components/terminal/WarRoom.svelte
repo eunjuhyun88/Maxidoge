@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { AGENT_SIGNALS, type AgentSignal } from '$lib/data/warroom';
+  import { type AgentSignal } from '$lib/data/warroom';
   import { gameState, setView } from '$lib/stores/gameState';
   import { openQuickTrade } from '$lib/stores/quickTradeStore';
   import { trackSignal as trackSignalStore, activeSignalCount } from '$lib/stores/trackedSignalStore';
   import { incrementTrackedSignals } from '$lib/stores/userProfileStore';
   import { notifySignalTracked } from '$lib/stores/notificationStore';
-  import { copyTradeStore } from '$lib/stores/copyTradeStore';
+  import { copyTradeStore, registerScanSignals } from '$lib/stores/copyTradeStore';
   import {
     fetchCurrentOI,
     fetchCurrentFunding,
@@ -408,6 +408,8 @@
       scanTabs = [nextTab, ...scanTabs.filter((tab) => tab.id !== nextTab.id)].slice(0, MAX_SCAN_TABS);
       activeScanId = nextTab.id;
       activeToken = 'ALL';
+      // CopyTrade에서 참조할 수 있도록 현재 시그널 등록
+      registerScanSignals(scanTabs.flatMap(t => t.signals));
       selectedIds = new Set();
       dispatch('scancomplete', {
         pair: scan.pair,

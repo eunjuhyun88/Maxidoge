@@ -1,6 +1,6 @@
 <script lang="ts">
   import { copyTradeStore, isCopyTradeOpen, copyTradeStep, copyTradeDraft } from '$lib/stores/copyTradeStore';
-  import { getConsensus, AGENT_SIGNALS } from '$lib/data/warroom';
+  import { getConsensus } from '$lib/data/warroom';
   import { notifySignalTracked } from '$lib/stores/notificationStore';
   import { derived } from 'svelte/store';
 
@@ -8,10 +8,12 @@
   $: step = $copyTradeStep;
   $: draft = $copyTradeDraft;
 
-  const selectedSignalIds = derived({ subscribe: copyTradeStore.subscribe }, $s => $s.selectedSignalIds);
-  $: selectedSignals = AGENT_SIGNALS.filter(s => $selectedSignalIds.includes(s.id));
+  // evidence는 이미 draft에 포함되어 있으므로 별도 signal lookup 불필요
+  $: selectedSignals = draft.evidence;
 
-  $: consensus = selectedSignals.length ? getConsensus(selectedSignals) : { dir: 'NEUTRAL' as const, conf: 0, count: { long: 0, short: 0, neutral: 0 } };
+  $: consensus = selectedSignals.length
+    ? { dir: draft.dir, conf: Math.round(selectedSignals.reduce((a, e) => a + e.conf, 0) / selectedSignals.length), count: { long: 0, short: 0, neutral: 0 } }
+    : { dir: 'NEUTRAL' as const, conf: 0, count: { long: 0, short: 0, neutral: 0 } };
 
   function calcRR(): string {
     if (!draft.sl || !draft.tp[0] || !draft.entry) return '—';

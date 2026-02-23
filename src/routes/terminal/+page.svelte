@@ -4,14 +4,13 @@
   import IntelPanel from '../../components/terminal/IntelPanel.svelte';
   import TokenDropdown from '../../components/shared/TokenDropdown.svelte';
   import CopyTradeModal from '../../components/modals/CopyTradeModal.svelte';
-  import { TICKER_DATA } from '$lib/data/warroom';
   import { AGDEFS } from '$lib/data/agents';
 
   let liveTickerStr = '';
   let tickerLoaded = false;
   $: TICKER_STR = tickerLoaded && liveTickerStr
     ? `${liveTickerStr}  \u00a0|\u00a0  ${liveTickerStr}`
-    : `${TICKER_DATA}  \u00a0|\u00a0  ${TICKER_DATA}`;
+    : 'Loading market data...';
   import { gameState } from '$lib/stores/gameState';
   import { livePrices } from '$lib/stores/priceStore';
   import { updateAllPrices } from '$lib/stores/quickTradeStore';
