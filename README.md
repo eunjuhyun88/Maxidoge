@@ -16,6 +16,9 @@ SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signa
 4. 둘 중 하나라도 실패하면 push/merge를 중단하고 먼저 에러를 수정한다.
 5. push/merge 후에도 `docs/AGENT_WATCH_LOG.md`에 완료 기록(검증 결과, commit hash, merge hash, push 상태)을 남긴다.
 6. `main` 머지 후 `main`에서 다시 `npm run check` + `npm run build`를 실행한다.
+7. 한 요청(한 작업 단위)은 **하나의 atomic commit**으로 마감한다.  
+   해당 요청에서 바뀐 코드/문서와 `docs/AGENT_WATCH_LOG.md` 기록을 같은 커밋에 포함한다.
+8. 작업 종료 직전에 `git status --short --branch`를 실행해 워킹트리가 clean인지 확인하고, 결과를 로그에 남긴다.
 
 참고:
 - 에이전트 자동 실행 규칙 파일은 `AGENTS.md`다.

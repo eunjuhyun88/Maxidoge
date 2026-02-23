@@ -835,6 +835,42 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ---
 
+### W-20260224-027
+
+- Start (KST): 2026-02-24 02:46
+- End (KST): 2026-02-24 02:49
+- Agent: 2-FE
+- Branch: `main`
+- Scope (planned):
+  - `README.md` 협업 규칙에 "한 요청 = 한 커밋(로그 포함)" 원칙 추가
+  - 작업 종료 시 `git status --short` clean 확인 절차 추가
+  - 문서 규칙 반영 후 main에서 check/build 검증 및 즉시 push
+- Overlap check (before work):
+  - 문서 파일만 수정 (`README.md`, `docs/AGENT_WATCH_LOG.md`)
+  - 앱 코드/서버/API/스토어 파일 미수정
+- Changes (actual):
+  - `README.md`
+    - `Agent Collaboration Protocol (SSOT)`에 2개 규칙 추가:
+      - 한 요청(한 작업 단위) = 하나의 atomic commit
+      - 작업 종료 전 `git status --short --branch` clean 확인 + 로그 기록
+- Diff vs plan:
+  - 없음
+- Validation:
+  - main에서 `npm run check` 통과
+  - main에서 `npm run build` 통과
+  - 실행 env 주입:
+    - `COINALYZE_API_KEY=dummy`
+    - `PUBLIC_EVM_CHAIN_ID=42161`
+    - `PUBLIC_EVM_RPC_URL=https://arb1.arbitrum.io/rpc`
+    - `PUBLIC_WALLETCONNECT_PROJECT_ID=dummy`
+- Commit / Push:
+  - this task changes are committed and pushed directly on `main` (single atomic commit)
+- Merge / Push (main):
+  - direct on main
+- Status: DONE
+
+---
+
 ### W-20260224-024
 
 - Start (KST): 2026-02-24 01:49
