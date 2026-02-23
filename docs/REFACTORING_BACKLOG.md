@@ -14,7 +14,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | ID | 제목 | 설명 | 상태 |
 |----|------|------|------|
 | **S-01** | Agent 브릿지 단일화 | `data/agents.ts`를 `AGENT_POOL` 기반 브릿지로 교체, `AGDEFS` export만 호환 유지 | ✅ |
-| **S-02** | Progression 단일 규칙 확정 | `progressionStore` 신설 기준 계약 정의 (LP, matches, tier, unlockedSpecs) | ⬜ |
+| **S-02** | Progression 단일 규칙 확정 | `progressionStore` 신설 기준 계약 정의 (LP, matches, tier, unlockedSpecs) | ✅ |
 | **S-03** | Price 계약 단일화 | `livePrice` 단일 스토어/이벤트 규약 정의 (심볼, 타임스탬프, source) | ✅ |
 | **S-04** | Arena DraftSelection 계약 고정 | `{ agentId, specId, weight }[]` + 합계 100 검증 규칙 확정 | ✅ |
 | **S-05** | Terminal Persistence Migration | `005_terminal_persistence.sql` (scan_runs/scan_signals/agent_chat_messages) | ✅ |
@@ -77,9 +77,9 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **B-01** | Arena API 스캐폴딩 | `/api/arena/match/*` 생성 (create/draft/analyze/hypothesis/result) | S-04 | ⬜ |
 | **B-02** | 지표 엔진 분리 | `scanEngine.ts` 서버 분리, 타입 통합, 클라이언트 임포트 전면 제거 | — | ✅ |
 | **B-03** | agentPipeline 구현 | `agentPipeline.ts` + 8개 에이전트 scoring 모듈 + `computeFinalPrediction` | B-02 | ✅ |
-| **B-04** | exitOptimizer 구현 | SL/TP 3전략 + EV/R:R 계산 | B-02 | ⬜ |
+| **B-04** | exitOptimizer 구현 | SL/TP 3전략 + EV/R:R 계산 | B-02 | ✅ |
 | **B-05** | 데이터 수집 API | snapshot/proxy 라우트 및 외부 API 클라이언트 추가 | — | ⬜ |
-| **B-06** | progression 서버 반영 | 매치 결과 기준 LP/티어/해금 업데이트 일원화 | B-01, B-03 | ⬜ |
+| **B-06** | progression 서버 반영 | 매치 결과 기준 LP/티어/해금 업데이트 일원화 | B-01, B-03 | ✅ |
 | **B-07** | RAG memory | `memory.ts` + pgvector 검색/저장 연동 | B-03 | ⬜ |
 | **B-08** | 하위호환 어댑터 | 기존 `/api/matches`를 신규 arena API 내부 호출로 연결 | B-01 | ⬜ |
 | **B-09** | Terminal Scan API | `POST /api/terminal/scan` (warroomScan.ts 로직 서버 이전) | B-02, S-05 | ✅ |
