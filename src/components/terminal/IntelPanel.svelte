@@ -1279,7 +1279,6 @@
     border-color: rgba(139,92,246,.45);
     background: rgba(139,92,246,.12);
   }
-  .pp-linked:hover .pp-q { text-decoration: underline; }
   .pp-ext {
     display: block;
     margin-top: 4px;
@@ -1288,7 +1287,6 @@
     color: rgba(139,92,246,.5);
     text-align: right;
   }
-  .pp-linked:hover .pp-ext { color: rgba(139,92,246,.85); }
   .pp-q {
     font-family: var(--fm); font-size: 10px; font-weight: 700;
     color: rgba(255,255,255,.84); line-height: 1.35;

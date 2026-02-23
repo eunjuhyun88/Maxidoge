@@ -80,6 +80,62 @@
   };
   let mobileTab: MobileTab = 'chart';
   let mobileViewTracked = false;
+  type MobilePanelSize = { widthPct: number; heightPct: number };
+  const MOBILE_PANEL_MIN_W = 72;
+  const MOBILE_PANEL_MAX_W = 100;
+  const MOBILE_PANEL_MIN_H = 58;
+  const MOBILE_PANEL_MAX_H = 100;
+  const MOBILE_PANEL_STEP = 3;
+  let mobilePanelSizes: Record<MobileTab, MobilePanelSize> = {
+    warroom: { widthPct: 100, heightPct: 100 },
+    chart: { widthPct: 100, heightPct: 100 },
+    intel: { widthPct: 100, heightPct: 100 },
+  };
+
+  function clampPercent(value: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function getMobilePanelStyle(tab: MobileTab) {
+    const panel = mobilePanelSizes[tab];
+    return `--mob-panel-width: ${panel.widthPct}%; --mob-panel-height: ${panel.heightPct}%`;
+  }
+
+  function resizeMobilePanelByWheel(tab: MobileTab, axis: 'x' | 'y', e: WheelEvent) {
+    if (!isMobile) return;
+    const rawDelta = axis === 'x' ? (Math.abs(e.deltaX) > 0 ? e.deltaX : e.deltaY) : e.deltaY;
+    if (!Number.isFinite(rawDelta) || rawDelta === 0) return;
+
+    const step = e.shiftKey ? MOBILE_PANEL_STEP * 2 : MOBILE_PANEL_STEP;
+    const signed = rawDelta > 0 ? step : -step;
+    const current = mobilePanelSizes[tab];
+
+    if (axis === 'x') {
+      const nextWidth = clampPercent(current.widthPct + signed, MOBILE_PANEL_MIN_W, MOBILE_PANEL_MAX_W);
+      if (nextWidth === current.widthPct) return;
+      e.preventDefault();
+      mobilePanelSizes = {
+        ...mobilePanelSizes,
+        [tab]: { ...current, widthPct: nextWidth },
+      };
+      return;
+    }
+
+    const nextHeight = clampPercent(current.heightPct + signed, MOBILE_PANEL_MIN_H, MOBILE_PANEL_MAX_H);
+    if (nextHeight === current.heightPct) return;
+    e.preventDefault();
+    mobilePanelSizes = {
+      ...mobilePanelSizes,
+      [tab]: { ...current, heightPct: nextHeight },
+    };
+  }
+
+  function resetMobilePanelSize(tab: MobileTab) {
+    mobilePanelSizes = {
+      ...mobilePanelSizes,
+      [tab]: { widthPct: 100, heightPct: 100 },
+    };
+  }
 
   function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
     if (typeof window === 'undefined') return;
@@ -502,18 +558,66 @@
 
     <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
       {#if mobileTab === 'warroom'}
-        <div class="mob-panel-wrap">
+        <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('warroom')}>
           <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-x"
+            title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize war room panel width with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'x', e)}
+            on:dblclick={() => resetMobilePanelSize('warroom')}
+          ></button>
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-y"
+            title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize war room panel height with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'y', e)}
+            on:dblclick={() => resetMobilePanelSize('warroom')}
+          ></button>
         </div>
       {:else if mobileTab === 'chart'}
-        <div class="mob-chart-section">
+        <div class="mob-chart-section mob-panel-resizable" style={getMobilePanelStyle('chart')}>
           <div class="mob-chart-area">
             <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
           </div>
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-x"
+            title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize chart panel width with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('chart', 'x', e)}
+            on:dblclick={() => resetMobilePanelSize('chart')}
+          ></button>
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-y"
+            title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize chart panel height with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('chart', 'y', e)}
+            on:dblclick={() => resetMobilePanelSize('chart')}
+          ></button>
         </div>
       {:else if mobileTab === 'intel'}
-        <div class="mob-panel-wrap">
+        <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('intel')}>
           <IntelPanel {chatMessages} {isTyping} {latestScan} prioritizeChat on:sendchat={handleSendChat} />
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-x"
+            title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize intel panel width with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('intel', 'x', e)}
+            on:dblclick={() => resetMobilePanelSize('intel')}
+          ></button>
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-y"
+            title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize intel panel height with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('intel', 'y', e)}
+            on:dblclick={() => resetMobilePanelSize('intel')}
+          ></button>
         </div>
       {/if}
     </div>
@@ -1075,6 +1179,63 @@
     overflow: hidden;
     background: rgba(8, 22, 14, 0.58);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
+  }
+  .mob-panel-resizable {
+    position: relative;
+    width: min(100%, var(--mob-panel-width, 100%));
+    height: min(100%, var(--mob-panel-height, 100%));
+    margin-inline: auto;
+    transition: width .16s ease, height .16s ease, box-shadow .16s ease, border-color .16s ease;
+  }
+  .mob-panel-resizable:focus-within,
+  .mob-panel-resizable:hover {
+    border-color: rgba(232, 150, 125, 0.28);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+  .mob-resize-handle {
+    position: absolute;
+    z-index: 8;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    opacity: 0.45;
+    transition: opacity .12s ease;
+  }
+  .mob-resize-handle::before {
+    content: '';
+    position: absolute;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: rgba(245, 196, 184, 0.44);
+  }
+  .mob-resize-handle:hover,
+  .mob-resize-handle:focus-visible {
+    opacity: 0.95;
+    outline: none;
+  }
+  .mob-resize-handle-x {
+    top: 10px;
+    right: 0;
+    width: 12px;
+    height: calc(100% - 20px);
+    cursor: ew-resize;
+  }
+  .mob-resize-handle-x::before {
+    width: 2px;
+    height: 42%;
+  }
+  .mob-resize-handle-y {
+    left: 10px;
+    bottom: 0;
+    width: calc(100% - 20px);
+    height: 12px;
+    cursor: ns-resize;
+  }
+  .mob-resize-handle-y::before {
+    width: 42%;
+    height: 2px;
   }
   .mob-chart-area {
     flex: 1 1 auto;

@@ -78,6 +78,7 @@
   let derivLoading = false;
   let derivLastPair = '';
   let derivRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  let _visibilityHandler: (() => void) | null = null;
 
   // ── Cache: avoid redundant API calls (60s TTL per pair) ──
   const _derivCache = new Map<string, { ts: number; data: any }>();
@@ -505,11 +506,21 @@
     dispatch('quicktrade', { dir, pair: sig.pair, price: entry });
   }
 
+  function isDocumentVisible() {
+    return typeof document === 'undefined' || document.visibilityState === 'visible';
+  }
+
+  function handleVisibilityChange() {
+    if (!isDocumentVisible()) return;
+    fetchDerivativesData();
+  }
+
   onMount(() => {
     restoreScanState();
     scanStateHydrated = true;
 
     volatilityInterval = setInterval(() => {
+      if (!isDocumentVisible()) return;
       if (Math.random() < 0.2) {
         volatilityAlert = true;
         setTimeout(() => { volatilityAlert = false; }, 8000);
@@ -517,7 +528,15 @@
     }, 30000);
 
     fetchDerivativesData();
-    derivRefreshTimer = setInterval(fetchDerivativesData, 30000);
+    derivRefreshTimer = setInterval(() => {
+      if (!isDocumentVisible()) return;
+      fetchDerivativesData();
+    }, 30000);
+
+    if (typeof document !== 'undefined') {
+      _visibilityHandler = handleVisibilityChange;
+      document.addEventListener('visibilitychange', _visibilityHandler);
+    }
 
     // Load scan history from server
     getScanHistory({ limit: 5 })
@@ -535,6 +554,10 @@
     if (volatilityInterval) clearInterval(volatilityInterval);
     if (derivRefreshTimer) clearInterval(derivRefreshTimer);
     if (_derivDebounce) clearTimeout(_derivDebounce);
+    if (typeof document !== 'undefined' && _visibilityHandler) {
+      document.removeEventListener('visibilitychange', _visibilityHandler);
+      _visibilityHandler = null;
+    }
   });
 </script>
 
@@ -571,7 +594,6 @@
 
   <WarRoomSignalFeed
     {filteredSignals}
-    {signalPool}
     {scanTabs}
     {selectedIds}
     {selectedCount}

@@ -551,3 +551,34 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - 없음
 - Commit / Push: pending
 - Status: DONE
+
+---
+
+### W-20260224-019
+
+- Start (KST): 2026-02-24 01:16
+- End (KST): 2026-02-24 01:21
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 홈 랜딩(`src/routes/+page.svelte`) UX 개선
+  - 히어로 구간 휠 하이재킹 완화(의도치 않은 스크롤 잠금 방지)
+  - 상태 가시성(지갑/오픈 트레이드/추적 시그널) 강화 및 접근성 보강
+  - motion reduction 대응(`prefers-reduced-motion`) 추가
+- Overlap check (before work):
+  - `git status --short` 확인: 기존 변경은 `WarRoom/alertEngine/arena` 및 docs 범위로, 이번 작업 파일(`src/routes/+page.svelte`)과 직접 충돌 없음
+  - `git log --oneline -12` 확인: 최근 FE 작업은 terminal/arena 중심, 홈 랜딩 파일 직접 충돌 이력 없음
+  - Agent 2 소유 범위(`src/routes/**/+page.svelte`) 내 작업으로 API/서버 파일 미수정 원칙 유지
+- Changes (actual):
+  - `src/routes/+page.svelte`
+    - 히어로 우측 패널의 휠 인터셉트를 포인터가 패널 위에 있을 때만 동작하도록 제한
+    - `prefers-reduced-motion` 감지 및 애니메이션/휠 캡처 완화 로직 추가
+    - Hero 기본 상태칩 추가(지갑 연결 상태, 오픈 트레이드 수, 추적 시그널 수)
+    - Escape 키로 feature detail 닫기 지원, 버튼 `type="button"`/ARIA 속성 보강
+    - 키보드 포커스 가시성(`:focus-visible`) 강화 및 모바일 상태칩 반응형 보정
+  - `docs/AGENT_WATCH_LOG.md`
+    - W-20260224-019 시작/완료 기록 반영
+- Diff vs plan:
+  - 없음
+- Commit / Push: 미실행
+- Status: DONE

@@ -21,8 +21,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { isWalletConnected, connectWallet, recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
-  import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch } from '$lib/api/arenaApi';
-  import type { AnalyzeResponse } from '$lib/api/arenaApi';
+  import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket } from '$lib/api/arenaApi';
+  import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
 
   $: walletOk = $isWalletConnected;
 
@@ -1046,11 +1046,69 @@
     engineStartMatch();
   }
 
+  // ═══════ BRACKET STATE ═══════
+  let bracketMatches: TournamentBracketMatch[] = [];
+  let bracketRound = 1;
+  let bracketLoading = false;
+
+  async function loadBracket() {
+    if (!state.tournament?.tournamentId) return;
+    bracketLoading = true;
+    try {
+      const res = await getTournamentBracket(state.tournament.tournamentId);
+      bracketMatches = res.matches;
+      bracketRound = res.round;
+    } catch (e) {
+      console.warn('[Arena] bracket load failed:', e);
+    } finally {
+      bracketLoading = false;
+    }
+  }
+
+  // Load bracket when switching to MAP tab in tournament mode
+  $: if (arenaRailTab === 'map' && state.arenaMode === 'TOURNAMENT') {
+    loadBracket();
+  }
+
+  // ═══════ ESC KEY HANDLER ═══════
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !state.inLobby) {
+      e.preventDefault();
+      if (state.phase === 'RESULT' || pvpVisible || resultVisible) {
+        goLobby();
+      } else if (confirmingExit) {
+        confirmingExit = false;
+      } else {
+        confirmingExit = true;
+        setTimeout(() => { confirmingExit = false; }, 3000);
+      }
+    }
+  }
+
+  let confirmingExit = false;
+
+  function confirmGoLobby() {
+    if (state.phase === 'RESULT' || pvpVisible || state.phase === 'DRAFT') {
+      goLobby();
+    } else if (confirmingExit) {
+      goLobby();
+    } else {
+      confirmingExit = true;
+      setTimeout(() => { confirmingExit = false; }, 3000);
+    }
+  }
+
   onMount(() => {
     setPhaseInitCallback(onPhaseInit);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', handleKeydown);
+    }
   });
 
   onDestroy(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', handleKeydown);
+    }
     _arenaDestroyed = true;
     if (hypothesisInterval) clearInterval(hypothesisInterval);
     if (_battleInterval) clearInterval(_battleInterval);
@@ -1092,10 +1150,47 @@
   {:else if state.phase === 'DRAFT'}
     <SquadConfig selectedAgents={state.selectedAgents} on:deploy={onSquadDeploy} on:back={onSquadBack} />
   {:else}
-    <!-- Match History Toggle -->
-    <button class="mh-toggle" on:click={() => matchHistoryOpen = !matchHistoryOpen}>
-      📋 {state.wins}W-{state.losses}L
-    </button>
+    <!-- ═══════ TOP ARENA NAV BAR ═══════ -->
+    <div class="arena-topbar">
+      <button class="atb-back" on:click={confirmGoLobby}>
+        {#if confirmingExit}
+          <span class="atb-confirm-pulse">EXIT? CLICK AGAIN</span>
+        {:else}
+          <span class="atb-arrow">←</span> LOBBY
+        {/if}
+      </button>
+      <div class="atb-phase-track">
+        <div class="atb-phase" class:active={state.phase === 'DRAFT'} class:done={['ANALYSIS','HYPOTHESIS','BATTLE','RESULT'].includes(state.phase)}>
+          <span class="atp-dot"></span><span class="atp-label">DRAFT</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'ANALYSIS'} class:done={['HYPOTHESIS','BATTLE','RESULT'].includes(state.phase)}>
+          <span class="atp-dot"></span><span class="atp-label">SCAN</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'HYPOTHESIS'} class:done={['BATTLE','RESULT'].includes(state.phase)}>
+          <span class="atp-dot"></span><span class="atp-label">HYPO</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'BATTLE'} class:done={state.phase === 'RESULT'}>
+          <span class="atp-dot"></span><span class="atp-label">BATTLE</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'RESULT'}>
+          <span class="atp-dot"></span><span class="atp-label">RESULT</span>
+        </div>
+      </div>
+      <div class="atb-right">
+        <div class="atb-mode" class:pvp={state.arenaMode === 'PVP'} class:tour={state.arenaMode === 'TOURNAMENT'}>
+          {modeLabel}{#if state.arenaMode === 'TOURNAMENT' && tournamentInfo.round} · R{tournamentInfo.round}{/if}
+        </div>
+        <div class="atb-stats">
+          <span class="atb-lp">⚡{state.lp}</span>
+          <span class="atb-wl">{state.wins}W-{state.losses}L</span>
+        </div>
+        <button class="atb-hist" on:click={() => matchHistoryOpen = !matchHistoryOpen}>📋</button>
+      </div>
+    </div>
     <MatchHistory visible={matchHistoryOpen} on:close={() => matchHistoryOpen = false} />
 
       <div class="battle-layout">
