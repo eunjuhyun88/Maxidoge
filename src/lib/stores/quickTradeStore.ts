@@ -270,44 +270,48 @@ export function updateAllPrices(
   options: { syncServer?: boolean } = {}
 ) {
   const syncServer = options.syncServer ?? true;
-  const prices = toNumericPriceMap(priceInput);
-  const snap = buildPriceMapHash(prices);
 
   const state = get(quickTradeStore);
   const openIds = state.trades.filter((t) => t.status === 'open').map((t) => t.id);
   const hasOpenTrades = openIds.length > 0;
   const openTradeHash = openIds.join('|');
+  if (!hasOpenTrades) {
+    _lastOpenTradeHash = '';
+    _lastServerSyncSnapshot = '';
+    return;
+  }
 
-  if (hasOpenTrades) {
-    // Skip only when both prices and open-trade set are unchanged.
-    // This prevents missing updates when a new trade opens at the same price snapshot.
-    if (!(snap === _lastLocalPriceSnapshot && openTradeHash === _lastOpenTradeHash)) {
-      let changed = false;
-      const trades = state.trades.map((t) => {
-        if (t.status !== 'open') return t;
-        const token = getBaseSymbolFromPair(t.pair);
-        const price = prices[token];
-        if (!price || price === t.currentPrice) return t;
-        changed = true;
-        const pnl = t.dir === 'LONG'
-          ? +((price - t.entry) / t.entry * 100).toFixed(2)
-          : +((t.entry - price) / t.entry * 100).toFixed(2);
-        return { ...t, currentPrice: price, pnlPercent: pnl };
+  const prices = toNumericPriceMap(priceInput);
+  const snap = buildPriceMapHash(prices);
+
+  // Skip only when both prices and open-trade set are unchanged.
+  // This prevents missing updates when a new trade opens at the same price snapshot.
+  if (!(snap === _lastLocalPriceSnapshot && openTradeHash === _lastOpenTradeHash)) {
+    let changed = false;
+    const trades = state.trades.map((t) => {
+      if (t.status !== 'open') return t;
+      const token = getBaseSymbolFromPair(t.pair);
+      const price = prices[token];
+      if (!price || price === t.currentPrice) return t;
+      changed = true;
+      const pnl = t.dir === 'LONG'
+        ? +((price - t.entry) / t.entry * 100).toFixed(2)
+        : +((t.entry - price) / t.entry * 100).toFixed(2);
+      return { ...t, currentPrice: price, pnlPercent: pnl };
+    });
+
+    if (changed) {
+      quickTradeStore.set({
+        ...state,
+        trades,
       });
-
-      if (changed) {
-        quickTradeStore.set({
-          ...state,
-          trades,
-        });
-      }
     }
   }
 
   _lastLocalPriceSnapshot = snap;
   _lastOpenTradeHash = openTradeHash;
 
-  if (syncServer && hasOpenTrades && typeof window !== 'undefined') {
+  if (syncServer && typeof window !== 'undefined') {
     const serverSyncHash = `${snap}::${openTradeHash}`;
     if (serverSyncHash === _lastServerSyncSnapshot) return;
     _lastServerSyncSnapshot = serverSyncHash;
