@@ -292,7 +292,7 @@
     if (dataLoaded.trending || trendLoading) return;
     trendLoading = true;
     try {
-      const res = await fetch('/api/market/trending?section=all&limit=15');
+      const res = await fetch('/api/market/trending?section=all&limit=15', { signal: AbortSignal.timeout(10000) });
       const json = await res.json();
       if (json.ok && json.data) {
         trendingCoins = json.data.trending ?? [];
@@ -313,7 +313,7 @@
     if (picksLoaded || picksLoading) return;
     picksLoading = true;
     try {
-      const res = await fetch('/api/terminal/opportunity-scan?limit=15');
+      const res = await fetch('/api/terminal/opportunity-scan?limit=15', { signal: AbortSignal.timeout(15000) });
       const json = await res.json();
       if (json.ok && json.data) {
         topPicks = json.data.coins ?? [];

@@ -155,8 +155,8 @@
   async function fetchLiveTicker() {
     try {
       const [fgRes, cgRes] = await Promise.all([
-        fetch('/api/feargreed?limit=1').then(r => r.json()).catch(() => null),
-        fetch('/api/coingecko/global').then(r => r.json()).catch(() => null),
+        fetch('/api/feargreed?limit=1', { signal: AbortSignal.timeout(5000) }).then(r => r.json()).catch(() => null),
+        fetch('/api/coingecko/global', { signal: AbortSignal.timeout(5000) }).then(r => r.json()).catch(() => null),
       ]);
 
       const parts: string[] = [];
@@ -386,6 +386,7 @@
             livePrices: { ...$livePrices },
           },
         }),
+        signal: AbortSignal.timeout(15000), // 15s timeout for LLM responses
       });
 
       isTyping = false;
@@ -718,6 +719,9 @@
   .tab-left {
     overflow-y: auto;
     overflow-x: hidden;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
     min-width: 0;
   }
   .tl {

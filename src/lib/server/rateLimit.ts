@@ -22,6 +22,7 @@ interface RateLimitConfig {
 
 interface BucketEntry {
   tokens: number[];    // timestamps of recent requests
+  lastSeen: number;    // for LRU eviction
 }
 
 // ── Rate Limiter Factory ─────────────────────────────────────
@@ -40,11 +41,12 @@ export function createRateLimiter(config: RateLimitConfig = {}) {
       entry.tokens = entry.tokens.filter(t => t > cutoff);
       if (entry.tokens.length === 0) buckets.delete(key);
     }
-    // Hard cap: if too many unique IPs tracked, drop oldest half
+    // Hard cap: if too many unique IPs tracked, evict least-recently-seen
     if (buckets.size > 10_000) {
-      const keys = [...buckets.keys()];
-      for (let i = 0; i < keys.length / 2; i++) {
-        buckets.delete(keys[i]);
+      const sorted = [...buckets.entries()].sort((a, b) => a[1].lastSeen - b[1].lastSeen);
+      const toEvict = buckets.size - 5_000; // drop to 5k
+      for (let i = 0; i < toEvict; i++) {
+        buckets.delete(sorted[i][0]);
       }
     }
   }, 120_000);
@@ -64,9 +66,12 @@ export function createRateLimiter(config: RateLimitConfig = {}) {
 
       let entry = buckets.get(key);
       if (!entry) {
-        entry = { tokens: [] };
+        entry = { tokens: [], lastSeen: now };
         buckets.set(key, entry);
       }
+
+      // Update LRU timestamp
+      entry.lastSeen = now;
 
       // Remove tokens outside the window
       entry.tokens = entry.tokens.filter(t => t > cutoff);
