@@ -6,6 +6,7 @@ import { writable, derived } from 'svelte/store';
 import type { CanonicalTimeframe } from '$lib/utils/timeframe';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
+import { getLivePriceSnapshot } from './priceStore';
 
 export type Phase = 'DRAFT' | 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE' | 'RESULT';
 export type ViewMode = 'arena' | 'terminal' | 'passport';
@@ -211,18 +212,18 @@ export function setView(view: ViewMode) {
 }
 
 /**
- * @deprecated S-03: priceStore.simulatePriceJitter()를 사용할 것.
- * 레거시 호환을 위해 유지하되, 실제 가격은 priceStore가 단일 소스.
+ * @deprecated S-03: 랜덤 지터를 제거하고 livePrice 스냅샷을 사용한다.
+ * 레거시 호출 호환을 위해 유지하되, 실제 가격 소스는 priceStore다.
  */
 export function updatePrices() {
+  const snap = getLivePriceSnapshot(['BTC', 'ETH', 'SOL']);
   gameState.update(s => {
-    const jitter = () => 1 + (Math.random() - 0.5) * 0.0014;
     return {
       ...s,
       prices: {
-        BTC: +(s.prices.BTC * jitter()).toFixed(0),
-        ETH: +(s.prices.ETH * jitter()).toFixed(0),
-        SOL: +(s.prices.SOL * jitter()).toFixed(2)
+        BTC: snap.BTC?.price ?? s.prices.BTC,
+        ETH: snap.ETH?.price ?? s.prices.ETH,
+        SOL: snap.SOL?.price ?? s.prices.SOL
       }
     };
   });

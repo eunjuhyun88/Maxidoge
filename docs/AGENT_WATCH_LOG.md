@@ -100,3 +100,70 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Diff vs plan: 없음
 - Commit / Push: `bff9a08` — push pending
 - Status: DONE
+
+---
+
+### W-20260223-004
+
+- Start (KST): 2026-02-23 19:58
+- End (KST): 2026-02-23 20:02
+- Agent: 3-Glue
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - S-03 Price 계약 단일화 준비
+  - `src/lib/stores/gameState.ts`의 `updatePrices()` 랜덤 지터 제거
+  - `src/lib/stores/priceStore.ts`를 단일 livePrice 인터페이스 중심으로 리팩토링
+  - Header/Chart/Terminal이 공통으로 소비 가능한 구독 API 제공(스토어 계층 한정)
+- Overlap check (before work):
+  - `git pull --ff-only` 확인: Already up to date
+  - `git log -n 6` 확인: 최신 커밋 `9b4d462`, 최근 항목 중 Agent 3 IN_PROGRESS 없음
+  - 최근 WATCH_LOG(W-001~W-003) 확인: 이번 범위(`src/lib/stores/**`)와 직접 충돌 없음
+- Changes (actual):
+  - `src/lib/stores/priceStore.ts`
+    - S-03 canonical `livePrice` 계약(`Record<symbol, { price, ts, source }`) 명시
+    - `selectLivePrice`, `selectLivePriceMap`, `getLivePriceSnapshot` 추가 (Header/Chart/Terminal 공통 소비 준비)
+    - 업데이트 액션(`updatePrice`, `updatePrices`, `updatePriceFull`)에 심볼/값 정규화 및 no-op dedupe 추가
+    - 레거시 `simulatePriceJitter()`는 랜덤 제거 후 no-op 유지
+  - `src/lib/stores/gameState.ts`
+    - `updatePrices()` 랜덤 지터 제거
+    - `getLivePriceSnapshot(['BTC','ETH','SOL'])` 기반 동기화로 변경
+- Diff vs plan:
+  - 없음
+- Commit / Push: pending
+- Status: DONE
+
+---
+
+### W-20260223-005
+
+- Start (KST): 2026-02-23 21:00
+- Agent: 1-BE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - B-02: 지표 엔진 분리 — 서버/서비스 계층 구성
+  - `src/lib/server/binance.ts` 신규: 서버사이드 Binance REST 클라이언트 (캐싱 포함)
+  - `src/lib/server/scanEngine.ts` 신규: 서버사이드 스캔 오케스트레이션 (13 소스 → MarketContext → factorEngine → WarRoomScanResult)
+  - `src/lib/services/scanService.ts` 수정: warroomScan 직접 호출 → scanEngine 서버 호출로 전환
+  - persistScan signals N+1 → 배치 INSERT
+- Overlap check (before work):
+  - `git log -n 8` 확인: 최신 `9b4d462`, W-004(Agent 3-Glue)는 stores 작업 → 파일 충돌 없음
+  - warroomScan.ts(engine)은 이번에 직접 수정 안 함 → client-side 호환 유지
+  - src/lib/server/ 내 파일은 다른 에이전트 미접근
+- Status: IN_PROGRESS
+
+---
+
+### W-20260223-006
+
+- Start (KST): 2026-02-23 20:03
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - F-07 WarRoom UI 분해
+  - `src/components/terminal/WarRoom.svelte`를 렌더링 전용 중심으로 축소 (목표 800줄 이하)
+  - 신호카드/헤더/스트립/푸터 등 UI 블록을 `src/components/terminal/warroom/*` 하위로 분리
+- Overlap check (before work):
+  - `git log -n 12` 확인: 최신 작업은 docs/perf/store 중심, WarRoom 직접 수정은 `2e4c6a9` 이후 없음
+  - `git log -- src/components/terminal/WarRoom.svelte` 확인: 기존 WarRoom 변경 이력 파악
+  - 현재 IN_PROGRESS `W-20260223-005`(Agent 1-BE)는 `src/lib/server/**`, `src/lib/services/**` 범위로 FE 컴포넌트 분해와 직접 충돌 없음
+- Status: IN_PROGRESS
