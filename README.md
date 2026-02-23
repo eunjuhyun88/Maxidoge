@@ -363,3 +363,30 @@ curl -I -H 'Accept-Encoding: br,gzip' https://<your-domain>/
 ```
 
 - `Content-Encoding: br` 또는 `Content-Encoding: gzip` 헤더가 보이면 정상
+
+### 2026-02-23 19:30 KST — Server Performance Hardening (진행중)
+
+작업자: Claude Agent (perf guardian)
+선행 확인: hooks.server.ts gzip 제거 — 다른 에이전트가 완료, 겹치지 않음
+
+변경 내용:
+1. ✅ hooks.server.ts gzip → 다른 에이전트 처리 완료 (skip)
+2. ✅ 서버 모듈 캐싱 추가: yahoo(5m), feargreed(5m), defillama(5m), coingecko(3m), fetchNews(2m)
+3. ✅ persistSnapshots N+1 → 배치 INSERT (24쿼리 → 2쿼리)
+4. ✅ battleInterval 메모리 누수 수정 (_battleInterval + onDestroy cleanup)
+5. ✅ walletStore localStorage 디바운스 추가 (300ms)
+6. ✅ quickTradeStore 즉시 hydration 제거 → terminal onMount에서만 호출
+7. ✅ 터미널 3초 폴링 최적화 (가격 변동 시에만 업데이트)
+8. ✅ 빌드 검증 통과
+
+변경 파일:
+- `src/lib/server/feargreed.ts` — getCached/setCache 5분
+- `src/lib/server/defillama.ts` — getCached/setCache 5분
+- `src/lib/server/coingecko.ts` — getCached/setCache 3분
+- `src/lib/server/yahooFinance.ts` — getCached/setCache 5분
+- `src/lib/server/marketFeedService.ts` — fetchNews getCached/setCache 2분
+- `src/lib/server/marketSnapshotService.ts` — batch INSERT (N+1 제거)
+- `src/routes/arena/+page.svelte` — _battleInterval leak fix + onDestroy cleanup
+- `src/lib/stores/walletStore.ts` — localStorage persist 300ms debounce
+- `src/lib/stores/quickTradeStore.ts` — 모듈 import 시 자동 hydration 제거
+- `src/routes/terminal/+page.svelte` — hydrateQuickTrades onMount + price hash skip

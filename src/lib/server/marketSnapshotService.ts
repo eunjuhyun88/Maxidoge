@@ -145,69 +145,75 @@ async function persistSnapshots(
 ): Promise<string[]> {
   const nowIso = new Date(at).toISOString();
   await withTransaction(async (client) => {
-    for (const row of sources) {
-      const expiresIso = new Date(at + row.ttlMs).toISOString();
+    // ── Batch source inserts (N+1 → 1 query) ──────────────
+    if (sources.length > 0) {
+      const srcValues: string[] = [];
+      const srcParams: unknown[] = [];
+      let idx = 1;
+      for (const row of sources) {
+        const expiresIso = new Date(at + row.ttlMs).toISOString();
+        srcValues.push(`($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}::jsonb, $${idx + 4}::timestamptz, $${idx + 5}::timestamptz)`);
+        srcParams.push(pair, row.source, row.dataType, JSON.stringify(row.payload ?? {}), nowIso, expiresIso);
+        idx += 6;
+      }
       await client.query(
-        `
-          INSERT INTO market_snapshots (pair, source, data_type, payload, fetched_at, expires_at)
-          VALUES ($1, $2, $3, $4::jsonb, $5::timestamptz, $6::timestamptz)
-          ON CONFLICT (pair, source, data_type)
-          DO UPDATE SET
-            payload = EXCLUDED.payload,
-            fetched_at = EXCLUDED.fetched_at,
-            expires_at = EXCLUDED.expires_at
-        `,
-        [pair, row.source, row.dataType, JSON.stringify(row.payload ?? {}), nowIso, expiresIso]
+        `INSERT INTO market_snapshots (pair, source, data_type, payload, fetched_at, expires_at)
+         VALUES ${srcValues.join(', ')}
+         ON CONFLICT (pair, source, data_type)
+         DO UPDATE SET
+           payload = EXCLUDED.payload,
+           fetched_at = EXCLUDED.fetched_at,
+           expires_at = EXCLUDED.expires_at`,
+        srcParams
       );
     }
 
+    // ── Batch indicator inserts (N+1 → 1 query) ──────────
+    const indRows: { normalized: ReturnType<typeof normalizeSeries>; trend: ReturnType<typeof analyzeTrend>; indicator: string; div: any }[] = [];
     for (const row of indicators) {
       const normalized = normalizeSeries(row.timestamps, row.values, 200);
       if (normalized.values.length === 0) continue;
+      indRows.push({ normalized, trend: analyzeTrend(normalized.values), indicator: row.indicator, div: row.divergence ?? null });
+    }
 
-      const trend = analyzeTrend(normalized.values);
-      const div = row.divergence ?? null;
-
+    if (indRows.length > 0) {
+      const indValues: string[] = [];
+      const indParams: unknown[] = [];
+      let idx = 1;
+      for (const r of indRows) {
+        indValues.push(
+          `($${idx}, $${idx+1}, $${idx+2}, $${idx+3}::bigint[], $${idx+4}::numeric[], ` +
+          `$${idx+5}::trend_dir_enum, $${idx+6}::numeric, $${idx+7}::numeric, $${idx+8}::numeric, $${idx+9}::int, ` +
+          `$${idx+10}::text, $${idx+11}::numeric, $${idx+12}::timestamptz)`
+        );
+        indParams.push(
+          pair, timeframe, r.indicator,
+          r.normalized.timestamps, r.normalized.values,
+          r.trend.direction, r.trend.slope, r.trend.acceleration, r.trend.strength, r.trend.duration,
+          r.div?.type ?? null, r.div?.confidence ?? null, nowIso
+        );
+        idx += 13;
+      }
       await client.query(
-        `
-          INSERT INTO indicator_series (
-            pair, timeframe, indicator, timestamps, vals,
-            trend_dir, trend_slope, trend_accel, trend_strength, trend_duration,
-            divergence_type, divergence_conf, computed_at
-          )
-          VALUES (
-            $1, $2, $3, $4::bigint[], $5::numeric[],
-            $6::trend_dir_enum, $7::numeric, $8::numeric, $9::numeric, $10::int,
-            $11::text, $12::numeric, $13::timestamptz
-          )
-          ON CONFLICT (pair, timeframe, indicator)
-          DO UPDATE SET
-            timestamps = EXCLUDED.timestamps,
-            vals = EXCLUDED.vals,
-            trend_dir = EXCLUDED.trend_dir,
-            trend_slope = EXCLUDED.trend_slope,
-            trend_accel = EXCLUDED.trend_accel,
-            trend_strength = EXCLUDED.trend_strength,
-            trend_duration = EXCLUDED.trend_duration,
-            divergence_type = EXCLUDED.divergence_type,
-            divergence_conf = EXCLUDED.divergence_conf,
-            computed_at = EXCLUDED.computed_at
-        `,
-        [
-          pair,
-          timeframe,
-          row.indicator,
-          normalized.timestamps,
-          normalized.values,
-          trend.direction,
-          trend.slope,
-          trend.acceleration,
-          trend.strength,
-          trend.duration,
-          div?.type ?? null,
-          div?.confidence ?? null,
-          nowIso,
-        ]
+        `INSERT INTO indicator_series (
+           pair, timeframe, indicator, timestamps, vals,
+           trend_dir, trend_slope, trend_accel, trend_strength, trend_duration,
+           divergence_type, divergence_conf, computed_at
+         )
+         VALUES ${indValues.join(', ')}
+         ON CONFLICT (pair, timeframe, indicator)
+         DO UPDATE SET
+           timestamps = EXCLUDED.timestamps,
+           vals = EXCLUDED.vals,
+           trend_dir = EXCLUDED.trend_dir,
+           trend_slope = EXCLUDED.trend_slope,
+           trend_accel = EXCLUDED.trend_accel,
+           trend_strength = EXCLUDED.trend_strength,
+           trend_duration = EXCLUDED.trend_duration,
+           divergence_type = EXCLUDED.divergence_type,
+           divergence_conf = EXCLUDED.divergence_conf,
+           computed_at = EXCLUDED.computed_at`,
+        indParams
       );
     }
   });

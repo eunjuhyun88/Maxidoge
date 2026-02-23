@@ -104,6 +104,7 @@
   let hypothesisVisible = false;
   let hypothesisTimer = 45;
   let hypothesisInterval: ReturnType<typeof setInterval> | null = null;
+  let _battleInterval: ReturnType<typeof setInterval> | null = null;
 
   // ═══════ REPLAY STATE ═══════
   let replayState = createReplayState();
@@ -857,7 +858,8 @@
     }
 
     let elapsed = 0;
-    const battleInterval = setInterval(() => {
+    if (_battleInterval) clearInterval(_battleInterval);
+    _battleInterval = setInterval(() => {
       elapsed += 500;
       gameState.update(s => {
         const price = s.prices.BTC * (1 + (Math.random() - 0.48) * 0.0015);
@@ -865,7 +867,7 @@
         const tpHit = isLong ? price >= pos.tp : price <= pos.tp;
         const slHit = isLong ? price <= pos.sl : price >= pos.sl;
         if (tpHit || slHit || elapsed >= 8000) {
-          clearInterval(battleInterval);
+          if (_battleInterval) { clearInterval(_battleInterval); _battleInterval = null; }
           const result = tpHit ? 'tp' : slHit ? 'sl' : (price > pos.entry ? 'time_win' : 'time_loss');
           setTimeout(() => advancePhase(), 500);
           return { ...s, prices: { ...s.prices, BTC: price }, battleResult: result };
@@ -1051,6 +1053,7 @@
   onDestroy(() => {
     _arenaDestroyed = true;
     if (hypothesisInterval) clearInterval(hypothesisInterval);
+    if (_battleInterval) clearInterval(_battleInterval);
     if (previewAutoTimer) clearTimeout(previewAutoTimer);
     if (replayTimer) clearTimeout(replayTimer);
     if (feedCursorTimer) clearTimeout(feedCursorTimer);

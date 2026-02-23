@@ -2,7 +2,10 @@
 // MAXI⚡DOGE — DeFiLlama server client
 // ═══════════════════════════════════════════════════════════════
 
+import { getCached, setCache } from './providers/cache';
+
 const STABLE_BASE = 'https://stablecoins.llama.fi';
+const CACHE_TTL = 5 * 60_000; // 5분 (일간 데이터)
 
 export type DeFiLlamaStableMcap = {
   totalMcapUsd: number;
@@ -31,6 +34,10 @@ function parseTotalMcap(row: any): number {
 }
 
 export async function fetchDefiLlamaStableMcap(): Promise<DeFiLlamaStableMcap | null> {
+  const cacheKey = 'defillama:stableMcap';
+  const cached = getCached<DeFiLlamaStableMcap>(cacheKey);
+  if (cached) return cached;
+
   try {
     const chart = await fetchJson('/stablecoincharts/all?stablecoin=1');
     if (!Array.isArray(chart) || chart.length < 2) return null;
@@ -51,12 +58,14 @@ export async function fetchDefiLlamaStableMcap(): Promise<DeFiLlamaStableMcap | 
         ? Number(latest.date) * 1000
         : Number.isFinite(Date.parse(String(latest?.date))) ? Date.parse(String(latest.date)) : Date.now();
 
-    return {
+    const result: DeFiLlamaStableMcap = {
       totalMcapUsd: latestMcap,
       change24hPct,
       change7dPct,
       updatedAt: Number.isFinite(dateMs) ? dateMs : Date.now(),
     };
+    setCache(cacheKey, result, CACHE_TTL);
+    return result;
   } catch (error) {
     console.error('[defillama/stablecoin] fetch failed:', error);
     return null;

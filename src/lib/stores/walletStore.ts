@@ -78,11 +78,15 @@ function loadWallet(): WalletState {
 
 export const walletStore = writable<WalletState>(loadWallet());
 
-// Persist
+// Persist (300ms 디바운스 — 매 업데이트마다 JSON.stringify + localStorage 쓰기 방지)
+let _walletPersistTimer: ReturnType<typeof setTimeout> | null = null;
 walletStore.subscribe(w => {
   if (typeof window === 'undefined') return;
-  const { showWalletModal, walletModalStep, signature, ...persistable } = w;
-  localStorage.setItem(STORAGE_KEYS.wallet, JSON.stringify(persistable));
+  if (_walletPersistTimer) clearTimeout(_walletPersistTimer);
+  _walletPersistTimer = setTimeout(() => {
+    const { showWalletModal, walletModalStep, signature, ...persistable } = w;
+    localStorage.setItem(STORAGE_KEYS.wallet, JSON.stringify(persistable));
+  }, 300);
 });
 
 // Derived stores

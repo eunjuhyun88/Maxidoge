@@ -4,6 +4,9 @@
 
 import { PAIR_RE } from '$lib/server/apiValidation';
 import { tfToCoinalyzeInterval } from '$lib/api/coinalyze';
+import { getCached, setCache } from './providers/cache';
+
+const NEWS_CACHE_TTL = 2 * 60_000; // 2분
 
 const NEWS_FEEDS = [
   { source: 'CoinDesk', url: 'https://www.coindesk.com/arc/outboundfeeds/rss/' },
@@ -97,6 +100,10 @@ export function pairToSlug(pair: string): string {
 }
 
 export async function fetchNews(limit = 20): Promise<NewsRecord[]> {
+  const cacheKey = `news:${limit}`;
+  const cached = getCached<NewsRecord[]>(cacheKey);
+  if (cached) return cached;
+
   const jobs = NEWS_FEEDS.map(async ({ source, url }) => {
     try {
       const res = await withTimeout(url, 6000);
@@ -127,7 +134,9 @@ export async function fetchNews(limit = 20): Promise<NewsRecord[]> {
 
   const merged = (await Promise.all(jobs)).flat();
   merged.sort((a, b) => b.publishedAt - a.publishedAt);
-  return merged.slice(0, Math.max(1, Math.min(100, limit)));
+  const result = merged.slice(0, Math.max(1, Math.min(100, limit)));
+  setCache(cacheKey, result, NEWS_CACHE_TTL);
+  return result;
 }
 
 async function callCoinalyze(eventFetch: typeof fetch, endpoint: string, params: Record<string, string>) {

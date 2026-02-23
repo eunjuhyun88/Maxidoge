@@ -302,6 +302,6 @@ export function clearClosedTrades() {
   }));
 }
 
-if (typeof window !== 'undefined') {
-  void hydrateQuickTrades();
-}
+// 모듈 import 시 자동 hydration 제거 — terminal 페이지 onMount에서 호출하도록 변경
+// 모든 페이지에서 불필요한 API 호출 방지
+// if (typeof window !== 'undefined') { void hydrateQuickTrades(); }

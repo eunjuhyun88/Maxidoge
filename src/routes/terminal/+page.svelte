@@ -13,7 +13,7 @@
     : 'Loading market data...';
   import { gameState } from '$lib/stores/gameState';
   import { livePrices } from '$lib/stores/priceStore';
-  import { updateAllPrices } from '$lib/stores/quickTradeStore';
+  import { updateAllPrices, hydrateQuickTrades } from '$lib/stores/quickTradeStore';
   import { updateTrackedPrices } from '$lib/stores/trackedSignalStore';
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
@@ -195,12 +195,19 @@
     windowWidth = window.innerWidth;
     window.addEventListener('resize', handleResize);
 
+    // ── Hydrate quick trades (터미널 페이지에서만 호출) ──
+    void hydrateQuickTrades();
+
     // ── Load live ticker data ──
     fetchLiveTicker();
 
-    // 1) Local UI refresh — 3초 간격 (WS가 실시간 가격 담당, 여기는 보조 동기화)
+    // 1) Local UI refresh — priceStore 변경 시에만 (3초 맹목 폴링 제거)
+    let _lastPriceHash = '';
     priceUiSync = setInterval(() => {
       const s = $gameState;
+      const hash = `${s.prices.BTC}|${s.prices.ETH}|${s.prices.SOL}`;
+      if (hash === _lastPriceHash) return; // 가격 변동 없으면 스킵
+      _lastPriceHash = hash;
       const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
       updateAllPrices(prices, { syncServer: false });
       updateTrackedPrices(prices);
