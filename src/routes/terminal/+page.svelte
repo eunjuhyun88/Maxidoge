@@ -155,14 +155,21 @@
     return Math.min(MAX_RIGHT, Math.max(MIN_RIGHT, next));
   }
 
+  function isHorizontalResizeGesture(e: WheelEvent) {
+    const absX = Math.abs(e.deltaX);
+    const absY = Math.abs(e.deltaY);
+    return absX >= 10 && absX > absY * 1.2;
+  }
+
   function resizePanelByWheel(target: 'left' | 'right' | 'center', e: WheelEvent, options?: { force?: boolean }) {
     if (!isDesktop) return;
 
     const force = options?.force === true;
-    const wantsResize = force || e.altKey || e.ctrlKey || e.metaKey;
+    const horizontalGesture = isHorizontalResizeGesture(e);
+    const wantsResize = force || horizontalGesture || e.altKey || e.ctrlKey || e.metaKey;
     if (!wantsResize) return;
 
-    const delta = e.deltaY === 0 ? e.deltaX : e.deltaY;
+    const delta = horizontalGesture ? e.deltaX : (e.deltaY === 0 ? e.deltaX : e.deltaY);
     if (!Number.isFinite(delta) || delta === 0) return;
     e.preventDefault();
 
@@ -555,7 +562,7 @@
 
     <!-- Left: WAR ROOM or collapsed strip -->
     {#if !leftCollapsed}
-      <div class="tl">
+      <div class="tl" on:wheel={(e) => resizePanelByWheel('left', e)}>
         <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scancomplete={handleScanComplete} />
       </div>
     {:else}
@@ -602,7 +609,7 @@
 
     <!-- Right: Intel Panel or collapsed strip -->
     {#if !rightCollapsed}
-      <div class="tr">
+      <div class="tr" on:wheel={(e) => resizePanelByWheel('right', e)}>
         <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} on:collapse={toggleRight} />
       </div>
     {:else}

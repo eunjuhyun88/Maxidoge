@@ -519,3 +519,35 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - 없음
 - Commit / Push: 미실행 (기존 작업트리 변경 포함, 사용자 지시 대기)
 - Status: DONE
+
+---
+
+### W-20260224-018
+
+- Start (KST): 2026-02-24 00:54
+- End (KST): 2026-02-24 01:00
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 터미널 3패널(좌/중앙/우)에서 가로 스크롤 제스처 기반 너비 조절 UX 추가
+  - 세로 스크롤은 유지하고, 수평 제스처만 리사이즈로 처리
+  - 데스크톱 `src/routes/terminal/+page.svelte` 범위 한정 수정
+- Overlap check (before work):
+  - `git status --short` 확인: BE/Glue 범위 파일 변경(`src/lib/api/**`, `src/lib/services/**`)은 미수정 유지
+  - Agent 2 소유 범위 파일만 수정 (`src/routes/**/+page.svelte`)
+  - 최근 WATCH_LOG 확인: W-014/015의 휠 리사이즈 후속 개선으로 기능 범위 중복은 있으나 파일 충돌 없음
+- Changes (actual):
+  - `src/routes/terminal/+page.svelte`
+    - `isHorizontalResizeGesture()` 추가: 수평 스크롤 제스처(`deltaX` 우세)만 패널 리사이즈 트리거로 판별
+    - `resizePanelByWheel()` 수정:
+      - 기존 modifier 기반(`Alt/Ctrl/Cmd`)은 유지
+      - 수평 제스처는 modifier 없이도 리사이즈 허용
+      - 수평 제스처 시 `deltaX`를 기준으로 너비 증감
+    - 데스크톱 패널 본문 이벤트 연결:
+      - 좌측 WAR ROOM 패널(`.tl`) `on:wheel` → 좌측 너비 조절
+      - 우측 INTEL 패널(`.tr`) `on:wheel` → 우측 너비 조절
+      - 세로 스크롤은 기본 동작 유지(수평 제스처일 때만 `preventDefault`)
+- Diff vs plan:
+  - 없음
+- Commit / Push: pending
+- Status: DONE
