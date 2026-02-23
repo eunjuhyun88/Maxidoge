@@ -39,7 +39,17 @@
   let _uiStateSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ═══ Live data from API (replaces hardcoded) ═══
-  let liveHeadlines: Headline[] = [];
+  interface HeadlineEx extends Headline {
+    interactions?: number;
+    importance?: number;
+    network?: string;
+    creator?: string;
+  }
+  let liveHeadlines: HeadlineEx[] = [];
+  let headlineOffset = 0;
+  let headlineHasMore = true;
+  let headlineLoading = false;
+  let headlineSortBy: 'importance' | 'time' = 'importance';
   let liveEvents: Array<{ id: string; tag: string; level: string; text: string; source: string; createdAt: number }> = [];
   let liveFlows: Array<{ id: string; label: string; addr: string; amt: string; isBuy: boolean }> = [];
   let dataLoaded = { headlines: false, events: false, flow: false };
@@ -120,24 +130,62 @@
   // Show all if no matches
   $: displayHeadlines = filteredHeadlines.length >= 2 ? filteredHeadlines : headlineSource;
 
-  async function fetchLiveHeadlines() {
+  async function fetchLiveHeadlines(append = false) {
+    if (headlineLoading) return;
+    headlineLoading = true;
     try {
       const token = ($gameState.pair || 'BTC/USDT').split('/')[0];
-      const res = await fetch(`/api/market/news?limit=15&token=${encodeURIComponent(token)}`);
+      const offset = append ? headlineOffset : 0;
+      const res = await fetch(
+        `/api/market/news?limit=20&offset=${offset}&token=${encodeURIComponent(token)}&sort=${headlineSortBy}&interval=1m`
+      );
       const json = await res.json();
       if (json.ok && json.data?.records?.length > 0) {
-        liveHeadlines = json.data.records.map((r: any) => ({
+        const newItems: HeadlineEx[] = json.data.records.map((r: any) => ({
           icon: r.sentiment === 'bullish' ? '📈' : r.sentiment === 'bearish' ? '📉' : '📊',
           time: formatRelativeTime(r.publishedAt),
           text: r.title || r.summary,
           bull: r.sentiment === 'bullish',
           link: r.link || '',
+          interactions: r.interactions || 0,
+          importance: r.importance || 0,
+          network: r.network || 'rss',
+          creator: r.creator || r.source || '',
         }));
+        if (append) {
+          liveHeadlines = [...liveHeadlines, ...newItems];
+        } else {
+          liveHeadlines = newItems;
+        }
+        headlineOffset = (json.data.offset ?? 0) + newItems.length;
+        headlineHasMore = json.data.hasMore ?? false;
         dataLoaded.headlines = true;
         dataLoaded = dataLoaded;
       }
     } catch (e) {
       console.warn('[IntelPanel] Headlines API unavailable, using fallback');
+    } finally {
+      headlineLoading = false;
+    }
+  }
+
+  function loadMoreHeadlines() {
+    if (headlineHasMore && !headlineLoading) {
+      fetchLiveHeadlines(true);
+    }
+  }
+
+  function toggleHeadlineSort() {
+    headlineSortBy = headlineSortBy === 'importance' ? 'time' : 'importance';
+    headlineOffset = 0;
+    headlineHasMore = true;
+    fetchLiveHeadlines(false);
+  }
+
+  function handleHeadlineScroll(e: Event) {
+    const el = e.target as HTMLElement;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 60) {
+      loadMoreHeadlines();
     }
   }
 
@@ -237,7 +285,9 @@
       // pair 바뀌면 debounce 후 refetch (빠른 전환 스팸 방지)
       if (_pairRefetchTimer) clearTimeout(_pairRefetchTimer);
       _pairRefetchTimer = setTimeout(() => {
-        fetchLiveHeadlines();
+        headlineOffset = 0;
+        headlineHasMore = true;
+        fetchLiveHeadlines(false);
         fetchLiveEvents();
         fetchLiveFlow();
       }, 300);
@@ -354,27 +404,58 @@
             </div>
 
           {:else if innerTab === 'headlines'}
-            <div class="hl-ticker-badge">{currentToken} NEWS</div>
-            <div class="hl-list">
-              {#if displayHeadlines.length === 0}
-                <div class="flow-empty">Loading headlines...</div>
+            <div class="hl-header-bar">
+              <span class="hl-ticker-badge">{currentToken} NEWS</span>
+              <button class="hl-sort-btn" on:click={toggleHeadlineSort} title="Toggle sort">
+                {headlineSortBy === 'importance' ? '🔥 HOT' : '🕐 NEW'}
+              </button>
+            </div>
+            <div class="hl-list hl-scrollable" on:scroll={handleHeadlineScroll}>
+              {#if displayHeadlines.length === 0 && !headlineLoading}
+                <div class="flow-empty">No headlines yet</div>
               {/if}
               {#each displayHeadlines as hl}
                 {#if hl.link}
                   <a class="hl-row hl-linked" href={hl.link} target="_blank" rel="noopener noreferrer">
                     <span class="hl-icon">{hl.icon}</span>
-                    <span class="hl-time">{hl.time}</span>
-                    <span class="hl-txt" class:bull={hl.bull}>{hl.text}</span>
+                    <div class="hl-main">
+                      <span class="hl-txt" class:bull={hl.bull}>{hl.text}</span>
+                      <div class="hl-meta">
+                        <span class="hl-time">{hl.time}</span>
+                        {#if hl.network && hl.network !== 'rss'}
+                          <span class="hl-net">{hl.network}</span>
+                        {/if}
+                        {#if hl.interactions && hl.interactions > 0}
+                          <span class="hl-engage">🔥 {hl.interactions > 1000 ? `${(hl.interactions / 1000).toFixed(1)}K` : hl.interactions}</span>
+                        {/if}
+                        {#if hl.creator && hl.network !== 'rss'}
+                          <span class="hl-creator">@{hl.creator.slice(0, 15)}</span>
+                        {/if}
+                      </div>
+                    </div>
                     <span class="hl-ext">&#8599;</span>
                   </a>
                 {:else}
                   <div class="hl-row">
                     <span class="hl-icon">{hl.icon}</span>
-                    <span class="hl-time">{hl.time}</span>
-                    <span class="hl-txt" class:bull={hl.bull}>{hl.text}</span>
+                    <div class="hl-main">
+                      <span class="hl-txt" class:bull={hl.bull}>{hl.text}</span>
+                      <div class="hl-meta">
+                        <span class="hl-time">{hl.time}</span>
+                        {#if hl.network && hl.network !== 'rss'}
+                          <span class="hl-net">{hl.network}</span>
+                        {/if}
+                      </div>
+                    </div>
                   </div>
                 {/if}
               {/each}
+              {#if headlineLoading}
+                <div class="hl-loading">Loading more...</div>
+              {/if}
+              {#if !headlineHasMore && displayHeadlines.length > 0}
+                <div class="hl-end">— end of headlines —</div>
+              {/if}
             </div>
 
           {:else if innerTab === 'events'}
@@ -551,22 +632,57 @@
   .rp-body.chat-mode { padding: 0; overflow: hidden; }
 
   /* ── Headlines ── */
-  .hl-ticker-badge {
-    padding: 4px 8px; font-family: var(--fm); font-size: 8px; font-weight: 900;
-    letter-spacing: 1.5px; color: var(--yel); background: rgba(255,230,0,.06);
+  .hl-header-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 8px;
+    background: rgba(255,230,0,.06);
     border-bottom: 1px solid rgba(255,230,0,.1);
   }
+  .hl-ticker-badge {
+    font-family: var(--fm); font-size: 8px; font-weight: 900;
+    letter-spacing: 1.5px; color: var(--yel);
+  }
+  .hl-sort-btn {
+    font-family: var(--fm); font-size: 7px; font-weight: 800;
+    letter-spacing: .5px; padding: 2px 6px;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,230,0,.2);
+    border-radius: 3px; color: rgba(255,230,0,.7); cursor: pointer;
+    transition: all .12s;
+  }
+  .hl-sort-btn:hover { background: rgba(255,230,0,.12); color: var(--yel); }
   .hl-list { display: flex; flex-direction: column; }
-  .hl-row { display: flex; gap: 6px; padding: 7px 8px; border-bottom: 1px solid rgba(255,230,0,.08); cursor: pointer; }
+  .hl-scrollable { overflow-y: auto; max-height: calc(100vh - 300px); }
+  .hl-scrollable::-webkit-scrollbar { width: 2px; }
+  .hl-scrollable::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  .hl-row { display: flex; gap: 6px; padding: 7px 8px; border-bottom: 1px solid rgba(255,230,0,.08); cursor: pointer; align-items: flex-start; }
   .hl-row:hover { background: rgba(255,230,0,.03); }
-  .hl-icon { font-size: 10px; flex-shrink: 0; width: 16px; }
-  .hl-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58); width: 34px; flex-shrink: 0; }
-  .hl-txt { font-family: var(--fm); font-size: 10px; line-height: 1.45; color: rgba(255,255,255,.82); }
+  .hl-icon { font-size: 10px; flex-shrink: 0; width: 16px; padding-top: 1px; }
+  .hl-main { flex: 1; min-width: 0; }
+  .hl-txt { font-family: var(--fm); font-size: 10px; line-height: 1.45; color: rgba(255,255,255,.82); display: block; }
   .hl-txt.bull { color: var(--grn); }
+  .hl-meta { display: flex; gap: 6px; align-items: center; margin-top: 2px; flex-wrap: wrap; }
+  .hl-time { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.42); }
+  .hl-net {
+    font-family: var(--fm); font-size: 7px; font-weight: 700; letter-spacing: .5px;
+    color: rgba(139,92,246,.7); background: rgba(139,92,246,.1);
+    padding: 0 4px; border-radius: 2px;
+  }
+  .hl-engage {
+    font-family: var(--fm); font-size: 7px; font-weight: 700;
+    color: rgba(255,140,59,.8);
+  }
+  .hl-creator {
+    font-family: var(--fm); font-size: 7px;
+    color: rgba(255,255,255,.3);
+  }
   a.hl-linked { text-decoration: none; color: inherit; }
   .hl-linked:hover .hl-txt { text-decoration: underline; }
-  .hl-ext { font-size: 10px; opacity: 0; transition: opacity .15s; flex-shrink: 0; color: rgba(255,230,0,.6); }
+  .hl-ext { font-size: 10px; opacity: 0; transition: opacity .15s; flex-shrink: 0; color: rgba(255,230,0,.6); padding-top: 1px; }
   .hl-linked:hover .hl-ext { opacity: 1; }
+  .hl-loading, .hl-end {
+    font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.3);
+    text-align: center; padding: 10px 0; letter-spacing: 1px;
+  }
 
   /* ── Events ── */
   .ev-list { display: flex; flex-direction: column; gap: 5px; }

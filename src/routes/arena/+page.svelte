@@ -36,6 +36,8 @@
       : (resultData.win ? '🏁 PVE CLEAR' : '❌ PVE FAILED');
   // Active agents for this match
   $: activeAgents = AGDEFS.filter(a => state.selectedAgents.includes(a.id));
+  $: railRank = [...activeAgents].sort((a, b) => b.conf - a.conf);
+  $: longBalance = Math.max(0, Math.min(100, Math.round(state.score)));
 
   // UI state
   let findings: Array<{def: typeof AGDEFS[0]; visible: boolean}> = [];
@@ -51,6 +53,7 @@
   let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = [];
   let historyOpen = false;
   let matchHistoryOpen = false;
+  let arenaRailTab: 'rank' | 'log' | 'map' = 'rank';
 
   // ═══════ SERVER SYNC STATE ═══════
   let serverMatchId: string | null = null;
@@ -1288,6 +1291,53 @@
           <div class="phase-timer">{state.timer > 0 ? Math.ceil(state.timer) + 's' : '--'}</div>
         </div>
 
+        <!-- Right Rail (reference UI - partial) -->
+        <aside class="arena-rail">
+          <div class="rail-head">
+            <div class="rail-pair">{state.pair} · {formatTimeframeLabel(state.squadConfig.timeframe)}</div>
+            <div class="rail-price">${Number.isFinite(state.prices.BTC) ? Math.round(state.prices.BTC).toLocaleString() : '--'}</div>
+          </div>
+          <div class="rail-tabs">
+            <button class:active={arenaRailTab === 'rank'} on:click={() => arenaRailTab = 'rank'}>RANK</button>
+            <button class:active={arenaRailTab === 'log'} on:click={() => arenaRailTab = 'log'}>LOG</button>
+            <button class:active={arenaRailTab === 'map'} on:click={() => arenaRailTab = 'map'}>MAP</button>
+          </div>
+          <div class="rail-body">
+            {#if arenaRailTab === 'rank'}
+              {#if railRank.length === 0}
+                <div class="rail-empty">No agents in this round</div>
+              {:else}
+                {#each railRank as ag, idx}
+                  <div class="rail-row">
+                    <span class="rail-rank">{idx + 1}</span>
+                    <span class="rail-name" style="color:{ag.color}">{ag.name}</span>
+                    <span class="rail-dir {ag.dir.toLowerCase()}">{ag.dir}</span>
+                    <span class="rail-conf">{ag.conf}%</span>
+                  </div>
+                {/each}
+              {/if}
+            {:else if arenaRailTab === 'log'}
+              {#if feedMessages.length === 0}
+                <div class="rail-empty">No logs yet</div>
+              {:else}
+                {#each feedMessages.slice(0, 10) as msg}
+                  <div class="rail-log">
+                    <span class="rl-name" style="color:{msg.color}">{msg.name}</span>
+                    <span class="rl-text">{msg.text}</span>
+                  </div>
+                {/each}
+              {/if}
+            {:else}
+              <div class="rail-map">
+                <div class="rm-item"><span>MODE</span><b>{modeLabel}</b></div>
+                <div class="rm-item"><span>AGENTS</span><b>{activeAgents.length}</b></div>
+                <div class="rm-item"><span>SCORE</span><b>{Math.round(state.score)}</b></div>
+                <div class="rm-item"><span>LP</span><b>{state.lp}</b></div>
+              </div>
+            {/if}
+          </div>
+        </aside>
+
         <!-- Feed Log -->
         <div class="feed-panel">
           {#each feedMessages as msg}
@@ -1468,6 +1518,14 @@
             {/if}
           </div>
         {/if}
+
+        <div class="arena-balance">
+          <span>LONG</span>
+          <div class="ab-track">
+            <div class="ab-fill" style="width:{longBalance}%"></div>
+          </div>
+          <span>SHORT</span>
+        </div>
       </div>
     </div>
   {/if}
@@ -2339,6 +2397,249 @@
   .preview-confirm:active {
     transform: translate(1px, 1px);
     box-shadow: 1px 1px 0 #000;
+  }
+
+  /* ═══════ PARTIAL REFERENCE UI LAYER (OUR TONE) ═══════ */
+  .arena-rail {
+    position: absolute;
+    top: 52px;
+    right: 10px;
+    bottom: 38px;
+    width: 190px;
+    z-index: 14;
+    border: 1px solid var(--arena-line);
+    background: rgba(8, 18, 13, 0.92);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    backdrop-filter: blur(4px);
+  }
+  .rail-head {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--arena-line-soft);
+    background: linear-gradient(180deg, rgba(232, 150, 125, 0.15), rgba(8, 18, 13, 0.2));
+  }
+  .rail-pair {
+    font-family: var(--fd);
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: var(--arena-accent);
+  }
+  .rail-price {
+    margin-top: 3px;
+    font-family: var(--fd);
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--arena-text);
+    letter-spacing: 1px;
+  }
+  .rail-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid var(--arena-line-soft);
+    border-bottom: 1px solid var(--arena-line-soft);
+  }
+  .rail-tabs button {
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: var(--arena-text-muted);
+    font-family: var(--fd);
+    font-size: 7px;
+    letter-spacing: 1px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .rail-tabs button.active {
+    color: var(--arena-text);
+    background: rgba(232, 150, 125, 0.15);
+    box-shadow: inset 0 -2px 0 rgba(232, 150, 125, 0.95);
+  }
+  .rail-body {
+    flex: 1;
+    overflow-y: auto;
+  }
+  .rail-body::-webkit-scrollbar {
+    width: 2px;
+  }
+  .rail-body::-webkit-scrollbar-thumb {
+    background: rgba(232, 150, 125, 0.35);
+  }
+  .rail-row {
+    display: grid;
+    grid-template-columns: 14px 1fr auto auto;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--arena-line-soft);
+  }
+  .rail-rank {
+    font-family: var(--fm);
+    font-size: 7px;
+    color: rgba(240, 237, 228, 0.45);
+    text-align: center;
+  }
+  .rail-name {
+    font-family: var(--fd);
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rail-dir {
+    font-family: var(--fm);
+    font-size: 6px;
+    border: 1px solid;
+    padding: 1px 4px;
+    letter-spacing: 1px;
+  }
+  .rail-dir.long {
+    color: var(--arena-good);
+    border-color: rgba(0, 204, 136, 0.45);
+    background: rgba(0, 204, 136, 0.12);
+  }
+  .rail-dir.short {
+    color: var(--arena-bad);
+    border-color: rgba(255, 94, 122, 0.42);
+    background: rgba(255, 94, 122, 0.1);
+  }
+  .rail-dir.neutral {
+    color: var(--arena-warn);
+    border-color: rgba(220, 185, 112, 0.5);
+    background: rgba(220, 185, 112, 0.12);
+  }
+  .rail-conf {
+    font-family: var(--fm);
+    font-size: 7px;
+    color: var(--arena-accent-2);
+    min-width: 26px;
+    text-align: right;
+  }
+  .rail-log {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--arena-line-soft);
+    display: grid;
+    gap: 2px;
+  }
+  .rl-name {
+    font-family: var(--fd);
+    font-size: 7px;
+    letter-spacing: 1px;
+    font-weight: 900;
+  }
+  .rl-text {
+    font-family: var(--fm);
+    font-size: 7px;
+    line-height: 1.35;
+    color: var(--arena-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rail-map {
+    padding: 7px;
+    display: grid;
+    gap: 6px;
+  }
+  .rm-item {
+    padding: 7px 8px;
+    border: 1px solid var(--arena-line-soft);
+    background: rgba(10, 22, 17, 0.78);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .rm-item span {
+    font-family: var(--fm);
+    font-size: 7px;
+    color: var(--arena-text-muted);
+    letter-spacing: 1px;
+  }
+  .rm-item b {
+    font-family: var(--fd);
+    font-size: 8px;
+    color: var(--arena-text);
+    letter-spacing: 1px;
+  }
+  .rail-empty {
+    padding: 18px 10px;
+    text-align: center;
+    color: rgba(240, 237, 228, 0.45);
+    font-family: var(--fm);
+    font-size: 8px;
+  }
+
+  .arena-balance {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    z-index: 15;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+  }
+  .arena-balance > span {
+    font-family: var(--fm);
+    font-size: 7px;
+    letter-spacing: 1px;
+    color: var(--arena-text-muted);
+  }
+  .ab-track {
+    height: 6px;
+    border: 1px solid var(--arena-line-soft);
+    background: linear-gradient(90deg, rgba(0, 204, 136, 0.12), rgba(255, 94, 122, 0.18));
+    position: relative;
+    overflow: hidden;
+  }
+  .ab-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--arena-good), var(--arena-accent-2));
+    transition: width .3s ease;
+  }
+
+  .feed-panel {
+    left: 8px;
+    right: 206px;
+    max-height: 82px;
+  }
+  .feed-msg {
+    border-color: var(--arena-line-soft);
+    background: rgba(8, 18, 13, 0.78);
+    color: var(--arena-text);
+  }
+  .feed-text {
+    color: var(--arena-text-dim);
+  }
+  .hist-btn {
+    right: 206px;
+  }
+
+  @media (max-width: 1150px) {
+    .arena-rail {
+      width: 170px;
+    }
+    .feed-panel {
+      right: 184px;
+    }
+    .hist-btn {
+      right: 184px;
+    }
+  }
+  @media (max-width: 900px) {
+    .arena-rail {
+      display: none;
+    }
+    .feed-panel {
+      right: 8px;
+    }
+    .hist-btn {
+      right: 8px;
+    }
   }
 
   @keyframes popIn { from { transform: translate(-50%, -50%) scale(.8); opacity: 0 } to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }

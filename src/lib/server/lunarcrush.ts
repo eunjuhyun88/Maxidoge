@@ -78,6 +78,77 @@ export async function fetchTopicSocial(topic: string): Promise<LunarCrushTopicDa
   };
 }
 
+// ── Topic Posts (popular social posts / news about a topic) ──
+
+export interface LunarCrushPost {
+  id: string;
+  title: string;
+  body: string;
+  link: string;
+  creator: string;
+  creatorFollowers: number;
+  network: string;      // 'twitter', 'reddit', 'youtube', 'news'
+  interactions: number;  // total engagements
+  sentiment: number;     // 1-5
+  publishedAt: number;   // unix ms
+}
+
+/** Fetch popular posts about a topic.
+ * interval: '1d' | '1w' | '1m' | '3m' | '6m' | '1y'
+ * Returns up to ~50 posts sorted by engagement */
+export async function fetchTopicPosts(
+  topic: string,
+  interval: string = '1m',
+  limit: number = 50
+): Promise<LunarCrushPost[]> {
+  const cacheTTL = 300_000; // 5min for posts
+  const path = `/topic/${topic.toLowerCase()}/posts/${interval}`;
+  const cacheKey = `lunarcrush:posts:${path}:${limit}`;
+  const cached = getCached<LunarCrushPost[]>(cacheKey);
+  if (cached) return cached;
+
+  const key = apiKey();
+  if (!key) return [];
+
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) {
+      console.error(`[LunarCrush Posts] ${res.status} ${res.statusText}`);
+      return [];
+    }
+    const json = await res.json();
+    const rawPosts = json?.data ?? json ?? [];
+    if (!Array.isArray(rawPosts)) return [];
+
+    const posts: LunarCrushPost[] = rawPosts
+      .slice(0, limit)
+      .map((p: any) => ({
+        id: String(p.id ?? p.post_id ?? `lc-${Date.now()}-${Math.random()}`),
+        title: p.post_title ?? p.title ?? '',
+        body: (p.body ?? p.post_body ?? '').slice(0, 300),
+        link: p.post_link ?? p.link ?? p.url ?? '',
+        creator: p.creator_display_name ?? p.creator_name ?? p.creator ?? 'Unknown',
+        creatorFollowers: p.creator_followers ?? 0,
+        network: p.network ?? 'unknown',
+        interactions: p.interactions_total ?? p.interactions ?? p.interactions_24h ?? 0,
+        sentiment: p.sentiment ?? 3,
+        publishedAt: p.post_created ? p.post_created * 1000 :
+                     p.time_created ? p.time_created * 1000 :
+                     Date.now(),
+      }))
+      .sort((a: LunarCrushPost, b: LunarCrushPost) => b.interactions - a.interactions);
+
+    setCache(cacheKey, posts, cacheTTL);
+    return posts;
+  } catch (err) {
+    console.error('[LunarCrush Posts]', err);
+    return [];
+  }
+}
+
 /** Check if LunarCrush API key is configured */
 export function hasLunarCrushKey(): boolean {
   return Boolean(apiKey());
