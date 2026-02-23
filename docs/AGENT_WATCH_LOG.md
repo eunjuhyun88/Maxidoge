@@ -588,6 +588,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 ### W-20260224-020
 
 - Start (KST): 2026-02-24 01:27
+- End (KST): 2026-02-24 01:30
 - Agent: 2-FE
 - Branch: `codex/fe-api-connect`
 - Scope (planned):
@@ -598,4 +599,20 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - 현재 브랜치 최신 커밋 `bacd2fc` 기준, FE 소유 파일 중심 작업 진행
   - 수정 대상은 `src/routes/**/+page.svelte` 범위 한정, 서버/API 파일 미수정
   - 사용자 요청 스코프(모바일 UI/UX)와 기존 미해결 타입 오류 영역(서버/arena 타입) 분리 유지
-- Status: IN_PROGRESS
+- Changes (actual):
+  - `src/routes/terminal/+page.svelte`
+    - 모바일 chart 탭에 `AI SCAN`, `OPEN WAR ROOM` 퀵 액션 추가
+    - 하단 네비에 WAR ROOM/INTEL 카운트 배지 추가(오픈 트레이드/추적 시그널)
+    - 모바일 패널 흐름(`mob-chart-stack`) 재구성 및 chart-only 패딩 최적화
+    - 동적 viewport height(`--term-vh`) 적용으로 모바일 높이 안정성 개선
+    - GTM 이벤트 보강:
+      - `terminal_mobile_nav_impression`
+      - `terminal_mobile_tab_auto_switch`
+      - `terminal_mobile_quick_scan_click`
+      - 기존 tab change 이벤트에 `from_tab`, `source` 추가
+  - `docs/AGENT_WATCH_LOG.md`
+    - W-20260224-020 시작/완료 갱신
+- Diff vs plan:
+  - 없음
+- Commit / Push: `bfbff59` — pushed to origin
+- Status: DONE
