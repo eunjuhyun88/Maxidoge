@@ -44,6 +44,7 @@ const STORAGE_KEY = STORAGE_KEYS.quickTrades;
 const MAX_TRADES = 200;
 const PRICE_SYNC_DEBOUNCE_MS = 1200;
 let _quickTradesHydrated = false;
+let _quickTradesHydratePromise: Promise<void> | null = null;
 
 function loadState(): QuickTradeState {
   if (typeof window === 'undefined') return { trades: [], showPanel: false };
@@ -118,16 +119,25 @@ function mergeServerAndLocalTrades(serverTrades: QuickTrade[], localTrades: Quic
 export async function hydrateQuickTrades(force = false): Promise<void> {
   if (typeof window === 'undefined') return;
   if (_quickTradesHydrated && !force) return;
+  if (_quickTradesHydratePromise) return _quickTradesHydratePromise;
 
-  const records = await fetchQuickTradesApi({ limit: MAX_TRADES, offset: 0 });
-  if (!records) return;
+  _quickTradesHydratePromise = (async () => {
+    const records = await fetchQuickTradesApi({ limit: MAX_TRADES, offset: 0 });
+    if (!records) return;
 
-  quickTradeStore.update((s) => ({
-    ...s,
-    trades: mergeServerAndLocalTrades(records.map(mapApiQuickTrade), s.trades),
-  }));
+    quickTradeStore.update((s) => ({
+      ...s,
+      trades: mergeServerAndLocalTrades(records.map(mapApiQuickTrade), s.trades),
+    }));
 
-  _quickTradesHydrated = true;
+    _quickTradesHydrated = true;
+  })();
+
+  try {
+    await _quickTradesHydratePromise;
+  } finally {
+    _quickTradesHydratePromise = null;
+  }
 }
 
 // ═══ Actions ═══

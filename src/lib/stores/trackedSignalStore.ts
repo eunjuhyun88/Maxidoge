@@ -35,6 +35,7 @@ const STORAGE_KEY = STORAGE_KEYS.trackedSignals;
 const MAX_SIGNALS = 50;
 const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24 hours
 let _trackedSignalsHydrated = false;
+let _trackedSignalsHydratePromise: Promise<void> | null = null;
 
 function loadState(): TrackedSignalState {
   if (typeof window === 'undefined') return { signals: [] };
@@ -114,15 +115,24 @@ function mergeServerAndLocalSignals(serverSignals: TrackedSignal[], localSignals
 export async function hydrateTrackedSignals(force = false): Promise<void> {
   if (typeof window === 'undefined') return;
   if (_trackedSignalsHydrated && !force) return;
+  if (_trackedSignalsHydratePromise) return _trackedSignalsHydratePromise;
 
-  const records = await fetchTrackedSignalsApi({ limit: MAX_SIGNALS, offset: 0 });
-  if (!records) return;
+  _trackedSignalsHydratePromise = (async () => {
+    const records = await fetchTrackedSignalsApi({ limit: MAX_SIGNALS, offset: 0 });
+    if (!records) return;
 
-  trackedSignalStore.update((s) => ({
-    signals: mergeServerAndLocalSignals(records.map(mapApiTrackedSignal), s.signals)
-  }));
+    trackedSignalStore.update((s) => ({
+      signals: mergeServerAndLocalSignals(records.map(mapApiTrackedSignal), s.signals)
+    }));
 
-  _trackedSignalsHydrated = true;
+    _trackedSignalsHydrated = true;
+  })();
+
+  try {
+    await _trackedSignalsHydratePromise;
+  } finally {
+    _trackedSignalsHydratePromise = null;
+  }
 }
 
 // ═══ Actions ═══
