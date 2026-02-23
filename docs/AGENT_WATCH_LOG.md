@@ -681,6 +681,34 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ### W-20260224-023
 
+- Start (KST): 2026-02-24 01:55
+- End (KST): 2026-02-24 01:56
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 원격에 올라간 스왑 파일 제거
+  - 에디터 임시 파일 git 추적 방지 패턴 추가
+- Overlap check (before work):
+  - 기능 코드 영향 없는 저장소 위생 작업
+  - FE/BE/Contract 코드 경로 미수정
+- Changes (actual):
+  - `.gitignore`
+    - `*.swp`, `*.swo`, `*~` 패턴 추가
+  - tracked swap files 제거:
+    - `.README.md.swp`
+    - `docs/.MAXIDOGE_Final_UserFlow_UIUX_Backend_Architecture_2026-02-23.md.swp`
+    - `docs/.MAXIDOGE_Final_UserFlow_UIUX_Backend_Architecture_2026-02-23.pdf.swp`
+    - `docs/.p0-alignment-checklist-latest.md.swp`
+    - `docs/.v3-direct-rewrite-status-2026-02-22.md.swp`
+- Diff vs plan:
+  - 없음
+- Commit / Push: pending
+- Status: DONE
+
+---
+
+### W-20260224-023
+
 - Start (KST): 2026-02-24 01:48
 - End (KST): 2026-02-24 01:53
 - Agent: 2-FE
