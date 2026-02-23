@@ -78,7 +78,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **B-02** | 지표 엔진 분리 | `scanEngine.ts` 서버 분리, 타입 통합, 클라이언트 임포트 전면 제거 | — | ✅ |
 | **B-03** | agentPipeline 구현 | `agentPipeline.ts` + 8개 에이전트 scoring 모듈 + `computeFinalPrediction` | B-02 | ✅ |
 | **B-04** | exitOptimizer 구현 | SL/TP 3전략 + EV/R:R 계산 | B-02 | ✅ |
-| **B-05** | 데이터 수집 API | snapshot/proxy 라우트 및 외부 API 클라이언트 추가 | — | ⬜ |
+| **B-05** | 데이터 수집 API | snapshot/proxy 라우트 및 외부 API 클라이언트 추가 | — | ✅ |
 | **B-06** | progression 서버 반영 | 매치 결과 기준 LP/티어/해금 업데이트 일원화 | B-01, B-03 | ✅ |
 | **B-07** | RAG memory | `memory.ts` + pgvector 검색/저장 연동 | B-03 | ⬜ |
 | **B-08** | 하위호환 어댑터 | 기존 `/api/matches`를 신규 arena API 내부 호출로 연결 | B-01 | ⬜ |
