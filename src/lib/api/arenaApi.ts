@@ -112,6 +112,7 @@ async function apiCall<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
+    signal: options?.signal ?? AbortSignal.timeout(10_000),
   });
   const data = await res.json();
   if (!res.ok || !data.success) {

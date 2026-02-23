@@ -41,7 +41,7 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
     ...(init.headers as JsonHeaders | undefined),
   };
 
-  const res = await fetch(url, { ...init, headers });
+  const res = await fetch(url, { ...init, headers, signal: init?.signal ?? AbortSignal.timeout(10_000) });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {

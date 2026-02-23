@@ -29,7 +29,7 @@ function canFetch(): boolean {
 export async function fetchHoldings(): Promise<PortfolioResponse | null> {
   if (!canFetch()) return null;
   try {
-    const res = await fetch('/api/portfolio/holdings');
+    const res = await fetch('/api/portfolio/holdings', { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -50,6 +50,7 @@ export async function upsertHolding(data: {
     const res = await fetch('/api/portfolio/holdings', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify(data),
     });
     return res.ok;

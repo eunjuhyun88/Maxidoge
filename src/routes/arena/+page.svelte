@@ -333,6 +333,8 @@
     agentStates[agentId] = { ...agentStates[agentId], speech: '' };
     agentStates = { ...agentStates };
 
+    // Clear any existing speech timer for this agent before creating a new one
+    if (speechTimers[agentId]) clearInterval(speechTimers[agentId]);
     speechTimers[agentId] = setInterval(() => {
       charIdx++;
       if (charIdx >= fullText.length) {
@@ -853,7 +855,7 @@
     const pos = state.pos || fallbackPos;
     if (!pos) {
       gameState.update(s => ({ ...s, battleResult: null, running: false }));
-      setTimeout(() => advancePhase(), 3000);
+      setTimeout(() => { if (!_arenaDestroyed) advancePhase(); }, 3000);
       return;
     }
 
@@ -869,7 +871,7 @@
         if (tpHit || slHit || elapsed >= 8000) {
           if (_battleInterval) { clearInterval(_battleInterval); _battleInterval = null; }
           const result = tpHit ? 'tp' : slHit ? 'sl' : (price > pos.entry ? 'time_win' : 'time_loss');
-          setTimeout(() => advancePhase(), 500);
+          setTimeout(() => { if (!_arenaDestroyed) advancePhase(); }, 500);
           return { ...s, prices: { ...s.prices, BTC: price }, battleResult: result };
         }
         return { ...s, prices: { ...s.prices, BTC: price } };

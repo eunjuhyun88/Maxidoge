@@ -329,3 +329,33 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - 없음
 - Commit / Push: pending
 - Status: DONE
+
+---
+
+### W-20260223-012
+
+- Start (KST): 2026-02-23 23:00
+- Agent: 4-Watcher
+- Branch: `claude/busy-mclean`
+- Scope (planned):
+  - Phase 1: REFACTORING_BACKLOG.md 상태 동기화 (13건 코드 vs 문서 불일치 수정)
+  - Phase 1: Consistency Check 3종 실행
+  - Phase 2: CRITICAL 성능 수정 (WarRoom onDestroy 누락, Arena 미추적 setTimeout, IntelPanel timer cleanup)
+  - Phase 2: Client API AbortSignal timeout 전역 적용
+  - 크로스커팅 성능/아키텍처 감사 기반 수정
+- Overlap check (before work):
+  - `git log -n 8` 확인: 최신 `a0071ef`(perf: skip no-op price updates)
+  - WATCH_LOG W-011(Agent3 quickTrade dedupe) DONE — stores 범위, 이번 작업과 충돌 없음
+  - W-010(Agent2 ChartPanel/Terminal) DONE — FE 컴포넌트 범위, 이번 작업의 timer cleanup과 동일 파일이나 다른 코드 영역
+  - 주요 수정 대상: docs/**, WarRoom.svelte(onDestroy), arena/+page.svelte(timer), IntelPanel.svelte(timer), src/lib/api/**(AbortSignal)
+- Changes (actual):
+  - `docs/REFACTORING_BACKLOG.md`: 13건 티켓 상태 업데이트 (⬜→✅/🟡), "이미 반영된 것" 10건 추가
+  - `src/routes/arena/+page.svelte`: advancePhase() setTimeout 2건 `_arenaDestroyed` guard 추가, speechTimers 중복 interval 방지
+  - `src/lib/api/*.ts` (13파일): `AbortSignal.timeout(10_000)` 전역 적용
+  - WarRoom.svelte / IntelPanel.svelte: onDestroy 이미 존재 확인 — 수정 불필요
+- Diff vs plan:
+  - Phase 2-1/2-3(WarRoom/IntelPanel onDestroy): 감사 오탐 — 이미 cleanup 존재하여 스킵
+  - Phase 2-2(Arena timer): 계획대로 완료
+  - Phase 2-4(AbortSignal): 계획대로 완료
+- Commit / Push: 빌드 검증 완료 (`vite build ✓ 11.96s`)
+- Status: DONE
