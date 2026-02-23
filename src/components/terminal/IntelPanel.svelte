@@ -4,8 +4,10 @@
   import { openTrades, closeQuickTrade } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
   import { predictMarkets, loadPolymarkets } from '$lib/stores/predictStore';
+  import { unifiedPositions, polymarketPositions, hydratePositions, positionsLoading } from '$lib/stores/positionStore';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import { parseOutcomePrices } from '$lib/api/polymarket';
+  import PolymarketBetPanel from './PolymarketBetPanel.svelte';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -35,6 +37,8 @@
 
   let activeTab = 'intel';
   let innerTab = 'chat';
+  let posSubTab: 'all' | 'trades' | 'markets' = 'all';
+  let betMarket: any = null; // market to open in BetPanel
   let tabCollapsed = false;
   let _uiStateSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -808,65 +812,104 @@
 
       {:else if activeTab === 'positions'}
         <div class="rp-body">
-          <!-- PREDICT section (horizontal scroll, above positions) -->
-          <div class="pp-section">
-            <div class="pp-header">
-              <span class="pp-title">🔮 PREDICT</span>
-              {#if cryptoMarkets.length > 0}
-                <span class="pp-cnt">{cryptoMarkets.length}</span>
-              {/if}
-            </div>
-            {#if cryptoMarkets.length > 0}
-              <div class="pp-scroll">
-                {#each cryptoMarkets as market}
-                  {@const outcome = parseOutcomePrices(market.outcomePrices)}
-                  <a class="pp-card pp-linked" href="https://polymarket.com/event/{market.slug}" target="_blank" rel="noopener noreferrer">
-                    <div class="pp-q">{market.question.length > 70 ? market.question.slice(0, 70) + '…' : market.question}</div>
-                    <div class="pp-bar-wrap">
-                      <div class="pp-bar-yes" style="width:{outcome.yes}%"></div>
-                    </div>
-                    <div class="pp-odds">
-                      <span class="pp-yes">YES {outcome.yes}¢</span>
-                      <span class="pp-no">NO {outcome.no}¢</span>
-                    </div>
-                    <span class="pp-ext">&#8599; Polymarket</span>
-                  </a>
-                {/each}
-              </div>
-              <div class="pp-hint">← swipe →</div>
-            {:else}
-              <div class="pp-empty">Loading markets...</div>
-            {/if}
+          <!-- Position sub-tabs: ALL / TRADES / MARKETS -->
+          <div class="pos-sub-tabs">
+            <button class="pos-sub" class:active={posSubTab === 'all'} on:click={() => posSubTab = 'all'}>ALL</button>
+            <button class="pos-sub" class:active={posSubTab === 'trades'} on:click={() => posSubTab = 'trades'}>TRADES</button>
+            <button class="pos-sub" class:active={posSubTab === 'markets'} on:click={() => posSubTab = 'markets'}>MARKETS</button>
           </div>
 
-          <!-- Open Positions -->
-          {#if openCount > 0}
-            <div class="pos-header">
-              <span class="pos-title">📊 POSITIONS</span>
-              <span class="pos-cnt">{openCount}</span>
-            </div>
-            {#each opens as trade (trade.id)}
-              <div class="pos-row">
-                <span class="pos-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>
-                  {trade.dir === 'LONG' ? '▲' : '▼'}
-                </span>
-                <div class="pos-info">
-                  <span class="pos-pair">{trade.pair}</span>
-                  <span class="pos-entry">${Math.round(trade.entry).toLocaleString()}</span>
-                </div>
-                <span class="pos-pnl" style="color:{trade.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
-                  {trade.pnlPercent >= 0 ? '+' : ''}{trade.pnlPercent.toFixed(1)}%
-                </span>
-                <button class="pos-close" on:click={() => handleClosePos(trade.id)}>CLOSE</button>
+          <!-- ALL / TRADES: Quick Trade Positions -->
+          {#if posSubTab === 'all' || posSubTab === 'trades'}
+            {#if openCount > 0}
+              <div class="pos-header">
+                <span class="pos-title">📊 TRADES</span>
+                <span class="pos-cnt">{openCount}</span>
               </div>
-            {/each}
-          {:else}
+              {#each opens as trade (trade.id)}
+                <div class="pos-row">
+                  <span class="pos-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>
+                    {trade.dir === 'LONG' ? '▲' : '▼'}
+                  </span>
+                  <div class="pos-info">
+                    <span class="pos-pair">{trade.pair}</span>
+                    <span class="pos-entry">${Math.round(trade.entry).toLocaleString()}</span>
+                  </div>
+                  <span class="pos-pnl" style="color:{trade.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                    {trade.pnlPercent >= 0 ? '+' : ''}{trade.pnlPercent.toFixed(1)}%
+                  </span>
+                  <button class="pos-close" on:click={() => handleClosePos(trade.id)}>CLOSE</button>
+                </div>
+              {/each}
+            {:else if posSubTab === 'trades'}
+              <div class="pos-empty-mini">
+                <span class="pos-empty-icon">📊</span>
+                <span class="pos-empty-txt">NO OPEN TRADES</span>
+              </div>
+            {/if}
+          {/if}
+
+          <!-- ALL / MARKETS: Polymarket Positions -->
+          {#if posSubTab === 'all' || posSubTab === 'markets'}
+            {#if $polymarketPositions.length > 0}
+              <div class="pos-header">
+                <span class="pos-title">🔮 MARKET BETS</span>
+                <span class="pos-cnt">{$polymarketPositions.length}</span>
+              </div>
+              {#each $polymarketPositions as pos (pos.id)}
+                <div class="pos-row poly-row">
+                  <span class="pos-dir" class:long={pos.direction === 'YES'} class:short={pos.direction === 'NO'}>
+                    {pos.direction === 'YES' ? '↑' : '↓'}
+                  </span>
+                  <div class="pos-info">
+                    <span class="pos-pair pos-market-q">{pos.asset.length > 40 ? pos.asset.slice(0, 40) + '…' : pos.asset}</span>
+                    <span class="pos-entry">{pos.direction} · ${pos.amountUsdc?.toFixed(0)} USDC</span>
+                  </div>
+                  <span class="pos-pnl" style="color:{(pos.pnlUsdc ?? 0) >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                    {(pos.pnlUsdc ?? 0) >= 0 ? '+' : ''}{(pos.pnlUsdc ?? 0).toFixed(2)}$
+                  </span>
+                  <span class="pos-status-badge">{pos.status}</span>
+                </div>
+              {/each}
+            {/if}
+
+            <!-- Browse Markets -->
+            {#if posSubTab === 'markets'}
+              <div class="pos-header" style="margin-top:8px">
+                <span class="pos-title">🌐 BROWSE MARKETS</span>
+              </div>
+              {#if cryptoMarkets.length > 0}
+                {#each cryptoMarkets.slice(0, 6) as market}
+                  {@const outcome = parseOutcomePrices(market.outcomePrices)}
+                  <div class="market-browse-card">
+                    <div class="mb-q">{market.question.length > 60 ? market.question.slice(0, 60) + '…' : market.question}</div>
+                    <div class="mb-odds">
+                      <span class="mb-yes">YES {outcome.yes}¢</span>
+                      <span class="mb-no">NO {outcome.no}¢</span>
+                    </div>
+                    <div class="mb-actions">
+                      <button class="mb-bet" on:click={() => { betMarket = market; }}>BET USDC</button>
+                      <a class="mb-link" href="https://polymarket.com/event/{market.slug}" target="_blank" rel="noopener noreferrer">↗</a>
+                    </div>
+                  </div>
+                {/each}
+              {:else}
+                <div class="pp-empty">Loading markets...</div>
+              {/if}
+            {/if}
+          {/if}
+
+          <!-- Empty state for ALL tab -->
+          {#if posSubTab === 'all' && openCount === 0 && $polymarketPositions.length === 0}
             <div class="pos-empty-mini">
               <span class="pos-empty-icon">📊</span>
               <span class="pos-empty-txt">NO OPEN POSITIONS</span>
             </div>
           {/if}
         </div>
+
+        <!-- Polymarket Bet Panel (slide-up) -->
+        <PolymarketBetPanel market={betMarket} onClose={() => { betMarket = null; }} />
       {/if}
     </div>
   {/if}
@@ -1084,6 +1127,52 @@
     font-family: var(--fm); font-size: 10px; font-weight: 700;
     letter-spacing: 1.5px;
   }
+
+  /* ── Position Sub-tabs ── */
+  .pos-sub-tabs { display: flex; gap: 2px; margin-bottom: 6px; }
+  .pos-sub {
+    flex: 1; padding: 5px 2px;
+    font: 700 9px/1 var(--fm); letter-spacing: 1.5px; text-align: center;
+    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+    border-radius: 4px; color: rgba(255,255,255,.4); cursor: pointer;
+    transition: all .15s;
+  }
+  .pos-sub:hover { background: rgba(255,230,0,.05); color: rgba(255,255,255,.6); }
+  .pos-sub.active { background: rgba(255,230,0,.08); color: var(--yel); border-color: rgba(255,230,0,.25); }
+
+  /* ── Polymarket position row ── */
+  .poly-row .pos-entry { font-size: 9px; color: rgba(255,255,255,.35); }
+  .pos-market-q { font-size: 10px; line-height: 1.2; }
+  .pos-status-badge {
+    font: 700 8px/1 var(--fm); padding: 2px 5px; border-radius: 3px;
+    background: rgba(255,230,0,.1); color: rgba(255,230,0,.7); letter-spacing: .5px;
+    text-transform: uppercase; flex-shrink: 0;
+  }
+
+  /* ── Market Browse Card ── */
+  .market-browse-card {
+    padding: 8px; background: rgba(139,92,246,.05);
+    border: 1px solid rgba(139,92,246,.15); border-radius: 6px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .market-browse-card:hover { border-color: rgba(139,92,246,.3); }
+  .mb-q { font: 400 10px/1.3 var(--fm); color: rgba(255,255,255,.7); }
+  .mb-odds { display: flex; gap: 8px; font: 700 10px/1 var(--fm); }
+  .mb-yes { color: #00CC88; }
+  .mb-no { color: #FF5E7A; }
+  .mb-actions { display: flex; gap: 6px; align-items: center; }
+  .mb-bet {
+    flex: 1; padding: 5px 8px; border: 1px solid rgba(255,230,0,.3);
+    border-radius: 4px; background: rgba(255,230,0,.08);
+    color: var(--yel); font: 700 9px/1 var(--fm); cursor: pointer;
+    letter-spacing: 1px; transition: all .15s;
+  }
+  .mb-bet:hover { background: rgba(255,230,0,.15); }
+  .mb-link {
+    padding: 4px 8px; font: 400 12px/1 var(--fm); color: rgba(255,255,255,.3);
+    text-decoration: none; border-radius: 4px;
+  }
+  .mb-link:hover { color: rgba(255,255,255,.6); background: rgba(255,255,255,.05); }
 
   /* ── PREDICT in Positions tab (horizontal scroll, 1 card visible) ── */
   .pp-section {
@@ -1491,4 +1580,39 @@
     transition: all .15s;
   }
   .picks-rescan:hover { background: rgba(255,230,0,.12); color: var(--yel); border-color: rgba(255,230,0,.3); }
+
+  /* Desktop resizable zones (x/y per intel section) */
+  @media (min-width: 1024px) and (pointer: fine) {
+    .rp-body:not(.chat-mode),
+    .ac-msgs,
+    .hl-scrollable,
+    .trend-list,
+    .picks-panel {
+      min-height: 140px;
+      max-height: 100%;
+      resize: vertical;
+      overflow-y: auto;
+    }
+
+    .pp-scroll {
+      width: 100%;
+      max-width: 100%;
+      min-width: 180px;
+      align-self: flex-start;
+      resize: horizontal;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+  }
+
+  @media (max-width: 1023px), (pointer: coarse) {
+    .rp-body,
+    .ac-msgs,
+    .hl-scrollable,
+    .trend-list,
+    .picks-panel,
+    .pp-scroll {
+      resize: none;
+    }
+  }
 </style>

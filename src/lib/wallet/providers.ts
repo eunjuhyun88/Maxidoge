@@ -215,7 +215,8 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
   return _coinbaseProvider;
 }
 
-async function resolveEvmProvider(key: WalletProviderKey): Promise<Eip1193Provider | null> {
+/** Exposed for EIP-712 signing and chain switching modules */
+export async function resolveEvmProvider(key: WalletProviderKey): Promise<Eip1193Provider | null> {
   if (key === 'walletconnect') {
     return getWalletConnectProvider();
   }

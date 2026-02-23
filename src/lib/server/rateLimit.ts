@@ -111,3 +111,9 @@ export const compareLimiter = createRateLimiter({ windowMs: 60_000, max: 3 });
 
 /** Opportunity scan: 12 per minute per IP (clients poll every 5min, but allow bursts) */
 export const opportunityScanLimiter = createRateLimiter({ windowMs: 60_000, max: 12 });
+
+/** Polymarket order preparation: 10 per minute per IP */
+export const polymarketOrderLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });
+
+/** Polymarket status polling: 30 per minute per IP */
+export const polymarketStatusLimiter = createRateLimiter({ windowMs: 60_000, max: 30 });
