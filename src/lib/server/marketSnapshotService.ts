@@ -17,8 +17,49 @@ import { fetchCryptoQuantData } from '$lib/server/cryptoquant';
 import { estimateExchangeNetflow } from '$lib/server/etherscan';
 import { fetchTopicSocial } from '$lib/server/lunarcrush';
 import { withTransaction } from '$lib/server/db';
+import { getCached, setCache } from '$lib/server/providers/cache';
 
 const SNAPSHOT_UNAVAILABLE_CODES = new Set(['42P01', '42703', '23503']);
+
+// ── Performance: 타임아웃 + 캐시 + 요청 병합 ───────────────
+const API_TIMEOUT_MS = 5_000;
+const SNAPSHOT_CACHE_TTL_MS = 30_000; // 30초 결과 캐시
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`[snapshot] ${label} timed out`)), API_TIMEOUT_MS)
+    ),
+  ]);
+}
+
+/** 소스별 캐시 TTL */
+const SRC_TTL = {
+  binance: 10_000,       // 10초 (가격 데이터)
+  coinalyze: 300_000,    // 5분 (rate limit 절약)
+  feargreed: 120_000,    // 2분
+  coingecko: 60_000,     // 1분
+  defillama: 120_000,    // 2분
+  yahoo: 300_000,        // 5분
+  news: 120_000,         // 2분
+  cmc: 120_000,          // 2분
+  cryptoquant: 300_000,  // 5분
+  etherscan: 120_000,    // 2분
+  lunarcrush: 120_000,   // 2분
+};
+
+function cf<T>(key: string, fetcher: () => Promise<T>, ttl: number, label: string): Promise<T> {
+  const hit = getCached<T>(key);
+  if (hit !== null) return Promise.resolve(hit);
+  return withTimeout(fetcher(), label).then(r => {
+    if (r !== null && r !== undefined) setCache(key, r, ttl);
+    return r;
+  });
+}
+
+// ── 동일 pair/timeframe 동시 요청 병합 ──
+const _inflightSnapshots = new Map<string, Promise<MarketSnapshotResult>>();
 
 type SnapshotSource = {
   source: string;
@@ -243,10 +284,41 @@ export async function collectMarketSnapshot(
   const pair = normalizePair(input.pair);
   const timeframe = normalizeTimeframe(input.timeframe);
   const persist = input.persist !== false;
-  const at = Date.now();
   const symbol = pairToSymbol(pair);
   const token = pair.split('/')[0];
+  const cqAsset = (token.toLowerCase() === 'btc' || token.toLowerCase() === 'eth')
+    ? token.toLowerCase() as 'btc' | 'eth' : 'btc';
 
+  // ── 결과 캐시 (30초 TTL) ──
+  const snapKey = `snap:${pair}:${timeframe}`;
+  const snapCached = getCached<MarketSnapshotResult>(snapKey);
+  if (snapCached) return snapCached;
+
+  // ── 동시 요청 병합 ──
+  const inflight = _inflightSnapshots.get(snapKey);
+  if (inflight) return inflight;
+
+  const snapPromise = _collectInternal(eventFetch, pair, timeframe, symbol, token, cqAsset, persist);
+  _inflightSnapshots.set(snapKey, snapPromise);
+
+  try {
+    const result = await snapPromise;
+    setCache(snapKey, result, SNAPSHOT_CACHE_TTL_MS);
+    return result;
+  } finally {
+    _inflightSnapshots.delete(snapKey);
+  }
+}
+
+async function _collectInternal(
+  eventFetch: typeof fetch,
+  pair: string, timeframe: string, symbol: string, token: string,
+  cqAsset: 'btc' | 'eth',
+  persist: boolean,
+): Promise<MarketSnapshotResult> {
+  const at = Date.now();
+
+  // ── 17개 소스 병렬 (개별 5초 타임아웃 + 소스별 캐시) ──
   const [
     klinesRes,
     klines1hRes,
@@ -266,23 +338,23 @@ export async function collectMarketSnapshot(
     ethNetflowRes,
     lunarCrushRes,
   ] = await Promise.allSettled([
-    fetchKlinesServer(symbol, timeframe, 300),
-    fetchKlinesServer(symbol, '1h', 300),
-    fetchKlinesServer(symbol, '1d', 300),
-    fetch24hrServer(symbol),
-    fetchDerivatives(eventFetch, pair, timeframe),
-    fetchFearGreed(60),
-    fetchCoinGeckoGlobal(),
-    fetchStablecoinMcap(),
-    fetchDefiLlamaStableMcap(),
-    fetchYahooSeries('DX-Y.NYB', '1mo', '1d'),
-    fetchYahooSeries('^GSPC', '1mo', '1d'),
-    fetchYahooSeries('^TNX', '1mo', '1d'),
-    fetchNews(20),
-    fetchCoinMarketCapQuote(token),
-    fetchCryptoQuantData(token.toLowerCase() === 'btc' || token.toLowerCase() === 'eth' ? token.toLowerCase() as 'btc' | 'eth' : 'btc'),
-    estimateExchangeNetflow(),
-    fetchTopicSocial(token.toLowerCase()),
+    cf(`bn:k:${symbol}:${timeframe}`, () => fetchKlinesServer(symbol, timeframe, 300), SRC_TTL.binance, 'Binance klines'),
+    cf(`bn:k:${symbol}:1h`, () => fetchKlinesServer(symbol, '1h', 300), SRC_TTL.binance, 'Binance 1h'),
+    cf(`bn:k:${symbol}:1d`, () => fetchKlinesServer(symbol, '1d', 300), SRC_TTL.binance, 'Binance 1d'),
+    cf(`bn:24h:${symbol}`, () => fetch24hrServer(symbol), SRC_TTL.binance, 'Binance 24hr'),
+    cf(`ca:deriv:${pair}:${timeframe}`, () => fetchDerivatives(eventFetch, pair, timeframe), SRC_TTL.coinalyze, 'Coinalyze Deriv'),
+    cf('fng:60', () => fetchFearGreed(60), SRC_TTL.feargreed, 'FearGreed'),
+    cf('cg:global', () => fetchCoinGeckoGlobal(), SRC_TTL.coingecko, 'CoinGecko Global'),
+    cf('cg:stable', () => fetchStablecoinMcap(), SRC_TTL.coingecko, 'CoinGecko Stable'),
+    cf('dl:stable', () => fetchDefiLlamaStableMcap(), SRC_TTL.defillama, 'DefiLlama Stable'),
+    cf('yahoo:dxy', () => fetchYahooSeries('DX-Y.NYB', '1mo', '1d'), SRC_TTL.yahoo, 'Yahoo DXY'),
+    cf('yahoo:spx', () => fetchYahooSeries('^GSPC', '1mo', '1d'), SRC_TTL.yahoo, 'Yahoo SPX'),
+    cf('yahoo:us10y', () => fetchYahooSeries('^TNX', '1mo', '1d'), SRC_TTL.yahoo, 'Yahoo US10Y'),
+    cf('news:latest', () => fetchNews(20), SRC_TTL.news, 'News RSS'),
+    cf(`cmc:${token}`, () => fetchCoinMarketCapQuote(token), SRC_TTL.cmc, 'CoinMarketCap'),
+    cf(`cq:${cqAsset}`, () => fetchCryptoQuantData(cqAsset), SRC_TTL.cryptoquant, 'CryptoQuant'),
+    cf('eth:netflow', () => estimateExchangeNetflow(), SRC_TTL.etherscan, 'Etherscan'),
+    cf(`lc:${token}`, () => fetchTopicSocial(token.toLowerCase()), SRC_TTL.lunarcrush, 'LunarCrush'),
   ]);
 
   const klines = requireKlines(klinesRes);

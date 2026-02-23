@@ -40,6 +40,47 @@ import {
 import { getCached, setCache } from './providers/cache';
 import { toBinanceInterval } from '$lib/utils/timeframe';
 
+// ── Performance: 개별 API 타임아웃 + 소스별 캐시 ──────────
+const API_TIMEOUT_MS = 5_000;
+
+/** 개별 API 호출에 5초 타임아웃 적용 */
+function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = API_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`[scanEngine] ${label} timed out (${timeoutMs}ms)`)), timeoutMs)
+    ),
+  ]);
+}
+
+// 소스별 캐시 TTL (API rate limit 고려)
+const CACHE_TTL = {
+  coinalyze: 300_000,   // 5분 (50 req/day 제한 → 보존)
+  feargreed: 120_000,   // 2분 (변동 느림)
+  coingecko: 60_000,    // 1분
+  etherscan: 120_000,   // 2분
+  yahoo: 300_000,       // 5분 (매크로 지표 변동 느림)
+  lunarcrush: 120_000,  // 2분
+  fred: 600_000,        // 10분 (일일 데이터)
+  cryptoquant: 300_000, // 5분
+};
+
+/** 캐시 우선 fetch — 캐시 히트면 API 호출 생략 */
+async function cachedFetch<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttlMs: number,
+  label: string,
+): Promise<T> {
+  const cached = getCached<T>(key);
+  if (cached !== null) return cached;
+  const result = await withTimeout(fetcher(), label, API_TIMEOUT_MS);
+  if (result !== null && result !== undefined) {
+    setCache(key, result, ttlMs);
+  }
+  return result;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Types (mirrored from warroomScan — avoids importing client code)
 // ═══════════════════════════════════════════════════════════════
@@ -491,26 +532,27 @@ async function _runServerScanInternal(pair: string, timeframe: string): Promise<
     throw new Error('Insufficient candle data for scan.');
   }
 
-  // ── Phase 2: 13 additional data sources (all parallel) ──
+  // ── Phase 2: 13 data sources (parallel, 5s timeout, 소스별 캐시) ──
+  const cqAsset = token === 'ETH' ? 'eth' : 'btc';
   const [
     oiRaw, fundingRaw, predFundingRaw, lsRaw, liqRaw,
     fngRaw, cgGlobalRaw, ethOnchainRaw,
     macroRaw, socialRaw, oiHistRaw,
     fredRaw, cqRaw,
   ] = await Promise.allSettled([
-    fetchCurrentOIServer(marketPair),
-    fetchCurrentFundingServer(marketPair),
-    fetchPredictedFundingServer(marketPair),
-    fetchLSRatioHistoryServer(marketPair, tf, 24),
-    fetchLiquidationHistoryServer(marketPair, tf, 24),
-    fetchFearGreedServer(),
-    fetchCoinGeckoGlobal(),
-    fetchEthOnchainServer(),
-    fetchMacroIndicatorsServer(),
-    fetchTopicSocial(token.toLowerCase()),
-    fetchOIHistoryServer(marketPair, tf, 24),
-    fetchFredMacroData(),
-    fetchCQServer(token === 'ETH' ? 'eth' : 'btc'),
+    cachedFetch(`ca:oi:${marketPair}`, () => fetchCurrentOIServer(marketPair), CACHE_TTL.coinalyze, 'Coinalyze OI'),
+    cachedFetch(`ca:fr:${marketPair}`, () => fetchCurrentFundingServer(marketPair), CACHE_TTL.coinalyze, 'Coinalyze FR'),
+    cachedFetch(`ca:pfr:${marketPair}`, () => fetchPredictedFundingServer(marketPair), CACHE_TTL.coinalyze, 'Coinalyze PredFR'),
+    cachedFetch(`ca:ls:${marketPair}:${tf}`, () => fetchLSRatioHistoryServer(marketPair, tf, 24), CACHE_TTL.coinalyze, 'Coinalyze LS'),
+    cachedFetch(`ca:liq:${marketPair}:${tf}`, () => fetchLiquidationHistoryServer(marketPair, tf, 24), CACHE_TTL.coinalyze, 'Coinalyze Liq'),
+    cachedFetch('fng:latest', () => fetchFearGreedServer(), CACHE_TTL.feargreed, 'FearGreed'),
+    cachedFetch('cg:global', () => fetchCoinGeckoGlobal(), CACHE_TTL.coingecko, 'CoinGecko'),
+    cachedFetch('eth:onchain', () => fetchEthOnchainServer(), CACHE_TTL.etherscan, 'Etherscan'),
+    cachedFetch('yahoo:macro', () => fetchMacroIndicatorsServer(), CACHE_TTL.yahoo, 'Yahoo Macro'),
+    cachedFetch(`lc:${token}`, () => fetchTopicSocial(token.toLowerCase()), CACHE_TTL.lunarcrush, 'LunarCrush'),
+    cachedFetch(`ca:oih:${marketPair}:${tf}`, () => fetchOIHistoryServer(marketPair, tf, 24), CACHE_TTL.coinalyze, 'Coinalyze OIHist'),
+    cachedFetch('fred:macro', () => fetchFredMacroData(), CACHE_TTL.fred, 'FRED'),
+    cachedFetch(`cq:${cqAsset}`, () => fetchCQServer(cqAsset), CACHE_TTL.cryptoquant, 'CryptoQuant'),
   ]);
 
   // ── Phase 3: Data Consolidation ──

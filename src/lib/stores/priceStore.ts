@@ -112,7 +112,7 @@ export function updatePrice(symbol: string, price: number, source: LivePriceSour
   priceStore.update(($p) => {
     const prev = $p[sym];
     if (shouldSkipRestFallback(prev, source)) return $p;
-    if (prev && prev.price === normalized && prev.source === source) return $p;
+    if (prev && prev.price === normalized) return $p;  // 가격 동일하면 소스 무관 스킵 (리렌더 방지)
 
     return {
       ...$p,
@@ -140,7 +140,7 @@ export function updatePrices(updates: Record<string, number>, source: LivePriceS
 
       const prev = $p[sym];
       if (shouldSkipRestFallback(prev, source)) continue;
-      if (prev && prev.price === normalized && prev.source === source) continue;
+      if (prev && prev.price === normalized) continue;  // 가격 동일하면 소스 무관 스킵
 
       next[sym] = { ...prev, price: normalized, ts, source };
       changed = true;
