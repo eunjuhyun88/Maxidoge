@@ -616,3 +616,32 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - 없음
 - Commit / Push: `bfbff59` — pushed to origin
 - Status: DONE
+
+---
+
+### W-20260224-021
+
+- Start (KST): 2026-02-24 01:38
+- End (KST): 2026-02-24 01:39
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 모바일 터미널 하단 네비가 중간에 표시되는 레이아웃 버그 수정
+  - 모바일 패널 리사이즈의 touch/pointer drag 지원 안정화
+  - 최소 변경으로 `src/routes/terminal/+page.svelte` 중심 수정
+- Overlap check (before work):
+  - 사용자 지적 이슈는 FE 범위(`src/routes/**/+page.svelte`)에서 해결 가능
+  - 기존 미해결 변경 중 API/서버 파일은 미수정 유지
+  - `TokenDropdown`의 대규모 변경은 롤백하여 이번 수정 범위에서 제외
+- Changes (actual):
+  - `src/routes/terminal/+page.svelte`
+    - 모바일 패널 리사이즈 핸들에 pointer drag 지원 추가 (`pointerdown` + 전역 `pointermove/up/cancel`)
+    - 리사이즈 시작/종료 GTM 이벤트 추가 (`terminal_mobile_panel_resize_start`, `terminal_mobile_panel_resize_end`)
+    - 모바일 터미널 레이아웃을 `position: absolute; inset: 0` 기반으로 고정해 하단 네비 위치 안정화
+    - 하단 네비를 `margin-top:auto + position: sticky; bottom:0`로 보정
+  - `docs/AGENT_WATCH_LOG.md`
+    - W-20260224-021 시작/완료 갱신
+- Diff vs plan:
+  - 없음
+- Commit / Push: 미실행
+- Status: DONE
