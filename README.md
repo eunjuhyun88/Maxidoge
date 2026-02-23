@@ -19,6 +19,8 @@ SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signa
 7. 한 요청(한 작업 단위)은 **하나의 atomic commit**으로 마감한다.  
    해당 요청에서 바뀐 코드/문서와 `docs/AGENT_WATCH_LOG.md` 기록을 같은 커밋에 포함한다.
 8. 작업 종료 직전에 `git status --short --branch`를 실행해 워킹트리가 clean인지 확인하고, 결과를 로그에 남긴다.
+9. push 전 워킹트리에 요청과 무관한 변경이 남아 있으면 먼저 정리한다.
+   필요 시 `git stash push -u -m "wip/<task>"`로 백업 후 push하고, 이후 `git stash pop`으로 복원한다.
 
 참고:
 - 에이전트 자동 실행 규칙 파일은 `AGENTS.md`다.

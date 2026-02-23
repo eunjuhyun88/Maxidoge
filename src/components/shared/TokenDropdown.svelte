@@ -32,10 +32,12 @@
     ai_gaming: 'AI/GAME',
     infra: 'INFRA',
   };
+  const QUICK_SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP', 'BNB', 'DOGE', 'ADA', 'CRV'] as const;
   const TOKEN_ORDER = new Map(TOKENS.map((t, idx) => [t.symbol, idx]));
 
   let open = false;
   let filter = '';
+  let showSearch = false;
   let activeTab: TabKey = 'all';
   let isMobileSheet = false;
   let panelStyle = '';
@@ -68,6 +70,9 @@
       const bi = TOKEN_ORDER.get(b.token.symbol) ?? 0;
       return ai - bi;
     });
+  $: quickRows = QUICK_SYMBOLS
+    .map((sym) => rows.find((row) => row.token.symbol === sym))
+    .filter((row): row is MarketRow => !!row);
 
   function matchTab(row: MarketRow, tab: TabKey) {
     if (tab === 'all') return true;
@@ -111,10 +116,10 @@
   async function openDropdown() {
     open = true;
     filter = '';
+    showSearch = false;
     updateViewportMode();
     await tick();
     placePanel();
-    searchEl?.focus();
     void loadTickerStats();
   }
 
@@ -128,6 +133,16 @@
       return;
     }
     void openDropdown();
+  }
+
+  async function toggleSearch() {
+    showSearch = !showSearch;
+    if (!showSearch) {
+      filter = '';
+      return;
+    }
+    await tick();
+    searchEl?.focus();
   }
 
   function selectToken(sym: string) {
@@ -280,18 +295,25 @@
           <div class="tdd-title">Market Selector</div>
           <div class="tdd-sub">Binance USDT Pairs</div>
         </div>
-        <button type="button" class="tdd-close" on:click={closeDropdown}>✕</button>
+        <div class="tdd-head-actions">
+          <button type="button" class="tdd-search-toggle" class:on={showSearch} on:click={toggleSearch}>
+            {showSearch ? 'LIST' : 'SEARCH'}
+          </button>
+          <button type="button" class="tdd-close" on:click={closeDropdown}>✕</button>
+        </div>
       </div>
 
-      <div class="tdd-search-wrap">
-        <input
-          bind:this={searchEl}
-          class="tdd-search"
-          type="text"
-          bind:value={filter}
-          placeholder="Search symbol, name, BTCUSDT..."
-        />
-      </div>
+      {#if showSearch}
+        <div class="tdd-search-wrap">
+          <input
+            bind:this={searchEl}
+            class="tdd-search"
+            type="text"
+            bind:value={filter}
+            placeholder="Type symbol or name (optional)"
+          />
+        </div>
+      {/if}
 
       <div class="tdd-tabs">
         {#each TAB_ORDER as tab}
@@ -299,6 +321,22 @@
             {TAB_LABELS[tab]}
           </button>
         {/each}
+      </div>
+
+      <div class="tdd-quick">
+        <span class="tdd-quick-label">Quick</span>
+        <div class="tdd-quick-list">
+          {#each quickRows as row}
+            <button
+              type="button"
+              class="tdd-quick-chip"
+              class:active={row.token.symbol === currentSymbol}
+              on:click={() => selectToken(row.token.symbol)}
+            >
+              {row.token.symbol}
+            </button>
+          {/each}
+        </div>
       </div>
 
       <div class="tdd-head-row">
@@ -452,6 +490,35 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.02);
   }
+  .tdd-head-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tdd-search-toggle {
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(224, 232, 244, 0.88);
+    font-family: var(--fd);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .58px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .tdd-search-toggle.on {
+    border-color: rgba(240, 185, 11, 0.7);
+    background: rgba(240, 185, 11, 0.16);
+    color: #ffe29a;
+  }
+  .tdd-search-toggle:hover {
+    border-color: rgba(240, 185, 11, 0.62);
+    background: rgba(240, 185, 11, 0.13);
+    color: #fff;
+  }
   .tdd-title {
     color: #f6f8fb;
     font-family: var(--fd);
@@ -517,6 +584,67 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
+  }
+
+  .tdd-quick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    min-width: 0;
+  }
+  .tdd-quick-label {
+    flex: 0 0 auto;
+    color: rgba(168, 180, 197, 0.72);
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .42px;
+    text-transform: uppercase;
+  }
+  .tdd-quick-list {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 1px;
+  }
+  .tdd-quick-list::-webkit-scrollbar {
+    height: 4px;
+  }
+  .tdd-quick-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+  }
+  .tdd-quick-chip {
+    flex: 0 0 auto;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(222, 231, 244, 0.9);
+    font-family: var(--fd);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .58px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .tdd-quick-chip:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+  .tdd-quick-chip.active {
+    border-color: rgba(240, 185, 11, 0.72);
+    background: rgba(240, 185, 11, 0.16);
+    color: #ffe29a;
   }
   .tdd-tabs::-webkit-scrollbar {
     height: 4px;
@@ -686,6 +814,13 @@
   }
 
   @media (max-width: 640px) {
+    .tdd-head-actions {
+      gap: 5px;
+    }
+    .tdd-search-toggle {
+      padding: 0 7px;
+      font-size: 7px;
+    }
     .tdd-head-row,
     .tdd-row {
       grid-template-columns: minmax(0, 1fr) 94px 64px;

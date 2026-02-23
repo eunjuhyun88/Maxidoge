@@ -902,3 +902,90 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - 없음
 - Commit / Push: 미실행
 - Status: DONE
+
+### W-20260224-046
+
+- Start (KST): 2026-02-24 06:42
+- Agent: 2-FE
+- Branch: `main`
+- Scope (planned):
+  - 푸시 시 워킹트리 정리 절차(stash 포함)를 README SSOT 규칙에 명시
+- Overlap check (before work):
+  - 현재 워킹트리 clean 상태 확인 후 진행
+- Status: IN_PROGRESS
+
+### W-20260224-046 (finish addendum)
+
+- End (KST): 2026-02-24 06:43
+- Agent: 2-FE
+- Branch: `main`
+- Changes (actual):
+  - `/Users/ej/Downloads/maxi-doge-main/README.md`
+    - SSOT 규칙에 push 전 워킹트리 정리 규칙 추가
+    - 무관 변경은 `git stash push -u -m "wip/<task>"`로 백업 후 진행하도록 명시
+- Validation:
+  - `npm run check` (maxi-doge-main): 통과
+  - `npm run build` (maxi-doge-main): 통과
+- Commit hash: `N/A` (요청에 따라 커밋/푸시 보류)
+- Merge hash: `N/A`
+- Push status: `N/A`
+- Status: DONE
+
+### W-20260224-047
+
+- Start (KST): 2026-02-24 07:42
+- Agent: 2-FE
+- Branch: `main`
+- Scope (planned):
+  - dev 서버 재실행 및 접속 확인
+- Overlap check (before work):
+  - 기존 변경 유지: `README.md`, `docs/AGENT_WATCH_LOG.md`
+- Status: IN_PROGRESS
+
+### W-20260224-047 (finish addendum)
+
+- End (KST): 2026-02-24 08:00
+- Agent: 2-FE
+- Branch: main
+- Changes (actual):
+  - dev server 단일 인스턴스 재기동 확인 (http://localhost:5173)
+  - 차트 변경 복원 작업 준비를 위한 상태 점검(stash/worktree)
+- Validation:
+  - lsof -iTCP:5173 -sTCP:LISTEN 단일 node 리스너 확인
+- Commit hash: N/A (다음 커밋에 포함)
+- Merge hash: N/A
+- Push status: N/A
+- Status: DONE
+
+### W-20260224-048
+
+- Start (KST): 2026-02-24 08:00
+- Agent: 2-FE
+- Branch: main
+- Scope (planned):
+  - 차트 스타일/구성 복원(stash 기반)
+  - TradingView 파란 계열 프리셋 고정
+- Overlap check (before work):
+  - 기존 변경 유지: README.md, docs/AGENT_WATCH_LOG.md
+  - 차트 관련 stash 존재 확인
+- Status: IN_PROGRESS
+
+### W-20260224-048 (finish addendum)
+
+- End (KST): 2026-02-24 08:00
+- Agent: 2-FE
+- Branch: main
+- Changes (actual):
+  - /Users/ej/Downloads/maxi-doge-main/src/components/arena/ChartPanel.svelte
+  - /Users/ej/Downloads/maxi-doge-main/src/components/shared/TokenDropdown.svelte
+  - /Users/ej/Downloads/maxi-doge-main/src/components/terminal/IntelPanel.svelte
+  - /Users/ej/Downloads/maxi-doge-main/src/routes/terminal/+page.svelte
+  - stash@{0} 기반 chart/terminal 변경 복원
+  - terminal route의 chart 전역 그린 오버라이드 제거(TradingView 파란 톤 우선)
+- Validation:
+  - npm run check 통과
+  - npm run build 통과
+- Commit hash: PENDING (바로 다음 로컬 커밋)
+- Merge hash: N/A
+- Push status: SKIPPED (사용자 지시)
+- Status: DONE
