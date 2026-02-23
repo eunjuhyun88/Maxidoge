@@ -251,7 +251,9 @@ export function updateTradePrice(tradeId: string, currentPrice: number) {
   }));
 }
 
-let _lastPriceSnapshot = '';
+let _lastLocalPriceSnapshot = '';
+let _lastOpenTradeHash = '';
+let _lastServerSyncSnapshot = '';
 let _priceSyncTimer: ReturnType<typeof setTimeout> | null = null;
 export function updateAllPrices(
   priceInput: PriceLikeMap,
@@ -259,17 +261,19 @@ export function updateAllPrices(
 ) {
   const syncServer = options.syncServer ?? true;
   const prices = toNumericPriceMap(priceInput);
-
-  // Skip if prices haven't changed
   const snap = buildPriceMapHash(prices);
-  if (snap === _lastPriceSnapshot) return;
-  _lastPriceSnapshot = snap;
 
   let hasOpenTrades = false;
+  let openTradeHash = '';
   quickTradeStore.update(s => {
-    // Skip if no open trades
-    hasOpenTrades = s.trades.some(t => t.status === 'open');
+    const openIds = s.trades.filter((t) => t.status === 'open').map((t) => t.id);
+    hasOpenTrades = openIds.length > 0;
+    openTradeHash = openIds.join('|');
     if (!hasOpenTrades) return s;
+
+    // Skip only when both prices and open-trade set are unchanged.
+    // This prevents missing updates when a new trade opens at the same price snapshot.
+    if (snap === _lastLocalPriceSnapshot && openTradeHash === _lastOpenTradeHash) return s;
 
     let changed = false;
     const trades = s.trades.map(t => {
@@ -286,10 +290,21 @@ export function updateAllPrices(
     return changed ? { ...s, trades } : s;
   });
 
+  _lastLocalPriceSnapshot = snap;
+  _lastOpenTradeHash = openTradeHash;
+
   if (syncServer && hasOpenTrades && typeof window !== 'undefined') {
+    const serverSyncHash = `${snap}::${openTradeHash}`;
+    if (serverSyncHash === _lastServerSyncSnapshot) return;
+    _lastServerSyncSnapshot = serverSyncHash;
+
+    const payload = { ...prices };
     if (_priceSyncTimer) clearTimeout(_priceSyncTimer);
     _priceSyncTimer = setTimeout(() => {
-      void updateQuickTradePricesApi({ prices });
+      void updateQuickTradePricesApi({ prices: payload }).catch(() => {
+        // allow retry on next sync tick if request failed
+        _lastServerSyncSnapshot = '';
+      });
     }, PRICE_SYNC_DEBOUNCE_MS);
   }
 }
