@@ -2,6 +2,18 @@
 // MAXI⚡DOGE — Agent Engine v3 Core Types
 // ═══════════════════════════════════════════════════════════════
 
+// ─── Market Data (shared between client & server) ────────────
+
+/** Binance OHLCV kline — canonical type used across engine, server, and client. */
+export interface BinanceKline {
+  time: number;       // Open time (seconds for LightweightCharts)
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 // ─── Agent Pool ──────────────────────────────────────────────
 
 export const AGENT_IDS = [

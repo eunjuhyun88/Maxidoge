@@ -21,9 +21,9 @@ import type {
   AgentOutput,
   MatchPrediction,
   MarketRegime,
+  BinanceKline,
 } from './types';
 import type { MarketContext } from './factorEngine';
-import type { BinanceKline } from '$lib/api/binance';
 import { calcATR } from './indicators';
 
 // ─── ATR from Klines ────────────────────────────────────────

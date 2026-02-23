@@ -5,22 +5,15 @@
 
 import { getCached, setCache } from './providers/cache';
 import { toBinanceInterval } from '$lib/utils/timeframe';
+import type { BinanceKline } from '$lib/engine/types';
+
+// Re-export for convenience (consumers can import from here or from engine/types)
+export type { BinanceKline } from '$lib/engine/types';
 
 const BASE = 'https://api.binance.com';
 const FETCH_TIMEOUT = 8_000;
 const KLINE_CACHE_TTL = 60_000;    // 1min — klines change fast
 const TICKER_CACHE_TTL = 30_000;   // 30s
-
-// ─── Shared types (defined locally to avoid client dependency) ──
-
-export interface BinanceKline {
-  time: number;       // Open time (seconds for LWC)
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
 
 // ─── Klines ──────────────────────────────────────────────────
 

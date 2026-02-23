@@ -11,14 +11,8 @@ const DATA_BASE = 'https://data-api.binance.vision';
 const FETCH_TIMEOUT = 8000; // 8s timeout for all REST calls
 
 // ─── Types ───────────────────────────────────────────────────
-export interface BinanceKline {
-  time: number;       // Open time (seconds for LWC)
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
+// BinanceKline is canonical in engine/types.ts — re-export for convenience
+export type { BinanceKline } from '$lib/engine/types';
 
 export interface BinanceTicker {
   symbol: string;

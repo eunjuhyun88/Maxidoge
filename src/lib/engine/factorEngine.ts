@@ -11,8 +11,7 @@
 //
 // 데이터 없을 시 value: 0, detail: 'Data unavailable' 반환.
 
-import type { FactorResult, TrendAnalysis, DivergenceSignal } from './types';
-import type { BinanceKline } from '$lib/api/binance';
+import type { FactorResult, TrendAnalysis, DivergenceSignal, BinanceKline } from './types';
 import { calcSMA, calcEMA, calcRSI, calcATR, calcOBV, calcMACD, calcCVD, calcBollingerBands } from './indicators';
 import { analyzeTrend, detectDivergence, analyzeMultiTF } from './trend';
 
