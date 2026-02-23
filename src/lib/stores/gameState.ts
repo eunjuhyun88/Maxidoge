@@ -6,7 +6,7 @@ import { writable, derived } from 'svelte/store';
 import type { CanonicalTimeframe } from '$lib/utils/timeframe';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
-import { getLivePriceSnapshot, livePrice } from './priceStore';
+import { getLivePriceSnapshot } from './priceStore';
 
 export type Phase = 'DRAFT' | 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE' | 'RESULT';
 export type ViewMode = 'arena' | 'terminal' | 'passport';
@@ -170,35 +170,8 @@ function loadState(): GameState {
 
 export const gameState = writable<GameState>(loadState());
 
-// S-03 bridge: keep legacy gameState.prices synced from canonical livePrice.
-let _livePriceSyncStop: (() => void) | null = null;
-if (typeof window !== 'undefined' && !_livePriceSyncStop) {
-  let _lastHash = '';
-  _livePriceSyncStop = livePrice.subscribe((snapshot) => {
-    const btc = snapshot.BTC?.price;
-    const eth = snapshot.ETH?.price;
-    const sol = snapshot.SOL?.price;
-    const hash = `${btc ?? '-'}|${eth ?? '-'}|${sol ?? '-'}`;
-    if (hash === _lastHash) return;
-    _lastHash = hash;
-
-    gameState.update((s) => {
-      const nextBtc = btc ?? s.prices.BTC;
-      const nextEth = eth ?? s.prices.ETH;
-      const nextSol = sol ?? s.prices.SOL;
-      if (nextBtc === s.prices.BTC && nextEth === s.prices.ETH && nextSol === s.prices.SOL) return s;
-
-      return {
-        ...s,
-        prices: {
-          BTC: nextBtc,
-          ETH: nextEth,
-          SOL: nextSol,
-        },
-      };
-    });
-  });
-}
+// S-03 이후 가격 동기화는 layout/chart 측 경로에서 수행한다.
+// gameState.prices는 레거시 호환 필드로 유지한다.
 
 // Auto-save persistent fields to localStorage (debounced — prices excluded intentionally)
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -248,12 +221,17 @@ export function setView(view: ViewMode) {
 export function updatePrices() {
   const snap = getLivePriceSnapshot(['BTC', 'ETH', 'SOL']);
   gameState.update(s => {
+    const nextBtc = snap.BTC?.price ?? s.prices.BTC;
+    const nextEth = snap.ETH?.price ?? s.prices.ETH;
+    const nextSol = snap.SOL?.price ?? s.prices.SOL;
+    if (nextBtc === s.prices.BTC && nextEth === s.prices.ETH && nextSol === s.prices.SOL) return s;
+
     return {
       ...s,
       prices: {
-        BTC: snap.BTC?.price ?? s.prices.BTC,
-        ETH: snap.ETH?.price ?? s.prices.ETH,
-        SOL: snap.SOL?.price ?? s.prices.SOL
+        BTC: nextBtc,
+        ETH: nextEth,
+        SOL: nextSol
       }
     };
   });

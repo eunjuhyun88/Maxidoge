@@ -170,46 +170,54 @@ function mergeBadges(existing: Badge[], remoteBadges: unknown[]): Badge[] {
 }
 
 let _profileHydrated = false;
+let _profileHydratePromise: Promise<void> | null = null;
 export async function hydrateUserProfile(force = false) {
   if (typeof window === 'undefined') return;
   if (_profileHydrated && !force) return;
+  if (_profileHydratePromise) return _profileHydratePromise;
 
-  const [profile, passport] = await Promise.all([fetchProfileApi(), fetchPassportApi()]);
-  if (!profile && !passport) return;
+  _profileHydratePromise = (async () => {
+    const [profile, passport] = await Promise.all([fetchProfileApi(), fetchPassportApi()]);
+    if (!profile && !passport) return;
 
-  userProfileStore.update((p) => {
-    const nextStats = {
-      ...p.stats,
-      winRate: Number(passport?.winRate ?? p.stats.winRate),
-      totalMatches: Number(passport?.totalMatches ?? profile?.stats?.totalMatches ?? p.stats.totalMatches),
-      totalPnL: Number(passport?.totalPnl ?? profile?.stats?.totalPnl ?? p.stats.totalPnL),
-      streak: Number(passport?.streak ?? profile?.stats?.streak ?? p.stats.streak),
-      bestStreak: Number(passport?.bestStreak ?? profile?.stats?.bestStreak ?? p.stats.bestStreak),
-      trackedSignals: Number(passport?.trackedSignals ?? p.stats.trackedSignals),
-      directionAccuracy: Number(passport?.winRate ?? p.stats.directionAccuracy),
-    };
+    userProfileStore.update((p) => {
+      const nextStats = {
+        ...p.stats,
+        winRate: Number(passport?.winRate ?? p.stats.winRate),
+        totalMatches: Number(passport?.totalMatches ?? profile?.stats?.totalMatches ?? p.stats.totalMatches),
+        totalPnL: Number(passport?.totalPnl ?? profile?.stats?.totalPnl ?? p.stats.totalPnL),
+        streak: Number(passport?.streak ?? profile?.stats?.streak ?? p.stats.streak),
+        bestStreak: Number(passport?.bestStreak ?? profile?.stats?.bestStreak ?? p.stats.bestStreak),
+        trackedSignals: Number(passport?.trackedSignals ?? p.stats.trackedSignals),
+        directionAccuracy: Number(passport?.winRate ?? p.stats.directionAccuracy),
+      };
 
-    const nextTier = normalizeDisplayTier(passport?.tier || profile?.stats?.displayTier || p.tier);
-    const nextProfile: UserProfile = {
-      ...p,
-      address: profile?.walletAddress ?? p.address,
-      username: profile?.nickname || p.username,
-      tier: nextTier,
-      avatar: profile?.avatar || p.avatar,
-      stats: nextStats,
-      joinedAt: Number(profile?.createdAt ?? p.joinedAt),
-    };
+      const nextTier = normalizeDisplayTier(passport?.tier || profile?.stats?.displayTier || p.tier);
+      const nextProfile: UserProfile = {
+        ...p,
+        address: profile?.walletAddress ?? p.address,
+        username: profile?.nickname || p.username,
+        tier: nextTier,
+        avatar: profile?.avatar || p.avatar,
+        stats: nextStats,
+        joinedAt: Number(profile?.createdAt ?? p.joinedAt),
+      };
 
-    nextProfile.badges = mergeBadges(nextProfile.badges, passport?.badges ?? profile?.stats?.badges ?? []);
-    return nextProfile;
-  });
+      nextProfile.badges = mergeBadges(nextProfile.badges, passport?.badges ?? profile?.stats?.badges ?? []);
+      return nextProfile;
+    });
 
-  _profileHydrated = true;
+    _profileHydrated = true;
+  })();
+
+  try {
+    await _profileHydratePromise;
+  } finally {
+    _profileHydratePromise = null;
+  }
 }
 
-if (typeof window !== 'undefined') {
-  void hydrateUserProfile();
-}
+// 자동 hydration은 hydrateDomainStores() 단일 진입점에서 수행한다.
 
 // ═══ Auto-sync from matchHistoryStore ═══
 matchHistoryStore.subscribe($mh => {
