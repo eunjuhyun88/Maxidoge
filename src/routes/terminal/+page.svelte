@@ -17,6 +17,7 @@
   import { updateTrackedPrices } from '$lib/stores/trackedSignalStore';
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
+  import { alertEngine } from '$lib/services/alertEngine';
   import { onMount, onDestroy } from 'svelte';
 
   // ── Panel resize state ──
@@ -212,6 +213,9 @@
       updateAllPrices(prices, { syncServer: true });
     }, 30000);
 
+    // 3) Background alert engine — scans every 5min, fires notifications
+    alertEngine.start();
+
     const params = new URLSearchParams(window.location.search);
     if (params.get('copyTrade') === '1') {
       const pair = params.get('pair') || 'BTC/USDT';
@@ -254,6 +258,7 @@
   onDestroy(() => {
     if (priceUiSync) clearInterval(priceUiSync);
     if (pricePersistSync) clearInterval(pricePersistSync);
+    alertEngine.stop();
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', handleResize);
     }
@@ -987,11 +992,16 @@
     min-height: 0;
     overflow: hidden;
     padding: 10px 10px 8px;
+    display: flex;
+    flex-direction: column;
   }
   .mob-panel-wrap,
   .mob-chart-section {
     height: 100%;
     min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
     border-radius: 12px;
     border: 1px solid rgba(232, 150, 125, 0.16);
     overflow: hidden;
@@ -999,9 +1009,12 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
   }
   .mob-chart-area {
-    flex: 1;
-    min-height: 220px;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .mob-bottom-nav {
     display: grid;
@@ -1339,6 +1352,13 @@
     border-radius: 12px;
     overflow: hidden;
   }
+  .terminal-mobile :global(.chart-wrapper) {
+    height: 100%;
+    min-height: 0;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-container) {
+    min-height: 180px;
+  }
   .terminal-mobile :global(.war-room .wr-header) {
     height: 38px;
     padding: 0 12px;
@@ -1492,6 +1512,10 @@
   .terminal-mobile :global(.chart-wrapper .indicator-strip) {
     padding: 6px 8px;
     gap: 5px;
+    max-height: 68px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
   }
   .terminal-mobile :global(.chart-wrapper .ind-chip),
   .terminal-mobile :global(.chart-wrapper .legend-chip),
@@ -1512,6 +1536,27 @@
     }
     .term-stars {
       opacity: 0.28;
+    }
+  }
+
+  @media (max-width: 768px) and (max-height: 760px) {
+    .mob-topbar {
+      padding: 8px 10px 6px;
+    }
+    .mob-topline {
+      margin-bottom: 6px;
+    }
+    .mob-desc {
+      display: none;
+    }
+    .mob-content {
+      padding: 8px;
+    }
+    .mob-bottom-nav {
+      padding: 6px 8px 2px;
+    }
+    .mob-nav-btn {
+      min-height: 44px;
     }
   }
 </style>

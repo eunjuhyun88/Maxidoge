@@ -353,4 +353,57 @@
     filter: grayscale(1);
   }
   .settings-btn:hover { opacity: 0.8; filter: none; }
+
+  /* Mobile/tablet: prevent header information from clipping */
+  @media (max-width: 900px) {
+    #nav {
+      padding: 0 8px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    #nav::-webkit-scrollbar { display: none; }
+
+    .nav-back {
+      font-size: 11px;
+      padding: 2px 6px;
+      margin-right: 4px;
+    }
+    .nav-logo {
+      font-size: 10px;
+      letter-spacing: 0.8px;
+    }
+    .nav-sep {
+      margin: 0 5px;
+      height: 14px;
+    }
+    .selected-ticker { gap: 4px; }
+    .st-pair { display: none; }
+    .st-price { font-size: 10px; }
+
+    .nav-tab {
+      font-size: 7px;
+      padding: 0 6px;
+      letter-spacing: 0.8px;
+      gap: 3px;
+    }
+    .tab-icon { display: none; }
+
+    .score-badge { display: none; }
+    .settings-btn { display: none; }
+
+    .wallet-btn {
+      font-size: 8px;
+      padding: 3px 8px;
+      white-space: nowrap;
+      max-width: 96px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .wallet-btn.connected {
+      font-size: 7px;
+      padding: 3px 7px;
+    }
+  }
 </style>
