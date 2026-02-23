@@ -170,7 +170,6 @@
   .api-info { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .api-badge { font-size: 9px; color: #ffe600; font-weight: 700; }
   .api-status { font-size: 7px; color: #00ff88; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(0,255,136,.1); }
-  .api-endpoints { }
   .api-ep { font-size: 7px; color: #555; font-family: var(--fm); margin: 2px 0; }
 
   .reset-btn {

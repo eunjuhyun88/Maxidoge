@@ -5,6 +5,7 @@
   import { AGDEFS, SOURCES } from '$lib/data/agents';
   import { sfx } from '$lib/audio/sfx';
   import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_GATHER, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, DOGE_VOTE_LONG, DOGE_WORDS, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
+  import { normalizeAgentId } from '$lib/engine/agents';
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, resetPhaseInit, startAnalysisFromDraft } from '$lib/engine/gameLoop';
   import { calculateLP, determineConsensus } from '$lib/engine/scoring';
   import Lobby from '../../components/arena/Lobby.svelte';
@@ -23,6 +24,7 @@
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket } from '$lib/api/arenaApi';
   import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
+  import type { DraftSelection } from '$lib/engine/types';
 
   $: walletOk = $isWalletConnected;
 
@@ -80,9 +82,10 @@
 
       // Build draft from selected agents (equal weight for now)
       const agentCount = currentState.selectedAgents.length;
+      if (agentCount <= 0) throw new Error('No agents selected for draft');
       const weight = Math.round(100 / agentCount);
-      const draft = currentState.selectedAgents.map((agentId, i) => ({
-        agentId,
+      const draft: DraftSelection[] = currentState.selectedAgents.map((agentId, i) => ({
+        agentId: normalizeAgentId(agentId),
         specId: 'base',
         weight: i === agentCount - 1 ? 100 - weight * (agentCount - 1) : weight,
       }));
@@ -1160,7 +1163,7 @@
         {/if}
       </button>
       <div class="atb-phase-track">
-        <div class="atb-phase" class:active={state.phase === 'DRAFT'} class:done={['ANALYSIS','HYPOTHESIS','BATTLE','RESULT'].includes(state.phase)}>
+        <div class="atb-phase done">
           <span class="atp-dot"></span><span class="atp-label">DRAFT</span>
         </div>
         <div class="atb-connector"></div>

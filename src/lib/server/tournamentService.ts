@@ -40,6 +40,34 @@ export interface TournamentBracketResult {
   matches: TournamentBracketMatch[];
 }
 
+type ActiveTournamentRow = {
+  tournament_id: string;
+  type: TournamentType;
+  pair: string;
+  status: TournamentStatus;
+  max_players: number;
+  registered_players: string;
+  entry_fee_lp: number;
+  start_at: string;
+};
+
+type TournamentBracketRow = {
+  round: number;
+  match_index: number;
+  user_a_id: string | null;
+  user_a_name: string | null;
+  user_b_id: string | null;
+  user_b_name: string | null;
+  winner_id: string | null;
+  match_id: string | null;
+};
+
+type TournamentRegistrationRow = {
+  user_id: string;
+  nickname: string | null;
+  seed: number | null;
+};
+
 const TABLE_UNAVAILABLE = new Set(['42P01', '42703', '23503']);
 function isTableError(err: any): boolean {
   const code = typeof err?.code === 'string' ? err.code : '';
@@ -209,16 +237,7 @@ function getTournamentBracketMemory(tournamentId: string): TournamentBracketResu
 
 export async function listActiveTournaments(limit = 20): Promise<TournamentActiveRecord[]> {
   try {
-    const res = await query<{
-      tournament_id: string;
-      type: TournamentType;
-      pair: string;
-      status: TournamentStatus;
-      max_players: number;
-      registered_players: string;
-      entry_fee_lp: number;
-      start_at: string;
-    }>(
+    const res = await query<ActiveTournamentRow>(
       `SELECT
          t.id AS tournament_id,
          t.type,
@@ -238,7 +257,7 @@ export async function listActiveTournaments(limit = 20): Promise<TournamentActiv
       [limit]
     );
 
-    return res.rows.map((row) => ({
+    return res.rows.map((row: ActiveTournamentRow) => ({
       tournamentId: row.tournament_id,
       type: row.type,
       pair: row.pair,
@@ -351,16 +370,7 @@ export async function registerTournament(userId: string, tournamentId: string): 
 
 export async function getTournamentBracket(tournamentId: string): Promise<TournamentBracketResult | null> {
   try {
-    const rows = await query<{
-      round: number;
-      match_index: number;
-      user_a_id: string | null;
-      user_a_name: string | null;
-      user_b_id: string | null;
-      user_b_name: string | null;
-      winner_id: string | null;
-      match_id: string | null;
-    }>(
+    const rows = await query<TournamentBracketRow>(
       `SELECT
          b.round,
          b.match_index,
@@ -379,16 +389,19 @@ export async function getTournamentBracket(tournamentId: string): Promise<Tourna
     );
 
     if (rows.rowCount && rows.rowCount > 0) {
-      const maxRound = rows.rows.reduce((m, r) => Math.max(m, Number(r.round || 1)), 1);
-      const activeRound = rows.rows.find((r) => !r.winner_id)?.round ?? maxRound;
-      const matches = rows.rows
-        .filter((r) => r.round === activeRound)
-        .map((r) => ({
-          matchIndex: Number(r.match_index),
-          userA: r.user_a_id ? { userId: r.user_a_id, nickname: r.user_a_name || `@${shortName(r.user_a_id)}` } : null,
-          userB: r.user_b_id ? { userId: r.user_b_id, nickname: r.user_b_name || `@${shortName(r.user_b_id)}` } : null,
-          winnerId: r.winner_id,
-          matchId: r.match_id,
+      const bracketRows: TournamentBracketRow[] = rows.rows;
+      const maxRound = bracketRows.reduce((maxRoundValue: number, row: TournamentBracketRow) => {
+        return Math.max(maxRoundValue, Number(row.round || 1));
+      }, 1);
+      const activeRound = bracketRows.find((row: TournamentBracketRow) => !row.winner_id)?.round ?? maxRound;
+      const matches = bracketRows
+        .filter((row: TournamentBracketRow) => row.round === activeRound)
+        .map((row: TournamentBracketRow) => ({
+          matchIndex: Number(row.match_index),
+          userA: row.user_a_id ? { userId: row.user_a_id, nickname: row.user_a_name || `@${shortName(row.user_a_id)}` } : null,
+          userB: row.user_b_id ? { userId: row.user_b_id, nickname: row.user_b_name || `@${shortName(row.user_b_id)}` } : null,
+          winnerId: row.winner_id,
+          matchId: row.match_id,
         }));
 
       return {
@@ -398,7 +411,7 @@ export async function getTournamentBracket(tournamentId: string): Promise<Tourna
       };
     }
 
-    const regRows = await query<{ user_id: string; nickname: string | null; seed: number | null }>(
+    const regRows = await query<TournamentRegistrationRow>(
       `SELECT r.user_id, u.nickname, r.seed
        FROM tournament_registrations r
        LEFT JOIN users u ON u.id = r.user_id
@@ -416,7 +429,7 @@ export async function getTournamentBracket(tournamentId: string): Promise<Tourna
       return { tournamentId, round: 1, matches: [] };
     }
 
-    const users: TournamentSide[] = regRows.rows.map((row) => ({
+    const users: TournamentSide[] = regRows.rows.map((row: TournamentRegistrationRow) => ({
       userId: row.user_id,
       nickname: row.nickname || `@${shortName(row.user_id)}`,
     }));

@@ -85,7 +85,7 @@ async function enrichWithSocial(coins: CMCTrendingCoin[]): Promise<TrendingCoin[
     return {
       ...c,
       sentiment: social?.sentiment ?? null,
-      socialVolume: social?.interactions ?? null,
+      socialVolume: social?.interactions24h ?? null,
       galaxyScore: social?.galaxyScore ?? null,
     };
   });

@@ -51,7 +51,7 @@ export async function fetchFearGreed(limit = 30): Promise<FearGreedSnapshot> {
   try {
     const url = `${FNG_ENDPOINT}?limit=${bounded}`;
     const payload = await fetchJson(url);
-    const listRaw = Array.isArray(payload?.data) ? payload.data : [];
+    const listRaw: unknown[] = Array.isArray(payload?.data) ? payload.data : [];
     const points = listRaw.map(toPoint).filter((row): row is FearGreedPoint => row !== null);
     const result: FearGreedSnapshot = {
       current: points[0] ?? null,
