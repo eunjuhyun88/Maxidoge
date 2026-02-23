@@ -13,7 +13,8 @@
     : 'Loading market data...';
   import { gameState } from '$lib/stores/gameState';
   import { livePrices } from '$lib/stores/priceStore';
-  import { hydrateQuickTrades } from '$lib/stores/quickTradeStore';
+  import { hydrateQuickTrades, openTradeCount } from '$lib/stores/quickTradeStore';
+  import { activeSignalCount } from '$lib/stores/trackedSignalStore';
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { alertEngine } from '$lib/services/alertEngine';
@@ -24,6 +25,8 @@
   let rightW = 300;      // Intel Panel width
   let containerEl: HTMLDivElement;
   let windowWidth = 1200;
+  let viewportHeight = 0;
+  $: terminalShellStyle = viewportHeight > 0 ? `--term-vh: ${viewportHeight}px;` : '';
 
   const MIN_LEFT = 200;
   const MAX_LEFT = 450;
@@ -80,6 +83,7 @@
   };
   let mobileTab: MobileTab = 'chart';
   let mobileViewTracked = false;
+  let mobileNavTracked = false;
   type MobilePanelSize = { widthPct: number; heightPct: number };
   const MOBILE_PANEL_MIN_W = 72;
   const MOBILE_PANEL_MAX_W = 100;
@@ -152,9 +156,12 @@
 
   function setMobileTab(tab: MobileTab) {
     if (mobileTab === tab) return;
+    const fromTab = mobileTab;
     mobileTab = tab;
     gtmEvent('terminal_mobile_tab_change', {
       tab,
+      from_tab: fromTab,
+      source: 'bottom-nav',
       pair: $gameState.pair,
       timeframe: $gameState.timeframe,
     });
@@ -169,6 +176,15 @@
     });
   }
   $: if (!isMobile && mobileViewTracked) mobileViewTracked = false;
+  $: if (isMobile && !mobileNavTracked) {
+    mobileNavTracked = true;
+    gtmEvent('terminal_mobile_nav_impression', {
+      tab: mobileTab,
+      pair: $gameState.pair,
+      timeframe: $gameState.timeframe,
+    });
+  }
+  $: if (!isMobile && mobileNavTracked) mobileNavTracked = false;
 
   function startDrag(target: DragTarget, e: MouseEvent) {
     if (isMobile || isTablet) return;
@@ -267,6 +283,7 @@
 
   function handleResize() {
     windowWidth = window.innerWidth;
+    viewportHeight = window.innerHeight;
   }
 
   async function fetchLiveTicker() {
@@ -306,6 +323,7 @@
 
   onMount(() => {
     windowWidth = window.innerWidth;
+    viewportHeight = window.innerHeight;
     window.addEventListener('resize', handleResize);
 
     // ── Hydrate quick trades (터미널 페이지에서만 호출) ──
@@ -366,6 +384,8 @@
   // Selected pair display
   $: pair = $gameState.pair || 'BTC/USDT';
   $: mobileMeta = MOBILE_TAB_META[mobileTab];
+  $: mobileOpenTrades = $openTradeCount;
+  $: mobileTrackedSignals = $activeSignalCount;
 
   function onTokenSelect(e: CustomEvent<{ pair: string }>) {
     gameState.update(s => ({ ...s, pair: e.detail.pair }));
@@ -403,8 +423,28 @@
       toggleLeft();
     }
     if (isMobile && mobileTab !== 'warroom') {
+      gtmEvent('terminal_mobile_tab_auto_switch', {
+        from_tab: mobileTab,
+        to_tab: 'warroom',
+        reason: 'scan_request',
+      });
       setMobileTab('warroom');
     }
+  }
+
+  function triggerMobileQuickScan() {
+    gtmEvent('terminal_mobile_quick_scan_click', {
+      tab: mobileTab,
+      pair: $gameState.pair,
+      timeframe: $gameState.timeframe,
+    });
+    handleChartScanRequest(new CustomEvent('scanrequest', {
+      detail: {
+        source: 'mobile-quick-action',
+        pair: $gameState.pair,
+        timeframe: $gameState.timeframe,
+      },
+    }));
   }
 
   $: if (pendingChartScan && tryTriggerWarRoomScan()) {
@@ -528,7 +568,7 @@
   }
 </script>
 
-<div class="terminal-shell">
+<div class="terminal-shell" style={terminalShellStyle}>
   <div class="term-stars" aria-hidden="true"></div>
   <div class="term-stars term-stars-soft" aria-hidden="true"></div>
   <div class="term-grain" aria-hidden="true"></div>
@@ -578,26 +618,37 @@
           ></button>
         </div>
       {:else if mobileTab === 'chart'}
-        <div class="mob-chart-section mob-panel-resizable" style={getMobilePanelStyle('chart')}>
-          <div class="mob-chart-area">
-            <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
+        <div class="mob-chart-stack">
+          <div class="mob-chart-section mob-panel-resizable" style={getMobilePanelStyle('chart')}>
+            <div class="mob-chart-area">
+              <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
+            </div>
+            <button
+              type="button"
+              class="mob-resize-handle mob-resize-handle-x"
+              title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+              aria-label="Resize chart panel width with scroll"
+              on:wheel={(e) => resizeMobilePanelByWheel('chart', 'x', e)}
+              on:dblclick={() => resetMobilePanelSize('chart')}
+            ></button>
+            <button
+              type="button"
+              class="mob-resize-handle mob-resize-handle-y"
+              title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+              aria-label="Resize chart panel height with scroll"
+              on:wheel={(e) => resizeMobilePanelByWheel('chart', 'y', e)}
+              on:dblclick={() => resetMobilePanelSize('chart')}
+            ></button>
           </div>
-          <button
-            type="button"
-            class="mob-resize-handle mob-resize-handle-x"
-            title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
-            aria-label="Resize chart panel width with scroll"
-            on:wheel={(e) => resizeMobilePanelByWheel('chart', 'x', e)}
-            on:dblclick={() => resetMobilePanelSize('chart')}
-          ></button>
-          <button
-            type="button"
-            class="mob-resize-handle mob-resize-handle-y"
-            title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
-            aria-label="Resize chart panel height with scroll"
-            on:wheel={(e) => resizeMobilePanelByWheel('chart', 'y', e)}
-            on:dblclick={() => resetMobilePanelSize('chart')}
-          ></button>
+
+          <div class="mob-quick-actions">
+            <button class="mob-quick-btn primary" on:click={triggerMobileQuickScan}>
+              AI SCAN
+            </button>
+            <button class="mob-quick-btn" on:click={() => setMobileTab('warroom')}>
+              OPEN WAR ROOM
+            </button>
+          </div>
         </div>
       {:else if mobileTab === 'intel'}
         <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('intel')}>
@@ -625,12 +676,18 @@
     <div class="mob-bottom-nav">
       <button class="mob-nav-btn" class:active={mobileTab === 'warroom'} on:click={() => setMobileTab('warroom')}>
         <span class="mob-nav-label">WAR ROOM</span>
+        {#if mobileOpenTrades > 0}
+          <span class="mob-nav-badge">{mobileOpenTrades > 9 ? '9+' : mobileOpenTrades}</span>
+        {/if}
       </button>
       <button class="mob-nav-btn" class:active={mobileTab === 'chart'} on:click={() => setMobileTab('chart')}>
         <span class="mob-nav-label">CHART</span>
       </button>
       <button class="mob-nav-btn" class:active={mobileTab === 'intel'} on:click={() => setMobileTab('intel')}>
         <span class="mob-nav-label">INTEL</span>
+        {#if mobileTrackedSignals > 0}
+          <span class="mob-nav-badge">{mobileTrackedSignals > 9 ? '9+' : mobileTrackedSignals}</span>
+        {/if}
       </button>
     </div>
   </div>
@@ -776,7 +833,8 @@
 
     position: relative;
     width: 100%;
-    height: 100%;
+    height: var(--term-vh, 100%);
+    min-height: 0;
     overflow: hidden;
     overflow-x: clip;
     overscroll-behavior: none;
@@ -1165,7 +1223,14 @@
     flex-direction: column;
   }
   .mob-content.chart-only {
-    padding: 6px 8px calc(10px + env(safe-area-inset-bottom));
+    padding: 4px 6px 6px;
+  }
+  .mob-chart-stack {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+    gap: 8px;
   }
   .mob-panel-wrap,
   .mob-chart-section {
@@ -1245,6 +1310,33 @@
     display: flex;
     flex-direction: column;
   }
+  .mob-quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0 2px 2px;
+  }
+  .mob-quick-btn {
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid rgba(232, 150, 125, 0.22);
+    background: rgba(240, 237, 228, 0.05);
+    color: rgba(240, 237, 228, 0.82);
+    font-family: var(--fm);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    cursor: pointer;
+    transition: all .14s ease;
+  }
+  .mob-quick-btn.primary {
+    background: linear-gradient(135deg, rgba(232, 150, 125, 0.36), rgba(232, 150, 125, 0.2));
+    border-color: rgba(232, 150, 125, 0.45);
+    color: #fff2e6;
+  }
+  .mob-quick-btn:active {
+    transform: translateY(1px);
+  }
   .mob-bottom-nav {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1290,6 +1382,23 @@
     font-weight: 800;
     letter-spacing: 1.1px;
     line-height: 1;
+  }
+  .mob-nav-badge {
+    margin-left: 6px;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 900;
+    line-height: 1;
+    color: #0b1b12;
+    background: var(--term-live);
+    box-shadow: 0 0 8px rgba(135, 220, 190, 0.45);
   }
 
   /* ═══════════════════════════════════════════
@@ -1992,6 +2101,16 @@
     .mob-content {
       padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
     }
+    .mob-content.chart-only {
+      padding: 4px 6px 6px;
+    }
+    .mob-quick-actions {
+      gap: 6px;
+    }
+    .mob-quick-btn {
+      height: 32px;
+      font-size: 8px;
+    }
     .mob-bottom-nav {
       padding: 6px 8px calc(4px + env(safe-area-inset-bottom));
       min-height: calc(54px + env(safe-area-inset-bottom));
@@ -2019,6 +2138,10 @@
     }
     .mob-meta-chip.subtle {
       display: none;
+    }
+    .mob-nav-label {
+      font-size: 9px;
+      letter-spacing: 0.9px;
     }
   }
 </style>

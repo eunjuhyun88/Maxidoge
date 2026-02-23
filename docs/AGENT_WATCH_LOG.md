@@ -582,3 +582,20 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - 없음
 - Commit / Push: 미실행
 - Status: DONE
+
+---
+
+### W-20260224-020
+
+- Start (KST): 2026-02-24 01:27
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 모바일 Terminal UX 개선 (`src/routes/terminal/+page.svelte`)
+  - 스크린샷 기준 하단 여백/탭 가시성/터치 접근성 개선
+  - 모바일 전용 CTA/정보 밀도 개선 + GTM 이벤트 보강
+- Overlap check (before work):
+  - 현재 브랜치 최신 커밋 `bacd2fc` 기준, FE 소유 파일 중심 작업 진행
+  - 수정 대상은 `src/routes/**/+page.svelte` 범위 한정, 서버/API 파일 미수정
+  - 사용자 요청 스코프(모바일 UI/UX)와 기존 미해결 타입 오류 영역(서버/arena 타입) 분리 유지
+- Status: IN_PROGRESS
