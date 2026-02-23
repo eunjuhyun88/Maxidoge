@@ -645,3 +645,100 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - 없음
 - Commit / Push: 미실행
 - Status: DONE
+
+---
+
+### W-20260224-022
+
+- Start (KST): 2026-02-24 01:42
+- End (KST): 2026-02-24 01:47
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 모바일 최소 해상도에서 footer/nav 고정 위치 안정화
+  - 모바일 패널 리사이즈의 touch fallback 추가 (pointer 미지원 브라우저 대비)
+  - `src/routes/terminal/+page.svelte` 단일 파일 범위로 수정
+- Overlap check (before work):
+  - 기존 모바일 터미널 후속 작업으로 FE 소유 파일 범위 내 처리
+  - 서버/API/스토어 파일은 미수정 유지
+  - 사용자 지적 이슈(footer 위치, touch drag)와 직접 연결된 파일만 수정
+- Changes (actual):
+  - `src/routes/terminal/+page.svelte`
+    - 모바일 레이아웃을 grid→flex column으로 정리하고 하단 네비를 `position:absolute; bottom:0`로 고정
+    - 콘텐츠 패딩에 `--mob-nav-slot`을 적용해 하단 네비 오버레이와 겹침 방지
+    - 기존 pointer drag 로직 공통화(`applyMobilePanelDrag`) 및 body `user-select` 정리 로직 보강
+    - touch fallback 추가:
+      - 핸들 `on:touchstart` 바인딩
+      - 전역 `touchmove/touchend/touchcancel` 처리
+      - pointer 미지원 환경에서만 touch drag 활성화
+    - GTM resize end/start payload에 `input`(`pointer`/`touch`) 구분값 추가
+- Diff vs plan:
+  - 없음
+- Commit / Push: pending
+- Status: DONE
+
+---
+
+### W-20260224-023
+
+- Start (KST): 2026-02-24 01:48
+- End (KST): 2026-02-24 01:53
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - PC/모바일 차트 심볼 드롭다운 가시성/검색 UX 복구
+  - 모바일 chart 탭에서도 pair/timeframe 상단 제어 노출
+  - War Room / Chart / Intel 3패널의 양축(좌우/상하) 스크롤 리사이즈를 PC/모바일 공통 제공
+- Overlap check (before work):
+  - FE 소유 파일(`src/components/**`, `src/routes/**/+page.svelte`) 범위 내 작업으로 제한
+  - 서버/API/스토어 파일 미수정 원칙 유지
+  - 기존 워크트리의 타입체크 실패 항목(서버/arena TS)은 본 UX 수정 범위와 분리
+- Changes (actual):
+  - `src/components/shared/TokenDropdown.svelte`
+    - Binance 스타일 market selector로 재구성(검색 + 카테고리 탭 + Last Price/24h/Vol 리스트)
+    - PC fixed dropdown + 모바일 full-sheet 표시
+    - Binance 24h 데이터 로딩/정렬(실패 시 chunk/single fallback)
+  - `src/components/arena/ChartPanel.svelte`
+    - pair dropdown compact 조건을 viewport 기반으로 분기(`compact={isCompactViewport()}`)
+  - `src/routes/terminal/+page.svelte`
+    - 모바일 chart 탭에서도 상단바(토큰 드롭다운 포함) 노출
+    - 모바일 chart 전용 CSS 오버라이드가 new dropdown panel을 가리지 않도록 보정
+    - 데스크톱 3패널(`left/center/right`)별 X/Y 스크롤 리사이즈 상태/핸들/스타일 추가
+- Diff vs plan:
+  - 없음
+- Commit / Push: 미실행
+- Status: DONE
+
+---
+
+### W-20260224-024
+
+- Start (KST): 2026-02-24 01:49
+- End (KST): 2026-02-24 01:55
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - Arena를 더 역동적으로 개선 (HUD + 실시간 이벤트 카드 + 보상 모달)
+  - `loox.app/lost-in-space` 톤앤매너를 반영한 우주/네온 스타일 적용
+  - 기존 phase 흐름은 유지하고 시각/인터랙션 레이어만 확장
+- Overlap check (before work):
+  - FE 소유 범위 파일(`src/routes/arena/+page.svelte`, `src/components/arena/**`, `src/lib/styles/**`)로 한정
+  - 서버/API/스토어 데이터 계약 파일은 미수정
+  - 기존 워크트리 변경이 있었으나 이번 작업은 Arena UI/UX 범위 내에서만 진행
+- Changes (actual):
+  - `src/components/arena/ArenaHUD.svelte` 신규
+    - Phase/Timer/Score/Bias를 HUD 카드로 표시
+  - `src/components/arena/ArenaEventCard.svelte` 신규
+    - ANALYSIS/HYPOTHESIS/BATTLE 단계별 라이브 이벤트 카드 표시
+  - `src/components/arena/ArenaRewardModal.svelte` 신규
+    - 결과 단계에서 XP 카운트업 + 배지 + streak 보상 표시
+  - `src/routes/arena/+page.svelte`
+    - Arena 동적 상태(`liveEvents`, `reward*`) 및 타이머 관리 로직 추가
+    - 단계 진입 시 이벤트 스트림 시작/정지 및 결과 보상 계산 연결
+    - `arena-space-theme` 클래스 적용 및 topbar/HUD/event-stack 스타일 강화
+  - `src/lib/styles/arena-tone.css`
+    - `arena-space-theme` 전용 변수/오버라이드 추가(우주 톤 네온 색상 체계)
+- Diff vs plan:
+  - 없음
+- Commit / Push: 미실행
+- Status: DONE
