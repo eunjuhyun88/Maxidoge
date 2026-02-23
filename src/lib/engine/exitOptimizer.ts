@@ -387,6 +387,35 @@ function getLatestValidValue(arr: number[]): number | null {
   return null;
 }
 
+// ─── Regime Detection ───────────────────────────────────
+
+/**
+ * 20-bar 기반 시장 국면 감지
+ * @param closes - 종가 배열 (최소 20개 권장)
+ */
+export function detectRegime(closes: number[]): MarketRegime {
+  if (closes.length < 20) return 'ranging';
+
+  const recent = closes.slice(-20);
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const changePct = ((last - first) / first) * 100;
+
+  // Volatility: stddev of returns
+  const returns: number[] = [];
+  for (let i = 1; i < recent.length; i++) {
+    returns.push((recent[i] - recent[i - 1]) / recent[i - 1]);
+  }
+  const mean = returns.reduce((s, v) => s + v, 0) / returns.length;
+  const variance = returns.reduce((s, v) => s + (v - mean) ** 2, 0) / returns.length;
+  const volatility = Math.sqrt(variance) * 100;
+
+  if (volatility > 3) return 'volatile';
+  if (changePct > 5) return 'trending_up';
+  if (changePct < -5) return 'trending_down';
+  return 'ranging';
+}
+
 // ─── Public API ─────────────────────────────────────────────
 
 /**
