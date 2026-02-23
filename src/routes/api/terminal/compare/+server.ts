@@ -85,7 +85,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
         scannedAt: Date.now(),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[compare] error:', error);
     return json({ error: 'Comparison failed' }, { status: 500 });
   }

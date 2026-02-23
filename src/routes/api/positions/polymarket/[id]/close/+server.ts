@@ -72,7 +72,7 @@ export const POST: RequestHandler = async ({ cookies, params, getClientAddress }
         amountUsdc: prepared.amountUsdc,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[positions/polymarket/close] error:', error);
     return json({ error: 'Failed to prepare close order' }, { status: 500 });
   }

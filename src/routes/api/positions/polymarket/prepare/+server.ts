@@ -117,7 +117,7 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
         feeRateBps: Number(prepared.order.feeRateBps),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[positions/polymarket/prepare] error:', error);
     return json({ error: 'Failed to prepare order' }, { status: 500 });
   }

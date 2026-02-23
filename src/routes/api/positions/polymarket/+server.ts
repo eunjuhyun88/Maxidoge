@@ -66,7 +66,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
       positions,
       total: Number(countResult.rows[0]?.total ?? 0),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[positions/polymarket] error:', error);
     return json({ error: 'Failed to fetch positions' }, { status: 500 });
   }

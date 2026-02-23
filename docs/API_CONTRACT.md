@@ -1,7 +1,7 @@
 # MAXI DOGE v3 API Contract
 
 작성일: 2026-02-22  
-수정일: 2026-02-23 (Arena v3 PvP/Tournament 계약 반영)  
+수정일: 2026-02-23 (응답 포맷 코드 실태 반영 + Arena v3 PvP/Tournament 계약)  
 목적: FE/BE 분리 개발을 위해 Arena/Live/Market API 계약을 고정한다.
 Doc index: `docs/README.md`
 
@@ -9,27 +9,41 @@ Doc index: `docs/README.md`
 
 1. Base path: `/api`
 2. Content type: `application/json`
-3. 시간: ISO8601 UTC (`createdAt`, `updatedAt`)
+3. 시간: epoch ms (`createdAt: 1760000000000`) 또는 ISO8601 UTC — 라우트별 상이
 4. 에러 형식 통일:
 
 ```json
+{ "error": "Human-readable error message" }
+```
+
+HTTP status code가 에러 유형을 전달한다 (400/401/404/409/500 등).
+에러 body는 항상 `{ "error": string }` 단일 필드.
+
+5. 성공 형식 — 2가지 패턴:
+
+**패턴 A: 리스트 엔드포인트** (matches, activity, chat/messages, notifications 등)
+
+```json
 {
-  "ok": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "weight sum must be 100"
-  }
+  "success": true,
+  "total": 42,
+  "records": [ ... ],
+  "pagination": { "limit": 50, "offset": 0 }
 }
 ```
 
-5. 성공 형식 통일:
+**패턴 B: 액션/단건 엔드포인트** (terminal/scan, market/snapshot, arena/* 등)
 
 ```json
 {
   "ok": true,
-  "data": {}
+  "data": { ... }
 }
 ```
+
+> 참고: 레거시 CRUD 라우트(Section 9 Chat 등)는 패턴 A를 사용.
+> 신규 라우트(Arena, Scan, Snapshot)는 패턴 B를 사용.
+> 향후 통합 시 패턴 B로 수렴 예정.
 
 ## 2. Arena / PvP / Tournament API
 

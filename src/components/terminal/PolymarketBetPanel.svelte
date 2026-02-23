@@ -163,7 +163,7 @@
     }
   }
 
-  async function doPolymarketAuth(providerKey: any, address: string): Promise<boolean> {
+  async function doPolymarketAuth(providerKey: string, address: string): Promise<boolean> {
     try {
       // Get auth typed data
       const authData = await getPolymarketAuthData(address);

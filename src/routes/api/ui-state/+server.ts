@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
 const MOBILE_TABS = new Set(['warroom', 'chart', 'intel']);
 const ACTIVE_TABS = new Set(['intel', 'community', 'positions']);
@@ -11,7 +12,8 @@ const PASSPORT_TABS = new Set(['profile', 'wallet', 'positions', 'arena']);
 const ORACLE_PERIODS = new Set(['7d', '30d', 'all']);
 const ORACLE_SORTS = new Set(['accuracy', 'level', 'sample', 'conf']);
 
-function mapRow(row: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRow(row: Record<string, any>) {
   return {
     userId: row.user_id,
     terminalLeftWidth: Number(row.terminal_left_width ?? 280),
@@ -51,8 +53,8 @@ export const GET: RequestHandler = async ({ cookies }) => {
 
     const row = await ensureUiState(user.id);
     return json({ success: true, uiState: mapRow(row) });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[ui-state/get] unexpected error:', error);
@@ -150,8 +152,8 @@ export const PUT: RequestHandler = async ({ cookies, request }) => {
     );
 
     return json({ success: true, uiState: mapRow(result.rows[0]) });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

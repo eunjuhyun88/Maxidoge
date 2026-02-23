@@ -80,6 +80,7 @@
   let derivRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
   // ── Cache: avoid redundant API calls (60s TTL per pair) ──
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const _derivCache = new Map<string, { ts: number; data: any }>();
   const DERIV_CACHE_TTL = 60_000;
   let _derivDebounce: ReturnType<typeof setTimeout> | null = null;

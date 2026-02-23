@@ -46,6 +46,7 @@
   let activeTab = $state('intel');
   let innerTab = $state('chat');
   let posSubTab: 'all' | 'trades' | 'perps' | 'markets' = $state('all');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let betMarket: any = $state(null); // market to open in BetPanel
   let showGmxPanel = $state(false);  // GmxTradePanel visibility
   let tabCollapsed = $state(false);

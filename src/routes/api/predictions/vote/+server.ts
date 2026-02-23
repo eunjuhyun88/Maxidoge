@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toNumber } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
 function normalizeDirection(value: unknown): 'YES' | 'NO' | '' {
   if (typeof value !== 'string') return '';
@@ -56,8 +57,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
         createdAt: new Date(result.rows[0].created_at).getTime(),
       },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

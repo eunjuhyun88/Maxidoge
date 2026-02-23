@@ -10,6 +10,7 @@ import {
   buildAgentSystemPrompt, buildOrchestratorSystemPrompt,
   type LLMMessage,
 } from '$lib/server/llmService';
+import { getErrorMessage, errorContains } from '$lib/utils/errorUtils';
 
 const SENDER_KINDS = new Set(['user', 'agent', 'system']);
 
@@ -43,6 +44,7 @@ type AgentChatRow = {
   sender_id: string | null;
   sender_name: string;
   message: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   meta: any;
   created_at: string;
 };
@@ -257,7 +259,7 @@ async function loadScanContext(
       summary: runRow.summary,
       signals: signals.rows,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (isPersistenceUnavailableError(error)) return null;
     console.warn('[chat/messages] failed to load scan context:', error);
     return null;
@@ -407,8 +409,8 @@ async function buildAgentReply(
       source: context?.signals?.length ? 'scan_context' : 'fallback',
       text: result.text,
     };
-  } catch (err: any) {
-    console.warn(`[chat/messages] LLM call failed for ${agentId}, using template fallback:`, err.message);
+  } catch (err: unknown) {
+    console.warn(`[chat/messages] LLM call failed for ${agentId}, using template fallback:`, getErrorMessage(err));
     return buildAgentReplyFallback(agentId, message, context, meta);
   }
 }
@@ -450,8 +452,8 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
       records: rows.rows.map(mapRow).reverse(),
       pagination: { limit, offset },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[chat/messages/get] unexpected error:', error);
@@ -554,8 +556,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       message: mapRow(insert.rows[0]),
       agentResponse,
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

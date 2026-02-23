@@ -28,14 +28,17 @@
   }>();
 
   let chartContainer: HTMLDivElement;
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   let chart: any;
   let series: any;
   let volumeSeries: any;
+  /* eslint-enable @typescript-eslint/no-explicit-any */
   let cleanup: (() => void) | null = null;
   let wsCleanup: (() => void) | null = null;
   let priceWsCleanup: (() => void) | null = null;
 
   // ═══ Indicator Series ═══
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   let ma7Series: any;
   let ma20Series: any;
   let ma25Series: any;
@@ -43,6 +46,7 @@
   let ma99Series: any;
   let ma120Series: any;
   let rsiSeries: any;
+  /* eslint-enable @typescript-eslint/no-explicit-any */
   let volumePaneIndex: number | null = null;
   let rsiPaneIndex: number | null = null;
   let klineCache: BinanceKline[] = [];
@@ -105,9 +109,11 @@
   let _chartNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Position lines
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   let tpLine: any = null;
   let entryLine: any = null;
   let slLine: any = null;
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   let {
     posEntry = null as number | null,
@@ -656,8 +662,8 @@
   //  INDICATOR COMPUTATION (optimised)
   // ═══════════════════════════════════════════
 
-  function computeSMA(data: { time: any; close: number }[], period: number) {
-    const result: { time: any; value: number }[] = [];
+  function computeSMA(data: { time: string | number; close: number }[], period: number) {
+    const result: { time: string | number; value: number }[] = [];
     let sum = 0;
     for (let i = 0; i < data.length; i++) {
       sum += data[i].close;
@@ -667,9 +673,9 @@
     return result;
   }
 
-  function computeRSI(data: { time: any; close: number }[], period = 14) {
+  function computeRSI(data: { time: string | number; close: number }[], period = 14) {
     if (data.length < period + 1) return [];
-    const result: { time: any; value: number }[] = [];
+    const result: { time: string | number; value: number }[] = [];
     let avgGain = 0, avgLoss = 0;
     for (let i = 1; i <= period; i++) {
       const d = data[i].close - data[i - 1].close;

@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { isValidEthAddress, issueWalletNonce, normalizeEthAddress } from '$lib/server/walletAuthRepository';
+import { errorContains } from '$lib/utils/errorUtils';
 
 function getClientIp(request: Request): string | null {
   const forwardedFor = request.headers.get('x-forwarded-for');
@@ -41,14 +42,14 @@ export const POST: RequestHandler = async ({ request }) => {
       message: issued.message,
       expiresAt: issued.expiresAt,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error?.code === '42P01') {
       return json({ error: 'auth_nonces table is missing. Run migration 0003 first.' }, { status: 500 });
     }
     if (error?.code === '42501') {
       return json({ error: 'Database role lacks permissions for auth_nonces setup. Run migration 0003 with owner role.' }, { status: 500 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) {

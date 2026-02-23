@@ -233,7 +233,7 @@ export async function linkWalletToUser(args: {
         metaJson,
       ]
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     // wallet_connections is optional in some environments.
     if (error?.code !== '42P01') {
       throw error;

@@ -47,9 +47,10 @@ export interface ResolveMatchInput {
 
 // ── DB persistence helpers ──
 const TABLE_UNAVAILABLE = new Set(['42P01', '42703', '23503']);
-function isTableError(err: any): boolean {
-  const code = typeof err?.code === 'string' ? err.code : '';
-  return TABLE_UNAVAILABLE.has(code) || (typeof err?.message === 'string' && err.message.includes('DATABASE_URL is not set'));
+function isTableError(err: unknown): boolean {
+  const errObj = err as Record<string, unknown> | null | undefined;
+  const code = typeof errObj?.code === 'string' ? errObj.code : '';
+  return TABLE_UNAVAILABLE.has(code) || (typeof errObj?.message === 'string' && (errObj.message as string).includes('DATABASE_URL is not set'));
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -69,7 +70,7 @@ export async function createMatch(userId: string, input: CreateMatchInput): Prom
        VALUES ($1, $2, $3, $4, 'DRAFT', $5)`,
       [matchId, userId, pair, timeframe, now]
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (!isTableError(err)) throw err;
     // DB unavailable - continue with in-memory match
   }
@@ -111,7 +112,7 @@ export async function submitDraft(userId: string, input: SubmitDraftInput): Prom
        WHERE id = $2 AND user_a_id = $3 AND phase = 'DRAFT'`,
       [JSON.stringify(input.draft), input.matchId, userId]
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (!isTableError(err)) throw err;
   }
 
@@ -132,7 +133,7 @@ export async function storeAnalysisResults(
        WHERE id = $4`,
       [JSON.stringify(agentOutputs), entryPrice, regime, matchId]
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (!isTableError(err)) throw err;
   }
 }
@@ -160,7 +161,7 @@ export async function submitHypothesis(
        WHERE id = $2 AND user_a_id = $3 AND phase = 'HYPOTHESIS'`,
       [JSON.stringify(prediction), input.matchId, userId]
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (!isTableError(err)) throw err;
   }
 
@@ -262,7 +263,7 @@ export async function resolveMatch(
        WHERE id = $4`,
       [exitPrice, priceChange, JSON.stringify(result), input.matchId]
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (!isTableError(err)) throw err;
   }
 
@@ -298,7 +299,7 @@ export async function getMatch(userId: string, matchId: string): Promise<Partial
       startedAt: row.started_at,
       endedAt: row.ended_at,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (isTableError(err)) return null;
     throw err;
   }
@@ -340,7 +341,7 @@ export async function listMatches(
         endedAt: row.ended_at,
       })),
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (isTableError(err)) return { records: [], total: 0 };
     throw err;
   }

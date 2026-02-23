@@ -142,7 +142,7 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
       clobOrderId: result.orderID,
       orderStatus: 'submitted',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[positions/polymarket/submit] error:', error);
     return json({ error: 'Failed to submit order' }, { status: 500 });
   }

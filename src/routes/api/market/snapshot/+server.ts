@@ -37,7 +37,7 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
         },
       }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     const validationMessage = toValidationMessage(error);
     if (validationMessage) return json({ error: validationMessage }, { status: 400 });
     console.error('[market/snapshot/get] unexpected error:', error);

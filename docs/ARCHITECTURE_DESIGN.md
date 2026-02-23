@@ -1,6 +1,7 @@
 # MAXI⚡DOGE v3 Architecture Design
 
 Created: 2026-02-22
+Updated: 2026-02-23 (§6 미구현 모듈 설계 추가 — Agent 4 감사 기반)
 Status: **DESIGN REVIEW** — 구현 시작 전 승인 필요
 Doc index: `docs/README.md`
 
@@ -688,3 +689,270 @@ node node_modules/.bin/svelte-check   # 0 errors
 | `routes/terminal/+page.svelte` | interval 제거 | F-03 |
 | `routes/arena/+page.svelte` | Phase UI + Draft flow | F-06 |
 | `components/terminal/WarRoom.svelte` | 렌더링 전용 축소 | F-07 |
+
+---
+
+## 6. 미구현 모듈 설계 (Agent 4 감사 기반, 2026-02-23)
+
+> Phase 4 마무리 후 도출된 미구현/미완성 모듈에 대한 설계 방향 문서.
+> 구현 핸드오프: Agent 1(BE) 또는 Agent 2(FE)에 전달.
+
+### 6.1 S-03 재검토 — Price 계약 현황
+
+**결론: S-03 계약 자체는 ✅ 완료. F-03 (FE 적용)은 ⬜ 미시작.**
+
+현재 구조:
+```
+priceStore.ts          ← livePrice: Record<symbol, PriceTick> (Single Source)
+  └─ updatePrice(), updatePrices(), updatePriceFull()
+
+livePriceSyncService.ts ← 가격 → quickTradeStore/trackedSignalStore 분배
+  └─ ensureLivePriceSyncStarted() / stopLivePriceSync()
+
+binance.ts (client)    ← subscribeMiniTicker() → WS 실시간 → priceStore 갱신
++layout.svelte         ← onMount: fetchPrices() + subscribeMiniTicker() 부트스트랩
+```
+
+**priceService.ts 미존재 사유**: 현재 `priceStore.ts`가 계약 역할을 겸하고 있음.
+별도 `priceService.ts` 신설은 F-03 작업에서 Header/Chart/Terminal의 중복 WS를 통합할 때 수행.
+
+**F-03 스코프**:
+1. Header.svelte: 자체 `subscribeMiniTicker()` 제거 → `$livePrice` 구독
+2. ChartPanel.svelte: miniTicker 제거 (klines WS는 차트 전용 유지)
+3. terminal/+page.svelte: `setInterval` 기반 가격 갱신 제거
+4. gameState.ts: `updatePrices()` 랜덤 지터 제거 또는 `livePrice` 동기화
+
+---
+
+### 6.2 B-06 — Progression 서버 반영 설계
+
+**현황**: `resolveMatch()` 가 LP delta를 계산하지만 DB에 반영하지 않음.
+
+**필요 함수**: `persistProgression(userId, matchResult, draftedAgents)`
+
+```
+/api/arena/resolve (POST)
+  │
+  ├─ arenaService.resolveMatch(matchId, exitPrice)
+  │   → MatchResult { winnerId, resultType, lpDelta, fbs, agentBreakdown }
+  │
+  └─ persistProgression(userId, matchResult, draftedAgents)  ← 신규
+      │
+      ├─ 1. INSERT lp_transactions
+      │   (match_id, user_id, amount, reason, balance_after)
+      │
+      ├─ 2. UPDATE user_passports
+      │   SET lp_total = lp_total + amount,
+      │       tier = getTierForLP(new_lp),
+      │       win_count += (won ? 1 : 0),
+      │       loss_count += (won ? 0 : 1),
+      │       current_streak = ...,
+      │       updated_at = now()
+      │
+      ├─ 3. UPDATE user_agent_progress (×3, 드래프트된 에이전트별)
+      │   SET total_matches += 1,
+      │       wins += (won ? 1 : 0),
+      │       losses += (won ? 0 : 1),
+      │       unlocked_specs = CASE
+      │         WHEN total_matches >= 30 THEN '{base,a,b,c}'
+      │         WHEN total_matches >= 10 THEN '{base,a,b}'
+      │         ELSE unlocked_specs
+      │       END,
+      │       updated_at = now()
+      │
+      └─ 4. 응답에 progression 포함
+          { matchResult, progression: { lpTotal, tier, newUnlocks[] } }
+```
+
+**트랜잭션**: 1~3을 단일 PostgreSQL 트랜잭션으로 실행.
+**파일**: `src/lib/server/arenaService.ts` 확장 또는 `src/lib/server/progressionService.ts` 신설.
+**의존**: B-01 ✅, B-03 ✅
+
+---
+
+### 6.3 B-07 — RAG Memory 설계
+
+**현황**: DB 스키마 ✅ (pgvector, match_memories, search_memories 함수). 구현 코드 ⬜.
+
+**아키텍처**:
+```
+src/lib/server/memory.ts (신규)
+  │
+  ├─ storeMemory(params: StoreMemoryInput): Promise<string>
+  │   1. 임베딩 생성 (수치 정규화 256d)
+  │   2. INSERT match_memories (factors, thesis, direction, confidence, embedding)
+  │   3. return memoryId
+  │
+  ├─ retrieveMemories(params: RetrieveInput): Promise<MatchMemory[]>
+  │   1. 현재 market_state → 임베딩 생성
+  │   2. search_memories(embedding, userId, agentId, top_k=5)
+  │   3. is_active=true 필터 + 유사도 순 반환
+  │
+  └─ augmentAgentContext(memories: MatchMemory[]): string
+      1. top-k 기억을 자연어 요약
+      2. "비슷한 시장 상황 N건 중 M건 방향 일치"
+      3. agentPipeline system prompt에 주입
+```
+
+**임베딩 전략**: 수치 정규화 (Option A — 외부 API 불필요)
+```typescript
+function generateEmbedding(factors: ScoringFactor[], regime: string, direction: string): number[] {
+  // 48 factors → 48 normalized scores (0-1)
+  // + regime one-hot (4d): trending_up/trending_down/ranging/volatile
+  // + direction one-hot (3d): LONG/SHORT/NEUTRAL
+  // + padding → 256d total
+  // L2 normalize
+}
+```
+
+**agentPipeline 통합 지점**:
+```
+분석 시 (analyze):
+  1. retrieveMemories(currentMarketState, agentId) → top-5 과거 기억
+  2. augmentAgentContext(memories) → system prompt 추가
+  3. agentPipeline 실행 (기억 반영된 컨텍스트로)
+
+결과 저장 시 (resolve):
+  1. matchResult 확정 후
+  2. storeMemory(factors, thesis, direction, confidence, outcome, priceChange)
+  3. LLM으로 lesson 생성 (선택적)
+```
+
+**파일**: `src/lib/server/memory.ts` 신설
+**의존**: B-03 ✅, pgvector ✅
+
+---
+
+### 6.4 Phase 5 — 경쟁모드 아키텍처 (B-12/B-13/B-14)
+
+#### 6.4.1 PvP Matching Pool (B-12)
+
+**현황**: DB 테이블 `pvp_matching_pool` 존재. BE 로직 ⬜.
+
+```
+src/lib/server/pvpPoolService.ts (신규)
+  │
+  ├─ createPool(userId, pair, timeframe): Promise<PvpPool>
+  │   INSERT pvp_matching_pool (creator_user_id, pair, timeframe, status='WAITING')
+  │   expires_at = now() + 4h
+  │   creator_tier/elo = user_passports에서 조회
+  │
+  ├─ listAvailable(pair?, limit?): Promise<PvpPool[]>
+  │   WHERE status='WAITING' AND expires_at > now()
+  │   ORDER BY created_at DESC
+  │
+  ├─ acceptPool(poolId, userId): Promise<AcceptResult>
+  │   트랜잭션:
+  │   1. UPDATE pool SET status='MATCHED', matched_user_id
+  │   2. arenaService.createMatch(pair, tf, mode='PVP', pvpPoolId)
+  │   3. return { poolId, matchId, opponent }
+  │
+  └─ expireStalePoolsJob(): Promise<number>
+      UPDATE SET status='EXPIRED' WHERE expires_at < now() AND status='WAITING'
+      → cron 또는 periodic 호출 (5분마다)
+```
+
+**API 라우트**:
+```
+POST /api/pvp/pool/create     → createPool()
+GET  /api/pvp/pool/available  → listAvailable()
+POST /api/pvp/pool/:id/accept → acceptPool()
+```
+
+#### 6.4.2 Tournament Ban/Pick (B-13 완성)
+
+**현황**: active/register/bracket ✅. ban/draft ⬜.
+
+```
+tournamentService.ts 확장:
+  │
+  ├─ submitBan(tournamentId, matchId, userId, bannedAgentId): Promise<BanResult>
+  │   1. 매치 상태 검증 (phase='BAN', 해당 유저 차례)
+  │   2. tournament_brackets UPDATE: ban_a 또는 ban_b SET
+  │   3. 양쪽 다 ban 제출 → phase='PICK' 전이
+  │   4. return { myBan, opponentBan, pickStartsAt }
+  │
+  └─ submitTournamentDraft(tournamentId, matchId, userId, draft): Promise<DraftResult>
+      1. draft 검증 (3개, weight 합 100, ban된 에이전트 미포함)
+      2. arenaService.submitDraft(matchId, userId, draft)
+      3. 양쪽 다 draft 제출 → phase='ANALYSIS' 전이
+      4. return { matchId, phase: 'ANALYSIS', acceptedDraft }
+```
+
+**API 라우트**:
+```
+POST /api/tournaments/:id/ban   → submitBan()
+POST /api/tournaments/:id/draft → submitTournamentDraft()
+```
+
+**Ban/Pick 타이밍**:
+- Ban 위상: 20초 (양쪽 동시)
+- Pick 위상: 40초 (양쪽 동시)
+- 타임아웃 시 랜덤 선택
+
+#### 6.4.3 Settlement Engine (B-14)
+
+**현황**: scoring.ts에 PvE LP 계산만 존재. 모드별 정산 ⬜.
+
+```
+src/lib/server/settlementEngine.ts (신규)
+  │
+  ├─ settleMatch(matchId, matchResult): Promise<SettlementResult>
+  │   mode 분기:
+  │   ├─ PVE:  lpDelta = LP_REWARDS[resultType]
+  │   ├─ PVP:  lpDelta = PVP_LP_REWARDS[resultType] + eloDelta 계산
+  │   └─ TOURNAMENT: lpDelta = tournamentRankReward(rank)
+  │
+  ├─ calculateElo(myElo, oppElo, won): { newElo, eloDelta }
+  │   K = matchesPlayed < 100 ? 32 : 16
+  │   E = 1 / (1 + 10^((oppElo - myElo) / 400))
+  │   delta = round(K * ((won ? 1 : 0) - E))
+  │   return { newElo: myElo + delta, eloDelta: delta }
+  │
+  ├─ persistSettlement(userId, settlement): Promise<void>
+  │   트랜잭션:
+  │   1. INSERT lp_transactions (amount, reason, balance_after)
+  │   2. UPDATE user_passports (lp_total, tier, elo_rating)
+  │   3. UPDATE arena_matches (fbs_score, elo_delta)
+  │   4. persistProgression() 호출 (B-06)
+  │
+  └─ settleTournament(tournamentId): Promise<TournamentSettlement>
+      1. 최종 순위 산출 (bracket 기반)
+      2. 순위별 LP 보상 분배
+      3. tournament_results INSERT
+      4. 각 참가자 lp_transactions INSERT
+```
+
+**LP 보상 테이블 (모드별)**:
+```
+PVE:        win +11, clutch +18, loss -8, draw +2
+PVP:        win +25, loss -10, draw +5
+Tournament: 1등 +100, 2등 +50, 3-4등 +25, 5-8등 -10
+```
+
+**ELO 초기값**: 1200
+**ELO K-factor**: 32 (매치 <100), 16 (매치 ≥100)
+
+---
+
+### 6.5 구현 우선순위 및 핸드오프
+
+```
+즉시 (B-06 — Agent 1 BE):
+  arenaService.ts에 persistProgression() 추가
+  /api/arena/resolve에서 호출
+
+다음 (B-14 → B-12 → B-13):
+  settlementEngine.ts 신설 (PVE settlement 먼저)
+  pvpPoolService.ts 신설 + API 라우트 3개
+  tournamentService.ts ban/draft 확장
+
+마지막 (B-07):
+  memory.ts 신설 (수치 임베딩 우선)
+  agentPipeline 통합
+
+FE (F-03 → F-14 → F-15):
+  priceService 통합 (Header/Chart/Terminal WS 단일화)
+  PvP Pool UI 컴포넌트
+  Tournament Ban/Pick UI
+```

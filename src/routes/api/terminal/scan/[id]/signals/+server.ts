@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { UUID_RE } from '$lib/server/apiValidation';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { getTerminalScan, getTerminalScanSignals } from '$lib/services/scanService';
+import { errorContains } from '$lib/utils/errorUtils';
 
 export const GET: RequestHandler = async ({ cookies, params }) => {
   try {
@@ -24,8 +25,8 @@ export const GET: RequestHandler = async ({ cookies, params }) => {
         records: signals.records,
       },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[terminal/scan/:id/signals/get] unexpected error:', error);

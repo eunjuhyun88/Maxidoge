@@ -174,7 +174,7 @@ export const GET: RequestHandler = async ({ url }) => {
       },
       { headers: { 'Cache-Control': 'public, max-age=60' } }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[api/market/trending] error:', error);
     return json({ error: 'Failed to fetch trending data' }, { status: 500 });
   }

@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
 interface PredictionRow {
   id: string;
@@ -76,8 +77,8 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
       records: rows.rows.map(mapPrediction),
       pagination: { limit, offset },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[predictions/get] unexpected error:', error);

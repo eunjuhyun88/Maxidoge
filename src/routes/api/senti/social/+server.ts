@@ -32,7 +32,7 @@ export const GET: RequestHandler = async ({ url }) => {
       { ok: true, data },
       { headers: { 'Cache-Control': 'public, max-age=60' } }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[senti/social] error:', error);
     return json({ error: 'Failed to fetch social sentiment' }, { status: 500 });
   }

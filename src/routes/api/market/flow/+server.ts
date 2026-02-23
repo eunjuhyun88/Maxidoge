@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { fetch24hrServer, pairToSymbol } from '$lib/server/binance';
 import { fetchDerivatives, normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
 import { fetchCoinMarketCapQuote, hasCoinMarketCapApiKey } from '$lib/server/coinmarketcap';
+import { errorContains } from '$lib/utils/errorUtils';
 
 function pickBias(funding: number | null, lsRatio: number | null, liqLong: number, liqShort: number): 'LONG' | 'SHORT' | 'NEUTRAL' {
   let score = 0;
@@ -95,11 +96,11 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
         },
       }
     );
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('pair must be like')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'pair must be like')) {
       return json({ error: error.message }, { status: 400 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('timeframe must be one of')) {
+    if (errorContains(error, 'timeframe must be one of')) {
       return json({ error: error.message }, { status: 400 });
     }
     console.error('[market/flow/get] unexpected error:', error);

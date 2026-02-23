@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { normalizePair, normalizeTradeDir, PAIR_RE, toPositiveNumber } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
 interface QuickTradeRow {
   id: string;
@@ -76,8 +77,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     );
 
     return json({ success: true, trade: mapTrade(result.rows[0]) });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

@@ -9,6 +9,7 @@ import type { RequestHandler } from './$types';
 import { getAuthenticatedUser } from '$lib/server/authRepository';
 import { query } from '$lib/server/db';
 import { parseSessionCookie, SESSION_COOKIE_NAME } from '$lib/server/session';
+import { errorContains } from '$lib/utils/errorUtils';
 
 const GENERIC_WALLET_RE = /^0x[0-9a-fA-F]{40}$|^[A-Za-z0-9]{20,64}$/;
 
@@ -70,8 +71,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
         linkedAt: new Date().toISOString()
       }
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) {

@@ -41,9 +41,10 @@ export interface TournamentBracketResult {
 }
 
 const TABLE_UNAVAILABLE = new Set(['42P01', '42703', '23503']);
-function isTableError(err: any): boolean {
-  const code = typeof err?.code === 'string' ? err.code : '';
-  return TABLE_UNAVAILABLE.has(code) || (typeof err?.message === 'string' && err.message.includes('DATABASE_URL is not set'));
+function isTableError(err: unknown): boolean {
+  const errObj = err as Record<string, unknown> | null | undefined;
+  const code = typeof errObj?.code === 'string' ? errObj.code : '';
+  return TABLE_UNAVAILABLE.has(code) || (typeof errObj?.message === 'string' && (errObj.message as string).includes('DATABASE_URL is not set'));
 }
 
 export class TournamentError extends Error {
@@ -248,7 +249,7 @@ export async function listActiveTournaments(limit = 20): Promise<TournamentActiv
       entryFeeLp: Number(row.entry_fee_lp || 0),
       startAt: row.start_at,
     }));
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (!isTableError(err)) throw err;
     return listActiveTournamentsMemory().slice(0, Math.max(1, Math.min(100, limit)));
   }
@@ -318,9 +319,9 @@ export async function registerTournament(userId: string, tournamentId: string): 
           if (!deductRes.rows[0]) {
             throw new TournamentError('INSUFFICIENT_LP', 422, 'Not enough LP to register');
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (err instanceof TournamentError) throw err;
-          if (err?.code === '42703') {
+          if ((err as Record<string, unknown>)?.code === '42703') {
             lpDelta = 0;
           } else {
             throw err;
@@ -342,7 +343,7 @@ export async function registerTournament(userId: string, tournamentId: string): 
         lpDelta,
       };
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (isTournamentError(err)) throw err;
     if (!isTableError(err)) throw err;
     return registerTournamentMemory(userId, tournamentId);
@@ -422,7 +423,7 @@ export async function getTournamentBracket(tournamentId: string): Promise<Tourna
     }));
 
     return buildBracketFromUsers(tournamentId, users);
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (!isTableError(err)) throw err;
     return getTournamentBracketMemory(tournamentId);
   }

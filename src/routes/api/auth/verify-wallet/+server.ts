@@ -10,6 +10,7 @@ import {
   normalizeEthAddress,
 } from '$lib/server/walletAuthRepository';
 import { parseSessionCookie, SESSION_COOKIE_NAME } from '$lib/server/session';
+import { errorContains } from '$lib/utils/errorUtils';
 
 const EVM_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
 const SOL_SIGNATURE_RE = /^0x[0-9a-fA-F]{64,512}$/;
@@ -130,14 +131,14 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
         verified: true,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error?.code === '42P01') {
       return json({ error: 'auth_nonces table is missing. Run migration 0003 first.' }, { status: 500 });
     }
     if (error?.code === '42501') {
       return json({ error: 'Database role lacks permissions for auth_nonces setup. Run migration 0003 with owner role.' }, { status: 500 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) {

@@ -8,6 +8,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { errorContains } from '$lib/utils/errorUtils';
 
 interface MatchRow {
   id: string;
@@ -113,8 +114,8 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
         hasMore: offset + limit < total,
       },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[matches/get] unexpected error:', error);
@@ -211,11 +212,11 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       success: true,
       record: mapMatch(result.rows[0]),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error?.code === '23503') {
       return json({ error: 'User does not exist' }, { status: 409 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) {

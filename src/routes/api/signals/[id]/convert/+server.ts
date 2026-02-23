@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { withTransaction } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toPositiveNumber, UUID_RE } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
 interface TrackedSignalRow {
   id: string;
@@ -97,8 +98,8 @@ export const POST: RequestHandler = async ({ cookies, request, params }) => {
 
     if ('error' in outcome) return json({ error: outcome.error }, { status: outcome.status });
     return json(outcome);
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[signals/convert] unexpected error:', error);

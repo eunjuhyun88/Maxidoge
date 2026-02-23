@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { errorContains } from '$lib/utils/errorUtils';
 
 const SOURCE_PAGES = new Set([
   'arena',
@@ -60,8 +61,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
         createdAt: new Date(event.rows[0].created_at).getTime(),
       },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

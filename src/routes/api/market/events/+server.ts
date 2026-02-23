@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { fetchDerivatives, normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
 import {
+import { errorContains } from '$lib/utils/errorUtils';
   fetchDexAdsLatest,
   fetchDexCommunityTakeoversLatest,
   fetchDexTokenBoostsLatest,
@@ -78,11 +79,11 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
         },
       }
     );
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('pair must be like')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'pair must be like')) {
       return json({ error: error.message }, { status: 400 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('timeframe must be one of')) {
+    if (errorContains(error, 'timeframe must be one of')) {
       return json({ error: error.message }, { status: 400 });
     }
     console.error('[market/events/get] unexpected error:', error);

@@ -18,7 +18,7 @@ export const GET: RequestHandler = async () => {
       { ok: true, data },
       { headers: { 'Cache-Control': 'public, max-age=300' } }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[api/macro/fred] error:', error);
     return json({ error: 'Failed to fetch FRED data' }, { status: 500 });
   }

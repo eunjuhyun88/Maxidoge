@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { errorContains } from '$lib/utils/errorUtils';
 
 export const GET: RequestHandler = async ({ cookies }) => {
   try {
@@ -22,8 +23,10 @@ export const GET: RequestHandler = async ({ cookies }) => {
       ),
     ]);
 
-    const u: any = userRow.rows[0] || {};
-    const p: any = profileRow.rows[0] || {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const u: Record<string, any> = userRow.rows[0] || {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p: Record<string, any> = profileRow.rows[0] || {};
 
     return json({
       success: true,
@@ -51,8 +54,8 @@ export const GET: RequestHandler = async ({ cookies }) => {
         },
       },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[profile/get] unexpected error:', error);
@@ -96,7 +99,7 @@ export const PATCH: RequestHandler = async ({ cookies, request }) => {
 
     if (displayTier || badges) {
       const setClauses: string[] = ['updated_at = now()'];
-      const params: any[] = [];
+      const params: unknown[] = [];
       let paramIdx = 1;
 
       if (displayTier) {
@@ -116,11 +119,11 @@ export const PATCH: RequestHandler = async ({ cookies, request }) => {
     }
 
     return json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error?.code === '23505') {
       return json({ error: 'Nickname is already taken' }, { status: 409 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

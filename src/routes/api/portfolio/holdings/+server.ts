@@ -18,7 +18,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
       [user.id]
     );
 
-    const holdings = result.rows.map((r: any) => ({
+    const holdings = result.rows.map((r: Record<string, unknown>) => ({
       id: r.id,
       symbol: r.asset_symbol,
       name: r.asset_name,
@@ -26,19 +26,19 @@ export const GET: RequestHandler = async ({ cookies }) => {
       avgPrice: Number(r.avg_price),
       currentPrice: Number(r.current_price),
       source: r.source,
-      createdAt: new Date(r.created_at).getTime(),
-      updatedAt: new Date(r.updated_at).getTime(),
+      createdAt: new Date(r.created_at as string).getTime(),
+      updatedAt: new Date(r.updated_at as string).getTime(),
     }));
 
     // Compute totals server-side
-    const totalValue = holdings.reduce((s: number, h: any) => s + h.amount * h.currentPrice, 0);
-    const totalCost = holdings.reduce((s: number, h: any) => s + h.amount * h.avgPrice, 0);
+    const totalValue = holdings.reduce((s, h) => s + h.amount * h.currentPrice, 0);
+    const totalCost = holdings.reduce((s, h) => s + h.amount * h.avgPrice, 0);
 
     return json({
       ok: true,
       data: { holdings, totalValue, totalCost },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[portfolio/holdings/get]', error);
     return json({ error: 'Failed to load holdings' }, { status: 500 });
   }
@@ -79,7 +79,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       [user.id, symbol, name, amount, avgPrice, currentPrice, source]
     );
 
-    const r: any = result.rows[0];
+    const r: Record<string, unknown> = result.rows[0];
     return json({
       ok: true,
       holding: {
@@ -90,10 +90,10 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
         avgPrice: Number(r.avg_price),
         currentPrice: Number(r.current_price),
         source: r.source,
-        updatedAt: new Date(r.updated_at).getTime(),
+        updatedAt: new Date(r.updated_at as string).getTime(),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });
     console.error('[portfolio/holdings/post]', error);
     return json({ error: 'Failed to save holding' }, { status: 500 });

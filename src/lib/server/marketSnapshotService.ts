@@ -14,6 +14,7 @@ import { fetchDefiLlamaStableMcap } from '$lib/server/defillama';
 import { fetchYahooSeries } from '$lib/server/yahooFinance';
 import { fetchCoinMarketCapQuote } from '$lib/server/coinmarketcap';
 import { withTransaction } from '$lib/server/db';
+import { errorContains } from '$lib/utils/errorUtils';
 
 const SNAPSHOT_UNAVAILABLE_CODES = new Set(['42P01', '42703', '23503']);
 
@@ -133,7 +134,7 @@ function buildRsiDivergence(closes: number[], rsi: number[]): DivergenceSignal |
 function isPersistenceUnavailableError(error: any): boolean {
   const code = typeof error?.code === 'string' ? error.code : '';
   if (SNAPSHOT_UNAVAILABLE_CODES.has(code)) return true;
-  return typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set');
+  return errorContains(error, 'DATABASE_URL is not set');
 }
 
 async function persistSnapshots(
@@ -169,6 +170,7 @@ async function persistSnapshots(
     }
 
     // ── Batch indicator inserts (N+1 → 1 query) ──────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const indRows: { normalized: ReturnType<typeof normalizeSeries>; trend: ReturnType<typeof analyzeTrend>; indicator: string; div: any }[] = [];
     for (const row of indicators) {
       const normalized = normalizeSeries(row.timestamps, row.values, 200);
@@ -444,7 +446,7 @@ export async function collectMarketSnapshot(
     try {
       updated = await persistSnapshots(pair, timeframe, at, snapshotSources, indicators);
       persisted = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (isPersistenceUnavailableError(error)) {
         persisted = false;
         warning = 'market snapshot tables unavailable; returning non-persistent snapshot';
