@@ -81,7 +81,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **B-05** | 데이터 수집 API | snapshot/proxy 라우트 및 외부 API 클라이언트 추가 | — | ✅ |
 | **B-06** | progression 서버 반영 | 매치 결과 기준 LP/티어/해금 업데이트 일원화 | B-01, B-03 | ✅ |
 | **B-07** | RAG memory | `memory.ts` + pgvector 검색/저장 연동 | B-03 | ⬜ |
-| **B-08** | 하위호환 어댑터 | 기존 `/api/matches`를 신규 arena API 내부 호출로 연결 | B-01 | ⬜ |
+| **B-08** | 하위호환 어댑터 | 기존 `/api/matches`를 신규 arena API 내부 호출로 연결 | B-01 | ✅ |
 | **B-09** | Terminal Scan API | `POST /api/terminal/scan` (warroomScan.ts 로직 서버 이전) | B-02, S-05 | ✅ |
 | **B-10** | Terminal Chat API | 기존 `/api/chat/messages` 확장 (meta.mentionedAgent → 에이전트 응답 생성) | B-09 | ✅ |
 | **B-11** | Market Data API | 뉴스(RSS)/이벤트(온체인)/플로우(스마트머니) + DexScreener(boost/ads/takeover/search) 프록시 | — | ✅ |
