@@ -327,7 +327,16 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
     - 서버 sync 실패 시 dedupe 키 초기화로 다음 tick 재시도 가능하게 보강
 - Diff vs plan:
   - 없음
-- Commit / Push: pending
+- Validation:
+  - working branch: `npm run check` + `npm run build` 통과
+  - main branch: `npm run check` + `npm run build` 재검증 통과  
+    (main 워크트리에서 필요한 env: `COINALYZE_API_KEY`, `PUBLIC_EVM_CHAIN_ID`, `PUBLIC_EVM_RPC_URL`, `PUBLIC_WALLETCONNECT_PROJECT_ID`)
+- Commit / Push:
+  - branch commit: `20bfce4`
+  - branch push: `origin/codex/frontend-polish` 반영 완료
+- Merge / Push (main):
+  - merge commit: `028ee93`
+  - main push: `origin/main` 반영 완료
 - Status: DONE
 
 ---
