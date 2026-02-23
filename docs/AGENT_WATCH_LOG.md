@@ -210,3 +210,49 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - 없음
 - Commit / Push: `ca36fdc` — pushed to origin
 - Status: DONE
+
+---
+
+### W-20260223-008
+
+- Start (KST): 2026-02-23 20:40
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - Terminal 차트 헤더 레이아웃 복구 (PC/모바일 공통)
+  - `src/components/arena/ChartPanel.svelte`의 헤더 구조는 유지하고 가독성/정렬만 개선
+  - `src/routes/terminal/+page.svelte`의 과도한 `:global(.chart-bar ...)` 오버라이드 충돌 정리
+  - 모바일 탭 UI에서 코인 선택/타임프레임/스캔 버튼 가시성 및 스크롤 UX 개선
+- Overlap check (before work):
+  - `git log -n 10` 및 WATCH_LOG 최신 항목 확인: Agent 1-BE는 서버 레이어, Agent 3-Glue는 stores/utils 범위
+  - 이번 작업은 FE 소유 범위(`src/components/**`, `src/routes/**/+page.svelte`) 내에서만 진행
+  - 서버 엔드포인트(`+server.ts`) 및 `src/lib/server/**` 미수정 원칙 준수
+- Status: IN_PROGRESS
+
+---
+
+### W-20260223-009
+
+- Start (KST): 2026-02-23 20:45
+- End (KST): 2026-02-23 20:46
+- Agent: 3-Glue
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - `livePrice -> quickTrade/tracked` 자동 동기화를 Terminal 페이지 의존 없이 서비스 계층에서 시작
+  - `src/lib/services/**`에 singleton sync 서비스 추가
+  - `src/lib/stores/hydration.ts`에서 동기화 서비스 기동 연결
+- Overlap check (before work):
+  - `git log -n 12` 확인: 최신 커밋은 docs/BE/store 정리, Agent 3 IN_PROGRESS 항목 없음
+  - `W-006`, `W-008`은 FE 컴포넌트 범위(`src/components/**`, `src/routes/**`)로 이번 수정(`src/lib/services/**`, `src/lib/stores/**`)과 충돌 없음
+  - 현재 워크트리의 docs 변경은 기존 로그 갱신 이력이며, 이번 작업은 Agent 3 범위 파일만 수정
+- Changes (actual):
+  - `src/lib/services/livePriceSyncService.ts` 신규
+    - singleton 기반 `ensureLivePriceSyncStarted()` 추가
+    - `livePrice` 구독 시 즉시 `updateAllPrices(syncServer:false)` + `updateTrackedPrices()` 연동
+    - 30초 주기로 quickTrade 가격 서버 동기화(`syncServer:true`) 수행
+  - `src/lib/stores/hydration.ts`
+    - `hydrateDomainStores()` 시작 시 `ensureLivePriceSyncStarted()` 호출하도록 연결
+- Diff vs plan:
+  - 없음
+- Commit / Push: pending
+- Status: DONE
