@@ -1653,38 +1653,14 @@
   }
   .gmx-open-btn:hover { background: rgba(255,140,0,.15); border-color: rgba(255,140,0,.4); color: #ffa033; }
 
-  /* Desktop resizable zones (x/y per intel section) */
-  @media (min-width: 1024px) and (pointer: fine) {
-    .rp-body:not(.chat-mode),
-    .ac-msgs,
-    .hl-scrollable,
-    .trend-list,
-    .picks-panel {
-      min-height: 140px;
-      max-height: 100%;
-      resize: vertical;
-      overflow-y: auto;
-    }
-
-    .pp-scroll {
-      width: 100%;
-      max-width: 100%;
-      min-width: 180px;
-      align-self: flex-start;
-      resize: horizontal;
-      overflow-x: auto;
-      overflow-y: hidden;
-    }
-  }
-
-  @media (max-width: 1023px), (pointer: coarse) {
-    .rp-body,
-    .ac-msgs,
-    .hl-scrollable,
-    .trend-list,
-    .picks-panel,
-    .pp-scroll {
-      resize: none;
-    }
+  /* Internal section resizing disabled.
+     Panel sizing is controlled by terminal-level column resizers for consistency. */
+  .rp-body,
+  .ac-msgs,
+  .hl-scrollable,
+  .trend-list,
+  .picks-panel,
+  .pp-scroll {
+    resize: none;
   }
 </style>

@@ -13,8 +13,7 @@
     : 'Loading market data...';
   import { gameState } from '$lib/stores/gameState';
   import { livePrices } from '$lib/stores/priceStore';
-  import { updateAllPrices, hydrateQuickTrades } from '$lib/stores/quickTradeStore';
-  import { updateTrackedPrices } from '$lib/stores/trackedSignalStore';
+  import { hydrateQuickTrades } from '$lib/stores/quickTradeStore';
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { alertEngine } from '$lib/services/alertEngine';
@@ -148,6 +147,61 @@
     window.removeEventListener('mouseup', onMouseUp);
   }
 
+  function clampLeftWidth(next: number) {
+    return Math.min(MAX_LEFT, Math.max(MIN_LEFT, next));
+  }
+
+  function clampRightWidth(next: number) {
+    return Math.min(MAX_RIGHT, Math.max(MIN_RIGHT, next));
+  }
+
+  function resizePanelByWheel(target: 'left' | 'right' | 'center', e: WheelEvent, options?: { force?: boolean }) {
+    if (!isDesktop) return;
+
+    const force = options?.force === true;
+    const wantsResize = force || e.altKey || e.ctrlKey || e.metaKey;
+    if (!wantsResize) return;
+
+    const delta = e.deltaY === 0 ? e.deltaX : e.deltaY;
+    if (!Number.isFinite(delta) || delta === 0) return;
+    e.preventDefault();
+
+    const step = e.shiftKey ? 26 : 14;
+    const signed = delta > 0 ? step : -step;
+
+    if (target === 'left') {
+      if (leftCollapsed) {
+        leftCollapsed = false;
+        leftW = savedLeftW;
+      }
+      leftW = clampLeftWidth(leftW + signed);
+      savedLeftW = leftW;
+      return;
+    }
+
+    if (target === 'right') {
+      if (rightCollapsed) {
+        rightCollapsed = false;
+        rightW = savedRightW;
+      }
+      rightW = clampRightWidth(rightW + signed);
+      savedRightW = rightW;
+      return;
+    }
+
+    if (target === 'center') {
+      if (leftCollapsed || rightCollapsed) return;
+      const half = Math.round(signed / 2);
+      // Wheel down: widen side panels (center narrower). Wheel up: opposite.
+      const nextLeft = clampLeftWidth(leftW + half);
+      const nextRight = clampRightWidth(rightW + half);
+      leftW = nextLeft;
+      rightW = nextRight;
+      savedLeftW = leftW;
+      savedRightW = rightW;
+    }
+  }
+
   function handleResize() {
     windowWidth = window.innerWidth;
   }
@@ -187,10 +241,6 @@
     }
   }
 
-  // Fast local updates + slower server persistence (keeps UI snappy without hammering DB)
-  let priceUiSync: ReturnType<typeof setInterval> | null = null;
-  let pricePersistSync: ReturnType<typeof setInterval> | null = null;
-
   onMount(() => {
     windowWidth = window.innerWidth;
     window.addEventListener('resize', handleResize);
@@ -201,26 +251,7 @@
     // ── Load live ticker data ──
     fetchLiveTicker();
 
-    // 1) Local UI refresh — priceStore 변경 시에만 (3초 맹목 폴링 제거)
-    let _lastPriceHash = '';
-    priceUiSync = setInterval(() => {
-      const s = $gameState;
-      const hash = `${s.prices.BTC}|${s.prices.ETH}|${s.prices.SOL}`;
-      if (hash === _lastPriceHash) return; // 가격 변동 없으면 스킵
-      _lastPriceHash = hash;
-      const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
-      updateAllPrices(prices, { syncServer: false });
-      updateTrackedPrices(prices);
-    }, 3000);
-
-    // 2) Periodic server persistence (batched in store debounce)
-    pricePersistSync = setInterval(() => {
-      const s = $gameState;
-      const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
-      updateAllPrices(prices, { syncServer: true });
-    }, 30000);
-
-    // 3) Background alert engine — scans every 5min, fires notifications
+    // Background alert engine — scans every 5min, fires notifications
     alertEngine.start();
 
     const params = new URLSearchParams(window.location.search);
@@ -263,8 +294,6 @@
   });
 
   onDestroy(() => {
-    if (priceUiSync) clearInterval(priceUiSync);
-    if (pricePersistSync) clearInterval(pricePersistSync);
     alertEngine.stop();
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', handleResize);
@@ -444,15 +473,15 @@
   <!-- ═══ MOBILE LAYOUT ═══ -->
   {#if isMobile}
   <div class="terminal-mobile">
-    <div class="mob-topbar" class:chart-focus={mobileTab === 'chart'}>
-      <div class="mob-topline">
-        <div class="mob-title-wrap">
-          <span class="mob-eyebrow">TERMINAL MOBILE</span>
-          <span class="mob-title">{mobileMeta.label}</span>
+    {#if mobileTab !== 'chart'}
+      <div class="mob-topbar">
+        <div class="mob-topline">
+          <div class="mob-title-wrap">
+            <span class="mob-eyebrow">TERMINAL MOBILE</span>
+            <span class="mob-title">{mobileMeta.label}</span>
+          </div>
+          <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
         </div>
-        <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
-      </div>
-      {#if mobileTab !== 'chart'}
         <div class="mob-meta">
           <div class="mob-token">
             <TokenDropdown value={pair} compact on:select={onTokenSelect} />
@@ -460,13 +489,11 @@
           <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
           <span class="mob-meta-chip subtle">{pair}</span>
         </div>
-      {/if}
-      {#if mobileTab !== 'chart'}
         <div class="mob-desc">{mobileMeta.desc}</div>
-      {/if}
-    </div>
+      </div>
+    {/if}
 
-    <div class="mob-content">
+    <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
       {#if mobileTab === 'warroom'}
         <div class="mob-panel-wrap">
           <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
@@ -532,7 +559,12 @@
         <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scancomplete={handleScanComplete} />
       </div>
     {:else}
-      <button class="panel-strip panel-strip-left" on:click={toggleLeft} title="Show War Room">
+      <button
+        class="panel-strip panel-strip-left"
+        on:click={toggleLeft}
+        on:wheel={(e) => resizePanelByWheel('left', e, { force: true })}
+        title="Show War Room"
+      >
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="1" y="2" width="14" height="12" rx="1.5"/>
           <line x1="6" y1="2" x2="6" y2="14"/>
@@ -544,7 +576,7 @@
     <!-- Left Resizer (drag only, no toggle) -->
     {#if !leftCollapsed}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="resizer resizer-h resizer-left">
+      <div class="resizer resizer-h resizer-left" on:wheel={(e) => resizePanelByWheel('left', e, { force: true })} title="스크롤/드래그로 WAR ROOM 너비 조절">
         <div class="resizer-drag" on:mousedown={(e) => startDrag('left', e)}></div>
       </div>
     {:else}
@@ -561,7 +593,7 @@
     <!-- Right Resizer (drag only, no toggle) -->
     {#if !rightCollapsed}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="resizer resizer-h resizer-right">
+      <div class="resizer resizer-h resizer-right" on:wheel={(e) => resizePanelByWheel('right', e, { force: true })} title="스크롤/드래그로 INTEL 너비 조절">
         <div class="resizer-drag" on:mousedown={(e) => startDrag('right', e)}></div>
       </div>
     {:else}
@@ -574,7 +606,12 @@
         <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} on:collapse={toggleRight} />
       </div>
     {:else}
-      <button class="panel-strip panel-strip-right" on:click={toggleRight} title="Show Intel">
+      <button
+        class="panel-strip panel-strip-right"
+        on:click={toggleRight}
+        on:wheel={(e) => resizePanelByWheel('right', e, { force: true })}
+        title="Show Intel"
+      >
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="1" y="2" width="14" height="12" rx="1.5"/>
           <line x1="10" y1="2" x2="10" y2="14"/>
@@ -630,6 +667,7 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
+    overflow-x: clip;
     overscroll-behavior: none;
     isolation: isolate;
     background:
@@ -717,6 +755,7 @@
     grid-template-rows: 1fr auto;
     height: 100%;
     overflow: hidden;
+    overflow-x: clip;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
   }
@@ -920,12 +959,6 @@
       linear-gradient(180deg, rgba(14, 36, 23, 0.92), rgba(10, 27, 17, 0.94));
     backdrop-filter: blur(8px);
   }
-  .mob-topbar.chart-focus {
-    padding: 8px 10px 6px;
-  }
-  .mob-topbar.chart-focus .mob-topline {
-    margin-bottom: 0;
-  }
   .mob-topline {
     display: flex;
     align-items: flex-start;
@@ -1020,6 +1053,9 @@
     display: flex;
     flex-direction: column;
   }
+  .mob-content.chart-only {
+    padding: 6px 8px calc(10px + env(safe-area-inset-bottom));
+  }
   .mob-panel-wrap,
   .mob-chart-section {
     height: auto;
@@ -1044,16 +1080,24 @@
   .mob-bottom-nav {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: minmax(44px, 44px);
+    align-items: center;
     gap: 8px;
     padding: 8px 10px calc(6px + env(safe-area-inset-bottom));
+    min-height: calc(60px + env(safe-area-inset-bottom));
+    max-height: calc(72px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--term-border);
     background: rgba(10, 26, 16, 0.92);
     backdrop-filter: blur(8px);
     position: relative;
     z-index: 4;
+    overflow: hidden;
   }
   .mob-nav-btn {
-    min-height: 50px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    align-self: center;
     border-radius: 12px;
     border: 1px solid rgba(232, 150, 125, 0.16);
     background: rgba(240, 237, 228, 0.03);
@@ -1577,23 +1621,31 @@
   }
 
   .terminal-mobile :global(.chart-wrapper .chart-bar) {
-    gap: 5px;
-    padding: 6px 8px;
+    gap: 2px;
+    padding: 3px 5px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-top) {
-    gap: 5px;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-top) { gap: 5px; }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-tools) {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    gap: 3px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .bar-left) {
-    gap: 5px;
-    width: 100%;
+    gap: 4px;
+    width: auto;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot) {
-    min-width: 136px;
-    flex: 1 1 148px;
+    min-width: 124px;
+    flex: 0 0 auto;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-trigger) {
-    min-height: 24px;
-    padding: 2px 7px;
+    min-height: 20px;
+    padding: 1px 6px;
     gap: 3px;
     border-radius: 7px;
   }
@@ -1610,76 +1662,96 @@
     max-height: min(62vh, 340px);
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns) {
-    width: 100%;
+    width: auto;
+    flex: 0 0 auto;
+    min-width: max-content;
     padding-bottom: 1px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns .tfbtn) {
-    min-height: 22px;
-    height: 22px;
-    padding: 0 7px;
+    min-height: 20px;
+    height: 20px;
+    padding: 0 6px;
     font-size: 8px;
-    letter-spacing: .5px;
+    letter-spacing: .4px;
     border-radius: 5px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-right) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats) {
     width: 100%;
     gap: 4px;
-    row-gap: 4px;
-    align-items: center;
-  }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls) {
-    width: 100%;
-    gap: 4px;
-    flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
     white-space: nowrap;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls::-webkit-scrollbar) {
-    height: 3px;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat) {
+    height: 20px;
+    padding: 0 6px;
+    gap: 4px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls::-webkit-scrollbar-thumb) {
-    background: rgba(240, 237, 228, 0.2);
-    border-radius: 999px;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-k) {
+    font-size: 7px;
+    letter-spacing: .45px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-v) {
+    font-size: 8px;
+    letter-spacing: .25px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-right) {
+    width: auto;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls) {
+    width: auto;
+    flex: 0 0 auto;
+    min-width: max-content;
+    gap: 4px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .draw-tools) {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 2px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .mode-toggle .mode-btn) {
-    min-height: 22px;
-    padding: 0 7px;
+    min-height: 20px;
+    padding: 0 6px;
     font-size: 8px;
-    letter-spacing: .55px;
+    letter-spacing: .45px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .draw-tools .draw-btn) {
-    width: 22px;
-    height: 22px;
-    font-size: 9px;
+    width: 20px;
+    height: 20px;
+    font-size: 8px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .scan-btn) {
-    min-height: 22px;
-    height: 22px;
-    padding: 0 7px;
+    min-height: 20px;
+    height: 20px;
+    padding: 0 6px;
     font-size: 8px;
-    letter-spacing: .5px;
+    letter-spacing: .4px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info) {
-    margin-left: 0;
-    width: 100%;
+    margin-left: auto;
+    width: auto;
     justify-content: flex-end;
-    border-left: none;
-    padding-left: 0;
-    order: 99;
+    border-left: 1px solid rgba(240, 237, 228, 0.12);
+    padding-left: 4px;
+    gap: 3px;
+    order: initial;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .cprc) {
-    font-size: 12px;
-    letter-spacing: .3px;
+    font-size: 11px;
+    letter-spacing: .2px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .pchg) {
-    font-size: 9px;
+    font-size: 8px;
   }
   .terminal-mobile :global(.chart-wrapper .indicator-strip) {
-    padding: 4px 6px;
-    gap: 4px;
+    padding: 3px 5px;
+    gap: 3px;
     max-height: none;
     flex-wrap: nowrap;
     white-space: nowrap;
@@ -1690,10 +1762,10 @@
   .terminal-mobile :global(.chart-wrapper .ind-chip),
   .terminal-mobile :global(.chart-wrapper .legend-chip),
   .terminal-mobile :global(.chart-wrapper .view-chip) {
-    min-height: 20px;
-    height: 20px;
-    padding: 0 6px;
-    font-size: 8px;
+    min-height: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 7px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-footer) {
     gap: 6px;
@@ -1716,6 +1788,7 @@
   .terminal-mobile :global(.war-room .scan-tabs),
   .terminal-mobile :global(.war-room .token-tabs),
   .terminal-mobile :global(.chart-wrapper .indicator-strip),
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-tools),
   .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns) {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
@@ -1753,9 +1826,14 @@
     }
     .mob-bottom-nav {
       padding: 6px 8px calc(4px + env(safe-area-inset-bottom));
+      min-height: calc(54px + env(safe-area-inset-bottom));
+      max-height: calc(64px + env(safe-area-inset-bottom));
+      grid-auto-rows: minmax(40px, 40px);
     }
     .mob-nav-btn {
-      min-height: 44px;
+      height: 40px;
+      min-height: 40px;
+      max-height: 40px;
     }
   }
 

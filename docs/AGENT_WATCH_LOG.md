@@ -329,3 +329,193 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - 없음
 - Commit / Push: pending
 - Status: DONE
+
+---
+
+### W-20260223-012
+
+- Start (KST): 2026-02-23 21:54
+- End (KST): 2026-02-23 22:44
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - Binance Futures 레이아웃 참고해 Terminal 차트 헤더 재구성(시세요약 + 도구영역 계층화)
+  - PC 깨짐 원인인 차트 헤더 반응형 분기 보정(`src/components/arena/ChartPanel.svelte`)
+  - 모바일/데스크톱 공통 가독성 개선(코인 드롭다운, 타임프레임, 컨트롤 밀집도)
+- Overlap check (before work):
+  - FE 범위 파일만 수정: `src/components/arena/ChartPanel.svelte`, 필요 시 `src/routes/terminal/+page.svelte`
+  - BE/서버 파일(`src/lib/server/**`, `src/routes/api/**`, `src/lib/engine/**`) 미수정 유지
+  - WATCH_LOG 기준 다른 에이전트 최근 항목은 stores/services, docs 범위로 직접 충돌 없음
+- Changes (actual):
+  - `src/components/arena/ChartPanel.svelte`
+    - 차트 헤더를 Binance 스타일로 2단 구성: 상단(라이브 페어 + 24H 저가/고가/거래대금 + 대형 가격), 하단(타임프레임/모드/드로잉/스캔)
+    - miniTicker full update 연동으로 `priceChange24h`, `high24h`, `low24h`, `quoteVolume24h` 실시간 반영
+    - 데스크톱 반응형 분기 추가(`<=1180px`)로 grid→가로 스크롤 전환, 모바일(`<=768px`)에서는 세로 스택 고정
+  - `src/routes/terminal/+page.svelte`
+    - 모바일 `chart` 탭에서 상단 보조 헤더 제거(차트 영역 우선) 및 `mob-content.chart-only` 패딩 최적화
+    - 차트 바 오버라이드를 `market-stats`/`price-info` 기준으로 조정해 드롭다운/가격/컨트롤 가시성 회복
+- Diff vs plan:
+  - 계획 대비 추가: 모바일 chart 탭에서 상단 문구 헤더를 제거해 실제 차트 노출 영역 확대
+- Commit / Push: 미실행 (사용자 확인 후 진행)
+- Status: DONE
+
+---
+
+### W-20260223-013
+
+- Start (KST): 2026-02-23 23:05
+- End (KST): 2026-02-23 23:12
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 차트 상단/지표 요약 줄바꿈 제거
+  - 지표 collapsed 행을 1줄 스크롤로 고정해 차트 가시 영역 확대
+  - 모바일에서 chart-bar/indicator-strip 높이 추가 축소
+- Overlap check (before work):
+  - FE 소유 파일만 수정: `src/components/arena/ChartPanel.svelte`, `src/routes/terminal/+page.svelte`
+  - BE/API 경로(`src/routes/api/**`, `src/lib/server/**`) 미수정 확인
+  - WATCH_LOG 최신 FE 작업(W-012) 후속 미세 조정으로 충돌 없음
+- Changes (actual):
+  - `src/components/arena/ChartPanel.svelte`
+    - collapsed 지표 라벨을 `MA20/MA60/MA120(optional)/RSI14/VOL`로 축약
+    - `.indicator-strip` / `.collapsed-summary`를 nowrap + horizontal scroll로 전환
+    - `.sum-title`/`.sum-item.optional` 모바일(`<=520px`) 숨김 처리로 세로 줄바꿈 제거
+  - `src/routes/terminal/+page.svelte`
+    - 모바일 chart-bar 패딩/간격 축소 (`gap`, `padding`)
+    - `.tf-btns`, `.bar-controls`를 `flex: 0 0 auto` + `min-width: max-content`로 고정
+    - `.draw-tools` nowrap 보장, `.price-info` 간격 축소
+    - 모바일 indicator strip/chip 높이 추가 축소 (20px → 18px)
+    - 가로 스크롤 터치 영역에 `.bar-tools` 추가
+- Diff vs plan:
+  - 없음
+- Commit / Push: 미실행 (사용자 확인 후 진행)
+- Status: DONE
+
+---
+
+### W-20260223-014
+
+- Start (KST): 2026-02-23 23:16
+- End (KST): 2026-02-23 23:22
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 데스크톱 3패널(좌/중앙/우) 휠 기반 너비 조절 추가
+  - 기존 드래그 리사이저는 유지, 스크롤 리사이즈를 보조 입력으로 확장
+  - 패널 본문 스크롤과 충돌 없도록 modifier(Alt/Ctrl/Cmd) 게이트 적용
+- Overlap check (before work):
+  - FE 범위 파일만 수정: `src/routes/terminal/+page.svelte`
+  - 서버/API/스토어 파일 미수정 확인
+  - WATCH_LOG 최근 항목(W-013)과 동일 페이지 후속 UX 작업으로 충돌 없음
+- Changes (actual):
+  - `src/routes/terminal/+page.svelte`
+    - `resizePanelByWheel()` 추가:
+      - 좌/우 패널: 너비 증감 + clamp + collapsed 상태 복원 처리
+      - 중앙 패널: 좌/우를 동시 증감해 차트 영역 비율 빠르게 조정
+      - 기본 게이트: `Alt/Ctrl/Cmd + wheel`, 강제 옵션 시 modifier 없이 동작
+    - 데스크톱 마크업 이벤트 연결:
+      - `tl/tr/tc` 패널 본문에 `on:wheel` 연결(Modifier 기반)
+      - 좌/우 리사이저 바에 `on:wheel` 연결(강제 resize)
+      - 접힘 상태 panel strip 버튼에도 `on:wheel` 연결(복원 + resize)
+- Diff vs plan:
+  - 없음
+- Commit / Push: 미실행 (사용자 확인 후 진행)
+- Status: DONE
+
+---
+
+### W-20260223-015
+
+- Start (KST): 2026-02-23 23:47
+- End (KST): 2026-02-24 00:05
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 터미널 차트 상단/하단 과대 높이 축소 (차트 가시영역 확대)
+  - 강제된 내부 가로/세로 `resize` 핸들 제거 (Chart/Intel 내부)
+  - 지표 라벨/힌트 압축으로 불필요한 가로 스크롤 최소화
+- Overlap check (before work):
+  - FE 소유 파일만 수정: `src/components/arena/ChartPanel.svelte`, `src/components/terminal/IntelPanel.svelte`, `src/routes/terminal/+page.svelte`
+  - 서버/API 경로(`src/routes/api/**`, `src/lib/server/**`) 미수정
+  - 기존 FE 변경 파일과 동일 범위 후속 UX 수정이며 BE 충돌 없음
+- Changes (actual):
+  - `src/components/arena/ChartPanel.svelte`
+    - 지표 스트립/차트 컨테이너의 내부 `resize: horizontal|vertical` 제거
+    - 상단 바 패딩/간격 축소로 차트 가시영역 확대
+    - `bar-top`(24h 메타 줄) 노출 임계폭 상향 (`1500px → 1900px`)으로 기본 높이 축소
+    - 지표 라벨 축약 (`RSI14(상대강도) → RSI14`, `VOL(거래량) → VOL`)
+    - 긴 힌트 문구 축약 및 중간 해상도에서 숨김 (`<=1580px`)
+    - MA120 칩을 optional 처리하고 중간 해상도에서 숨김 (`<=1450px`)
+  - `src/components/terminal/IntelPanel.svelte`
+    - 내부 섹션(`rp-body`, `ac-msgs`, `hl-scrollable`, `trend-list`, `picks-panel`, `pp-scroll`) 강제 리사이즈 제거
+    - 컬럼 패널 크기 제어를 terminal 레벨 리사이저로 일원화
+  - `src/routes/terminal/+page.svelte`
+    - 패널 본문(`tl/tc/tr`)의 휠 리사이즈 바인딩 제거 (본문 스크롤과 충돌 방지)
+    - 리사이저 바/접힘 스트립에서만 휠 리사이즈 유지
+    - 터미널 루트/데스크톱 그리드 `overflow-x: clip` 추가로 가로 넘침 억제
+- Diff vs plan:
+  - 없음 (계획 범위 내)
+- Commit / Push: 미실행
+- Status: DONE
+
+---
+
+### W-20260223-016
+
+- Start (KST): 2026-02-24 00:10
+- End (KST): 2026-02-24 00:18
+- Agent: 2-FE
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - 모바일 하단 네비(`WAR ROOM / CHART / INTEL`)가 비정상적으로 세로 확장되는 반응형 버그 수정
+  - 네비 컨테이너/버튼 높이 고정, grid stretch 해제, 작은 화면에서도 동일 밀도 유지
+- Overlap check (before work):
+  - FE 소유 파일만 수정: `src/routes/terminal/+page.svelte`
+  - 서버/API/스토어 파일 미수정
+  - 기존 터미널 FE 작업 후속이며 BE 충돌 없음
+- Changes (actual):
+  - `src/routes/terminal/+page.svelte`
+    - `.mob-bottom-nav`에 `grid-auto-rows`/`min-height`/`max-height` 추가로 하단 네비 높이 상한 고정
+    - `.mob-bottom-nav`에 `align-items: center`, `overflow: hidden` 추가로 grid stretch 방지
+    - `.mob-nav-btn` 높이를 `height/min/max`로 고정해 세로 비정상 확장 차단
+    - 저높이 화면(`max-height: 760px`)에서도 동일하게 축소 고정값 적용
+- Diff vs plan:
+  - 없음
+- Commit / Push: 미실행
+- Status: DONE
+
+---
+
+### W-20260224-017
+
+- Start (KST): 2026-02-24 00:16
+- End (KST): 2026-02-24 00:18
+- Agent: 4-Watcher
+- Branch: `codex/fe-api-connect`
+- Scope (planned):
+  - F-03 상태 점검: `src/routes/terminal/+page.svelte`의 3초/30초 polling 제거 확인
+  - `gameState.prices` 직접 write 경로를 1개로 축소 (`src/routes/+layout.svelte` 유지, `src/components/arena/ChartPanel.svelte` 제거)
+  - WarRoom/alertEngine에 `document.visibilityState` 기반 throttle 적용
+  - 이번 감사 라운드와 최근 커밋 반영 상태 기록
+- Overlap check (before work):
+  - `git log --oneline -8` 확인: `5bcfb15`, `858e20b`, `4321817`, `f180a48` 등 최근 성능/UX 커밋 반영 상태 확인
+  - WATCH_LOG 최신 항목 확인: `W-20260223-016`은 `src/routes/terminal/+page.svelte` 작업 중이며, 본 라운드는 해당 파일 직접 수정 없이 교차 파일(`ChartPanel/WarRoom/alertEngine/docs`)만 수정
+  - Section 7 기준 Watcher 허용 예외(성능/버그 교차 수정) 범위 내에서 최소 변경 적용
+- Changes (actual):
+  - `src/routes/terminal/+page.svelte`
+    - 3초/30초 polling 제거 상태 재검증 완료 (`updateAllPrices`, `updateTrackedPrices`, 관련 interval 미존재)
+  - `src/components/arena/ChartPanel.svelte`
+    - `flushPriceUpdate`/`throttledPriceUpdate`에서 `gameState.prices` 직접 write 제거
+    - 가격 직접 write 경로를 `src/routes/+layout.svelte` 1곳으로 축소
+  - `src/components/terminal/WarRoom.svelte`
+    - 30초 interval 루프에 `document.visibilityState` 게이트 추가 (hidden 탭 skip)
+    - `visibilitychange` 복귀 시 `fetchDerivativesData()` 즉시 1회 실행
+  - `src/lib/services/alertEngine.ts`
+    - hidden 탭 throttle(`HIDDEN_INTERVAL_MS`) 추가
+    - `visibilitychange` 복귀 시 즉시 scan + 주기 재스케줄로 활성 탭 우선 동작
+  - `docs/AGENT_WATCH_LOG.md`
+    - 본 라운드(W-20260224-017) 및 최근 커밋 반영 상태 기록
+- Diff vs plan:
+  - 없음
+- Commit / Push: 미실행 (기존 작업트리 변경 포함, 사용자 지시 대기)
+- Status: DONE
