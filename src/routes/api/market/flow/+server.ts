@@ -30,6 +30,13 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
     const deriv = derivRes.status === 'fulfilled' ? derivRes.value : null;
     const cmc = cmcRes.status === 'fulfilled' ? cmcRes.value : null;
 
+    const bias = pickBias(
+      deriv?.funding ?? null,
+      deriv?.lsRatio ?? null,
+      deriv?.liqLong24h ?? 0,
+      deriv?.liqShort24h ?? 0
+    );
+
     // records는 실제 파생/플로우 데이터에서 구성 (하드코딩 제거)
     const records: Array<{id:string;pair:string;token:string;agentId:string;agent:string;vote:string;confidence:number;text:string;source:string;createdAt:number}> = [];
     const now = Date.now();
@@ -51,13 +58,6 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
         source: 'BINANCE', createdAt: now,
       });
     }
-
-    const bias = pickBias(
-      deriv?.funding ?? null,
-      deriv?.lsRatio ?? null,
-      deriv?.liqLong24h ?? 0,
-      deriv?.liqShort24h ?? 0
-    );
 
     return json(
       {

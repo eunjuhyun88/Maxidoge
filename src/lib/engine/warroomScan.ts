@@ -14,6 +14,8 @@ import {
 } from '$lib/api/coinalyze';
 import type { AgentSignal } from '$lib/data/warroom';
 import { AGENT_POOL } from './agents';
+import { fetchFearGreed, fngToScore } from '$lib/api/feargreed';
+import { fetchGlobal, btcDominanceToScore } from '$lib/api/coingecko';
 
 type Vote = AgentSignal['vote'];
 
@@ -42,7 +44,10 @@ const AGENT_META = {
   flow: { icon: 'FLOW', name: AGENT_POOL.FLOW.name, color: AGENT_POOL.FLOW.color },
   deriv: { icon: 'DER', name: AGENT_POOL.DERIV.name, color: AGENT_POOL.DERIV.color },
   senti: { icon: 'SENT', name: AGENT_POOL.SENTI.name, color: AGENT_POOL.SENTI.color },
-  macro: { icon: 'MACRO', name: AGENT_POOL.MACRO.name, color: AGENT_POOL.MACRO.color }
+  macro: { icon: 'MACRO', name: AGENT_POOL.MACRO.name, color: AGENT_POOL.MACRO.color },
+  vpa: { icon: 'VPA', name: AGENT_POOL.VPA.name, color: AGENT_POOL.VPA.color },
+  ict: { icon: 'ICT', name: AGENT_POOL.ICT.name, color: AGENT_POOL.ICT.color },
+  valuation: { icon: 'VAL', name: AGENT_POOL.VALUATION.name, color: AGENT_POOL.VALUATION.color }
 } as const;
 
 function clamp(value: number, min: number, max: number) {
@@ -167,12 +172,14 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
     throw new Error('캔들 데이터가 부족해서 스캔을 완료할 수 없습니다.');
   }
 
-  const [oiRaw, fundingRaw, predFundingRaw, lsRaw, liqRaw] = await Promise.allSettled([
+  const [oiRaw, fundingRaw, predFundingRaw, lsRaw, liqRaw, fngRaw, cgGlobalRaw] = await Promise.allSettled([
     fetchCurrentOI(marketPair),
     fetchCurrentFunding(marketPair),
     fetchPredictedFunding(marketPair),
     fetchLSRatioHistory(marketPair, tf, 24),
-    fetchLiquidationHistory(marketPair, tf, 24)
+    fetchLiquidationHistory(marketPair, tf, 24),
+    fetchFearGreed(),
+    fetchGlobal()
   ]);
 
   const now = Date.now();
@@ -203,6 +210,8 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
   const liqShort = liqRaw.status === 'fulfilled' && liqRaw.value.length > 0
     ? liqRaw.value.reduce((sum, d) => sum + d.short, 0)
     : 0;
+  const fng = fngRaw.status === 'fulfilled' ? fngRaw.value : null;
+  const cgGlobal = cgGlobalRaw.status === 'fulfilled' ? cgGlobalRaw.value : null;
 
   let structureScore = 0;
   if (sma20 != null) structureScore += latestClose >= sma20 ? 0.26 : -0.26;
@@ -246,9 +255,16 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
   }
 
   let sentiScore = 0;
-  if (change24 >= 2.0) sentiScore += 0.22;
-  else if (change24 <= -2.0) sentiScore -= 0.22;
-  else sentiScore += change24 / 15;
+  if (fng) {
+    // Real Fear & Greed data — contrarian scoring
+    const fngScoreVal = fngToScore(fng.value);
+    sentiScore += (fngScoreVal / 100) * 0.35;
+  } else {
+    // Fallback: price momentum proxy
+    if (change24 >= 2.0) sentiScore += 0.22;
+    else if (change24 <= -2.0) sentiScore -= 0.22;
+    else sentiScore += change24 / 15;
+  }
   if (rsi14 != null) {
     if (rsi14 > 62) sentiScore += 0.12;
     else if (rsi14 < 38) sentiScore -= 0.12;
@@ -259,6 +275,14 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
   }
 
   let macroScore = 0;
+  if (cgGlobal) {
+    // Real CoinGecko global data
+    const domScore = btcDominanceToScore(cgGlobal.btcDominance);
+    macroScore += (domScore / 100) * 0.16;
+    if (cgGlobal.marketCapChange24h > 2) macroScore += 0.12;
+    else if (cgGlobal.marketCapChange24h < -2) macroScore -= 0.12;
+    else macroScore += cgGlobal.marketCapChange24h / 25;
+  }
   if (sma120 != null) macroScore += latestClose >= sma120 ? 0.14 : -0.14;
   if (Math.abs(change24) > 4) macroScore += change24 > 0 ? 0.1 : -0.1;
   if (funding != null && change24 > 0 && funding > 0.0006) macroScore -= 0.12;
@@ -269,17 +293,89 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
     if (lsRatio < 0.88) macroScore += 0.08;
   }
 
+  // ── VPA Agent (Volume Price Analysis) ──
+  const recentK20 = klines.slice(-20);
+  const cvd = recentK20.reduce((sum, k) => sum + (k.close >= k.open ? k.volume : -k.volume), 0);
+  const totalVol20 = recentK20.reduce((sum, k) => sum + k.volume, 0);
+  const cvdRatio = totalVol20 > 0 ? cvd / totalVol20 : 0;
+  const buyVol = recentK20.filter(k => k.close >= k.open).reduce((s, k) => s + k.volume, 0);
+  const sellVol = recentK20.filter(k => k.close < k.open).reduce((s, k) => s + k.volume, 0);
+  const bsRatio = (buyVol + sellVol) > 0 ? buyVol / (buyVol + sellVol) : 0.5;
+  const last5 = klines.slice(-5);
+  let absorptionCount = 0;
+  for (const k of last5) {
+    const body = Math.abs(k.close - k.open);
+    const range = k.high - k.low;
+    if (range > 0 && body / range < 0.3 && k.volume > avgVolume20 * 1.2) absorptionCount++;
+  }
+  let vpaScore = 0;
+  vpaScore += cvdRatio * 0.4;
+  vpaScore += (bsRatio - 0.5) * 0.6;
+  if (absorptionCount >= 2) vpaScore += latestClose < (sma20 ?? latestClose) ? 0.15 : -0.15;
+
+  // ── ICT Agent (Smart Money Concepts) ──
+  const high50 = Math.max(...klines.slice(-50).map(k => k.high));
+  const low50 = Math.min(...klines.slice(-50).map(k => k.low));
+  const range50 = high50 - low50;
+  const pricePosition = range50 > 0 ? (latestClose - low50) / range50 : 0.5;
+  const recentHigh = Math.max(...klines.slice(-10).map(k => k.high));
+  const prevHigh = Math.max(...klines.slice(-20, -10).map(k => k.high));
+  const recentLow = Math.min(...klines.slice(-10).map(k => k.low));
+  const prevLow = Math.min(...klines.slice(-20, -10).map(k => k.low));
+  let bullFVG = 0, bearFVG = 0;
+  for (let i = klines.length - 3; i >= Math.max(klines.length - 12, 2); i--) {
+    if (klines[i].low > klines[i - 2].high) bullFVG++;
+    if (klines[i].high < klines[i - 2].low) bearFVG++;
+  }
+  let ictScore = 0;
+  ictScore += (0.5 - pricePosition) * 0.4;
+  if (recentHigh > prevHigh) ictScore += 0.15;
+  if (recentLow < prevLow) ictScore -= 0.15;
+  ictScore += (bullFVG - bearFVG) * 0.08;
+  const last3 = klines.slice(-3);
+  for (const k of last3) {
+    const body = Math.abs(k.close - k.open);
+    const range = k.high - k.low;
+    if (range > 0 && body / range > 0.7) ictScore += k.close > k.open ? 0.06 : -0.06;
+  }
+
+  // ── VALUATION Agent (On-chain Valuation Proxy) ──
+  let valuationScore = 0;
+  if (sma120 != null) {
+    const deviation = (latestClose - sma120) / sma120;
+    if (deviation > 0.15) valuationScore -= 0.25;
+    else if (deviation < -0.15) valuationScore += 0.25;
+    else valuationScore += -deviation * 1.2;
+  }
+  if (rsi14 != null) {
+    if (rsi14 > 70) valuationScore -= 0.2;
+    else if (rsi14 < 30) valuationScore += 0.2;
+    else valuationScore += (50 - rsi14) / 150;
+  }
+  if (volumeRatio > 1.5 && change24 < -1) valuationScore += 0.12;
+  if (volumeRatio > 1.5 && change24 > 3) valuationScore -= 0.12;
+  if (cgGlobal) {
+    if (cgGlobal.marketCapChange24h < -5) valuationScore += 0.1;
+    if (cgGlobal.marketCapChange24h > 5) valuationScore -= 0.1;
+  }
+
   const structureVote = scoreToVote(structureScore, 0.1);
   const flowVote = scoreToVote(flowScore, 0.08);
   const derivVote = derivDataPoints === 0 ? 'neutral' : scoreToVote(derivScore, 0.1);
   const sentiVote = scoreToVote(sentiScore, 0.08);
   const macroVote = scoreToVote(macroScore, 0.1);
+  const vpaVote = scoreToVote(vpaScore, 0.08);
+  const ictVote = scoreToVote(ictScore, 0.1);
+  const valuationVote = scoreToVote(valuationScore, 0.1);
 
   const structurePlan = buildTradePlan(latestClose, structureVote, structureScore, atrPct);
   const flowPlan = buildTradePlan(latestClose, flowVote, flowScore, atrPct);
   const derivPlan = buildTradePlan(latestClose, derivVote, derivScore, atrPct);
   const sentiPlan = buildTradePlan(latestClose, sentiVote, sentiScore, atrPct);
   const macroPlan = buildTradePlan(latestClose, macroVote, macroScore, atrPct);
+  const vpaPlan = buildTradePlan(latestClose, vpaVote, vpaScore, atrPct);
+  const ictPlan = buildTradePlan(latestClose, ictVote, ictScore, atrPct);
+  const valuationPlan = buildTradePlan(latestClose, valuationVote, valuationScore, atrPct);
 
   const signals: AgentSignal[] = [
     {
@@ -345,8 +441,10 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
       pair: marketPair,
       vote: sentiVote,
       conf: scoreToConfidence(sentiScore, 54),
-      text: `Sentiment proxy · 24h ${fmtSignedPct(change24)} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · volume regime x${volumeRatio.toFixed(2)}.`,
-      src: 'PROXY:PRICE/MOMENTUM',
+      text: fng
+        ? `F&G ${fng.value} ${fng.classification} · 24h ${fmtSignedPct(change24)} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · volume x${volumeRatio.toFixed(2)}.`
+        : `Sentiment proxy · 24h ${fmtSignedPct(change24)} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · volume x${volumeRatio.toFixed(2)}.`,
+      src: fng ? 'ALTERNATIVE.ME:F&G' : 'PROXY:PRICE/MOMENTUM',
       time: timeLabel,
       entry: sentiPlan.entry,
       tp: sentiPlan.tp,
@@ -362,12 +460,65 @@ export async function runWarRoomScan(pair: string, timeframe: string): Promise<W
       pair: marketPair,
       vote: macroVote,
       conf: scoreToConfidence(macroScore, 57),
-      text: `Macro regime proxy · trend ${sma120 != null ? (latestClose >= sma120 ? 'risk-on' : 'risk-off') : 'unknown'} · funding ${funding != null ? formatFunding(funding) : '—'} · volatility ${atrPct != null ? atrPct.toFixed(2) : '—'}%.`,
-      src: 'MACRO:REGIME',
+      text: cgGlobal
+        ? `BTC Dom ${cgGlobal.btcDominance.toFixed(1)}% · MktCap 24h ${fmtSignedPct(cgGlobal.marketCapChange24h)} · trend ${sma120 != null ? (latestClose >= sma120 ? 'risk-on' : 'risk-off') : 'unknown'} · funding ${funding != null ? formatFunding(funding) : '—'} · vol ${atrPct != null ? atrPct.toFixed(2) : '—'}%.`
+        : `Macro regime proxy · trend ${sma120 != null ? (latestClose >= sma120 ? 'risk-on' : 'risk-off') : 'unknown'} · funding ${funding != null ? formatFunding(funding) : '—'} · volatility ${atrPct != null ? atrPct.toFixed(2) : '—'}%.`,
+      src: cgGlobal ? 'COINGECKO:GLOBAL' : 'MACRO:REGIME',
       time: timeLabel,
       entry: macroPlan.entry,
       tp: macroPlan.tp,
       sl: macroPlan.sl
+    },
+    {
+      id: `vpa-${scanRunId}`,
+      agentId: 'vpa',
+      icon: AGENT_META.vpa.icon,
+      name: AGENT_META.vpa.name,
+      color: AGENT_META.vpa.color,
+      token,
+      pair: marketPair,
+      vote: vpaVote,
+      conf: scoreToConfidence(vpaScore, 56),
+      text: `CVD ${cvdRatio > 0 ? 'bullish' : 'bearish'} ${fmtSignedPct(cvdRatio * 100)} · Buy vol ${(bsRatio * 100).toFixed(0)}% · Vol x${volumeRatio.toFixed(2)} · ${absorptionCount >= 2 ? 'Absorption detected' : 'No absorption'}.`,
+      src: `BINANCE:${token}:VOLUME`,
+      time: timeLabel,
+      entry: vpaPlan.entry,
+      tp: vpaPlan.tp,
+      sl: vpaPlan.sl
+    },
+    {
+      id: `ict-${scanRunId}`,
+      agentId: 'ict',
+      icon: AGENT_META.ict.icon,
+      name: AGENT_META.ict.name,
+      color: AGENT_META.ict.color,
+      token,
+      pair: marketPair,
+      vote: ictVote,
+      conf: scoreToConfidence(ictScore, 55),
+      text: `${pricePosition > 0.5 ? 'Premium' : 'Discount'} zone ${(pricePosition * 100).toFixed(0)}% · ${recentHigh > prevHigh ? 'Bullish BOS' : recentLow < prevLow ? 'Bearish BOS' : 'No BOS'} · FVG bull ${bullFVG} / bear ${bearFVG} · Range ${fmtPrice(low50)}-${fmtPrice(high50)}.`,
+      src: `BINANCE:${token}:ICT`,
+      time: timeLabel,
+      entry: ictPlan.entry,
+      tp: ictPlan.tp,
+      sl: ictPlan.sl
+    },
+    {
+      id: `valuation-${scanRunId}`,
+      agentId: 'valuation',
+      icon: AGENT_META.valuation.icon,
+      name: AGENT_META.valuation.name,
+      color: AGENT_META.valuation.color,
+      token,
+      pair: marketPair,
+      vote: valuationVote,
+      conf: scoreToConfidence(valuationScore, 54),
+      text: `${sma120 != null ? `MA120 dev ${fmtSignedPct(((latestClose - sma120) / sma120) * 100)}` : 'MA120 —'} · RSI ${rsi14 != null ? rsi14.toFixed(1) : '—'} · Vol regime x${volumeRatio.toFixed(2)}${cgGlobal ? ` · MktCap ${fmtSignedPct(cgGlobal.marketCapChange24h)}` : ''}.`,
+      src: cgGlobal ? 'COINGECKO:VALUATION' : 'PROXY:VALUATION',
+      time: timeLabel,
+      entry: valuationPlan.entry,
+      tp: valuationPlan.tp,
+      sl: valuationPlan.sl
     }
   ];
 
