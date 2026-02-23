@@ -295,6 +295,4 @@ export function clearAll() {
   trackedSignalStore.update(() => ({ signals: [] }));
 }
 
-if (typeof window !== 'undefined') {
-  void hydrateTrackedSignals();
-}
+// 자동 hydration은 hydrateDomainStores() 단일 진입점에서 수행한다.
