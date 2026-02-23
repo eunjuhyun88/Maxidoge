@@ -254,5 +254,5 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
     - `hydrateDomainStores()` 시작 시 `ensureLivePriceSyncStarted()` 호출하도록 연결
 - Diff vs plan:
   - 없음
-- Commit / Push: pending
+- Commit / Push: `1e8b616` — pushed to origin
 - Status: DONE
