@@ -129,7 +129,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
     - `getLivePriceSnapshot(['BTC','ETH','SOL'])` 기반 동기화로 변경
 - Diff vs plan:
   - 없음
-- Commit / Push: `ca36fdc` — pushed to origin
+- Commit / Push: `50a0216` — pushed to origin
 - Status: DONE
 
 ---
@@ -156,7 +156,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `src/lib/server/scanEngine.ts` — 신규: 서버사이드 스캔 오케스트레이션 (13 소스 병렬 fetch → 8 에이전트 스코어링 → WarRoomScanResult, 동시성 제어 포함)
   - `src/lib/services/scanService.ts` — warroomScan → scanEngine 전환 + persistScan N+1 → 배치 INSERT (8쿼리→1쿼리)
 - Diff vs plan: 없음 (계획 4건 전부 실행)
-- Commit / Push: pending
+- Commit / Push: `ca36fdc` — pushed to origin
 - Status: DONE
 
 ---
