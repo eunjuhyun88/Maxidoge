@@ -789,8 +789,26 @@
   type WarRoomHandle = {
     triggerScanFromChart?: () => void;
   };
+  type PatternScanScope = 'visible' | 'full';
+  type PatternScanReport = {
+    ok: boolean;
+    scope: PatternScanScope;
+    candleCount: number;
+    patternCount: number;
+    patterns: Array<{
+      kind: 'head_and_shoulders' | 'falling_wedge';
+      shortName: string;
+      direction: 'BULLISH' | 'BEARISH';
+      status: 'FORMING' | 'CONFIRMED';
+      confidence: number;
+      startTime: number;
+      endTime: number;
+    }>;
+    message: string;
+  };
   type ChartPanelHandle = {
     activateTradeDrawing?: (dir?: 'LONG' | 'SHORT') => Promise<void> | void;
+    runPatternScanFromIntel?: (options?: { scope?: PatternScanScope; focus?: boolean }) => Promise<PatternScanReport>;
   };
   let warRoomRef: WarRoomHandle | null = null;
   let mobileChartRef: ChartPanelHandle | null = null;
@@ -865,7 +883,7 @@
   let chatMessages: ChatMsg[] = [
     { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'MAXI⚡DOGE Orchestrator v8 online. 8 agents standing by. Scan first, then ask questions about the results.', time: '—', isUser: false, isSystem: true },
     { from: 'ORCHESTRATOR', icon: '🧠', color: '#ff2d9b',
-      text: '💡 Try these:\n• "BTC 전망 분석해줘" — I\'ll route to the right agents\n• "@STRUCTURE MA, RSI 분석" — Direct to Structure agent\n• "@DERIV 펀딩 + OI 어때?" — Derivatives analysis\n• "@FLOW 고래 움직임?" — On-chain + whale flow\n• "@SENTI 소셜 센티먼트" — F&G + LunarCrush social\n• "@MACRO DXY, 금리 영향?" — Macro regime check',
+      text: '💡 Try these:\n• "BTC 전망 분석해줘" — I\'ll route to the right agents\n• "차트패턴 찾아봐" — 보이는 구간 패턴을 차트에 바로 표시\n• "@STRUCTURE MA, RSI 분석" — Direct to Structure agent\n• "@DERIV 펀딩 + OI 어때?" — Derivatives analysis\n• "@FLOW 고래 움직임?" — On-chain + whale flow\n• "@SENTI 소셜 센티먼트" — F&G + LunarCrush social\n• "@MACRO DXY, 금리 영향?" — Macro regime check',
       time: '—', isUser: false },
   ];
   let isTyping = false;
@@ -890,6 +908,161 @@
     if (/\b(tp down|target down|lower low|resistance reject)\b/.test(lower)) shortScore += 1;
     if (longScore === shortScore) return null;
     return longScore > shortScore ? 'LONG' : 'SHORT';
+  }
+
+  function detectMentionedAgentLocal(text: string): string | null {
+    const mention = text.match(/@([a-z0-9_]+)/i);
+    if (!mention) return null;
+    const token = String(mention[1] || '').toUpperCase();
+    const exact = AGDEFS.find((ag) => ag.name.toUpperCase() === token);
+    if (exact) return exact.name;
+    if (token === 'ORCHESTRATOR' || token === 'SYSTEM' || token === 'AGENT') return 'ORCHESTRATOR';
+    if (token === 'SENTIMENT') return 'SENTI';
+    if (token === 'VALUE') return 'VALUATION';
+    return null;
+  }
+
+  function inferAgentFromIntentLocal(text: string): string {
+    const lower = text.toLowerCase();
+    if (/차트|candle|캔들|패턴|pattern|bos|choch|ob|fvg|support|resist|지지|저항|추세|trend|구조|structure/.test(lower)) return 'STRUCTURE';
+    if (/파생|deriv|펀딩|funding|oi|open.?interest|청산|liquid|옵션|option|선물|futures|숏|롱|레버/.test(lower)) return 'DERIV';
+    if (/온체인|on.?chain|mvrv|nupl|sopr|nvt|valuation|밸류|네트워크|network|active.?addr|whale|고래/.test(lower)) return 'VALUATION';
+    if (/자금|flow|플로우|넷플로우|netflow|거래소|exchange|inflow|outflow|유입|유출|이동/.test(lower)) return 'FLOW';
+    if (/거래량|volume|볼륨|cvd|delta|vwap|profile|흡수|absorption/.test(lower)) return 'VPA';
+    if (/스마트.?머니|smart.?money|ict|유동성|imbalance|breaker|mitigation/.test(lower)) return 'ICT';
+    if (/센티|senti|감정|공포|탐욕|fear|greed|소셜|social|여론|분위기/.test(lower)) return 'SENTI';
+    if (/매크로|macro|경제|금리|interest.?rate|연준|fed|cpi|gdp|달러|dollar|dxy|국채/.test(lower)) return 'MACRO';
+    return 'ORCHESTRATOR';
+  }
+
+  function buildOfflineAgentReply(userText: string, statusLabel: string): { sender: string; text: string; tradeDir: ChatTradeDirection | null } {
+    const sender = detectMentionedAgentLocal(userText) || inferAgentFromIntentLocal(userText);
+    const pair = $gameState.pair || 'BTC/USDT';
+    const timeframe = ($gameState.timeframe || '4h').toUpperCase();
+    const scanSummary = latestScan
+      ? `최근 스캔: ${latestScan.pair} ${latestScan.timeframe.toUpperCase()} ${String(latestScan.consensus).toUpperCase()} ${Math.round(latestScan.avgConfidence)}%`
+      : '최근 스캔 데이터가 없어 즉시 컨텍스트는 제한됩니다.';
+    const tradeDirFromQuestion = inferSuggestedDirection(userText);
+    const tradeDirFromScan = latestScan?.consensus === 'long'
+      ? 'LONG'
+      : latestScan?.consensus === 'short'
+        ? 'SHORT'
+        : null;
+    const tradeDir = tradeDirFromQuestion || tradeDirFromScan;
+    const tradeHint = tradeDir
+      ? `\n실행 힌트: ${tradeDir} 관점으로 보고, 필요하면 START ${tradeDir}로 드래그 진입을 시작하세요.`
+      : '';
+
+    return {
+      sender,
+      tradeDir,
+      text:
+        `서버 채팅 연결이 불안정해 로컬 폴백으로 응답합니다 (${statusLabel}).\n` +
+        `${pair} ${timeframe} 기준으로 우선 판단을 이어갑니다.\n` +
+        `${scanSummary}${tradeHint}`,
+    };
+  }
+
+  function isPatternScanIntent(text: string): boolean {
+    const lower = text.toLowerCase();
+    const compact = lower.replace(/\s+/g, '');
+    if (compact.includes('차트패턴찾아봐')) return true;
+
+    const hasPatternKeyword =
+      /(차트패턴|패턴|헤드앤숄더|헤드숄더|하락쐐기|headandshoulders|fallingwedge|wedge|pattern)/.test(compact);
+    const hasActionKeyword = /(찾|분석|스캔|봐|보여|detect|scan|find|show|draw)/.test(compact);
+    return hasPatternKeyword && hasActionKeyword;
+  }
+
+  function patternKindLabel(kind: PatternScanReport['patterns'][number]['kind']): string {
+    return kind === 'head_and_shoulders' ? '헤드앤숄더' : '하락쐐기';
+  }
+
+  function patternStatusLabel(status: PatternScanReport['patterns'][number]['status']): string {
+    return status === 'CONFIRMED' ? '확정' : '형성중';
+  }
+
+  function formatPatternChatReply(report: PatternScanReport): string {
+    const scopeLabel = report.scope === 'visible' ? '보이는 구간' : '전체 구간';
+    if (report.patternCount === 0) {
+      return `패턴 스캔 완료 (${scopeLabel}, ${report.candleCount}봉)\n결과: 조건에 맞는 패턴이 없습니다. 줌아웃 후 다시 시도해보세요.`;
+    }
+    const top = report.patterns
+      .slice(0, 2)
+      .map((p) => `• ${patternKindLabel(p.kind)} ${patternStatusLabel(p.status)} ${(p.confidence * 100).toFixed(0)}%`)
+      .join('\n');
+    return `패턴 스캔 완료 (${scopeLabel}, ${report.candleCount}봉)\n${top}\n차트에 가이드 라인을 표시했습니다.`;
+  }
+
+  async function triggerPatternScanFromChat(source: string, time: string) {
+    if (isMobile && mobileTab !== 'chart') {
+      gtmEvent('terminal_mobile_tab_auto_switch', {
+        from_tab: mobileTab,
+        to_tab: 'chart',
+        reason: 'pattern_scan_from_chat',
+      });
+      setMobileTab('chart');
+      await tick();
+    }
+
+    await tick();
+    const chartPanel = getActiveChartPanel();
+    if (!chartPanel || typeof chartPanel.runPatternScanFromIntel !== 'function') {
+      gtmEvent('terminal_pattern_scan_request_failed', {
+        source,
+        reason: 'chart_panel_unavailable',
+        pair: $gameState.pair,
+        timeframe: $gameState.timeframe,
+      });
+      chatMessages = [...chatMessages, {
+        from: 'SYSTEM',
+        icon: '⚠️',
+        color: '#ff8c3b',
+        text: '차트가 준비되지 않아 패턴 스캔을 실행하지 못했습니다.',
+        time,
+        isUser: false,
+        isSystem: true,
+      }];
+      return;
+    }
+
+    try {
+      const report = await chartPanel.runPatternScanFromIntel({ scope: 'visible', focus: true });
+      gtmEvent('terminal_pattern_scan_request', {
+        source,
+        pair: $gameState.pair,
+        timeframe: $gameState.timeframe,
+        scope: report.scope,
+        candle_count: report.candleCount,
+        pattern_count: report.patternCount,
+        ok: report.ok,
+      });
+      chatMessages = [...chatMessages, {
+        from: 'ORCHESTRATOR',
+        icon: '🧠',
+        color: '#ff2d9b',
+        text: formatPatternChatReply(report),
+        time,
+        isUser: false,
+      }];
+    } catch (error) {
+      gtmEvent('terminal_pattern_scan_request_failed', {
+        source,
+        reason: 'runtime_error',
+        pair: $gameState.pair,
+        timeframe: $gameState.timeframe,
+      });
+      chatMessages = [...chatMessages, {
+        from: 'SYSTEM',
+        icon: '⚠️',
+        color: '#ff8c3b',
+        text: '패턴 스캔 실행 중 오류가 발생했습니다.',
+        time,
+        isUser: false,
+        isSystem: true,
+      }];
+      console.error('[terminal] pattern scan from chat failed:', error);
+    }
   }
 
   function getActiveChartPanel(): ChartPanelHandle | null {
@@ -983,6 +1156,7 @@
     // 멘션된 에이전트 감지 (없으면 서버에서 ORCHESTRATOR로 기본 처리)
     const agent = AGDEFS.find(ag => text.toLowerCase().includes(`@${ag.name.toLowerCase()}`));
     const mentionedAgent = agent?.name || undefined;
+    const patternIntent = isPatternScanIntent(text);
     chatTradeReady = false;
     gtmEvent('terminal_chat_question_sent', {
       source: 'intel-chat',
@@ -990,7 +1164,16 @@
       timeframe: $gameState.timeframe || '4h',
       chars: text.length,
       mentioned_agent: mentionedAgent || 'auto',
+      intent: patternIntent ? 'pattern_scan' : 'agent_chat',
     });
+
+    if (patternIntent) {
+      isTyping = false;
+      await triggerPatternScanFromChat('intel-chat', time);
+      return;
+    }
+
+    isTyping = true;
 
     try {
       const res = await fetch('/api/chat/messages', {
@@ -1039,32 +1222,62 @@
           });
         }
       } else {
-        chatTradeReady = false;
+        let statusLabel = String(res.status);
+        try {
+          const errBody = await res.json();
+          const errMsg = typeof errBody?.error === 'string' ? errBody.error : '';
+          if (errMsg) statusLabel = `${res.status} ${errMsg}`;
+        } catch {
+          // noop
+        }
+        const offline = buildOfflineAgentReply(text, statusLabel);
+        const fallbackMeta = AGENT_META[offline.sender] || AGENT_META.ORCHESTRATOR;
+        if (offline.tradeDir) {
+          chatSuggestedDir = offline.tradeDir;
+          chatTradeReady = true;
+        } else {
+          chatTradeReady = false;
+        }
         gtmEvent('terminal_chat_answer_error', {
           source: 'intel-chat',
           pair: $gameState.pair || 'BTC/USDT',
           timeframe: $gameState.timeframe || '4h',
           status: res.status,
+          mode: 'offline_fallback',
         });
         chatMessages = [...chatMessages, {
-          from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
-          text: 'Connection error. Try again or check server status.',
-          time, isUser: false, isSystem: true
+          from: offline.sender,
+          icon: fallbackMeta.icon,
+          color: fallbackMeta.color,
+          text: offline.text,
+          time,
+          isUser: false,
         }];
       }
     } catch (err) {
       isTyping = false;
-      chatTradeReady = false;
+      const offline = buildOfflineAgentReply(text, 'network');
+      const fallbackMeta = AGENT_META[offline.sender] || AGENT_META.ORCHESTRATOR;
+      if (offline.tradeDir) {
+        chatSuggestedDir = offline.tradeDir;
+        chatTradeReady = true;
+      } else {
+        chatTradeReady = false;
+      }
       gtmEvent('terminal_chat_answer_error', {
         source: 'intel-chat',
         pair: $gameState.pair || 'BTC/USDT',
         timeframe: $gameState.timeframe || '4h',
         status: 'network',
+        mode: 'offline_fallback',
       });
       chatMessages = [...chatMessages, {
-        from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
-        text: 'Network error. Please check your connection.',
-        time, isUser: false, isSystem: true
+        from: offline.sender,
+        icon: fallbackMeta.icon,
+        color: fallbackMeta.color,
+        text: offline.text,
+        time,
+        isUser: false,
       }];
     }
   }

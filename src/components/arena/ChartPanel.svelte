@@ -146,14 +146,30 @@
     time: number; position: 'aboveBar' | 'belowBar'; color: string;
     shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'; text: string;
   };
+  type PatternScanScope = 'visible' | 'full';
+  type PatternScanResult = {
+    ok: boolean;
+    scope: PatternScanScope;
+    candleCount: number;
+    patternCount: number;
+    patterns: Array<{
+      kind: ChartPatternDetection['kind'];
+      shortName: string;
+      direction: ChartPatternDetection['direction'];
+      status: ChartPatternDetection['status'];
+      confidence: number;
+      startTime: number;
+      endTime: number;
+    }>;
+    message: string;
+  };
+  const MIN_PATTERN_CANDLES = 30;
   export let agentMarkers: ChartMarker[] = [];
   let patternMarkers: ChartMarker[] = [];
   let detectedPatterns: ChartPatternDetection[] = [];
   let patternLineSeries: any[] = [];
   let _patternSignature = '';
-  let patternPanelCollapsed = false;
-  let selectedPatternId: string | null = null;
-  let selectedPattern: ChartPatternDetection | null = null;
+  let _patternRangeScanTimer: ReturnType<typeof setTimeout> | null = null;
 
   export let agentAnnotations: Array<{
     id: string; icon: string; name: string; color: string; label: string;
@@ -363,29 +379,6 @@
     if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
     if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(2)}K`;
     return v.toFixed(2);
-  }
-
-  function formatPatternTime(ts: number) {
-    if (!Number.isFinite(ts) || ts <= 0) return '—';
-    return new Date(ts * 1000).toLocaleTimeString('ko-KR', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-  }
-
-  function patternKindLabel(kind: ChartPatternDetection['kind']) {
-    if (kind === 'head_and_shoulders') return '헤드앤숄더';
-    if (kind === 'falling_wedge') return '하락쐐기';
-    return kind;
-  }
-
-  function patternStatusLabel(status: ChartPatternDetection['status']) {
-    return status === 'CONFIRMED' ? '확정' : '형성중';
-  }
-
-  function patternDirectionLabel(direction: ChartPatternDetection['direction']) {
-    return direction === 'BULLISH' ? '상방' : '하방';
   }
 
   function toChartPrice(y: number): number | null {
@@ -1207,9 +1200,8 @@
     if (!drawingCanvas || !chart || chartMode !== 'agent' || detectedPatterns.length === 0) return;
 
     for (const pattern of detectedPatterns.slice(0, 3)) {
-      const active = !selectedPatternId || selectedPatternId === pattern.id;
-      const lineAlpha = active ? 0.92 : 0.45;
-      const fillAlpha = active ? 0.16 : 0.07;
+      const lineAlpha = 0.9;
+      const fillAlpha = 0.14;
 
       const upperGuide = pattern.guideLines.find((g) => g.label === 'upper');
       const lowerGuide = pattern.guideLines.find((g) => g.label === 'lower');
@@ -1239,7 +1231,7 @@
 
         ctx.save();
         ctx.strokeStyle = withAlpha(guide.color, lineAlpha);
-        ctx.lineWidth = active ? (guide.style === 'dashed' ? 2 : 2.2) : 1.4;
+        ctx.lineWidth = guide.style === 'dashed' ? 2 : 2.2;
         ctx.setLineDash(guide.style === 'dashed' ? [7, 5] : []);
         ctx.beginPath();
         ctx.moveTo(from.x, from.y);
@@ -1247,13 +1239,11 @@
         ctx.stroke();
         ctx.setLineDash([]);
 
-        if (active) {
-          ctx.fillStyle = withAlpha(guide.color, 0.95);
-          ctx.beginPath();
-          ctx.arc(from.x, from.y, 2.2, 0, Math.PI * 2);
-          ctx.arc(to.x, to.y, 2.2, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        ctx.fillStyle = withAlpha(guide.color, 0.95);
+        ctx.beginPath();
+        ctx.arc(from.x, from.y, 2.2, 0, Math.PI * 2);
+        ctx.arc(to.x, to.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
       }
 
@@ -1336,18 +1326,51 @@
     } catch {}
   }
 
-  function runPatternDetection() {
-    if (!chart || !series || klineCache.length < 30) {
-      detectedPatterns = [];
-      patternMarkers = [];
-      _patternSignature = '';
-      applyCombinedMarkers();
-      clearPatternLineSeries();
-      renderDrawings();
-      return;
-    }
+  function clearDetectedPatterns() {
+    detectedPatterns = [];
+    patternMarkers = [];
+    _patternSignature = '';
+    applyCombinedMarkers();
+    clearPatternLineSeries();
+    renderDrawings();
+  }
 
-    const next = detectChartPatterns(klineCache, { maxPatterns: 3, pivotLookaround: 2 });
+  function snapshotPattern(pattern: ChartPatternDetection): PatternScanResult['patterns'][number] {
+    return {
+      kind: pattern.kind,
+      shortName: pattern.shortName,
+      direction: pattern.direction,
+      status: pattern.status,
+      confidence: pattern.confidence,
+      startTime: pattern.startTime,
+      endTime: pattern.endTime,
+    };
+  }
+
+  function buildPatternSummary(patterns: ChartPatternDetection[]): string {
+    if (patterns.length === 0) return '패턴 미감지 · 조건 미충족';
+    const summary = patterns
+      .slice(0, 2)
+      .map((p) => `${p.shortName} ${Math.round(p.confidence * 100)}%`)
+      .join(' · ');
+    return `패턴 ${patterns.length}개 감지 · ${summary}`;
+  }
+
+  function getVisibleScopeCandles(): BinanceKline[] {
+    if (!chart || klineCache.length === 0) return [];
+    try {
+      const range = chart.timeScale?.().getVisibleLogicalRange?.();
+      if (!range || !Number.isFinite(range.from) || !Number.isFinite(range.to)) return [];
+      const from = Math.max(0, Math.floor(range.from));
+      const to = Math.min(klineCache.length - 1, Math.ceil(range.to));
+      if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return [];
+      return klineCache.slice(from, to + 1);
+    } catch {
+      return [];
+    }
+  }
+
+  function applyDetectedPatternState(next: ChartPatternDetection[]) {
     const signature = next
       .map((p) => `${p.id}:${p.status}:${Math.round(p.confidence * 100)}`)
       .join('|');
@@ -1361,31 +1384,98 @@
     renderDrawings();
   }
 
-  function forcePatternScan() {
-    runPatternDetection();
-    if (detectedPatterns.length === 0) {
-      pushChartNotice('패턴 미감지 · 조건 미충족');
-      return;
-    }
-    const summary = detectedPatterns
-      .slice(0, 2)
-      .map((p) => `${p.shortName} ${Math.round(p.confidence * 100)}%`)
-      .join(' · ');
-    pushChartNotice(`패턴 ${detectedPatterns.length}개 감지 · ${summary}`);
+  function scheduleVisiblePatternScan() {
+    if (_patternRangeScanTimer) clearTimeout(_patternRangeScanTimer);
+    _patternRangeScanTimer = setTimeout(() => {
+      _patternRangeScanTimer = null;
+      runPatternDetection('visible', { fallbackToFull: true });
+    }, 120);
   }
 
-  $: selectedPattern = (() => {
-    if (detectedPatterns.length === 0) {
-      selectedPatternId = null;
-      return null;
+  function runPatternDetection(
+    scope: PatternScanScope = 'visible',
+    opts: { fallbackToFull?: boolean } = {}
+  ): PatternScanResult {
+    const fallbackToFull = opts.fallbackToFull ?? false;
+    if (!chart || !series || klineCache.length < MIN_PATTERN_CANDLES) {
+      clearDetectedPatterns();
+      return {
+        ok: false,
+        scope,
+        candleCount: klineCache.length,
+        patternCount: 0,
+        patterns: [],
+        message: '캔들 데이터가 부족해 패턴을 분석할 수 없습니다.',
+      };
     }
-    if (!selectedPatternId || !detectedPatterns.some((p) => p.id === selectedPatternId)) {
-      selectedPatternId = detectedPatterns[0].id;
+
+    let effectiveScope: PatternScanScope = scope;
+    let sourceCandles = scope === 'visible' ? getVisibleScopeCandles() : klineCache;
+    if (sourceCandles.length < MIN_PATTERN_CANDLES && scope === 'visible' && fallbackToFull) {
+      effectiveScope = 'full';
+      sourceCandles = klineCache;
     }
-    return detectedPatterns.find((p) => p.id === selectedPatternId) ?? detectedPatterns[0];
-  })();
-  $: if (selectedPatternId) {
-    renderDrawings();
+    if (sourceCandles.length < MIN_PATTERN_CANDLES) {
+      clearDetectedPatterns();
+      return {
+        ok: false,
+        scope: effectiveScope,
+        candleCount: sourceCandles.length,
+        patternCount: 0,
+        patterns: [],
+        message: '보이는 구간 캔들이 부족합니다. 조금 줌아웃한 뒤 다시 시도하세요.',
+      };
+    }
+
+    const next = detectChartPatterns(sourceCandles, { maxPatterns: 3, pivotLookaround: 2 });
+    applyDetectedPatternState(next);
+
+    return {
+      ok: next.length > 0,
+      scope: effectiveScope,
+      candleCount: sourceCandles.length,
+      patternCount: next.length,
+      patterns: next.map(snapshotPattern),
+      message: buildPatternSummary(next),
+    };
+  }
+
+  function focusPatternRange(pattern: ChartPatternDetection) {
+    if (!chart) return;
+    const span = Math.max(1, pattern.endTime - pattern.startTime);
+    const from = Math.max(0, pattern.startTime - Math.round(span * 0.25));
+    const to = pattern.endTime + Math.round(span * 0.35);
+    try {
+      chart.timeScale().setVisibleRange({ from, to } as any);
+    } catch {}
+  }
+
+  function forcePatternScan() {
+    const result = runPatternDetection('visible');
+    pushChartNotice(result.message);
+  }
+
+  export async function runPatternScanFromIntel(options: { scope?: PatternScanScope; focus?: boolean } = {}): Promise<PatternScanResult> {
+    const scope = options.scope ?? 'visible';
+    if (chartMode !== 'agent') {
+      await setChartMode('agent');
+      await tick();
+    }
+
+    const result = runPatternDetection(scope);
+    if ((options.focus ?? true) && detectedPatterns.length > 0) {
+      focusPatternRange(detectedPatterns[0]);
+      renderDrawings();
+    }
+    pushChartNotice(result.message);
+    gtmEvent('terminal_pattern_scan_from_intel', {
+      pair: state.pair,
+      timeframe: state.timeframe,
+      scope: result.scope,
+      candle_count: result.candleCount,
+      pattern_count: result.patternCount,
+    });
+    return result;
   }
 
   // ═══════════════════════════════════════════
@@ -1639,6 +1729,7 @@
         if (range && range.from < 20 && !_isLoadingMore && !_noMoreHistory) {
           loadMoreHistory();
         }
+        scheduleVisiblePatternScan();
         renderDrawings();
       });
 
@@ -1718,7 +1809,7 @@
         if (rsiData.length > 0) rsiVal = rsiData[rsiData.length - 1].value;
       }
       latestVolume = klineCache[klineCache.length - 1]?.volume || 0;
-      runPatternDetection();
+      runPatternDetection('visible', { fallbackToFull: true });
       // Don't call fitContent — preserve user's scroll position
     } catch (e) {
       console.error('[ChartPanel] loadMoreHistory error:', e);
@@ -1774,7 +1865,7 @@
         rsiSeries.setData(rsiData);
         if (rsiData.length > 0) rsiVal = rsiData[rsiData.length - 1].value;
       }
-      runPatternDetection();
+      runPatternDetection('visible', { fallbackToFull: true });
 
       // Cache MA display values
       const len = klines.length;
@@ -1832,7 +1923,7 @@
         if (isUpdate) klineCache[klineCache.length - 1] = kline;
         else klineCache.push(kline);
         const cLen = klineCache.length;
-        runPatternDetection();
+        runPatternDetection('visible', { fallbackToFull: true });
 
         // MA — simple running average from last N
         if (ma7Series && cLen >= 7) {
@@ -2006,6 +2097,7 @@
   }
 
   onDestroy(() => {
+    if (_patternRangeScanTimer) clearTimeout(_patternRangeScanTimer);
     if (_priceUpdateTimer) clearTimeout(_priceUpdateTimer);
     if (_tvInitTimer) clearTimeout(_tvInitTimer);
     if (_tvLoadTimer) clearTimeout(_tvLoadTimer);
@@ -2291,59 +2383,8 @@
       <div class="chart-notice">{chartNotice}</div>
     {/if}
 
-    {#if chartMode === 'agent' && detectedPatterns.length > 0}
-      <div class="pattern-panel">
-        <div class="pattern-head">
-          <span>PATTERN LAB</span>
-          <button
-            class="pattern-collapse"
-            type="button"
-            on:click={() => patternPanelCollapsed = !patternPanelCollapsed}
-          >
-            {patternPanelCollapsed ? '+' : '−'}
-          </button>
-        </div>
-        {#if !patternPanelCollapsed}
-          <div class="pattern-tabs">
-            {#each detectedPatterns.slice(0, 3) as pat (pat.id)}
-              <button
-                type="button"
-                class="pattern-tab"
-                class:active={selectedPattern?.id === pat.id}
-                class:bull={pat.direction === 'BULLISH'}
-                class:bear={pat.direction === 'BEARISH'}
-                on:click={() => selectedPatternId = pat.id}
-              >
-                {pat.shortName} {(pat.confidence * 100).toFixed(0)}%
-              </button>
-            {/each}
-          </div>
-          {#if selectedPattern}
-            <div class="pattern-card" class:bull={selectedPattern.direction === 'BULLISH'} class:bear={selectedPattern.direction === 'BEARISH'}>
-              <div class="pattern-name">{patternKindLabel(selectedPattern.kind)}</div>
-              <div class="pattern-meta">
-                <span>{patternStatusLabel(selectedPattern.status)}</span>
-                <span>{patternDirectionLabel(selectedPattern.direction)}</span>
-                <span>신뢰도 {(selectedPattern.confidence * 100).toFixed(0)}%</span>
-              </div>
-              <div class="pattern-range">
-                {formatPatternTime(selectedPattern.startTime)} → {formatPatternTime(selectedPattern.endTime)}
-              </div>
-              {#if selectedPattern.guideLines.length > 0}
-                <div class="pattern-guides">
-                  {#each selectedPattern.guideLines.slice(0, 3) as guide (guide.id)}
-                    <span>{guide.label}: {formatPrice(guide.to.price)}</span>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/if}
-        {/if}
-      </div>
-    {/if}
-
     {#if showPosition && posEntry !== null && posTp !== null && posSl !== null}
-      <div class="pos-overlay" class:with-pattern={chartMode === 'agent' && detectedPatterns.length > 0}>
+      <div class="pos-overlay">
         <div class="pos-badge {posDir.toLowerCase()}">
           {posDir === 'LONG' ? '🚀 LONG' : posDir === 'SHORT' ? '💀 SHORT' : '— NEUTRAL'}
         </div>
@@ -2939,15 +2980,6 @@
     .scale-btn.wide { min-width: 40px; }
     .strip-restore-btn { padding: 2px 6px; font-size: 8px; }
     .chart-notice { bottom: 36px; }
-    .pattern-panel {
-      top: 6px;
-      right: 6px;
-      width: min(240px, calc(100% - 12px));
-      padding: 6px;
-      gap: 5px;
-    }
-    .pattern-name { font-size: 9px; }
-    .pos-overlay.with-pattern { top: 104px; }
     .drag-indicator { bottom: 30px; }
     .trade-plan-overlay {
       left: 8px;
@@ -3223,117 +3255,6 @@
     pointer-events: none;
     white-space: nowrap;
   }
-  .pattern-panel {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 13;
-    width: min(280px, calc(100% - 16px));
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,.18);
-    background: rgba(8, 13, 22, 0.88);
-    backdrop-filter: blur(4px);
-    box-shadow: 0 10px 28px rgba(0,0,0,.36);
-    padding: 7px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .pattern-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-family: var(--fd);
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: .9px;
-    color: rgba(255,255,255,.88);
-  }
-  .pattern-collapse {
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    border: 1px solid rgba(255,255,255,.25);
-    background: rgba(255,255,255,.08);
-    color: rgba(255,255,255,.9);
-    font-size: 11px;
-    line-height: 1;
-    cursor: pointer;
-  }
-  .pattern-tabs {
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-  .pattern-tab {
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,.2);
-    background: rgba(255,255,255,.06);
-    color: rgba(255,255,255,.86);
-    padding: 2px 7px;
-    font-family: var(--fm);
-    font-size: 8px;
-    font-weight: 800;
-    letter-spacing: .35px;
-    cursor: pointer;
-  }
-  .pattern-tab.active {
-    box-shadow: 0 0 0 1px rgba(255,255,255,.2) inset;
-  }
-  .pattern-tab.bull.active {
-    border-color: rgba(111, 242, 171, .65);
-    color: #9af5c6;
-    background: rgba(78, 199, 132, .22);
-  }
-  .pattern-tab.bear.active {
-    border-color: rgba(255, 140, 160, .65);
-    color: #ffd2db;
-    background: rgba(234, 94, 124, .24);
-  }
-  .pattern-card {
-    border-radius: 8px;
-    border: 1px solid rgba(255,255,255,.15);
-    background: rgba(255,255,255,.04);
-    padding: 7px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-  .pattern-card.bull {
-    border-color: rgba(111, 242, 171, .38);
-    background: rgba(111, 242, 171, .1);
-  }
-  .pattern-card.bear {
-    border-color: rgba(255, 140, 160, .38);
-    background: rgba(255, 140, 160, .1);
-  }
-  .pattern-name {
-    font-family: var(--fd);
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: .5px;
-    color: #f6f9ff;
-  }
-  .pattern-meta {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    font-family: var(--fm);
-    font-size: 8px;
-    color: rgba(255,255,255,.8);
-  }
-  .pattern-range {
-    font-family: var(--fm);
-    font-size: 8px;
-    color: rgba(255,255,255,.66);
-  }
-  .pattern-guides {
-    display: grid;
-    gap: 3px;
-    font-family: var(--fm);
-    font-size: 8px;
-    color: rgba(255,255,255,.86);
-  }
 
   .tv-container { flex: 1; position: relative; overflow: hidden; background: #0a0a1a; }
   .tv-container :global(iframe) { width: 100% !important; height: 100% !important; border: none !important; }
@@ -3414,7 +3335,6 @@
   .error-badge { position: absolute; top: 6px; left: 6px; padding: 3px 8px; border-radius: 4px; background: rgba(255,45,85,.2); border: 1px solid rgba(255,45,85,.4); color: #ff2d55; font-size: 8px; font-family: var(--fm); font-weight: 700; z-index: 5; }
 
   .pos-overlay { position: absolute; top: 6px; right: 6px; z-index: 12; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
-  .pos-overlay.with-pattern { top: 124px; }
   .pos-badge { padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; border: 2px solid; }
   .pos-badge.long { background: rgba(0,255,136,.2); border-color: #00ff88; color: #00ff88; }
   .pos-badge.short { background: rgba(255,45,85,.2); border-color: #ff2d55; color: #ff2d55; }

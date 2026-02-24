@@ -108,6 +108,28 @@ function mapRow(row: AgentChatRow) {
   };
 }
 
+function buildEphemeralRow(input: {
+  userId: string;
+  channel: string;
+  senderKind: string;
+  senderId: string | null;
+  senderName: string;
+  message: string;
+  meta: Record<string, unknown>;
+}) {
+  return {
+    id: `ephemeral-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    userId: input.userId,
+    channel: input.channel,
+    senderKind: input.senderKind,
+    senderId: input.senderId,
+    senderName: input.senderName,
+    message: input.message,
+    meta: input.meta,
+    createdAt: Date.now(),
+  };
+}
+
 function normalizeAgentName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const cleaned = raw.toUpperCase().replace(/^@+/, '').replace(/[^A-Z0-9_]/g, '');
@@ -464,9 +486,6 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
 
 export const POST: RequestHandler = async ({ cookies, request }) => {
   try {
-    const user = await getAuthUserFromCookies(cookies);
-    if (!user) return json({ error: 'Authentication required' }, { status: 401 });
-
     const body = await readJsonBody<Record<string, unknown>>(request, 32 * 1024);
 
     const channel = typeof body?.channel === 'string' ? body.channel.trim() : 'terminal';
@@ -482,25 +501,53 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     if (senderName.length > 64) return json({ error: 'senderName is too long' }, { status: 400 });
     if (message.length > 4000) return json({ error: 'message is too long' }, { status: 400 });
 
-    const insert = await query<AgentChatRow>(
-      `
-        INSERT INTO agent_chat_messages (
-          user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, now())
-        RETURNING
-          id, user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
-      `,
-      [user.id, channel, senderKind, senderId, senderName, message, JSON.stringify(meta)]
-    );
+    let user: Awaited<ReturnType<typeof getAuthUserFromCookies>> | null = null;
+    try {
+      user = await getAuthUserFromCookies(cookies);
+    } catch (authErr) {
+      console.warn('[chat/messages/post] auth lookup failed, falling back to guest mode:', authErr);
+      user = null;
+    }
 
-    await query(
-      `
-        INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
-        VALUES ($1, 'chat_sent', 'terminal', $2, 'info', $3::jsonb)
-      `,
-      [user.id, insert.rows[0].id, JSON.stringify({ channel, senderKind })]
-    ).catch(() => undefined);
+    const allowGuestTerminal = !user && channel === 'terminal' && senderKind === 'user';
+    if (!user && !allowGuestTerminal) return json({ error: 'Authentication required' }, { status: 401 });
+
+    const userId = user?.id ?? 'guest';
+    const requestMeta = user ? meta : { ...meta, guestMode: true };
+
+    let persistedMessage: ReturnType<typeof mapRow>;
+    if (user) {
+      const insert = await query<AgentChatRow>(
+        `
+          INSERT INTO agent_chat_messages (
+            user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, now())
+          RETURNING
+            id, user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
+        `,
+        [user.id, channel, senderKind, senderId, senderName, message, JSON.stringify(requestMeta)]
+      );
+
+      persistedMessage = mapRow(insert.rows[0]);
+      await query(
+        `
+          INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
+          VALUES ($1, 'chat_sent', 'terminal', $2, 'info', $3::jsonb)
+        `,
+        [user.id, insert.rows[0].id, JSON.stringify({ channel, senderKind })]
+      ).catch(() => undefined);
+    } else {
+      persistedMessage = buildEphemeralRow({
+        userId,
+        channel,
+        senderKind,
+        senderId,
+        senderName,
+        message,
+        meta: requestMeta,
+      });
+    }
 
     let agentResponse: ReturnType<typeof mapRow> | null = null;
 
@@ -510,54 +557,67 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
         || inferAgentFromIntent(message)
         || 'ORCHESTRATOR';
       {
-        const context = await loadScanContext(user.id, meta);
+        const context = user ? await loadScanContext(user.id, meta) : null;
         const reply = await buildAgentReply(mentionedAgent, message, context, meta);
         const replyMeta = {
-          ...meta,
+          ...requestMeta,
           mentionedAgent,
           responseSource: reply.source,
           scanId: reply.scanId,
         };
 
-        try {
-          const replyInsert = await query<AgentChatRow>(
-            `
-              INSERT INTO agent_chat_messages (
-                user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
-              )
-              VALUES ($1, $2, 'agent', $3, $4, $5, $6::jsonb, now())
-              RETURNING
-                id, user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
-            `,
-            [user.id, channel, reply.agentId, reply.agentId, reply.text, JSON.stringify(replyMeta)]
-          );
-          agentResponse = mapRow(replyInsert.rows[0]);
+        if (user) {
+          try {
+            const replyInsert = await query<AgentChatRow>(
+              `
+                INSERT INTO agent_chat_messages (
+                  user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
+                )
+                VALUES ($1, $2, 'agent', $3, $4, $5, $6::jsonb, now())
+                RETURNING
+                  id, user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
+              `,
+              [user.id, channel, reply.agentId, reply.agentId, reply.text, JSON.stringify(replyMeta)]
+            );
+            agentResponse = mapRow(replyInsert.rows[0]);
 
-          await query(
-            `
-              INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
-              VALUES ($1, 'chat_sent', 'terminal', $2, 'info', $3::jsonb)
-            `,
-            [
-              user.id,
-              replyInsert.rows[0].id,
-              JSON.stringify({
-                channel,
-                senderKind: 'agent',
-                senderId: reply.agentId,
-                source: reply.source,
-              }),
-            ]
-          ).catch(() => undefined);
-        } catch (error) {
-          console.warn('[chat/messages/post] failed to persist agent response:', error);
+            await query(
+              `
+                INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
+                VALUES ($1, 'chat_sent', 'terminal', $2, 'info', $3::jsonb)
+              `,
+              [
+                user.id,
+                replyInsert.rows[0].id,
+                JSON.stringify({
+                  channel,
+                  senderKind: 'agent',
+                  senderId: reply.agentId,
+                  source: reply.source,
+                }),
+              ]
+            ).catch(() => undefined);
+          } catch (error) {
+            console.warn('[chat/messages/post] failed to persist agent response:', error);
+          }
+        } else {
+          agentResponse = buildEphemeralRow({
+            userId,
+            channel,
+            senderKind: 'agent',
+            senderId: reply.agentId,
+            senderName: reply.agentId,
+            message: reply.text,
+            meta: replyMeta,
+          });
         }
       }
     }
 
     return json({
       success: true,
-      message: mapRow(insert.rows[0]),
+      guestMode: !user,
+      message: persistedMessage,
       agentResponse,
     });
   } catch (error: unknown) {
