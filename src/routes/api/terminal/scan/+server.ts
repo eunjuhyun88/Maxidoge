@@ -4,8 +4,7 @@ import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { query } from '$lib/server/db';
 import { runTerminalScan } from '$lib/services/scanService';
 import { scanLimiter } from '$lib/server/rateLimit';
-import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
-import { evaluateIpReputation } from '$lib/server/ipReputation';
+import { runIpRateLimitGuard } from '$lib/server/authSecurity';
 import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
 
 function parseValidationMessage(message: string): string | null {
@@ -16,25 +15,15 @@ function parseValidationMessage(message: string): string | null {
 
 export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
   const fallbackIp = getClientAddress();
-  const reputation = evaluateIpReputation(request, fallbackIp);
-  if (!reputation.allowed) {
-    return json({ error: 'Request blocked by security policy' }, { status: 403 });
-  }
-
-  // Rate limit: 6 scans/min per IP
-  const ip = reputation.clientIp || fallbackIp || 'unknown';
-  if (!scanLimiter.check(ip)) {
-    return json({ error: 'Too many scan requests. Please wait.' }, { status: 429 });
-  }
-  const distributedAllowed = await checkDistributedRateLimit({
+  const guard = await runIpRateLimitGuard({
+    request,
+    fallbackIp,
+    limiter: scanLimiter,
     scope: 'terminal:scan',
-    key: ip,
-    windowMs: 60_000,
     max: 6,
+    tooManyMessage: 'Too many scan requests. Please wait.',
   });
-  if (!distributedAllowed) {
-    return json({ error: 'Too many scan requests. Please wait.' }, { status: 429 });
-  }
+  if (!guard.ok) return guard.response;
 
   try {
     const user = await getAuthUserFromCookies(cookies);

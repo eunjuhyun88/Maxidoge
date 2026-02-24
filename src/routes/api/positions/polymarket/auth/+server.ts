@@ -14,8 +14,7 @@ import { query } from '$lib/server/db';
 import { buildAuthTypedData, deriveApiCredentials } from '$lib/server/polymarketClob';
 import { polymarketOrderLimiter } from '$lib/server/rateLimit';
 import { encryptSecret, isSecretsEncryptionConfigured } from '$lib/server/secretCrypto';
-import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
-import { evaluateIpReputation } from '$lib/server/ipReputation';
+import { runIpRateLimitGuard } from '$lib/server/authSecurity';
 import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
 
 const ETH_ADDRESS_RE = /^0x[0-9a-f]{40}$/i;
@@ -26,24 +25,15 @@ const ETH_ADDRESS_RE = /^0x[0-9a-f]{40}$/i;
  */
 export const GET: RequestHandler = async ({ cookies, url, getClientAddress, request }) => {
   const fallbackIp = getClientAddress();
-  const reputation = evaluateIpReputation(request, fallbackIp);
-  if (!reputation.allowed) {
-    return json({ error: 'Request blocked by security policy' }, { status: 403 });
-  }
-
-  const ip = reputation.clientIp || fallbackIp || 'unknown';
-  if (!polymarketOrderLimiter.check(ip)) {
-    return json({ error: 'Too many requests.' }, { status: 429 });
-  }
-  const distributedAllowed = await checkDistributedRateLimit({
+  const guard = await runIpRateLimitGuard({
+    request,
+    fallbackIp,
+    limiter: polymarketOrderLimiter,
     scope: 'polymarket:auth:get',
-    key: ip,
-    windowMs: 60_000,
     max: 10,
+    tooManyMessage: 'Too many requests.',
   });
-  if (!distributedAllowed) {
-    return json({ error: 'Too many requests.' }, { status: 429 });
-  }
+  if (!guard.ok) return guard.response;
 
   try {
     const user = await getAuthUserFromCookies(cookies);
@@ -76,24 +66,15 @@ export const GET: RequestHandler = async ({ cookies, url, getClientAddress, requ
  */
 export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
   const fallbackIp = getClientAddress();
-  const reputation = evaluateIpReputation(request, fallbackIp);
-  if (!reputation.allowed) {
-    return json({ error: 'Request blocked by security policy' }, { status: 403 });
-  }
-
-  const ip = reputation.clientIp || fallbackIp || 'unknown';
-  if (!polymarketOrderLimiter.check(ip)) {
-    return json({ error: 'Too many requests.' }, { status: 429 });
-  }
-  const distributedAllowed = await checkDistributedRateLimit({
+  const guard = await runIpRateLimitGuard({
+    request,
+    fallbackIp,
+    limiter: polymarketOrderLimiter,
     scope: 'polymarket:auth:post',
-    key: ip,
-    windowMs: 60_000,
     max: 10,
+    tooManyMessage: 'Too many requests.',
   });
-  if (!distributedAllowed) {
-    return json({ error: 'Too many requests.' }, { status: 429 });
-  }
+  if (!guard.ok) return guard.response;
 
   try {
     const user = await getAuthUserFromCookies(cookies);

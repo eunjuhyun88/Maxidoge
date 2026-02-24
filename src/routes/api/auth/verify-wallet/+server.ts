@@ -9,10 +9,7 @@ import {
 } from '$lib/server/walletAuthRepository';
 import { parseSessionCookie, SESSION_COOKIE_NAME } from '$lib/server/session';
 import { authVerifyLimiter } from '$lib/server/rateLimit';
-import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
-import { evaluateIpReputation } from '$lib/server/ipReputation';
-import { isRequestBodyTooLargeError, readJsonBody, readTurnstileToken } from '$lib/server/requestGuards';
-import { verifyTurnstile } from '$lib/server/turnstile';
+import { readAuthBodyWithTurnstile, runAuthAbuseGuard } from '$lib/server/authSecurity';
 
 const EVM_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
 
@@ -25,33 +22,24 @@ function normalizeChain(chainRaw: string | null): string {
 
 export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
   const fallbackIp = getClientAddress();
-  const reputation = evaluateIpReputation(request, fallbackIp);
-  if (!reputation.allowed) {
-    return json({ error: 'Request blocked by security policy' }, { status: 403 });
-  }
-
-  const ip = reputation.clientIp || fallbackIp || 'unknown';
-  if (!authVerifyLimiter.check(ip)) {
-    return json({ error: 'Too many wallet verification attempts. Please wait.' }, { status: 429 });
-  }
-  const distributedAllowed = await checkDistributedRateLimit({
+  const guard = await runAuthAbuseGuard({
+    request,
+    fallbackIp,
+    limiter: authVerifyLimiter,
     scope: 'auth:verify-wallet',
-    key: ip,
-    windowMs: 60_000,
     max: 10,
+    tooManyMessage: 'Too many wallet verification attempts. Please wait.',
   });
-  if (!distributedAllowed) {
-    return json({ error: 'Too many wallet verification attempts. Please wait.' }, { status: 429 });
-  }
+  if (!guard.ok) return guard.response;
+
   try {
-    const body = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);
-    const turnstile = await verifyTurnstile({
-      token: readTurnstileToken(body),
-      remoteIp: reputation.clientIp || fallbackIp || null,
+    const bodyResult = await readAuthBodyWithTurnstile({
+      request,
+      remoteIp: guard.remoteIp,
+      maxBytes: 16 * 1024,
     });
-    if (!turnstile.ok) {
-      return json({ error: 'Bot verification failed' }, { status: 403 });
-    }
+    if (!bodyResult.ok) return bodyResult.response;
+    const body = bodyResult.body;
 
     const addressField = typeof body?.address === 'string' ? body.address.trim() : '';
     const walletAddressField = typeof body?.walletAddress === 'string' ? body.walletAddress.trim() : '';
@@ -151,12 +139,6 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
     }
     if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
-    }
-    if (isRequestBodyTooLargeError(error)) {
-      return json({ error: 'Request body too large' }, { status: 413 });
-    }
-    if (error instanceof SyntaxError) {
-      return json({ error: 'Invalid request body' }, { status: 400 });
     }
     console.error('[auth/verify-wallet] unexpected error:', error);
     return json({ error: 'Failed to verify wallet signature' }, { status: 500 });
