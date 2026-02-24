@@ -21,6 +21,8 @@ SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signa
 8. 작업 종료 직전에 `git status --short --branch`를 실행해 워킹트리가 clean인지 확인하고, 결과를 로그에 남긴다.
 9. push 전 워킹트리에 요청과 무관한 변경이 남아 있으면 먼저 정리한다.
    필요 시 `git stash push -u -m "wip/<task>"`로 백업 후 push하고, 이후 `git stash pop`으로 복원한다.
+10. 모든 구현 작업은 반드시 설계안을 먼저 작성하고, 설계 검토/승인을 받은 뒤에만 실제 구현을 시작한다.
+11. 매 작업 시작 메시지에서 현재 브랜치 위치를 먼저 보고한 뒤 작업을 시작한다.
 
 참고:
 - 에이전트 자동 실행 규칙 파일은 `AGENTS.md`다.
