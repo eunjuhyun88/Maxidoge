@@ -1147,3 +1147,18 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: SUCCESS (`origin/codex/passport-ml-orpo-design-v2`, `origin/main`)
 - Working tree check (before final push): `## main...origin/main [ahead 2]` (clean)
 - Status: DONE
+
+### W-20260225-0129-passport-codex
+
+- Start (KST): 2026-02-25 01:29
+- Agent: Codex (GPT-5)
+- Branch: `codex/passport-ml-pipeline-skeleton-v1`
+- Scope (planned):
+  - ORPO 학습 설계 기준으로 PostgreSQL 마이그레이션 SQL 추가
+  - SvelteKit 서버에 ML 파이프라인 API/워커 스켈레톤 추가
+  - 추론 로그/trajectory/dataset/train-job/eval 조회/트리거 골격 연결
+- Overlap check (before work):
+  - `## codex/passport-ml-pipeline-skeleton-v1` (clean)
+  - single worktree(`/Users/ej/Downloads/maxidoge-clones/frontend-passport`) 확인
+  - 기존 IN_PROGRESS 항목은 과거 세션 기록이며 현재 브랜치 변경 파일과 직접 충돌 없음
+- Status: IN_PROGRESS
