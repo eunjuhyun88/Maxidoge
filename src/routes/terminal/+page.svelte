@@ -1098,7 +1098,6 @@
             <TokenDropdown value={pair} compact on:select={onTokenSelect} />
           </div>
           <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
-          <span class="mob-meta-chip subtle">{pair}</span>
         </div>
         <div class="mob-desc">{mobileMeta.desc}</div>
       </div>
@@ -1355,7 +1354,7 @@
   <!-- ═══ DESKTOP LAYOUT (full 3-panel with resizers) ═══ -->
   {:else}
   <div class="terminal-page" bind:this={containerEl}
-    style="grid-template-columns: {leftCollapsed ? 32 : leftW}px 6px 1fr 6px {rightCollapsed ? 32 : rightW}px">
+    style="grid-template-columns: {leftCollapsed ? 30 : leftW}px 4px 1fr 4px {rightCollapsed ? 30 : rightW}px">
 
     <!-- Left: WAR ROOM or collapsed strip -->
     {#if !leftCollapsed}
@@ -1556,6 +1555,8 @@
     overflow-x: clip;
     overscroll-behavior: none;
     isolation: isolate;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
     background:
       radial-gradient(110% 72% at 15% 0%, rgba(232, 150, 125, 0.1) 0%, rgba(232, 150, 125, 0) 58%),
       radial-gradient(96% 68% at 88% 6%, rgba(135, 220, 190, 0.14) 0%, rgba(135, 220, 190, 0) 62%),
@@ -1637,7 +1638,7 @@
      ═══════════════════════════════════════════ */
   .terminal-page {
     display: grid;
-    grid-template-columns: 280px 6px 1fr 6px 300px; /* overridden by inline style */
+    grid-template-columns: 280px 4px 1fr 4px 300px; /* overridden by inline style */
     grid-template-rows: 1fr auto;
     height: 100%;
     overflow: hidden;
@@ -1678,7 +1679,7 @@
   .tab-left::-webkit-scrollbar-track { background: transparent; }
   .tab-left::-webkit-scrollbar-thumb {
     background: rgba(232, 150, 125, 0.45);
-    border-radius: 3px;
+    border-radius: 2px;
   }
 
   .tc {
@@ -1700,12 +1701,12 @@
     flex-direction: column;
     transition: width .16s ease, height .16s ease, box-shadow .16s ease, border-color .16s ease;
     border: 1px solid transparent;
-    border-radius: 10px;
+    border-radius: 8px;
   }
   .desk-panel-resizable:hover,
   .desk-panel-resizable:focus-within {
     border-color: rgba(232, 150, 125, 0.24);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
   }
   .desk-panel-body {
     flex: 1 1 auto;
@@ -1795,10 +1796,10 @@
   .resizer-left { grid-column: 2; }
   .resizer-right { grid-column: 4; }
   .resizer-h {
-    width: 6px;
-    background: rgba(10, 24, 16, 0.9);
-    border-left: 1px solid var(--term-border-soft);
-    border-right: 1px solid var(--term-border-soft);
+    width: 4px;
+    background: rgba(10, 24, 16, 0.82);
+    border-left: 1px solid rgba(232, 150, 125, 0.1);
+    border-right: 1px solid rgba(232, 150, 125, 0.1);
     transition: background .15s, border-color .15s;
   }
   .resizer-h:hover {
@@ -1807,7 +1808,7 @@
     border-right-color: var(--term-border);
   }
   .resizer-spacer {
-    width: 2px;
+    width: 1px;
     grid-row: 1;
   }
   .resizer-spacer:nth-of-type(1) { grid-column: 2; }
@@ -1816,8 +1817,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 8px 0;
+    gap: 5px;
+    padding: 7px 0;
     background: rgba(12, 29, 19, 0.95);
     border: none;
     cursor: pointer;
@@ -1867,7 +1868,7 @@
      TICKER BAR — shared across all layouts
      ═══════════════════════════════════════════ */
   .ticker-bar {
-    height: 24px;
+    height: 22px;
     background: linear-gradient(180deg, rgba(15, 40, 24, 0.95) 0%, rgba(10, 27, 17, 0.98) 100%);
     border-top: 1px solid var(--term-border);
     overflow: hidden;
@@ -1886,8 +1887,8 @@
     font-family: var(--fm);
     color: var(--term-live);
     font-weight: 600;
-    letter-spacing: 0.5px;
-    line-height: 24px;
+    letter-spacing: 0.35px;
+    line-height: 22px;
     padding: 0 20px;
   }
   @keyframes tickerScroll {
@@ -1913,7 +1914,7 @@
   }
   .mob-topbar {
     flex-shrink: 0;
-    padding: 10px 12px 8px;
+    padding: 8px 10px 6px;
     border-bottom: 1px solid var(--term-border);
     background:
       linear-gradient(135deg, rgba(232, 150, 125, 0.14), rgba(232, 150, 125, 0.04)),
@@ -1923,8 +1924,8 @@
   .mob-topline {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    margin-bottom: 8px;
+    gap: 6px;
+    margin-bottom: 6px;
   }
   .mob-title-wrap {
     display: flex;
@@ -1943,7 +1944,7 @@
     font-family: var(--fd);
     font-size: 14px;
     font-weight: 900;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.35px;
     color: var(--term-text);
     line-height: 1.2;
   }
@@ -1966,7 +1967,7 @@
   .mob-meta {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     min-width: 0;
   }
   .mob-token {
@@ -1982,22 +1983,17 @@
     font-family: var(--fm);
     font-size: 9px;
     font-weight: 700;
-    letter-spacing: 0.35px;
+    letter-spacing: 0.2px;
     color: rgba(240, 237, 228, 0.84);
     max-width: 44vw;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .mob-meta-chip.subtle {
-    color: rgba(240, 237, 228, 0.65);
-    border-color: rgba(240, 237, 228, 0.13);
-    background: rgba(240, 237, 228, 0.04);
-  }
   .mob-desc {
-    margin-top: 8px;
+    margin-top: 6px;
     font-family: var(--fm);
-    font-size: 10px;
+    font-size: 9px;
     color: rgba(240, 237, 228, 0.56);
     letter-spacing: 0.15px;
     line-height: 1.35;
@@ -2010,7 +2006,7 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     touch-action: pan-y;
-    padding: 10px 10px calc(12px + var(--mob-nav-slot));
+    padding: 8px 8px calc(10px + var(--mob-nav-slot));
     scroll-padding-bottom: calc(8px + var(--mob-nav-slot));
     display: flex;
     flex-direction: column;
@@ -2110,8 +2106,8 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-auto-rows: minmax(44px, 44px);
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px calc(6px + env(safe-area-inset-bottom));
+    gap: 6px;
+    padding: 7px 8px calc(5px + env(safe-area-inset-bottom));
     min-height: calc(60px + env(safe-area-inset-bottom));
     max-height: calc(72px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--term-border);
@@ -2152,7 +2148,7 @@
   .mob-nav-label {
     font-size: 10px;
     font-weight: 800;
-    letter-spacing: 1.1px;
+    letter-spacing: 0.8px;
     line-height: 1;
   }
   .mob-nav-badge {
@@ -2180,7 +2176,7 @@
     --tab-left-width: clamp(196px, 23vw, 232px);
     --tab-bottom-height: clamp(176px, 24vh, 230px);
     display: grid;
-    grid-template-rows: minmax(0, 1fr) 8px var(--tab-bottom-height) auto;
+    grid-template-rows: minmax(0, 1fr) 6px var(--tab-bottom-height) auto;
     height: 100%;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
@@ -2189,7 +2185,7 @@
   .tab-top {
     grid-row: 1;
     display: grid;
-    grid-template-columns: var(--tab-left-width) 8px minmax(0, 1fr);
+    grid-template-columns: var(--tab-left-width) 6px minmax(0, 1fr);
     min-height: 0;
     overflow: hidden;
   }
@@ -2198,7 +2194,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 4px 6px 6px;
+    padding: 4px 3px 4px 4px;
     overflow: hidden;
   }
   .tab-center {
@@ -2206,7 +2202,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 6px 6px 4px;
+    padding: 4px 4px 4px 3px;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
@@ -2218,7 +2214,7 @@
     width: min(100%, var(--tab-panel-width));
     height: min(100%, var(--tab-panel-height));
     margin: auto;
-    border-radius: 10px;
+    border-radius: 8px;
     border: 1px solid transparent;
     transition: width .16s ease, height .16s ease, box-shadow .16s ease, border-color .16s ease;
     min-width: 0;
@@ -2316,7 +2312,7 @@
   }
   .tab-layout-split-v span {
     width: 2px;
-    height: 52px;
+    height: 42px;
   }
   .tab-layout-split-h {
     grid-row: 2;
@@ -2324,7 +2320,7 @@
     cursor: row-resize;
   }
   .tab-layout-split-h span {
-    width: 54px;
+    width: 44px;
     height: 2px;
   }
   .tab-bottom {
@@ -2334,7 +2330,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 6px;
+    padding: 4px;
     overflow: hidden;
   }
   .terminal-tablet .ticker-bar {
@@ -2495,6 +2491,22 @@
   .terminal-shell :global(.intel-panel .ac-name) {
     color: rgba(240, 237, 228, 0.68);
   }
+  .terminal-shell :global(.war-room .wr-msg-text),
+  .terminal-shell :global(.war-room .wr-msg-name),
+  .terminal-shell :global(.intel-panel .hl-txt),
+  .terminal-shell :global(.intel-panel .comm-txt),
+  .terminal-shell :global(.intel-panel .ev-body),
+  .terminal-shell :global(.intel-panel .ac-txt) {
+    line-height: 1.4;
+    letter-spacing: 0.08px;
+  }
+  .terminal-shell :global(.war-room .deriv-val),
+  .terminal-shell :global(.war-room .wr-msg-price),
+  .terminal-shell :global(.intel-panel .flow-amt),
+  .terminal-shell :global(.intel-panel .hl-time),
+  .terminal-shell :global(.intel-panel .ev-etime) {
+    font-variant-numeric: tabular-nums;
+  }
   .terminal-shell :global(.intel-panel .hl-row:hover),
   .terminal-shell :global(.intel-panel .comm-react:hover) {
     background: rgba(232, 150, 125, 0.08);
@@ -2509,6 +2521,106 @@
   }
   .terminal-shell :global(.intel-panel .ac-input input:focus) {
     border-color: rgba(232, 150, 125, 0.42);
+  }
+
+  /* Text density tuning (desktop/tablet): denser headers, clearer body hierarchy */
+  .terminal-shell {
+    --term-font-2xs: clamp(7px, 0.42vw, 8px);
+    --term-font-xs: clamp(8px, 0.5vw, 9px);
+    --term-font-sm: clamp(9px, 0.62vw, 10px);
+    --term-font-md: clamp(10px, 0.78vw, 11.5px);
+    --term-font-lg: clamp(11px, 0.9vw, 13px);
+  }
+  .terminal-shell :global(.war-room .wr-title) {
+    font-size: var(--term-font-md);
+    letter-spacing: 1.05px;
+  }
+  .terminal-shell :global(.war-room .wr-chip),
+  .terminal-shell :global(.war-room .ticker-chip),
+  .terminal-shell :global(.war-room .scan-tab),
+  .terminal-shell :global(.war-room .token-tab),
+  .terminal-shell :global(.intel-panel .rp-inner-tab),
+  .terminal-shell :global(.intel-panel .ac-trade-btn) {
+    font-size: var(--term-font-xs);
+    letter-spacing: 0.42px;
+  }
+  .terminal-shell :global(.war-room .scan-tab-history),
+  .terminal-shell :global(.war-room .token-tab-count),
+  .terminal-shell :global(.war-room .wr-msg-time),
+  .terminal-shell :global(.war-room .wr-msg-src),
+  .terminal-shell :global(.intel-panel .hl-time),
+  .terminal-shell :global(.intel-panel .ev-etime),
+  .terminal-shell :global(.intel-panel .flow-addr),
+  .terminal-shell :global(.intel-panel .ac-name) {
+    font-size: var(--term-font-2xs);
+    letter-spacing: 0.28px;
+  }
+  .terminal-shell :global(.war-room .deriv-lbl),
+  .terminal-shell :global(.war-room .scan-status-text),
+  .terminal-shell :global(.war-room .select-all-btn),
+  .terminal-shell :global(.war-room .wr-act-btn),
+  .terminal-shell :global(.war-room .src-count),
+  .terminal-shell :global(.war-room .src-tracked),
+  .terminal-shell :global(.intel-panel .hl-net),
+  .terminal-shell :global(.intel-panel .hl-engage),
+  .terminal-shell :global(.intel-panel .hl-creator),
+  .terminal-shell :global(.intel-panel .trend-name),
+  .terminal-shell :global(.intel-panel .trend-vol),
+  .terminal-shell :global(.intel-panel .trend-soc),
+  .terminal-shell :global(.intel-panel .trend-galaxy) {
+    font-size: var(--term-font-xs);
+    letter-spacing: 0.18px;
+  }
+  .terminal-shell :global(.war-room .wr-msg-name),
+  .terminal-shell :global(.war-room .wr-msg-vote),
+  .terminal-shell :global(.war-room .wr-msg-conf),
+  .terminal-shell :global(.war-room .wr-msg-signal-row),
+  .terminal-shell :global(.war-room .wr-msg-text),
+  .terminal-shell :global(.war-room .src-text),
+  .terminal-shell :global(.war-room .ctc-text),
+  .terminal-shell :global(.intel-panel .rp-tab),
+  .terminal-shell :global(.intel-panel .hl-txt),
+  .terminal-shell :global(.intel-panel .flow-lbl),
+  .terminal-shell :global(.intel-panel .flow-amt),
+  .terminal-shell :global(.intel-panel .comm-name),
+  .terminal-shell :global(.intel-panel .comm-txt),
+  .terminal-shell :global(.intel-panel .ev-body),
+  .terminal-shell :global(.intel-panel .ac-title),
+  .terminal-shell :global(.intel-panel .ac-txt),
+  .terminal-shell :global(.intel-panel .ac-input input),
+  .terminal-shell :global(.intel-panel .trend-sym),
+  .terminal-shell :global(.intel-panel .trend-price),
+  .terminal-shell :global(.intel-panel .trend-chg) {
+    font-size: var(--term-font-sm);
+    letter-spacing: 0.12px;
+  }
+  .terminal-shell :global(.war-room .deriv-val),
+  .terminal-shell :global(.war-room .stat-val),
+  .terminal-shell :global(.war-room .wr-msg-entry),
+  .terminal-shell :global(.war-room .wr-msg-tp),
+  .terminal-shell :global(.war-room .wr-msg-sl),
+  .terminal-shell :global(.intel-panel .pos-pnl),
+  .terminal-shell :global(.intel-panel .pick-score) {
+    font-size: var(--term-font-md);
+    letter-spacing: 0.08px;
+  }
+  .terminal-shell :global(.war-room .wr-msg-text),
+  .terminal-shell :global(.intel-panel .hl-txt),
+  .terminal-shell :global(.intel-panel .comm-txt),
+  .terminal-shell :global(.intel-panel .ev-body),
+  .terminal-shell :global(.intel-panel .ac-txt) {
+    line-height: 1.38;
+  }
+  .terminal-shell :global(.war-room .deriv-val),
+  .terminal-shell :global(.war-room .wr-msg-conf),
+  .terminal-shell :global(.war-room .wr-msg-time),
+  .terminal-shell :global(.war-room .stat-val),
+  .terminal-shell :global(.intel-panel .flow-amt),
+  .terminal-shell :global(.intel-panel .trend-price),
+  .terminal-shell :global(.intel-panel .trend-chg),
+  .terminal-shell :global(.intel-panel .pick-score),
+  .terminal-shell :global(.intel-panel .pos-pnl) {
+    font-variant-numeric: tabular-nums lining-nums;
   }
 
   /* Mobile-only readability and touch ergonomics */
@@ -2737,12 +2849,12 @@
     border-radius: 7px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-sym) {
-    font-size: 9px;
-    letter-spacing: .7px;
+    font-size: 10px;
+    letter-spacing: .55px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-pair),
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-arrow) {
-    font-size: 7px;
+    font-size: 8px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-panel:not(.mobile)) {
     width: min(92vw, 320px);
@@ -2758,8 +2870,8 @@
     min-height: 20px;
     height: 20px;
     padding: 0 6px;
-    font-size: 8px;
-    letter-spacing: .4px;
+    font-size: 9px;
+    letter-spacing: .25px;
     border-radius: 5px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats) {
@@ -2777,12 +2889,12 @@
     gap: 4px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-k) {
-    font-size: 7px;
-    letter-spacing: .45px;
-  }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-v) {
     font-size: 8px;
     letter-spacing: .25px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-v) {
+    font-size: 9px;
+    letter-spacing: .1px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .bar-right) {
     width: auto;
@@ -2805,8 +2917,8 @@
   .terminal-mobile :global(.chart-wrapper .chart-bar .mode-toggle .mode-btn) {
     min-height: 20px;
     padding: 0 6px;
-    font-size: 8px;
-    letter-spacing: .45px;
+    font-size: 9px;
+    letter-spacing: .25px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .draw-tools .draw-btn) {
     width: 20px;
@@ -2817,8 +2929,8 @@
     min-height: 20px;
     height: 20px;
     padding: 0 6px;
-    font-size: 8px;
-    letter-spacing: .4px;
+    font-size: 9px;
+    letter-spacing: .2px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info) {
     margin-left: auto;
@@ -2831,10 +2943,10 @@
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .cprc) {
     font-size: 11px;
-    letter-spacing: .2px;
+    letter-spacing: .08px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .pchg) {
-    font-size: 8px;
+    font-size: 9px;
   }
   .terminal-mobile :global(.chart-wrapper .indicator-strip) {
     padding: 3px 5px;
@@ -2852,7 +2964,7 @@
     min-height: 18px;
     height: 18px;
     padding: 0 5px;
-    font-size: 7px;
+    font-size: 8px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-footer) {
     gap: 6px;
@@ -2941,9 +3053,6 @@
       max-width: 36vw;
       padding: 4px 7px;
       font-size: 8px;
-    }
-    .mob-meta-chip.subtle {
-      display: none;
     }
     .mob-nav-label {
       font-size: 9px;
