@@ -10,6 +10,9 @@ import {
 import { parseSessionCookie, SESSION_COOKIE_NAME } from '$lib/server/session';
 import { authVerifyLimiter } from '$lib/server/rateLimit';
 import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
+import { evaluateIpReputation } from '$lib/server/ipReputation';
+import { isBodyTooLarge, readTurnstileToken } from '$lib/server/requestGuards';
+import { verifyTurnstile } from '$lib/server/turnstile';
 
 const EVM_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
 
@@ -21,7 +24,13 @@ function normalizeChain(chainRaw: string | null): string {
 }
 
 export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
-  const ip = getClientAddress();
+  const fallbackIp = getClientAddress();
+  const reputation = evaluateIpReputation(request, fallbackIp);
+  if (!reputation.allowed) {
+    return json({ error: 'Request blocked by security policy' }, { status: 403 });
+  }
+
+  const ip = reputation.clientIp || fallbackIp || 'unknown';
   if (!authVerifyLimiter.check(ip)) {
     return json({ error: 'Too many wallet verification attempts. Please wait.' }, { status: 429 });
   }
@@ -34,9 +43,20 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
   if (!distributedAllowed) {
     return json({ error: 'Too many wallet verification attempts. Please wait.' }, { status: 429 });
   }
+  if (isBodyTooLarge(request, 16 * 1024)) {
+    return json({ error: 'Request body too large' }, { status: 413 });
+  }
 
   try {
     const body = await request.json();
+    const turnstile = await verifyTurnstile({
+      token: readTurnstileToken(body),
+      remoteIp: reputation.clientIp || fallbackIp || null,
+    });
+    if (!turnstile.ok) {
+      return json({ error: 'Bot verification failed' }, { status: 403 });
+    }
+
     const addressRaw = typeof body?.address === 'string' ? body.address.trim() : '';
     const message = typeof body?.message === 'string' ? body.message.trim() : '';
     const signature = typeof body?.signature === 'string' ? body.signature.trim() : '';

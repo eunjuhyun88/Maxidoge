@@ -14,11 +14,20 @@ import {
 } from '$lib/server/walletAuthRepository';
 import { authLoginLimiter } from '$lib/server/rateLimit';
 import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
+import { evaluateIpReputation } from '$lib/server/ipReputation';
+import { isBodyTooLarge, readTurnstileToken } from '$lib/server/requestGuards';
+import { verifyTurnstile } from '$lib/server/turnstile';
 
 const EVM_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
 
 export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
-  const ip = getClientAddress();
+  const fallbackIp = getClientAddress();
+  const reputation = evaluateIpReputation(request, fallbackIp);
+  if (!reputation.allowed) {
+    return json({ error: 'Request blocked by security policy' }, { status: 403 });
+  }
+
+  const ip = reputation.clientIp || fallbackIp || 'unknown';
   if (!authLoginLimiter.check(ip)) {
     return json({ error: 'Too many login attempts. Please wait.' }, { status: 429 });
   }
@@ -31,9 +40,20 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
   if (!distributedAllowed) {
     return json({ error: 'Too many login attempts. Please wait.' }, { status: 429 });
   }
+  if (isBodyTooLarge(request, 16 * 1024)) {
+    return json({ error: 'Request body too large' }, { status: 413 });
+  }
 
   try {
     const body = await request.json();
+    const turnstile = await verifyTurnstile({
+      token: readTurnstileToken(body),
+      remoteIp: reputation.clientIp || fallbackIp || null,
+    });
+    if (!turnstile.ok) {
+      return json({ error: 'Bot verification failed' }, { status: 403 });
+    }
+
     const email = typeof body?.email === 'string' ? body.email.trim() : '';
     const nickname = typeof body?.nickname === 'string' ? body.nickname.trim() : '';
     const walletAddressRaw = typeof body?.walletAddress === 'string' ? body.walletAddress.trim() : '';

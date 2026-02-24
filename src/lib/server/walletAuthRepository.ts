@@ -109,39 +109,14 @@ function sanitizeIssuedIp(raw?: string | null): string | null {
 async function ensureNonceInfrastructure(): Promise<void> {
   if (_nonceInfraReady) return;
 
-  await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
-  await query(
-    `
-      CREATE TABLE IF NOT EXISTS auth_nonces (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        address text NOT NULL,
-        nonce text NOT NULL,
-        message text NOT NULL,
-        provider text,
-        issued_ip inet,
-        user_agent text,
-        expires_at timestamptz NOT NULL,
-        consumed_at timestamptz,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        CHECK (address ~ '^0x[0-9a-fA-F]{40}$'),
-        CHECK (char_length(nonce) BETWEEN 16 AND 128),
-        CHECK (expires_at > created_at)
-      )
-    `
+  const result = await query<{ exists: boolean }>(
+    `SELECT to_regclass('public.auth_nonces') IS NOT NULL AS exists`
   );
-  await query(
-    `
-      CREATE INDEX IF NOT EXISTS idx_auth_nonces_address_created_at
-      ON auth_nonces (lower(address), created_at DESC)
-    `
-  );
-  await query(
-    `
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_auth_nonces_active_address_nonce
-      ON auth_nonces (lower(address), nonce)
-      WHERE consumed_at IS NULL
-    `
-  );
+  if (!result.rows[0]?.exists) {
+    const error: any = new Error('auth_nonces table is missing. Run migration 0003 first.');
+    error.code = '42P01';
+    throw error;
+  }
 
   _nonceInfraReady = true;
 }

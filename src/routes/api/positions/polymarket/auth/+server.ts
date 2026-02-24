@@ -13,6 +13,7 @@ import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { query } from '$lib/server/db';
 import { buildAuthTypedData, deriveApiCredentials } from '$lib/server/polymarketClob';
 import { polymarketOrderLimiter } from '$lib/server/rateLimit';
+import { encryptSecret, isSecretsEncryptionConfigured } from '$lib/server/secretCrypto';
 
 const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
@@ -92,13 +93,23 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
       return json({ error: 'Failed to derive Polymarket API credentials' }, { status: 502 });
     }
 
+    if (!isSecretsEncryptionConfigured()) {
+      return json({ error: 'Server secret encryption is not configured' }, { status: 503 });
+    }
+
     // Store L2 credentials in users table
     await query(
       `UPDATE users
        SET poly_api_key = $1, poly_secret = $2, poly_passphrase = $3,
            poly_wallet_address = $4, updated_at = now()
        WHERE id = $5`,
-      [creds.apiKey, creds.secret, creds.passphrase, walletAddress, user.id],
+      [
+        encryptSecret(creds.apiKey),
+        encryptSecret(creds.secret),
+        encryptSecret(creds.passphrase),
+        walletAddress,
+        user.id,
+      ],
     );
 
     // Log activity
