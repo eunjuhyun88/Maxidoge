@@ -1229,3 +1229,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Commit hash: PENDING
 - Push status: not executed
 - Status: DONE
+
+## [W-20260225-121] FINISH
+
+- End (KST): 2026-02-25 05:50
+- Agent: Codex (GPT-5)
+- Branch / merge target:
+  - source: `codex/terminal-be-gap-redesign-w121` (`5bb1ded3cc8daa1cc4d8760f5e26d876535d6dd2`)
+  - target: `main` (local merge commit `ebe5b3028ba39752d7062eb05a6d7025056c1ba5`)
+- What changed:
+  - `src/components/terminal/IntelPanel.svelte`
+    - POSITIONS 탭 진입/가시성 복귀 시 `hydratePositions()` 자동 동기화 추가
+    - pending 포지션 폴링 루프 + 주기적 전체 재동기화 루프 추가
+    - 동기화 상태 배지(`SYNCING/SYNC ERROR/SYNCED`), pending/total 카운트, 수동 `REFRESH`, retry UI 추가
+  - `src/lib/stores/positionStore.ts`
+    - `positionsLastSyncedAt` 스토어 추가
+    - `hydratePositions()` 성공 시 마지막 동기화 시간 기록
+    - `pollPendingPositions()`를 Polymarket + GMX pending 처리로 확장
+- Validation:
+  - feature(`codex/terminal-be-gap-redesign-w121`) `npm run check`: PASS
+  - feature(`codex/terminal-be-gap-redesign-w121`) `npm run build`: PASS
+  - main(`merge result`) `npm run check`: PASS
+  - main(`merge result`) `npm run build`: PASS
+- Commit hash: `5bb1ded3cc8daa1cc4d8760f5e26d876535d6dd2`
+- Merge hash: `ebe5b3028ba39752d7062eb05a6d7025056c1ba5`
+- Push status:
+  - `origin/codex/terminal-be-gap-redesign-w121`: SUCCESS
+  - `origin/main`: FAILED (protected branch policy: PR required, merge commit 금지, required checks gate)
+- Status: DONE (main push blocked by protection policy)
