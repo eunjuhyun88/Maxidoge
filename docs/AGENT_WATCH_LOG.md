@@ -1118,3 +1118,32 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `## main...origin/main`에서 분기, 워킹트리 clean 확인
   - single worktree(`/Users/ej/Downloads/maxidoge-clones/frontend-passport`) 확인
 - Status: IN_PROGRESS
+
+### W-20260225-0113-passport-codex (finish addendum)
+
+- End (KST): 2026-02-25 01:21
+- Agent: Codex (GPT-5)
+- Branch / merge target:
+  - source: `codex/passport-ml-orpo-design-v2` (`52badd5`)
+  - target: `main`
+- Changes (actual):
+  - `/Users/ej/Downloads/maxidoge-clones/frontend-passport/docs/PASSPORT_ML_ORPO_LEARNING_ARCHITECTURE_v2_2026-02-25.md` 신규 추가
+    - Pretraining/Continual Pretraining/SFT/ORPO/Retraining 전주기 설계
+    - Terminal 저장-조회 연계 lineage 키(`trace_id`, `inference_id`, `dataset_version_id`) 표준화
+    - 모델 분리(PM/AM), 데이터셋 계층(L0~L4), 평가/배포 게이트 정의
+  - `/Users/ej/Downloads/maxidoge-clones/frontend-passport/docs/PASSPORT_BACKEND_ARCHITECTURE_v1_2026-02-25.md`
+    - v2 학습 아키텍처 문서 참조 링크 추가
+  - `/Users/ej/Downloads/maxidoge-clones/frontend-passport/docs/AGENT_WATCH_LOG.md`
+    - 본 작업 start/finish 기록 추가
+- Diff vs plan:
+  - 없음
+- Validation:
+  - feature(`codex/passport-ml-orpo-design-v2`) `npm run check`: PASS
+  - feature(`codex/passport-ml-orpo-design-v2`) `npm run build`: PASS
+  - main(`merge result`) `npm run check`: PASS
+  - main(`merge result`) `npm run build`: PASS
+- Commit hash: `52badd5`
+- Merge hash: `d046a19`
+- Push status: SUCCESS (`origin/codex/passport-ml-orpo-design-v2`, `origin/main`)
+- Working tree check (before final push): `## main...origin/main [ahead 2]` (clean)
+- Status: DONE
