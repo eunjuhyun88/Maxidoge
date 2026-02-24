@@ -46,9 +46,12 @@ type Pivot = {
 
 const HS_LOOKBACK_BARS = 220;
 const HS_MIN_BAR_GAP = 3;
-const HS_MAX_SHOULDER_DIFF = 0.045;
-const HS_MIN_HEAD_LIFT = 0.012;
+const HS_SIDE_SEARCH = 3;
+const HS_MAX_SHOULDER_DIFF = 0.06;
+const HS_MIN_HEAD_LIFT = 0.009;
+const HS_MIN_VALLEY_DEPTH = 0.01;
 const HS_BREAK_BUFFER = 0.002;
+const HS_BREAK_MAX_BARS = 48;
 
 const WEDGE_WINDOWS = [36, 48, 60];
 const WEDGE_MIN_POINTS = 3;
@@ -160,85 +163,115 @@ function detectHeadAndShoulders(klines: BinanceKline[], lookaround: number): Cha
   const minRecentIndex = Math.max(0, klines.length - HS_LOOKBACK_BARS);
 
   for (let i = 1; i < highs.length - 1; i += 1) {
-    const h1 = highs[i - 1];
     const h2 = highs[i];
-    const h3 = highs[i + 1];
+    const leftStart = Math.max(0, i - HS_SIDE_SEARCH);
+    const rightEnd = Math.min(highs.length - 1, i + HS_SIDE_SEARCH);
 
-    if (h3.index < minRecentIndex) continue;
-    if (h2.index - h1.index < HS_MIN_BAR_GAP) continue;
-    if (h3.index - h2.index < HS_MIN_BAR_GAP) continue;
+    for (let li = leftStart; li < i; li += 1) {
+      const h1 = highs[li];
 
-    const shoulderBase = Math.max(h1.price, h3.price);
-    if (!isFiniteNum(shoulderBase) || shoulderBase <= 0) continue;
+      for (let ri = i + 1; ri <= rightEnd; ri += 1) {
+        const h3 = highs[ri];
 
-    const shoulderDiff = Math.abs(h1.price - h3.price) / shoulderBase;
-    if (shoulderDiff > HS_MAX_SHOULDER_DIFF) continue;
+        if (h3.index < minRecentIndex) continue;
+        if (h2.index - h1.index < HS_MIN_BAR_GAP) continue;
+        if (h3.index - h2.index < HS_MIN_BAR_GAP) continue;
 
-    const headLift = (h2.price - shoulderBase) / shoulderBase;
-    if (headLift < HS_MIN_HEAD_LIFT) continue;
+        const shoulderBase = Math.max(h1.price, h3.price);
+        if (!isFiniteNum(shoulderBase) || shoulderBase <= 0) continue;
 
-    const l1 = findLowestBetween(lows, h1.index, h2.index);
-    const l2 = findLowestBetween(lows, h2.index, h3.index);
-    if (!l1 || !l2) continue;
+        const shoulderDiff = Math.abs(h1.price - h3.price) / shoulderBase;
+        if (shoulderDiff > HS_MAX_SHOULDER_DIFF) continue;
 
-    let breakoutIndex = -1;
-    for (let k = h3.index + 1; k < Math.min(klines.length, h3.index + 36); k += 1) {
-      const neck = lineValueAtIndex(l1, l2, k);
-      if (!isFiniteNum(neck) || neck <= 0) continue;
-      if (klines[k].close < neck * (1 - HS_BREAK_BUFFER)) {
-        breakoutIndex = k;
-        break;
+        const headLift = (h2.price - shoulderBase) / shoulderBase;
+        if (headLift < HS_MIN_HEAD_LIFT) continue;
+
+        const l1 = findLowestBetween(lows, h1.index, h2.index);
+        const l2 = findLowestBetween(lows, h2.index, h3.index);
+        if (!l1 || !l2) continue;
+
+        const valleyDepth = (h2.price - Math.min(l1.price, l2.price)) / Math.max(h2.price, 1);
+        if (valleyDepth < HS_MIN_VALLEY_DEPTH) continue;
+
+        let breakoutIndex = -1;
+        for (let k = h3.index + 1; k < Math.min(klines.length, h3.index + HS_BREAK_MAX_BARS); k += 1) {
+          const neck = lineValueAtIndex(l1, l2, k);
+          if (!isFiniteNum(neck) || neck <= 0) continue;
+          if (klines[k].close < neck * (1 - HS_BREAK_BUFFER)) {
+            breakoutIndex = k;
+            break;
+          }
+        }
+
+        const markerIndex = breakoutIndex >= 0 ? breakoutIndex : h3.index;
+        const markerKline = klines[markerIndex];
+        const markerNeck = lineValueAtIndex(l1, l2, markerIndex);
+        if (!isFiniteNum(markerNeck) || markerNeck <= 0) continue;
+
+        const breakoutDepth = breakoutIndex >= 0 ? (markerNeck - markerKline.close) / markerNeck : 0;
+        const shoulderScore = 1 - clamp(shoulderDiff / HS_MAX_SHOULDER_DIFF, 0, 1);
+        const headScore = clamp(headLift / 0.04, 0, 1);
+        const valleyScore = clamp(valleyDepth / 0.1, 0, 1);
+        const breakScore = breakoutIndex >= 0 ? clamp(breakoutDepth / 0.012, 0, 1) : 0.35;
+        const confidence = clamp(
+          0.2 + shoulderScore * 0.28 + headScore * 0.27 + valleyScore * 0.2 + breakScore * 0.25,
+          0.25,
+          0.96
+        );
+        const status: ChartPatternStatus = breakoutIndex >= 0 ? 'CONFIRMED' : 'FORMING';
+
+        const detection: ChartPatternDetection = {
+          id: `hs-${h1.time}-${h2.time}-${h3.time}-${markerKline.time}`,
+          kind: 'head_and_shoulders',
+          name: 'Head and Shoulders',
+          shortName: 'H&S',
+          direction: 'BEARISH',
+          status,
+          confidence,
+          startTime: h1.time,
+          endTime: markerKline.time,
+          markerTime: markerKline.time,
+          markerPrice: markerKline.high,
+          guideLines: [
+            {
+              id: `hs-neck-${h1.time}-${h3.time}`,
+              label: 'neckline',
+              color: '#ff657a',
+              style: 'dashed',
+              from: { time: l1.time, price: l1.price },
+              to: { time: markerKline.time, price: markerNeck },
+            },
+            {
+              id: `hs-crest-l-${h1.time}-${h2.time}`,
+              label: 'crest-left',
+              color: '#ff8ca0',
+              style: 'solid',
+              from: { time: h1.time, price: h1.price },
+              to: { time: h2.time, price: h2.price },
+            },
+            {
+              id: `hs-crest-r-${h2.time}-${h3.time}`,
+              label: 'crest-right',
+              color: '#ff8ca0',
+              style: 'solid',
+              from: { time: h2.time, price: h2.price },
+              to: { time: h3.time, price: h3.price },
+            },
+          ],
+        };
+
+        if (!best) {
+          best = detection;
+          continue;
+        }
+        if (detection.status === 'CONFIRMED' && best.status !== 'CONFIRMED') {
+          best = detection;
+          continue;
+        }
+        if (detection.endTime > best.endTime) best = detection;
+        else if (detection.endTime === best.endTime && detection.confidence > best.confidence) best = detection;
       }
     }
-
-    const markerIndex = breakoutIndex >= 0 ? breakoutIndex : h3.index;
-    const markerKline = klines[markerIndex];
-    const markerNeck = lineValueAtIndex(l1, l2, markerIndex);
-    if (!isFiniteNum(markerNeck) || markerNeck <= 0) continue;
-
-    const valleyDepth = (h2.price - Math.min(l1.price, l2.price)) / Math.max(h2.price, 1);
-    const breakoutDepth = breakoutIndex >= 0 ? (markerNeck - markerKline.close) / markerNeck : 0;
-    const shoulderScore = 1 - clamp(shoulderDiff / HS_MAX_SHOULDER_DIFF, 0, 1);
-    const headScore = clamp(headLift / 0.04, 0, 1);
-    const valleyScore = clamp(valleyDepth / 0.1, 0, 1);
-    const breakScore = breakoutIndex >= 0 ? clamp(breakoutDepth / 0.012, 0, 1) : 0.35;
-    const confidence = clamp(
-      0.2 + shoulderScore * 0.28 + headScore * 0.27 + valleyScore * 0.2 + breakScore * 0.25,
-      0.25,
-      0.96
-    );
-    const status: ChartPatternStatus = breakoutIndex >= 0 ? 'CONFIRMED' : 'FORMING';
-
-    const detection: ChartPatternDetection = {
-      id: `hs-${h1.time}-${markerKline.time}`,
-      kind: 'head_and_shoulders',
-      name: 'Head and Shoulders',
-      shortName: 'H&S',
-      direction: 'BEARISH',
-      status,
-      confidence,
-      startTime: h1.time,
-      endTime: markerKline.time,
-      markerTime: markerKline.time,
-      markerPrice: markerKline.high,
-      guideLines: [
-        {
-          id: `hs-neck-${h1.time}`,
-          label: 'neckline',
-          color: '#ff657a',
-          style: 'dashed',
-          from: { time: l1.time, price: l1.price },
-          to: { time: markerKline.time, price: markerNeck },
-        },
-      ],
-    };
-
-    if (!best) {
-      best = detection;
-      continue;
-    }
-    if (detection.endTime > best.endTime) best = detection;
-    else if (detection.endTime === best.endTime && detection.confidence > best.confidence) best = detection;
   }
 
   return best;
