@@ -7,12 +7,14 @@
 
 import type { Handle } from '@sveltejs/kit';
 import { dev } from '$app/environment';
+import { runMutatingApiOriginGuard } from '$lib/server/originGuard';
 
 // Immutable asset path pattern (Vite hashed filenames)
 const IMMUTABLE_ASSET = /\/_app\/immutable\//;
 
 export const handle: Handle = async ({ event, resolve }) => {
-  const response = await resolve(event);
+  const blocked = runMutatingApiOriginGuard(event);
+  const response = blocked ?? await resolve(event);
 
   // ── Security headers ──────────────────────────────────────
   response.headers.set('X-Content-Type-Options', 'nosniff');
