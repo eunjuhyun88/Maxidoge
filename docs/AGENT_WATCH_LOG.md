@@ -1203,3 +1203,29 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: SUCCESS (`origin/codex/passport-ml-pipeline-skeleton-v1`, `origin/main`)
 - Working tree check (before final push): `## main...origin/main [ahead 3]` (clean)
 - Status: DONE
+
+### W-20260225-0452-integration-codex
+
+- Start (KST): 2026-02-25 04:52
+- End (KST): 2026-02-25 04:57
+- Agent: Codex (GPT-5)
+- Branch: `codex/fix-integration-log-path`
+- Scope (planned):
+  - integration 저장소가 frontend-passport 로그 파일을 건드리지 않도록 AGENTS 경로 오설정 수정
+  - docs redirect 문서의 AGENTS 경로 정정
+- Overlap check (before work):
+  - `## main...origin/main [ahead 1, behind 2]` (clean)
+  - 문제 원인 확인: integration `AGENTS.md`가 frontend-passport `docs/AGENT_WATCH_LOG.md`로 기록하도록 설정됨
+- Changes (actual):
+  - `AGENTS.md`
+    - START 로그 경로를 integration 로컬 로그로 변경
+    - Logging Model Development log 경로를 integration 로컬 로그로 변경
+    - Source of Truth의 repo rules 경로를 integration AGENTS로 변경
+  - `docs/README.md`
+    - 에이전트 실행 규칙 파일 경로를 integration AGENTS로 변경
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: PENDING
+- Push status: not executed
+- Status: DONE

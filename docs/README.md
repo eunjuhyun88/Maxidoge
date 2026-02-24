@@ -13,4 +13,4 @@
 5. `main` 머지 작업을 수행한 경우, `main`에서 `npm run check` + `npm run build` 재검증 후 unified 로그에 통합 요약 반영
 
 에이전트 실행 규칙 파일:
-- `/Users/ej/Downloads/maxidoge-clones/frontend-passport/AGENTS.md`
+- `/Users/ej/Downloads/maxidoge-clones/integration/AGENTS.md`
