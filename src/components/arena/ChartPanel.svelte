@@ -423,66 +423,6 @@
     return null;
   }
 
-  function toOverlayPoint(point: { time: number; price: number }): { x: number; y: number } | null {
-    const x = toOverlayX(point.time);
-    const y = toChartY(point.price);
-    if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y)) return null;
-    return { x, y };
-  }
-
-  function drawPatternTag(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string) {
-    const label = text.length > 20 ? `${text.slice(0, 20)}…` : text;
-    ctx.save();
-    ctx.font = "11px 'JetBrains Mono', monospace";
-    const padX = 7;
-    const boxH = 18;
-    const boxW = Math.max(50, Math.ceil(ctx.measureText(label).width) + padX * 2);
-    const boxX = Math.max(4, Math.min(x + 8, drawingCanvas.width - boxW - 4));
-    const boxY = Math.max(4, Math.min(y - boxH - 4, drawingCanvas.height - boxH - 4));
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
-    ctx.fillRect(boxX, boxY, boxW, boxH);
-    ctx.strokeStyle = withAlpha(color, 0.92);
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1);
-    ctx.fillStyle = withAlpha(color, 0.96);
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, boxX + padX, boxY + boxH / 2);
-    ctx.restore();
-  }
-
-  function drawPatternOverlays(ctx: CanvasRenderingContext2D) {
-    if (!drawingCanvas || detectedPatterns.length === 0) return;
-    ctx.save();
-    for (const pattern of detectedPatterns) {
-      for (const guide of pattern.guideLines) {
-        const from = toOverlayPoint(guide.from);
-        const to = toOverlayPoint(guide.to);
-        if (!from || !to) continue;
-        ctx.beginPath();
-        ctx.strokeStyle = withAlpha(guide.color, pattern.status === 'CONFIRMED' ? 0.95 : 0.78);
-        ctx.lineWidth = pattern.status === 'CONFIRMED' ? 2.6 : 2.1;
-        if (guide.style === 'dashed') ctx.setLineDash([6, 4]);
-        else ctx.setLineDash([]);
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(to.x, to.y);
-        ctx.stroke();
-      }
-
-      const marker = toOverlayPoint({ time: pattern.markerTime, price: pattern.markerPrice });
-      if (!marker) continue;
-      const tagColor = pattern.direction === 'BEARISH' ? '#ff657a' : '#58d78d';
-      drawPatternTag(
-        ctx,
-        marker.x,
-        marker.y,
-        `${pattern.shortName} ${pattern.status === 'CONFIRMED' ? 'OK' : 'PEND'} ${Math.round(pattern.confidence * 100)}%`,
-        tagColor
-      );
-    }
-    ctx.setLineDash([]);
-    ctx.restore();
-  }
-
   function clampRoundPrice(v: number) {
     if (!Number.isFinite(v)) return v;
     const abs = Math.abs(v);
@@ -1211,7 +1151,6 @@
     const ctx = drawingCanvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-    drawPatternOverlays(ctx);
     for (const d of drawings) {
       ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.5;
       if (d.type === 'hline') { ctx.setLineDash([6, 3]); ctx.moveTo(0, d.points[0].y); ctx.lineTo(drawingCanvas.width, d.points[0].y); }
@@ -1250,14 +1189,10 @@
   function toOverlayPoint(time: number, price: number): { x: number; y: number } | null {
     if (!chart || !drawingCanvas) return null;
     if (!Number.isFinite(time) || !Number.isFinite(price)) return null;
-    try {
-      const x = chart.timeScale().timeToCoordinate(time as any);
-      const y = toChartY(price);
-      if (!Number.isFinite(x) || y === null || !Number.isFinite(y)) return null;
-      return { x, y };
-    } catch {
-      return null;
-    }
+    const x = toOverlayX(time);
+    const y = toChartY(price);
+    if (x == null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
   }
 
   function drawPatternTag(
