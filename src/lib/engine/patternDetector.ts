@@ -55,9 +55,15 @@ const HS_BREAK_MAX_BARS = 48;
 
 const WEDGE_WINDOWS = [36, 48, 60];
 const WEDGE_MIN_POINTS = 3;
-const WEDGE_MIN_CONTRACTION = 0.25;
-const WEDGE_SLOPE_RATIO = 1.12;
+const WEDGE_MIN_CONTRACTION = 0.3;
+const WEDGE_SLOPE_RATIO = 1.18;
 const WEDGE_BREAK_BUFFER = 0.0015;
+const WEDGE_MIN_LINE_FIT = 0.5;
+const WEDGE_MIN_UPPER_DROP = 0.02;
+const WEDGE_MIN_LOWER_DROP = 0.01;
+const WEDGE_MIN_BAND_COVERAGE = 0.64;
+const WEDGE_MIN_APEX_AHEAD = 0;
+const WEDGE_MAX_APEX_AHEAD = 1.35;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -151,6 +157,42 @@ function linearRegression(points: Array<{ x: number; y: number }>): { slope: num
   }
   const r2 = ssTot === 0 ? 0 : clamp(1 - ssRes / ssTot, 0, 1);
   return { slope, intercept, r2 };
+}
+
+function relativeDrop(from: number, to: number): number {
+  if (!isFiniteNum(from) || !isFiniteNum(to) || from <= 0) return 0;
+  return (from - to) / from;
+}
+
+function computeApexPosition(
+  upReg: { slope: number; intercept: number },
+  lowReg: { slope: number; intercept: number }
+): number | null {
+  const denom = upReg.slope - lowReg.slope;
+  if (!isFiniteNum(denom) || Math.abs(denom) < 1e-9) return null;
+  const apex = (lowReg.intercept - upReg.intercept) / denom;
+  return isFiniteNum(apex) ? apex : null;
+}
+
+function computeBandCoverage(
+  klines: BinanceKline[],
+  start: number,
+  end: number,
+  upperAt: (idx: number) => number,
+  lowerAt: (idx: number) => number
+): number {
+  let total = 0;
+  let inside = 0;
+  for (let i = start; i <= end; i += 1) {
+    const upper = upperAt(i);
+    const lower = lowerAt(i);
+    if (!isFiniteNum(upper) || !isFiniteNum(lower) || upper <= lower) continue;
+    total += 1;
+    const close = klines[i].close;
+    if (close <= upper * 1.004 && close >= lower * 0.996) inside += 1;
+  }
+  if (total === 0) return 0;
+  return inside / total;
 }
 
 function detectHeadAndShoulders(klines: BinanceKline[], lookaround: number): ChartPatternDetection | null {
@@ -296,6 +338,8 @@ function detectFallingWedge(klines: BinanceKline[], lookaround: number): ChartPa
 
     if (!(upReg.slope < 0 && lowReg.slope < 0)) continue;
     if (!(Math.abs(upReg.slope) > Math.abs(lowReg.slope) * WEDGE_SLOPE_RATIO)) continue;
+    const lineFit = clamp((upReg.r2 + lowReg.r2) / 2, 0, 1);
+    if (lineFit < WEDGE_MIN_LINE_FIT) continue;
 
     const upperAt = (idx: number) => upReg.slope * idx + upReg.intercept;
     const lowerAt = (idx: number) => lowReg.slope * idx + lowReg.intercept;
@@ -307,6 +351,15 @@ function detectFallingWedge(klines: BinanceKline[], lookaround: number): ChartPa
 
     const contraction = 1 - widthEnd / widthStart;
     if (contraction < WEDGE_MIN_CONTRACTION) continue;
+    const upperDrop = relativeDrop(upperAt(start), upperAt(end));
+    const lowerDrop = relativeDrop(lowerAt(start), lowerAt(end));
+    if (upperDrop < WEDGE_MIN_UPPER_DROP || lowerDrop < WEDGE_MIN_LOWER_DROP) continue;
+    const bandCoverage = computeBandCoverage(klines, start, end, upperAt, lowerAt);
+    if (bandCoverage < WEDGE_MIN_BAND_COVERAGE) continue;
+    const apexX = computeApexPosition(upReg, lowReg);
+    if (apexX == null) continue;
+    const apexAhead = (apexX - end) / Math.max(windowSize, 1);
+    if (apexAhead < WEDGE_MIN_APEX_AHEAD || apexAhead > WEDGE_MAX_APEX_AHEAD) continue;
 
     let breakoutIndex = -1;
     const probeStart = Math.max(start + Math.floor(windowSize * 0.55), klines.length - 12);
@@ -322,12 +375,12 @@ function detectFallingWedge(klines: BinanceKline[], lookaround: number): ChartPa
 
     const markerIndex = breakoutIndex >= 0 ? breakoutIndex : end;
     const marker = klines[markerIndex];
-    const lineFit = clamp((upReg.r2 + lowReg.r2) / 2, 0, 1);
     const slopeGap = clamp((Math.abs(upReg.slope) / Math.max(Math.abs(lowReg.slope), 1e-9) - 1) / 0.8, 0, 1);
     const contractionScore = clamp((contraction - WEDGE_MIN_CONTRACTION) / 0.45, 0, 1);
     const breakScore = breakoutIndex >= 0 ? 1 : 0.42;
+    const coverageScore = clamp((bandCoverage - WEDGE_MIN_BAND_COVERAGE) / 0.3, 0, 1);
     const confidence = clamp(
-      0.18 + lineFit * 0.24 + slopeGap * 0.22 + contractionScore * 0.22 + breakScore * 0.14,
+      0.18 + lineFit * 0.22 + slopeGap * 0.2 + contractionScore * 0.2 + coverageScore * 0.12 + breakScore * 0.08,
       0.24,
       0.95
     );
@@ -547,7 +600,9 @@ function detectFallingWedgeFallback(klines: BinanceKline[]): ChartPatternDetecti
   const upReg = linearRegression(highs);
   const lowReg = linearRegression(lows);
   if (!(upReg.slope < 0 && lowReg.slope < 0)) return null;
-  if (!(Math.abs(upReg.slope) > Math.abs(lowReg.slope) * 1.02)) return null;
+  if (!(Math.abs(upReg.slope) > Math.abs(lowReg.slope) * 1.2)) return null;
+  const lineFit = clamp((upReg.r2 + lowReg.r2) / 2, 0, 1);
+  if (lineFit < 0.62) return null;
 
   const upperAt = (idx: number) => upReg.slope * idx + upReg.intercept;
   const lowerAt = (idx: number) => lowReg.slope * idx + lowReg.intercept;
@@ -558,22 +613,33 @@ function detectFallingWedgeFallback(klines: BinanceKline[]): ChartPatternDetecti
   if (widthStart <= 0 || widthEnd <= 0) return null;
 
   const contraction = 1 - widthEnd / widthStart;
-  if (contraction < 0.1) return null;
+  if (contraction < 0.24) return null;
+  const upperDrop = relativeDrop(upperAt(start), upperAt(end));
+  const lowerDrop = relativeDrop(lowerAt(start), lowerAt(end));
+  if (upperDrop < 0.03 || lowerDrop < 0.015) return null;
+  const bandCoverage = computeBandCoverage(klines, start, end, upperAt, lowerAt);
+  if (bandCoverage < 0.72) return null;
+  const apexX = computeApexPosition(upReg, lowReg);
+  if (apexX == null) return null;
+  const apexAhead = (apexX - end) / Math.max(span, 1);
+  if (apexAhead < 0 || apexAhead > 1.1) return null;
 
   const upperNow = upperAt(end);
   if (!isFiniteNum(upperNow) || upperNow <= 0) return null;
   const isConfirmed = marker.close > upperNow * (1 + WEDGE_BREAK_BUFFER * 0.7);
 
-  const lineFit = clamp((upReg.r2 + lowReg.r2) / 2, 0, 1);
   const slopeGap = clamp((Math.abs(upReg.slope) / Math.max(Math.abs(lowReg.slope), 1e-9) - 1) / 0.55, 0, 1);
+  const coverageScore = clamp((bandCoverage - 0.72) / 0.24, 0, 1);
   const confidence = clamp(
-    0.3
-      + lineFit * 0.3
-      + clamp(contraction / 0.4, 0, 1) * 0.24
-      + slopeGap * 0.16,
+    0.28
+      + lineFit * 0.28
+      + clamp((contraction - 0.24) / 0.36, 0, 1) * 0.2
+      + slopeGap * 0.14
+      + coverageScore * 0.1,
     0.3,
-    0.86
+    0.9
   );
+  if (!isConfirmed && confidence < 0.64) return null;
 
   return {
     id: `fw-fb-${klines[start].time}-${marker.time}`,
