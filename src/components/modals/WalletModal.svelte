@@ -14,7 +14,6 @@
     requestInjectedEvmAccount,
     requestPhantomSolanaAccount,
     signInjectedEvmMessage,
-    signPhantomSolanaUtf8Message,
     type WalletProviderKey
   } from '$lib/wallet/providers';
 
@@ -28,9 +27,11 @@
   let actionError = '';
   let connectingProvider = '';
   let signingMessage = false;
+  let signedWalletMessage = '';
+  let signedWalletSignature = '';
   let preferredAuthStep: 'signup' | 'login' = 'signup';
 
-  const WALLET_SIGNATURE_RE = /^0x[0-9a-fA-F]{64,512}$/;
+  const WALLET_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
   const preferredEvmChain = getPreferredEvmChainCode();
 
   function isWalletProviderKey(value: string): value is WalletProviderKey {
@@ -71,6 +72,16 @@
     };
   }
 
+  function getSignedWalletProof(): { walletMessage: string; walletSignature: string } | null {
+    if (!signedWalletMessage || !WALLET_SIGNATURE_RE.test(signedWalletSignature)) {
+      return null;
+    }
+    return {
+      walletMessage: signedWalletMessage,
+      walletSignature: signedWalletSignature,
+    };
+  }
+
   async function handleSignupSubmit() {
     const payload = parseAuthInput();
     if (!payload) return;
@@ -79,14 +90,18 @@
       setWalletModalStep('wallet-select');
       return;
     }
+    const walletProof = getSignedWalletProof();
+    if (!walletProof) {
+      actionError = 'Sign wallet message first before signup.';
+      setWalletModalStep('sign-message');
+      return;
+    }
     try {
       const res = await registerAuth({
         ...payload,
         walletAddress: state.address || undefined,
-        walletSignature: typeof state.signature === 'string'
-          && WALLET_SIGNATURE_RE.test(state.signature)
-          ? state.signature
-          : undefined,
+        walletMessage: walletProof.walletMessage,
+        walletSignature: walletProof.walletSignature,
       });
       applyAuthenticatedUser(res.user);
     } catch (error) {
@@ -102,10 +117,18 @@
       setWalletModalStep('wallet-select');
       return;
     }
+    const walletProof = getSignedWalletProof();
+    if (!walletProof) {
+      actionError = 'Sign wallet message first before login.';
+      setWalletModalStep('sign-message');
+      return;
+    }
     try {
       const res = await loginAuth({
         ...payload,
         walletAddress: state.address,
+        walletMessage: walletProof.walletMessage,
+        walletSignature: walletProof.walletSignature,
       });
       applyAuthenticatedUser(res.user);
     } catch (error) {
@@ -115,6 +138,8 @@
 
   async function handleConnect(provider: string) {
     actionError = '';
+    signedWalletMessage = '';
+    signedWalletSignature = '';
     if (!isWalletProviderKey(provider)) {
       actionError = 'Unsupported wallet provider.';
       return;
@@ -169,41 +194,27 @@
 
         const signature = await signInjectedEvmMessage(provider, noncePayload.message, state.address);
 
-        await verifyWalletSignature({
-          address: state.address,
-          message: noncePayload.message,
-          signature,
-          provider,
-          chain: state.chain,
-        });
+        // Existing users with an active account can immediately relink wallet proof.
+        if (state.email) {
+          await verifyWalletSignature({
+            address: state.address,
+            message: noncePayload.message,
+            signature,
+            provider,
+            chain: state.chain,
+          });
+        }
 
+        signedWalletMessage = noncePayload.message;
+        signedWalletSignature = signature;
         signMessage(signature);
         return;
       }
 
-      // Non-EVM wallets (e.g. Phantom Solana) use a direct verification call without nonce.
-      if (provider === 'phantom') {
-        const message = [
-          'MAXI DOGE Wallet Verification',
-          `Address: ${state.address}`,
-          `Issued At: ${new Date().toISOString()}`,
-          'Signing this message proves wallet ownership.',
-        ].join('\n');
-
-        const signature = await signPhantomSolanaUtf8Message(message);
-        await verifyWalletSignature({
-          address: state.address,
-          message,
-          signature,
-          provider,
-          chain: 'SOL',
-        });
-        signMessage(signature);
-        return;
-      }
-
-      throw new Error(`${WALLET_PROVIDER_LABEL[provider]} does not support this signature flow yet.`);
+      throw new Error('Solana wallet auth is temporarily unavailable. Use an EVM wallet.');
     } catch (error) {
+      signedWalletMessage = '';
+      signedWalletSignature = '';
       actionError = error instanceof Error ? error.message : 'Failed to sign wallet message';
     } finally {
       signingMessage = false;
@@ -216,6 +227,8 @@
     } catch (error) {
       console.warn('[WalletModal] logout api failed', error);
     }
+    signedWalletMessage = '';
+    signedWalletSignature = '';
     disconnectWallet();
     clearAuthenticatedUser();
     closeWalletModal();

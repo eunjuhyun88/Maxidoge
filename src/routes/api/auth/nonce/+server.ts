@@ -1,6 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { isValidEthAddress, issueWalletNonce, normalizeEthAddress } from '$lib/server/walletAuthRepository';
+import { authNonceLimiter } from '$lib/server/rateLimit';
+import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
 
 function getClientIp(request: Request): string | null {
   const forwardedFor = request.headers.get('x-forwarded-for');
@@ -9,7 +11,21 @@ function getClientIp(request: Request): string | null {
   return ip || null;
 }
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, getClientAddress }) => {
+  const ip = getClientAddress();
+  if (!authNonceLimiter.check(ip)) {
+    return json({ error: 'Too many nonce requests. Please wait.' }, { status: 429 });
+  }
+  const distributedAllowed = await checkDistributedRateLimit({
+    scope: 'auth:nonce',
+    key: ip,
+    windowMs: 60_000,
+    max: 8,
+  });
+  if (!distributedAllowed) {
+    return json({ error: 'Too many nonce requests. Please wait.' }, { status: 429 });
+  }
+
   try {
     const body = await request.json();
     const addressRaw = typeof body?.address === 'string' ? body.address.trim() : '';

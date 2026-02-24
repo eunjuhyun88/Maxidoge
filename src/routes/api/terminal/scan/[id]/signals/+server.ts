@@ -17,7 +17,10 @@ export const GET: RequestHandler = async ({ cookies, params }) => {
 
     const signals = await getTerminalScanSignals(user.id, scanId);
     return json({
+      success: true,
       ok: true,
+      scanId,
+      records: signals.records,
       warning: signals.warning,
       data: {
         scanId,
@@ -32,4 +35,3 @@ export const GET: RequestHandler = async ({ cookies, params }) => {
     return json({ error: 'Failed to load scan signals' }, { status: 500 });
   }
 };
-

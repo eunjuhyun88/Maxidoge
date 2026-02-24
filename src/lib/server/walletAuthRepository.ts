@@ -1,5 +1,6 @@
 import { query } from './db';
 import { isIP } from 'node:net';
+import { recoverMessageAddress, type Hex } from 'viem';
 
 const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -40,6 +41,48 @@ export function normalizeEthAddress(address: string): string {
 export function extractNonceFromMessage(message: string): string | null {
   const match = message.match(/Nonce:\s*([A-Za-z0-9-]+)/i);
   return match?.[1] || null;
+}
+
+export async function verifyEvmMessageSignature(args: {
+  address: string;
+  message: string;
+  signature: string;
+}): Promise<boolean> {
+  if (!isValidEthAddress(args.address)) return false;
+  try {
+    const recovered = await recoverMessageAddress({
+      message: args.message,
+      signature: args.signature as Hex,
+    });
+    return normalizeEthAddress(recovered) === normalizeEthAddress(args.address);
+  } catch {
+    return false;
+  }
+}
+
+export async function verifyAndConsumeEvmNonce(args: {
+  address: string;
+  message: string;
+  signature: string;
+}): Promise<'ok' | 'missing_nonce' | 'invalid_signature' | 'invalid_nonce'> {
+  const address = normalizeEthAddress(args.address);
+  const nonce = extractNonceFromMessage(args.message);
+  if (!nonce) return 'missing_nonce';
+
+  const verified = await verifyEvmMessageSignature({
+    address,
+    message: args.message,
+    signature: args.signature,
+  });
+  if (!verified) return 'invalid_signature';
+
+  const consumed = await consumeWalletNonce({
+    address,
+    nonce,
+    message: args.message,
+  });
+
+  return consumed ? 'ok' : 'invalid_nonce';
 }
 
 function sanitizeIssuedIp(raw?: string | null): string | null {
