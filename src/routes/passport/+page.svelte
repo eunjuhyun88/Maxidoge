@@ -7,10 +7,10 @@
   import { walletStore, openWalletModal } from '$lib/stores/walletStore';
   import { agentStats, hydrateAgentStats } from '$lib/stores/agentData';
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
-  import { HOLDINGS_DATA, calcTotal, calcPnL, type HoldingAsset } from '$lib/data/holdings';
+  import { HOLDINGS_DATA, calcPnL, type HoldingAsset } from '$lib/data/holdings';
   import { gameState } from '$lib/stores/gameState';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
-  import { fetchHoldings, type PortfolioHolding } from '$lib/api/portfolioApi';
+  import { fetchHoldings } from '$lib/api/portfolioApi';
   import { livePrices } from '$lib/stores/priceStore';
   import EmptyState from '../../components/shared/EmptyState.svelte';
 
@@ -36,10 +36,78 @@
   // Holdings: live API data with static fallback
   let liveHoldings: HoldingAsset[] = [];
   let holdingsLoaded = false;
+  let holdingsState: 'loading' | 'live' | 'fallback' = 'loading';
+  let holdingsStatusMessage = 'Syncing wallet holdings...';
+  let holdingsSyncAddress: string | null = null;
+  let baseHoldings: HoldingAsset[] = HOLDINGS_DATA;
+  let effectiveHoldings: HoldingAsset[] = HOLDINGS_DATA;
   $: liveP = $livePrices;
 
-  // Build effective holdings array: live API → static fallback
-  $: effectiveHoldings = holdingsLoaded && liveHoldings.length > 0 ? liveHoldings : HOLDINGS_DATA;
+  function withLivePrices(holdings: HoldingAsset[], prices: Record<string, number>): HoldingAsset[] {
+    const repriced = holdings.map((asset) => {
+      const livePrice = prices[asset.symbol];
+      const currentPrice = Number.isFinite(livePrice) && livePrice > 0 ? livePrice : asset.currentPrice;
+      return { ...asset, currentPrice };
+    });
+
+    const totalValue = repriced.reduce((sum, asset) => sum + asset.amount * asset.currentPrice, 0);
+    if (totalValue <= 0) {
+      return repriced.map((asset) => ({ ...asset, allocation: 0 }));
+    }
+
+    return repriced.map((asset) => ({
+      ...asset,
+      allocation: (asset.amount * asset.currentPrice) / totalValue,
+    }));
+  }
+
+  function toHoldingAsset(item: {
+    symbol: string;
+    name: string;
+    amount: number;
+    avgPrice: number;
+    currentPrice: number;
+  }): HoldingAsset {
+    return {
+      symbol: item.symbol,
+      name: item.name,
+      icon: ASSET_ICONS[item.symbol] || item.symbol[0],
+      color: ASSET_COLORS[item.symbol] || '#888',
+      amount: item.amount,
+      avgPrice: item.avgPrice,
+      currentPrice: item.currentPrice,
+      allocation: 0,
+    };
+  }
+
+  async function hydrateHoldings() {
+    holdingsState = 'loading';
+    holdingsStatusMessage = 'Syncing wallet holdings...';
+
+    try {
+      const res = await fetchHoldings();
+      if (res?.ok && res.data.holdings.length > 0) {
+        liveHoldings = res.data.holdings.map(toHoldingAsset);
+        holdingsLoaded = true;
+        holdingsState = 'live';
+        holdingsStatusMessage = `Live holdings synced (${liveHoldings.length} assets)`;
+        return;
+      }
+    } catch {
+      // handled below with fallback state
+    }
+
+    liveHoldings = [];
+    holdingsLoaded = false;
+    holdingsState = 'fallback';
+    holdingsStatusMessage = wallet.connected
+      ? 'Live holdings unavailable. Showing demo holdings.'
+      : 'Connect wallet to load live holdings.';
+  }
+
+  // Build effective holdings array: live API → static fallback + live price overlay
+  $: baseHoldings = holdingsLoaded && liveHoldings.length > 0 ? liveHoldings : HOLDINGS_DATA;
+  $: effectiveHoldings = withLivePrices(baseHoldings, liveP);
 
   // Holdings calculations
   $: total = effectiveHoldings.reduce((s, h) => s + h.amount * h.currentPrice, 0);
@@ -109,6 +177,7 @@
   }
 
   function setActiveTab(tab: TabType) {
+    if (tab === activeTab) return;
     activeTab = tab;
     void updateUiStateApi({ passportActiveTab: tab });
   }
@@ -124,6 +193,15 @@
     USDC: '$', USDT: '$', BNB: 'B', ADA: 'A', MATIC: 'M', DOT: 'D', LINK: 'L',
   };
 
+  $: if (wallet.connected && wallet.address && wallet.address !== holdingsSyncAddress) {
+    holdingsSyncAddress = wallet.address;
+    void hydrateHoldings();
+  }
+
+  $: if (!wallet.connected && holdingsSyncAddress !== null) {
+    holdingsSyncAddress = null;
+  }
+
   onMount(() => {
     hydrateUserProfile();
     hydrateAgentStats();
@@ -134,29 +212,9 @@
       }
     })();
 
-    // Holdings: fire-and-forget API fetch
-    void (async () => {
-      try {
-        const res = await fetchHoldings();
-        if (res?.ok && res.data.holdings.length > 0) {
-          const totalVal = res.data.totalValue || 1;
-          liveHoldings = res.data.holdings.map((h) => ({
-            symbol: h.symbol,
-            name: h.name,
-            icon: ASSET_ICONS[h.symbol] || h.symbol[0],
-            color: ASSET_COLORS[h.symbol] || '#888',
-            amount: h.amount,
-            avgPrice: h.avgPrice,
-            // Use live price from priceStore if available
-            currentPrice: liveP[h.symbol] || h.currentPrice,
-            allocation: (h.amount * h.currentPrice) / totalVal,
-          }));
-          holdingsLoaded = true;
-        }
-      } catch {
-        // Fallback to static data — no action needed
-      }
-    })();
+    if (!wallet.connected || !wallet.address) {
+      void hydrateHoldings();
+    }
   });
 </script>
 
@@ -348,6 +406,11 @@
               {:else}
                 <div class="vb-connected"><span class="vbc-dot"></span>{wallet.shortAddr} · {wallet.chain} · {wallet.balance.toLocaleString()} USDT</div>
               {/if}
+            </div>
+
+            <div class="holdings-status" class:live={holdingsState === 'live'}>
+              <span class="hs-dot"></span>
+              <span>{holdingsStatusMessage}</span>
             </div>
 
             <div class="holdings-body">
@@ -645,6 +708,31 @@
   .vb-connect:hover { transform: scale(1.03); box-shadow: 2px 2px 0 #000; }
   .vb-connected { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.4); margin-top: 3px; display: flex; align-items: center; gap: 5px; }
   .vbc-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--grn); box-shadow: 0 0 4px var(--grn); }
+  .holdings-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.03);
+    color: rgba(255,255,255,.55);
+    font-family: var(--fm);
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: .8px;
+  }
+  .holdings-status.live { border-color: rgba(0,255,136,.3); color: rgba(220,255,236,.9); }
+  .hs-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ff8c3b;
+    box-shadow: 0 0 4px rgba(255,140,59,.6);
+    flex-shrink: 0;
+  }
+  .holdings-status.live .hs-dot { background: var(--grn); box-shadow: 0 0 5px rgba(0,255,136,.75); }
 
   .holdings-body { display: grid; grid-template-columns: 200px 1fr; gap: 0; background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; overflow: hidden; }
   .st { font-size: 8px; font-family: var(--fd); font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.5); padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
