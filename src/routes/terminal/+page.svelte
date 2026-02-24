@@ -6,11 +6,11 @@
   import CopyTradeModal from '../../components/modals/CopyTradeModal.svelte';
   import { AGDEFS } from '$lib/data/agents';
 
-  let liveTickerStr = $state('');
-  let tickerLoaded = $state(false);
-  let TICKER_STR = $derived(tickerLoaded && liveTickerStr
+  let liveTickerStr = '';
+  let tickerLoaded = false;
+  $: TICKER_STR = tickerLoaded && liveTickerStr
     ? `${liveTickerStr}  \u00a0|\u00a0  ${liveTickerStr}`
-    : 'Loading market data...');
+    : 'Loading market data...';
   import { gameState } from '$lib/stores/gameState';
   import { livePrices } from '$lib/stores/priceStore';
   import { hydrateQuickTrades, openTradeCount } from '$lib/stores/quickTradeStore';
@@ -21,10 +21,10 @@
   import { onMount, onDestroy, tick } from 'svelte';
 
   // ── Panel resize state ──
-  let leftW = $state(280);       // War Room width
-  let rightW = $state(300);      // Intel Panel width
+  let leftW = 280;       // War Room width
+  let rightW = 300;      // Intel Panel width
   let containerEl: HTMLDivElement;
-  let windowWidth = $state(1200);
+  let windowWidth = 1200;
 
   const MIN_LEFT = 200;
   const MAX_LEFT = 450;
@@ -32,8 +32,8 @@
   const MAX_RIGHT = 500;
 
   // Collapse state
-  let leftCollapsed = $state(false);
-  let rightCollapsed = $state(false);
+  let leftCollapsed = false;
+  let rightCollapsed = false;
   let savedLeftW = 280;
   let savedRightW = 300;
 
@@ -68,9 +68,9 @@
   let dragStartVal = 0;
 
   // Responsive layout mode
-  let isMobile = $derived(windowWidth < BP_MOBILE);
-  let isTablet = $derived(windowWidth >= BP_MOBILE && windowWidth < BP_TABLET);
-  let isDesktop = $derived(windowWidth >= BP_TABLET);
+  $: isMobile = windowWidth < BP_MOBILE;
+  $: isTablet = windowWidth >= BP_MOBILE && windowWidth < BP_TABLET;
+  $: isDesktop = windowWidth >= BP_TABLET;
 
   // Mobile tab control
   type MobileTab = 'warroom' | 'chart' | 'intel';
@@ -828,11 +828,9 @@
     }
   }
 
-  $effect.pre(() => {
-    if (pendingChartScan && tryTriggerWarRoomScan()) {
-      pendingChartScan = false;
-    }
-  });
+  $: if (pendingChartScan && tryTriggerWarRoomScan()) {
+    pendingChartScan = false;
+  }
 
   // ── Agent Chat State ──
   interface ChatMsg {

@@ -16,7 +16,7 @@ export const GET: RequestHandler = async ({ params }) => {
         },
       }
     );
-  } catch (error: unknown) {
+  } catch (error: any) {
     if (typeof error?.message === 'string' && error.message.startsWith('invalid ')) {
       return json({ error: error.message }, { status: 400 });
     }

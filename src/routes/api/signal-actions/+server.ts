@@ -3,7 +3,6 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import {
-import { errorContains } from '$lib/utils/errorUtils';
   normalizePair,
   normalizeTradeDir,
   PAIR_RE,
@@ -13,8 +12,7 @@ import { errorContains } from '$lib/utils/errorUtils';
 
 const ACTIONS = new Set(['track', 'untrack', 'convert_to_trade', 'copy_trade', 'quick_long', 'quick_short']);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRow(row: Record<string, any>) {
+function mapRow(row: any) {
   return {
     id: row.id,
     userId: row.user_id,
@@ -80,8 +78,8 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
       records: rows.rows.map(mapRow),
       pagination: { limit, offset },
     });
-  } catch (error: unknown) {
-    if (errorContains(error, 'DATABASE_URL is not set')) {
+  } catch (error: any) {
+    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[signal-actions/get] unexpected error:', error);
@@ -135,8 +133,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     ).catch(() => undefined);
 
     return json({ success: true, action: mapRow(insert.rows[0]) });
-  } catch (error: unknown) {
-    if (errorContains(error, 'DATABASE_URL is not set')) {
+  } catch (error: any) {
+    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

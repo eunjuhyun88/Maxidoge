@@ -15,9 +15,9 @@
   $: trackedSigs = $activeSignalCount;
   $: openPos = $openTradeCount;
 
-  let btcPrice = $derived(state.prices.BTC);
-  let ethPrice = $derived(state.prices.ETH);
-  let solPrice = $derived(state.prices.SOL);
+  $: btcPrice = state.prices.BTC;
+  $: ethPrice = state.prices.ETH;
+  $: solPrice = state.prices.SOL;
 
   function enterArena() { goto('/arena'); }
   function enterTerminal() { goto('/terminal'); }
@@ -47,7 +47,7 @@
     { id: 'G', icon: '🎯', label: 'DIRECT QUERY', desc: '"IS ETH SAFE TO BUY?" — ASK IN PLAIN ENGLISH, GET AI ANALYSIS', count: 4 },
   ];
 
-  let selectedFeature: number | null = $state(null);
+  let selectedFeature: number | null = null;
   let heroRightEl: HTMLDivElement;
   let heroLeftEl: HTMLDivElement;
   let prefersReducedMotion = false;

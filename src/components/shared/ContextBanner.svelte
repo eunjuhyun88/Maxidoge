@@ -11,15 +11,15 @@
   import { onMount } from 'svelte';
 
   // Current page context
-  let { page = 'home' as 'terminal' | 'arena' | 'passport' | 'oracle' | 'signals' | 'live' | 'home' }: { page?: 'terminal' | 'arena' | 'passport' | 'oracle' | 'signals' | 'live' | 'home' } = $props();
+  export let page: 'terminal' | 'arena' | 'passport' | 'oracle' | 'signals' | 'live' | 'home' = 'home';
 
-  let openPos = $derived($openTradeCount);
-  let trackedSigs = $derived($activeSignalCount);
-  let pnl = $derived($totalQuickPnL);
-  let records = $derived($matchHistoryStore.records);
-  let wr = $derived($winRate);
-  let profile = $derived($userProfileStore);
-  let tier = $derived($profileTier);
+  $: openPos = $openTradeCount;
+  $: trackedSigs = $activeSignalCount;
+  $: pnl = $totalQuickPnL;
+  $: records = $matchHistoryStore.records;
+  $: wr = $winRate;
+  $: profile = $userProfileStore;
+  $: tier = $profileTier;
 
   interface BannerItem {
     icon: string;
@@ -29,7 +29,7 @@
     show: boolean;
   }
 
-  let items = $derived(getBannerItems(page, openPos, trackedSigs, pnl, records, wr, tier));
+  $: items = getBannerItems(page, openPos, trackedSigs, pnl, records, wr, tier);
 
   function getBannerItems(
     p: string,

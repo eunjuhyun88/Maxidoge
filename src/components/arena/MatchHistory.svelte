@@ -5,13 +5,15 @@
 
   const dispatch = createEventDispatcher();
 
-  let { visible = false }: { visible?: boolean } = $props();
+  export let visible = false;
 
-  let state = $derived($gameState);
-  let records = $derived($matchRecords);
-  let wr = $derived($winRate);
-  let alp = $derived($avgLP);
-  let bs = $derived($bestStreak);
+  let state = $gameState;
+  $: state = $gameState;
+
+  $: records = $matchRecords;
+  $: wr = $winRate;
+  $: alp = $avgLP;
+  $: bs = $bestStreak;
 
   // Expanded row tracking
   let expandedId: string | null = null;

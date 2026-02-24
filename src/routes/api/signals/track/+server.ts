@@ -3,7 +3,6 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import {
-import { errorContains } from '$lib/utils/errorUtils';
   normalizePair,
   normalizeTradeDir,
   PAIR_RE,

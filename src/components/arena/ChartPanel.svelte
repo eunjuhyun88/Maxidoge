@@ -33,18 +33,15 @@
   }>();
 
   let chartContainer: HTMLDivElement;
-  /* eslint-disable @typescript-eslint/no-explicit-any */
   let chart: any;
   let lwcModule: any = null;
   let series: any;
   let volumeSeries: any;
-  /* eslint-enable @typescript-eslint/no-explicit-any */
   let cleanup: (() => void) | null = null;
   let wsCleanup: (() => void) | null = null;
   let priceWsCleanup: (() => void) | null = null;
 
   // ═══ Indicator Series ═══
-  /* eslint-disable @typescript-eslint/no-explicit-any */
   let ma7Series: any;
   let ma20Series: any;
   let ma25Series: any;
@@ -52,7 +49,6 @@
   let ma99Series: any;
   let ma120Series: any;
   let rsiSeries: any;
-  /* eslint-enable @typescript-eslint/no-explicit-any */
   let volumePaneIndex: number | null = null;
   let rsiPaneIndex: number | null = null;
   let klineCache: BinanceKline[] = [];
@@ -76,13 +72,13 @@
   let latestVolume = 0;
 
   // ═══ Chart Mode ═══
-  let chartMode: 'agent' | 'trading' = $state('agent');
+  let chartMode: 'agent' | 'trading' = 'agent';
   let tvWidget: any = null;
   let tvContainer: HTMLDivElement;
   let tvScriptLoaded = false;
-  let tvLoading = $state(false);
-  let tvError = $state('');
-  let tvSafeMode = $state(false);
+  let tvLoading = false;
+  let tvError = '';
+  let tvSafeMode = false;
   let _tvFallbackTried = false;
   let _tvLoadTimer: ReturnType<typeof setTimeout> | null = null;
   let _tvReinitKey = '';
@@ -129,11 +125,9 @@
   let _chartNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Position lines
-  /* eslint-disable @typescript-eslint/no-explicit-any */
   let tpLine: any = null;
   let entryLine: any = null;
   let slLine: any = null;
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   export let posEntry: number | null = null;
   export let posTp: number | null = null;
@@ -177,7 +171,7 @@
   $: pairQuoteLabel = (state.pair?.split('/')?.[1] || 'USDT').toUpperCase();
 
   type IndicatorKey = 'ma20' | 'ma60' | 'ma120' | 'ma7' | 'ma25' | 'ma99' | 'rsi' | 'vol';
-  let indicatorEnabled: Record<IndicatorKey, boolean> = $state({
+  let indicatorEnabled: Record<IndicatorKey, boolean> = {
     ma20: true,
     ma60: true,
     ma120: true,
@@ -804,7 +798,7 @@
       applyIndicatorProfile();
       applyIndicatorVisibility();
     }
-  });
+  }
 
   function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
     if (typeof window === 'undefined') return;
@@ -822,8 +816,8 @@
   //  INDICATOR COMPUTATION (optimised)
   // ═══════════════════════════════════════════
 
-  function computeSMA(data: { time: string | number; close: number }[], period: number) {
-    const result: { time: string | number; value: number }[] = [];
+  function computeSMA(data: { time: any; close: number }[], period: number) {
+    const result: { time: any; value: number }[] = [];
     let sum = 0;
     for (let i = 0; i < data.length; i++) {
       sum += data[i].close;
@@ -833,9 +827,9 @@
     return result;
   }
 
-  function computeRSI(data: { time: string | number; close: number }[], period = 14) {
+  function computeRSI(data: { time: any; close: number }[], period = 14) {
     if (data.length < period + 1) return [];
-    const result: { time: string | number; value: number }[] = [];
+    const result: { time: any; value: number }[] = [];
     let avgGain = 0, avgLoss = 0;
     for (let i = 1; i <= period; i++) {
       const d = data[i].close - data[i - 1].close;
@@ -976,19 +970,17 @@
 
   // Debounced TradingView init/re-init only when pair/TF key changes.
   let _tvInitTimer: ReturnType<typeof setTimeout> | null = null;
-  $effect(() => {
-    if (chartMode === 'trading' && tvContainer && state.pair && state.timeframe) {
-      const key = `${state.pair}|${state.timeframe}`;
-      if (key !== _tvReinitKey) {
-        _tvReinitKey = key;
-        if (_tvInitTimer) clearTimeout(_tvInitTimer);
-        _tvInitTimer = setTimeout(() => {
-          _tvFallbackTried = false;
-          initTradingView(false);
-        }, 220);
-      }
+  $: if (chartMode === 'trading' && tvContainer && state.pair && state.timeframe) {
+    const key = `${state.pair}|${state.timeframe}`;
+    if (key !== _tvReinitKey) {
+      _tvReinitKey = key;
+      if (_tvInitTimer) clearTimeout(_tvInitTimer);
+      _tvInitTimer = setTimeout(() => {
+        _tvFallbackTried = false;
+        initTradingView(false);
+      }, 220);
     }
-  });
+  }
 
   function retryTradingView() {
     _tvFallbackTried = false;

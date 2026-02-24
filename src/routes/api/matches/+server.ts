@@ -8,7 +8,6 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
-import { errorContains } from '$lib/utils/errorUtils';
 
 // ── Legacy v2 match row (matches 테이블) ──
 interface MatchRow {
@@ -209,8 +208,8 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
         hasMore: offset + limit < total,
       },
     });
-  } catch (error: unknown) {
-    if (errorContains(error, 'DATABASE_URL is not set')) {
+  } catch (error: any) {
+    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[matches/get] unexpected error:', error);
@@ -286,11 +285,11 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       success: true,
       record: mapLegacyMatch(result.rows[0]),
     });
-  } catch (error: unknown) {
+  } catch (error: any) {
     if (error?.code === '23503') {
       return json({ error: 'User does not exist' }, { status: 409 });
     }
-    if (errorContains(error, 'DATABASE_URL is not set')) {
+    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) {

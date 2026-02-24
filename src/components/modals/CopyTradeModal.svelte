@@ -4,16 +4,16 @@
   import { notifySignalTracked } from '$lib/stores/notificationStore';
   import { derived } from 'svelte/store';
 
-  let isOpen = $derived($isCopyTradeOpen);
-  let step = $derived($copyTradeStep);
-  let draft = $derived($copyTradeDraft);
+  $: isOpen = $isCopyTradeOpen;
+  $: step = $copyTradeStep;
+  $: draft = $copyTradeDraft;
 
   // evidence는 이미 draft에 포함되어 있으므로 별도 signal lookup 불필요
-  let selectedSignals = $derived(draft.evidence);
+  $: selectedSignals = draft.evidence;
 
-  let consensus = $derived.by(() => selectedSignals.length
+  $: consensus = selectedSignals.length
     ? { dir: draft.dir, conf: Math.round(selectedSignals.reduce((a, e) => a + e.conf, 0) / selectedSignals.length), count: { long: 0, short: 0, neutral: 0 } }
-    : { dir: 'NEUTRAL' as const, conf: 0, count: { long: 0, short: 0, neutral: 0 } });
+    : { dir: 'NEUTRAL' as const, conf: 0, count: { long: 0, short: 0, neutral: 0 } };
 
   function calcRR(): string {
     if (!draft.sl || !draft.tp[0] || !draft.entry) return '—';

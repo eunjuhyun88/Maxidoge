@@ -4,7 +4,6 @@ import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { query } from '$lib/server/db';
 import { runTerminalScan } from '$lib/services/scanService';
 import { scanLimiter } from '$lib/server/rateLimit';
-import { errorContains } from '$lib/utils/errorUtils';
 
 function parseValidationMessage(message: string): string | null {
   if (message.startsWith('pair must be like')) return message;
@@ -58,10 +57,10 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
       warning: result.warning,
       data: result.data,
     });
-  } catch (error: unknown) {
+  } catch (error: any) {
     const validationMessage = typeof error?.message === 'string' ? parseValidationMessage(error.message) : null;
     if (validationMessage) return json({ error: validationMessage }, { status: 400 });
-    if (errorContains(error, 'DATABASE_URL is not set')) {
+    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

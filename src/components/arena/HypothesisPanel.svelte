@@ -5,67 +5,68 @@
 
   const dispatch = createEventDispatcher();
 
-  let state = $derived($gameState);
-  let p0 = $derived($p0Override);
+  let state = $gameState;
+  $: state = $gameState;
+
+  let p0 = $p0Override;
+  $: p0 = $p0Override;
 
   // Get current price from the active pair
-  let pairBase = $derived(state.pair.split('/')[0]);
-  let currentPrice = $derived(state.prices[pairBase as keyof typeof state.prices] || state.prices.BTC);
+  $: pairBase = state.pair.split('/')[0];
+  $: currentPrice = state.prices[pairBase as keyof typeof state.prices] || state.prices.BTC;
 
   // Hypothesis state
-  let dir: 'LONG' | 'SHORT' | 'NEUTRAL' | null = $state(null);
-  let conf = $state(0);
-  let tf = $state('1h');
-  let vmode: 'tpsl' | 'close' = $state('tpsl');
-  let closeN = $state(3);
-  let locked = $state(false);
+  let dir: 'LONG' | 'SHORT' | 'NEUTRAL' | null = null;
+  let conf = 0;
+  let tf = '1h';
+  let vmode: 'tpsl' | 'close' = 'tpsl';
+  let closeN = 3;
+  let locked = false;
 
   // NEW: Reasoning tags
   const REASONING_TAGS = ['STRUCTURE', 'FLOW', 'FUNDING', 'SENTIMENT', 'MACRO'] as const;
-  let selectedTags: Set<string> = $state(new Set());
+  let selectedTags: Set<string> = new Set();
 
   // NEW: Optional text reason (280 char max)
-  let reason = $state('');
-  let reasonCharsLeft = $derived(280 - reason.length);
+  let reason = '';
+  $: reasonCharsLeft = 280 - reason.length;
 
   // Price levels — dynamically adjusted to current price
-  let entry = $state(currentPrice);
-  let tp = $state(entry * 1.02);
-  let sl = $state(entry * 0.985);
-  let userAdjusted = $state(false);
+  let entry = currentPrice;
+  let tp = entry * 1.02;
+  let sl = entry * 0.985;
+  let userAdjusted = false;
 
   // Update entry when price changes (only if user hasn't manually adjusted)
-  $effect.pre(() => {
-    if (!userAdjusted && !dir) {
-      entry = currentPrice;
-      tp = entry * 1.02;
-      sl = entry * 0.985;
-    }
-  });
+  $: if (!userAdjusted && !dir) {
+    entry = currentPrice;
+    tp = entry * 1.02;
+    sl = entry * 0.985;
+  }
 
   // Calculate step size based on price magnitude
-  let step = $derived(currentPrice > 10000 ? 100 : currentPrice > 1000 ? 10 : currentPrice > 100 ? 1 : currentPrice > 10 ? 0.1 : 0.01);
-  let decimals = $derived(currentPrice > 100 ? 0 : currentPrice > 1 ? 2 : 4);
+  $: step = currentPrice > 10000 ? 100 : currentPrice > 1000 ? 10 : currentPrice > 100 ? 1 : currentPrice > 10 ? 0.1 : 0.01;
+  $: decimals = currentPrice > 100 ? 0 : currentPrice > 1 ? 2 : 4;
 
-  let reward = $derived(Math.abs(tp - entry));
-  let risk = $derived(Math.abs(entry - sl));
-  let rr = $derived(risk > 0 ? (reward / risk).toFixed(2) : '—');
-  let rrColor = $derived(parseFloat(rr) >= 2 ? '#00cc66' : parseFloat(rr) >= 1.5 ? '#ffd060' : parseFloat(rr) >= 1 ? '#ff8c3b' : '#ff2d55');
-  let tpPct = $derived(((tp - entry) / entry * 100).toFixed(2));
-  let slPct = $derived(((sl - entry) / entry * 100).toFixed(2));
+  $: reward = Math.abs(tp - entry);
+  $: risk = Math.abs(entry - sl);
+  $: rr = risk > 0 ? (reward / risk).toFixed(2) : '—';
+  $: rrColor = parseFloat(rr) >= 2 ? '#00cc66' : parseFloat(rr) >= 1.5 ? '#ffd060' : parseFloat(rr) >= 1 ? '#ff8c3b' : '#ff2d55';
+  $: tpPct = ((tp - entry) / entry * 100).toFixed(2);
+  $: slPct = ((sl - entry) / entry * 100).toFixed(2);
 
   // Validation: for LONG, TP > Entry > SL; for SHORT, SL > Entry > TP
   // P0 override disables submission
-  let canSubmit = $derived(!p0.active && !locked && dir !== null && dir !== 'NEUTRAL' && (
+  $: canSubmit = !p0.active && !locked && dir !== null && dir !== 'NEUTRAL' && (
     dir === 'LONG' ? (tp > entry && entry > sl) :
     dir === 'SHORT' ? (sl > entry && entry > tp) : false
-  ));
+  );
 
   // Timer
-  let { timeLeft = 45 }: { timeLeft?: number } = $props();
+  export let timeLeft = 45;
 
   // "Hypothesis First" — agent data should be hidden when user has not yet committed
-  let hypothesisInputActive = $derived(!locked);
+  $: hypothesisInputActive = !locked;
 
   const TF_LABELS: Record<string, string> = { '1m': '1M', '5m': '5M', '15m': '15M', '1h': '1H', '4h': '4H', '1d': '1D' };
 

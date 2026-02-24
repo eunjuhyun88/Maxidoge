@@ -29,36 +29,36 @@
   import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
   import type { DraftSelection } from '$lib/engine/types';
 
-  let walletOk = $derived($isWalletConnected);
+  $: walletOk = $isWalletConnected;
 
-  let state = $derived($gameState);
-  let modeLabel = $derived(state.arenaMode);
-  let tournamentInfo = $derived(state.tournament);
-  let resultOverlayTitle = $derived(state.arenaMode === 'TOURNAMENT'
+  $: state = $gameState;
+  $: modeLabel = state.arenaMode;
+  $: tournamentInfo = state.tournament;
+  $: resultOverlayTitle = state.arenaMode === 'TOURNAMENT'
     ? (resultData.win ? '🏆 TOURNAMENT WIN 🏆' : '☠ TOURNAMENT LOSS ☠')
     : state.arenaMode === 'PVP'
       ? (resultData.win ? '🏆 YOU WIN! 🏆' : '💀 YOU LOSE 💀')
-      : (resultData.win ? '🏁 PVE CLEAR' : '❌ PVE FAILED'));
+      : (resultData.win ? '🏁 PVE CLEAR' : '❌ PVE FAILED');
   // Active agents for this match
-  let activeAgents = $derived(AGDEFS.filter(a => state.selectedAgents.includes(a.id)));
-  let railRank = $derived([...activeAgents].sort((a, b) => b.conf - a.conf));
-  let longBalance = $derived(Math.max(0, Math.min(100, Math.round(state.score))));
+  $: activeAgents = AGDEFS.filter(a => state.selectedAgents.includes(a.id));
+  $: railRank = [...activeAgents].sort((a, b) => b.conf - a.conf);
+  $: longBalance = Math.max(0, Math.min(100, Math.round(state.score)));
 
   // UI state
-  let findings: Array<{def: typeof AGDEFS[0]; visible: boolean}> = $state([]);
-  let agentStates: Record<string, {state: string; speech: string; energy: number; voteDir: string; posX?: number; posY?: number}> = $state({});
-  let verdictVisible = $state(false);
-  let resultVisible = $state(false);
-  let resultData = $state({ win: false, lp: 0, tag: '', motto: '' });
-  let floatingWords: Array<{id: number; text: string; color: string; x: number; dur: number}> = $state([]);
-  let feedMessages: Array<{icon: string; name: string; color: string; text: string; dir?: string; isNew?: boolean}> = $state([]);
-  let councilActive = $state(false);
-  let phaseLabel = $state(PHASE_LABELS.DRAFT);
-  let pvpVisible = $state(false);
-  let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = $state([]);
-  let historyOpen = $state(false);
-  let matchHistoryOpen = $state(false);
-  let arenaRailTab: 'rank' | 'log' | 'map' = $state('rank');
+  let findings: Array<{def: typeof AGDEFS[0]; visible: boolean}> = [];
+  let agentStates: Record<string, {state: string; speech: string; energy: number; voteDir: string; posX?: number; posY?: number}> = {};
+  let verdictVisible = false;
+  let resultVisible = false;
+  let resultData = { win: false, lp: 0, tag: '', motto: '' };
+  let floatingWords: Array<{id: number; text: string; color: string; x: number; dur: number}> = [];
+  let feedMessages: Array<{icon: string; name: string; color: string; text: string; dir?: string; isNew?: boolean}> = [];
+  let councilActive = false;
+  let phaseLabel = PHASE_LABELS.DRAFT;
+  let pvpVisible = false;
+  let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = [];
+  let historyOpen = false;
+  let matchHistoryOpen = false;
+  let arenaRailTab: 'rank' | 'log' | 'map' = 'rank';
 
   type ArenaLiveEvent = {
     id: number;
@@ -376,8 +376,6 @@
     agentStates[agentId] = { ...agentStates[agentId], speech: '' };
     agentStates = { ...agentStates };
 
-    // Clear any existing speech timer for this agent before creating a new one
-    if (speechTimers[agentId]) clearInterval(speechTimers[agentId]);
     speechTimers[agentId] = setInterval(() => {
       charIdx++;
       if (charIdx >= fullText.length) {
@@ -951,7 +949,7 @@
     const pos = state.pos || fallbackPos;
     if (!pos) {
       gameState.update(s => ({ ...s, battleResult: null, running: false }));
-      setTimeout(() => { if (!_arenaDestroyed) advancePhase(); }, 3000);
+      setTimeout(() => advancePhase(), 3000);
       return;
     }
 
@@ -967,7 +965,7 @@
         if (tpHit || slHit || elapsed >= 8000) {
           if (_battleInterval) { clearInterval(_battleInterval); _battleInterval = null; }
           const result = tpHit ? 'tp' : slHit ? 'sl' : (price > pos.entry ? 'time_win' : 'time_loss');
-          setTimeout(() => { if (!_arenaDestroyed) advancePhase(); }, 500);
+          setTimeout(() => advancePhase(), 500);
           return { ...s, prices: { ...s.prices, BTC: price }, battleResult: result };
         }
         return { ...s, prices: { ...s.prices, BTC: price } };

@@ -3,7 +3,6 @@ import type { RequestHandler } from './$types';
 import { withTransaction } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import {
-import { errorContains } from '$lib/utils/errorUtils';
   normalizePair,
   normalizeTradeDir,
   PAIR_RE,
@@ -200,8 +199,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
         expiresAt: new Date(outcome.signal.expires_at).getTime(),
       },
     });
-  } catch (error: unknown) {
-    if (errorContains(error, 'DATABASE_URL is not set')) {
+  } catch (error: any) {
+    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

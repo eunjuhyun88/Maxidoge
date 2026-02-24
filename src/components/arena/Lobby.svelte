@@ -17,17 +17,19 @@
   const TOURNAMENT_UNLOCK_LP = 500;
   const TOURNAMENT_UNLOCK_PVP_WINS = 5;
 
-  let selectedMode: 'pve' | 'pvp' | 'tournament' = $state('pve');
-  let tournaments: TournamentActiveRecord[] = $state([]);
-  let tournamentsLoading = $state(false);
-  let tournamentsError: string | null = $state(null);
-  let selectedTournamentId: string | null = $state(null);
-  let bracketLoading = $state(false);
-  let bracketError: string | null = $state(null);
-  let bracketRound = $state(1);
-  let bracketMatches: TournamentBracketMatch[] = $state([]);
-  let registerLoading = $state(false);
-  let registerMessage: string | null = $state(null);
+  let selectedMode: 'pve' | 'pvp' | 'tournament' = 'pve';
+  let tournaments: TournamentActiveRecord[] = [];
+  let tournamentsLoading = false;
+  let tournamentsError: string | null = null;
+  let selectedTournamentId: string | null = null;
+  let bracketLoading = false;
+  let bracketError: string | null = null;
+  let bracketRound = 1;
+  let bracketMatches: TournamentBracketMatch[] = [];
+  let registerLoading = false;
+  let registerMessage: string | null = null;
+  let selectedTournament: TournamentActiveRecord | null = null;
+  let canRegisterTournament = false;
 
   let mounted = false;
   let hoveredMode: string | null = null;
@@ -52,7 +54,7 @@
   $: canRegisterTournament =
     !!selectedTournament &&
     selectedTournament.status === 'REG_OPEN' &&
-    selectedTournament.registeredPlayers < selectedTournament.maxPlayers);
+    selectedTournament.registeredPlayers < selectedTournament.maxPlayers;
 
   $: lpBarWidth = Math.min(100, ($gameState.lp / 3000) * 100);
   $: streakEmoji = $gameState.streak >= 5 ? '🔥' : $gameState.streak >= 3 ? '⚡' : '';

@@ -17,8 +17,8 @@
     type WalletProviderKey
   } from '$lib/wallet/providers';
 
-  let state = $derived($walletStore);
-  let step = $derived(state.walletModalStep);
+  $: state = $walletStore;
+  $: step = state.walletModalStep;
 
   // Form state
   let emailInput = '';

@@ -2,9 +2,12 @@
   import { onMount } from 'svelte';
   import { notifications, unreadCount, seedNotifications, type Notification, type NotificationType } from '$lib/stores/notificationStore';
 
-  let open = $state(false);
-  let items = $derived($notifications);
-  let count = $derived($unreadCount);
+  let open = false;
+  let items: Notification[] = [];
+  let count = 0;
+
+  $: items = $notifications;
+  $: count = $unreadCount;
 
   onMount(() => {
     void (async () => {

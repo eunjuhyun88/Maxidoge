@@ -8,7 +8,6 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createAuthSession, createAuthUser, findAuthUserConflict } from '$lib/server/authRepository';
 import {
-import { errorContains } from '$lib/utils/errorUtils';
   buildSessionCookieValue,
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_OPTIONS,
@@ -171,11 +170,11 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
         createdAt: new Date(createdAt).toISOString(),
       },
     });
-  } catch (error: unknown) {
+  } catch (error: any) {
     if (error?.code === '23505') {
       return json({ error: 'Email or nickname already exists' }, { status: 409 });
     }
-    if (errorContains(error, 'DATABASE_URL is not set')) {
+    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) {

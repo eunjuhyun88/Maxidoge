@@ -6,20 +6,14 @@
   import { createEventDispatcher } from 'svelte';
   const dispatch = createEventDispatcher();
 
-  let {
-    image = '/characters/trading-states.jpg',
-    title = 'Nothing here yet',
-    subtitle = '',
-    ctaText = '',
-    ctaHref = '',
-    icon = '',
-    compact = false,
-    variant = 'default' as 'default' | 'purple' | 'cyan' | 'pink' | 'green' | 'orange',
-  }: {
-    image?: string; title?: string; subtitle?: string; ctaText?: string;
-    ctaHref?: string; icon?: string; compact?: boolean;
-    variant?: 'default' | 'purple' | 'cyan' | 'pink' | 'green' | 'orange';
-  } = $props();
+  export let image: string = '/characters/trading-states.jpg';
+  export let title: string = 'Nothing here yet';
+  export let subtitle: string = '';
+  export let ctaText: string = '';
+  export let ctaHref: string = '';
+  export let icon: string = '';
+  export let compact: boolean = false;
+  export let variant: 'default' | 'purple' | 'cyan' | 'pink' | 'green' | 'orange' = 'default';
 
   function handleCTA() {
     dispatch('action');
@@ -36,7 +30,7 @@
     green: { accent: '#00ff88', glow: 'rgba(0,255,136,.15)' },
     orange: { accent: '#ff8c3b', glow: 'rgba(255,140,59,.15)' },
   };
-  let colors = $derived(variantColors[variant] || variantColors.default);
+  $: colors = variantColors[variant] || variantColors.default;
 </script>
 
 <div class="empty" class:compact style="--es-accent:{colors.accent}; --es-glow:{colors.glow}">

@@ -16,12 +16,12 @@
     isSystem?: boolean;
   }
 
-  let chatMessages: ChatMsg[] = $state([
+  let chatMessages: ChatMsg[] = [
     { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'MAXI⚡DOGE Orchestrator v8 online.', time: '—', isUser: false, isSystem: true },
-  ]);
-  let chatInput = $state('');
+  ];
+  let chatInput = '';
   let chatEl: HTMLDivElement;
-  let isTyping = $state(false);
+  let isTyping = false;
 
   const agentResponses: Record<string, string[]> = {
     ORCHESTRATOR: ['Analyzing across 7 agents...', 'Running backtest... 68% win rate detected.', 'Consensus updated.'],
@@ -39,7 +39,7 @@
     color: string;
   }
 
-  let activities: Activity[] = $state([]);
+  let activities: Activity[] = [];
 
   export function addActivity(icon: string, text: string, color: string = '#fff') {
     activities = [{ id: crypto.randomUUID(), icon, text, time: Date.now(), color }, ...activities].slice(0, 50);
@@ -47,8 +47,8 @@
 
   // ── Tab state ──
   type Tab = 'positions' | 'tracked' | 'chat' | 'activity';
-  let activeTab: Tab = $state('positions');
-  let collapsed = $state(false);
+  let activeTab: Tab = 'positions';
+  let collapsed = false;
 
   export function activateTab(tab: Tab) {
     activeTab = tab;
@@ -56,12 +56,12 @@
   }
 
   // ── Reactive ──
-  let state = $derived($gameState);
-  let opens = $derived($openTrades);
-  let closed = $derived($closedTrades);
-  let totalPnl = $derived($totalQuickPnL);
-  let tracked = $derived($activeSignals);
-  let trackedCount = $derived($activeSignalCount);
+  $: state = $gameState;
+  $: opens = $openTrades;
+  $: closed = $closedTrades;
+  $: totalPnl = $totalQuickPnL;
+  $: tracked = $activeSignals;
+  $: trackedCount = $activeSignalCount;
 
   // ── Trade actions ──
   function handleCloseTrade(tradeId: string) {

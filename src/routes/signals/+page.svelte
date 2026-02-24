@@ -22,14 +22,14 @@
   import ContextBanner from '../../components/shared/ContextBanner.svelte';
   import OracleLeaderboard from '../../components/community/OracleLeaderboard.svelte';
 
-  let state = $derived($gameState);
-  let records = $derived($matchHistoryStore.records);
-  let opens = $derived($openTrades);
-  let tracked = $derived($activeSignals);
+  $: state = $gameState;
+  $: records = $matchHistoryStore.records;
+  $: opens = $openTrades;
+  $: tracked = $activeSignals;
 
-  let filter: string = $state('all');
-  let signalsView: 'community' | 'signals' | 'oracle' = $state('community');
-  let communityFilter: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked' = $state('all');
+  let filter: string = 'all';
+  let signalsView: 'community' | 'signals' | 'oracle' = 'community';
+  let communityFilter: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked' = 'all';
   const COMMUNITY_FILTERS: Array<{ key: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked'; label: string }> = [
     { key: 'all', label: 'All' },
     { key: 'crypto', label: 'Crypto' },
@@ -48,20 +48,20 @@
   ];
 
   // Build signals from real data sources
-  let arenaSignals = $derived(buildArenaSignals(records, AGDEFS, state));
-  let tradeSignals = $derived(buildTradeSignals(opens));
-  let trackedSignals = $derived(buildTrackedSignals(tracked, AGDEFS));
-  let agentSignals = $derived(buildAgentSignals(AGDEFS, state));
-  let allSignals = $derived([...arenaSignals, ...tradeSignals, ...trackedSignals, ...agentSignals]);
-  let filteredSignals = $derived.by(() => filter === 'all' ? allSignals
+  $: arenaSignals = buildArenaSignals(records, AGDEFS, state);
+  $: tradeSignals = buildTradeSignals(opens);
+  $: trackedSignals = buildTrackedSignals(tracked, AGDEFS);
+  $: agentSignals = buildAgentSignals(AGDEFS, state);
+  $: allSignals = [...arenaSignals, ...tradeSignals, ...trackedSignals, ...agentSignals];
+  $: filteredSignals = filter === 'all' ? allSignals
     : filter === 'active' ? allSignals.filter(s => s.active)
     : filter === 'arena' ? arenaSignals
     : filter === 'trade' ? tradeSignals
     : filter === 'tracked' ? trackedSignals
-    : allSignals.filter(s => s.priority === filter));
-  let activeSignalCount = $derived(allSignals.filter((s) => s.active).length);
-  let highConvictionCount = $derived(allSignals.filter((s) => s.conf >= 78).length);
-  let communityIdeas = $derived(buildCommunityIdeas(filteredSignals, communityFilter));
+    : allSignals.filter(s => s.priority === filter);
+  $: activeSignalCount = allSignals.filter((s) => s.active).length;
+  $: highConvictionCount = allSignals.filter((s) => s.conf >= 78).length;
+  $: communityIdeas = buildCommunityIdeas(filteredSignals, communityFilter);
 
   function handleTrack(sig: Signal) {
     trackSignal(sig.pair, sig.dir, sig.entry, sig.agent?.name || 'manual', sig.conf);

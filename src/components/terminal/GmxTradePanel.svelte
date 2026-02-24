@@ -13,7 +13,7 @@
   import { ensureArbitrumChain } from '$lib/wallet/chainSwitch';
 
   // ── Props ──────────────────────────────────────────
-  let { onClose = () => {} }: { onClose?: () => void } = $props();
+  export let onClose: () => void = () => {};
 
   // ── State ──────────────────────────────────────────
   let markets: GmxMarket[] = [];
@@ -28,12 +28,12 @@
   const collateralInputId = 'gmx-collateral-input';
 
   // ── Derived ────────────────────────────────────────
-  let collateralNum = $derived(parseFloat(collateral) || 0);
-  let sizeUsd = $derived(collateralNum * leverage);
-  let walletConnected = $derived($walletStore.connected);
-  let isValid = $derived(collateralNum >= 1 && collateralNum <= 100_000 && leverage >= 1 && leverage <= 100 && selectedMarket);
-  let hasEnoughUsdc = $derived(balance ? collateralNum <= balance.usdcBalance : true);
-  let hasEnoughEth = $derived(balance ? balance.ethBalance > 0.001 : true);
+  $: collateralNum = parseFloat(collateral) || 0;
+  $: sizeUsd = collateralNum * leverage;
+  $: walletConnected = $walletStore.connected;
+  $: isValid = collateralNum >= 1 && collateralNum <= 100_000 && leverage >= 1 && leverage <= 100 && selectedMarket;
+  $: hasEnoughUsdc = balance ? collateralNum <= balance.usdcBalance : true;
+  $: hasEnoughEth = balance ? balance.ethBalance > 0.001 : true;
 
   // ── Init ───────────────────────────────────────────
   async function loadMarkets() {
