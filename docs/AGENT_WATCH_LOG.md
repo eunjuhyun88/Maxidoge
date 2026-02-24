@@ -1222,3 +1222,27 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - pre-existing change: `docs/AGENT_WATCH_LOG.md` modified
   - single worktree(`/Users/ej/Downloads/maxidoge-clones/frontend-passport`) 확인
 - Status: IN_PROGRESS
+
+### W-20260225-0352-passport-codex (finish addendum)
+
+- End (KST): 2026-02-25 03:59
+- Agent: Codex (GPT-5)
+- Branch / target:
+  - source: `codex/git-collab-policy-share`
+  - target: `main` (PR)
+- Changes (actual):
+  - `docs/GIT_COLLABORATION_POLICY_SSOT.md` 신규 추가 (Git 협업 SSOT Addendum)
+  - `README.md`에 `0-1) Git Collaboration Policy (SSOT Addendum)` 섹션 추가
+  - `AGENTS.md` Source of Truth에 정책 문서 링크 추가
+  - `docs/README.md` 리다이렉트 문서에 정책 경로 추가
+  - 본 작업 START/FINISH 로그 기록
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash:
+  - policy commit: `803744c`
+- Push status:
+  - SUCCESS (`origin/codex/git-collab-policy-share`)
+- Final working tree status:
+  - pending (finish-log commit/push after this entry)
+- Status: DONE
