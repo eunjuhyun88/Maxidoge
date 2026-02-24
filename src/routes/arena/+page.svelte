@@ -1240,7 +1240,7 @@
   });
 </script>
 
-<div class="arena-page arena-space-theme">
+<div class="arena-page arena-space-theme tm-page-shell tm-scroll">
   <!-- Wallet Gate Overlay -->
   {#if !walletOk}
     <div class="wallet-gate">
@@ -3067,6 +3067,22 @@
   }
   .hist-btn {
     right: 206px;
+  }
+
+  /* ── Tone/readability tuning ── */
+  .arena-page {
+    color: var(--space-text);
+  }
+  .arena-page :is(.atb-meta, .atb-phase-label, .atb-phase-desc, .feed-text, .wg-sub) {
+    font-size: clamp(11px, 0.95vw, 14px);
+    line-height: 1.55;
+    color: var(--space-text-soft);
+  }
+  .arena-page :is(.atb-title, .wg-title) {
+    letter-spacing: 0.05em;
+  }
+  .arena-page :is(.arena-rail, .feed-panel, .hist-panel, .wg-card) {
+    border-color: rgba(153, 230, 255, 0.26);
   }
 
   @media (max-width: 1150px) {

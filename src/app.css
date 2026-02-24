@@ -33,6 +33,20 @@
   --nav-accent:#E8967D;
   --nav-border:rgba(232,150,125,0.2);
 
+  /* ── SHARED TONE SYSTEM ── */
+  --tm-bg-0:#07131a;
+  --tm-bg-1:#0c1d2a;
+  --tm-bg-2:#13283a;
+  --tm-surface:rgba(15,31,46,0.78);
+  --tm-surface-strong:rgba(12,25,38,0.88);
+  --tm-border:rgba(172,206,240,0.24);
+  --tm-accent-warm:#f1a488;
+  --tm-accent-cool:#88c8ff;
+  --tm-focus:#ffe08a;
+  --tm-text-high:#f6f9ff;
+  --tm-text-mid:rgba(230,240,255,0.82);
+  --tm-text-low:rgba(196,214,235,0.66);
+
   --fg:#FFFFFF;
   --fg-strong:rgba(255,255,255,0.95);
   --fg-medium:rgba(255,255,255,0.7);
@@ -122,6 +136,57 @@ a,button,input,textarea,select{
 }
 .skip-link:focus-visible{
   transform:translateY(0);
+}
+
+/* ── PAGE TONE + READABILITY LAYER ── */
+.tm-page-shell{
+  position:relative;
+  color:var(--tm-text-high);
+  font-family:var(--fb);
+  line-height:1.55;
+  letter-spacing:0.015em;
+}
+.tm-page-shell :is(h1,h2,h3,h4,.tm-heading){
+  color:var(--tm-text-high);
+  line-height:1.2;
+  text-wrap:balance;
+}
+.tm-page-shell :is(p,li,small,.tm-body){
+  color:var(--tm-text-mid);
+  line-height:1.6;
+}
+.tm-page-shell :is(button,a,input,textarea,select){
+  font-family:var(--fb);
+}
+.tm-page-shell :is(button,input,textarea,select,a):focus-visible{
+  outline:2px solid var(--tm-focus);
+  outline-offset:2px;
+}
+
+.tm-scroll{
+  scrollbar-width:thin;
+  scrollbar-color:rgba(172,206,240,0.5) rgba(8,18,29,0.4);
+}
+.tm-scroll::-webkit-scrollbar{
+  width:8px;
+  height:8px;
+}
+.tm-scroll::-webkit-scrollbar-track{
+  background:rgba(8,18,29,0.35);
+}
+.tm-scroll::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg, rgba(136,200,255,0.7), rgba(241,164,136,0.7));
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.12);
+}
+.tm-scroll::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(180deg, rgba(136,200,255,0.9), rgba(241,164,136,0.9));
+}
+
+:where(.home,.arena-page,.terminal-shell,.signals-page,.passport-page,.settings-page,.oracle-redirect,.holdings-redirect).tm-page-shell{
+  text-rendering:optimizeLegibility;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
 }
 
 /* ── SCROLLBAR ── */

@@ -1274,7 +1274,7 @@
   }
 </script>
 
-<div class="terminal-shell">
+<div class="terminal-shell tm-page-shell">
   <div class="term-stars" aria-hidden="true"></div>
   <div class="term-stars term-stars-soft" aria-hidden="true"></div>
   <div class="term-grain" aria-hidden="true"></div>
@@ -3195,6 +3195,35 @@
   .terminal-mobile :global(.chart-wrapper .chart-container),
   .terminal-mobile :global(.chart-wrapper .tv-container) {
     touch-action: pan-y pinch-zoom;
+  }
+
+  /* ── Tone/readability tuning ── */
+  .terminal-shell :global(.war-room .wr-msg-text),
+  .terminal-shell :global(.intel-panel .hl-txt),
+  .terminal-shell :global(.intel-panel .comm-txt),
+  .terminal-shell :global(.intel-panel .ev-body),
+  .terminal-shell :global(.intel-panel .ac-txt) {
+    font-size: clamp(11px, 0.85vw, 14px);
+    line-height: 1.55;
+    color: var(--tm-text-mid);
+  }
+  .terminal-shell :global(.war-room .wr-msg-name),
+  .terminal-shell :global(.intel-panel .trend-sym),
+  .terminal-shell :global(.intel-panel .ac-title) {
+    font-size: clamp(11px, 0.9vw, 14px);
+    letter-spacing: 0.03em;
+  }
+  .terminal-shell :global(.war-room .wr-msg-time),
+  .terminal-shell :global(.intel-panel .hl-time),
+  .terminal-shell :global(.intel-panel .ev-etime),
+  .terminal-shell :global(.intel-panel .flow-addr) {
+    font-size: 10px;
+    color: var(--tm-text-low);
+  }
+  .terminal-shell :global(.war-room),
+  .terminal-shell :global(.intel-panel),
+  .terminal-shell :global(.chart-wrapper) {
+    border-color: rgba(172,206,240,0.2);
   }
 
   @media (max-width: 768px) {

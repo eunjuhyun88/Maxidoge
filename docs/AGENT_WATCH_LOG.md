@@ -1256,3 +1256,28 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: not executed
 - Final working tree status: pending rebase/push
 - Status: DONE
+
+### W-20260225-0540-maxi-doge-frontend-agent2 (finish addendum)
+
+- End (KST): 2026-02-25 05:58
+- Agent: Codex (GPT-5) / frontend-check-agent-2
+- Branch / target:
+  - source: `codex/frontend-agent2-all-pages-tone-readability`
+  - target: `main`
+- Changes (actual):
+  - 전역 톤앤매너/가독성 레이어 추가
+    - `src/app.css`: 공통 tone system 토큰 및 `tm-page-shell`, `tm-scroll` 유틸 추가
+  - 모든 주요 페이지 공통 shell 연결
+    - `src/routes/+page.svelte`, `src/routes/arena/+page.svelte`, `src/routes/terminal/+page.svelte`, `src/routes/signals/+page.svelte`, `src/routes/passport/+page.svelte`, `src/routes/settings/+page.svelte`
+  - 페이지별 가독성 강화
+    - `src/routes/settings/+page.svelte`: 다크 톤 재구성, 타이포/대비/모바일 가독성 개선
+    - `src/routes/signals/+page.svelte`: 헤더/카드/리스트/필터 구간 톤 정렬 및 텍스트 가독성 개선
+    - `src/routes/oracle/+page.svelte`, `src/routes/holdings/+page.svelte`: redirect 페이지 톤 정렬
+    - `src/routes/+page.svelte`, `src/routes/arena/+page.svelte`, `src/routes/passport/+page.svelte`, `src/routes/terminal/+page.svelte`: 보조 가독성 튜닝
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: pending (next commit)
+- Push status: not executed
+- Final working tree status: pending commit (expected clean after commit)
+- Status: DONE

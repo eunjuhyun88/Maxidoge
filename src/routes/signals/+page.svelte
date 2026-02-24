@@ -127,7 +127,7 @@
   });
 </script>
 
-<div class="signals-page">
+<div class="signals-page tm-page-shell tm-scroll">
   <ContextBanner page="signals" />
   <div class="sig-header">
     <div class="sh-bg"></div>
@@ -331,17 +331,23 @@
 
 <style>
   .signals-page {
-    height: 100%;
+    min-height: 100%;
     overflow-y: auto;
-    background: linear-gradient(180deg, #1a1a0a, #0a0a1a);
+    background:
+      radial-gradient(circle at 10% 12%, rgba(241,164,136,0.18), transparent 36%),
+      radial-gradient(circle at 86% 7%, rgba(136,200,255,0.14), transparent 34%),
+      linear-gradient(180deg, var(--tm-bg-1), var(--tm-bg-0));
   }
 
   .sig-header {
     position: relative;
-    padding: 20px 24px;
-    border-bottom: 4px solid #000;
-    background: linear-gradient(135deg, #ff8c3b, #ff6600);
+    padding: 22px 24px 18px;
+    border-bottom: 1px solid var(--tm-border);
+    background:
+      linear-gradient(180deg, rgba(10,24,35,0.9), rgba(9,20,30,0.76)),
+      radial-gradient(circle at 84% -22%, rgba(241,164,136,0.34), transparent 48%);
     overflow: hidden;
+    backdrop-filter: blur(7px);
   }
   .sig-header::after {
     content: '';
@@ -363,12 +369,11 @@
   }
   .sh-content { position: relative; z-index: 2; }
   .sh-title {
-    font-family: var(--fc);
-    font-size: 28px;
-    color: #fff;
-    -webkit-text-stroke: 1px #000;
-    text-shadow: 3px 3px 0 rgba(0,0,0,.3);
-    letter-spacing: 3px;
+    font-family: var(--fd);
+    font-size: clamp(26px, 3.2vw, 38px);
+    color: var(--tm-text-high);
+    text-shadow: 0 10px 24px rgba(0,0,0,.35);
+    letter-spacing: 0.06em;
   }
   .sh-top-row { display: flex; align-items: center; gap: 8px; }
   .sh-live {
@@ -393,11 +398,11 @@
   }
   @keyframes sh-blink { 0%,100%{opacity:1} 50%{opacity:.2} }
   .sh-sub {
-    font-family: var(--fm);
-    font-size: 9px;
-    color: rgba(255,255,255,.78);
-    letter-spacing: 1.2px;
-    margin-top: 2px;
+    font-family: var(--fb);
+    font-size: 12px;
+    color: var(--tm-text-mid);
+    letter-spacing: 0.01em;
+    margin-top: 6px;
   }
   .sh-flow {
     display: flex;
@@ -898,6 +903,123 @@
     transition: all .12s;
   }
   .sig-btn.copy-trade:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 #000; }
+
+  /* ── Tone + readability pass ── */
+  .sh-flow-step { font-size: 10px; padding: 4px 9px; }
+  .sh-count { font-size: 10px; padding: 4px 10px; }
+  .view-switch {
+    background: rgba(5, 11, 22, 0.82);
+    border-bottom: 1px solid var(--tm-border);
+    backdrop-filter: blur(6px);
+  }
+  .vs-btn {
+    font-size: 11px;
+    min-height: 36px;
+    color: rgba(232, 243, 255, 0.76);
+    border-color: rgba(172,206,240,0.28);
+    background: rgba(255,255,255,0.06);
+  }
+  .vs-btn.active {
+    background: linear-gradient(135deg, rgba(136,200,255,0.76), rgba(241,164,136,0.7));
+    color: #101720;
+  }
+  .hub-summary {
+    background: rgba(8, 15, 28, 0.76);
+    border-bottom: 1px solid var(--tm-border);
+  }
+  .hs-label {
+    font-size: 10px;
+    color: var(--tm-text-low);
+  }
+  .hs-value { font-size: 18px; }
+
+  .community-layout {
+    background: linear-gradient(180deg, rgba(13, 27, 43, 0.92), rgba(9, 18, 30, 0.95));
+  }
+  .community-ideas {
+    border-right: 1px solid rgba(172,206,240,0.16);
+  }
+  .ci-title { font-size: clamp(26px, 2.9vw, 34px); color: var(--tm-text-high); }
+  .ci-sub { font-size: 13px; color: var(--tm-text-mid); }
+  .ci-explore {
+    background: rgba(136,200,255,0.14);
+    color: #dcecff;
+    border: 1px solid rgba(136,200,255,0.34);
+  }
+  .ci-chip {
+    background: rgba(255,255,255,0.1);
+    color: #d9e9ff;
+    border-color: rgba(172,206,240,0.24);
+  }
+  .ci-chip.active {
+    background: rgba(136,200,255,0.22);
+    border-color: rgba(136,200,255,0.44);
+    color: #f5f9ff;
+  }
+  .ci-card {
+    background: rgba(17, 33, 52, 0.74);
+    border: 1px solid rgba(172,206,240,0.2);
+    box-shadow: 0 10px 20px rgba(2, 8, 16, 0.32);
+  }
+  .ci-tf {
+    background: linear-gradient(135deg, #4f68d8, #5c56c7);
+    box-shadow: 0 8px 14px rgba(34, 48, 105, 0.28);
+  }
+  .ci-subs,
+  .ci-strategy {
+    background: rgba(9, 20, 34, 0.64);
+    color: var(--tm-text-mid);
+    box-shadow: none;
+    border: 1px solid rgba(172,206,240,0.14);
+  }
+  .ci-pair { color: var(--tm-text-high); }
+  .ci-track {
+    background: rgba(241,164,136,0.16);
+    color: #ffd8c9;
+    border-color: rgba(241,164,136,0.42);
+  }
+
+  .community-live {
+    background: linear-gradient(180deg, #0f2034 0%, #0a1422 100%);
+    border-left: 1px solid rgba(172,206,240,0.14);
+  }
+  .cl-title { font-size: 12px; color: #ffd79e; }
+  .cl-link { font-size: 10px; color: #9ed4ff; }
+  .cl-btn { font-size: 10px; line-height: 1.35; }
+
+  .community-oracle {
+    background: linear-gradient(180deg, #101b2b 0%, #0a1220 100%);
+  }
+
+  .filter-btn {
+    font-size: 10px;
+    padding: 5px 10px;
+    color: rgba(232,243,255,0.76);
+    border-color: rgba(172,206,240,0.24);
+  }
+  .signal-card {
+    border: 1px solid rgba(172,206,240,0.2);
+    background: rgba(13, 24, 38, 0.72);
+  }
+  .sig-source { font-size: 8px; }
+  .sig-agent-name { font-size: 10px; }
+  .sig-pair { font-size: 14px; }
+  .sig-priority { font-size: 8px; }
+  .sig-time {
+    font-size: 10px;
+    color: rgba(232,243,255,0.56);
+  }
+  .sig-dir-badge { font-size: 11px; padding: 4px 8px; }
+  .sig-conf,
+  .sig-rr { font-size: 11px; }
+  .sl-label { font-size: 9px; }
+  .sl-val { font-size: 13px; }
+  .sig-reason {
+    font-size: 11px;
+    color: var(--tm-text-mid);
+    line-height: 1.5;
+  }
+  .sig-btn { font-size: 10px; padding: 6px 12px; }
 
   @media (max-width: 1200px) {
     .hub-summary {

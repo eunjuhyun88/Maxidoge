@@ -102,7 +102,7 @@
   });
 </script>
 
-<div class="settings-page">
+<div class="settings-page tm-page-shell tm-scroll">
   <div class="settings-header">
     <h1 class="settings-title">⚙️ SETTINGS</h1>
     <p class="settings-sub">Configure your MAXI⚡DOGE experience</p>
@@ -246,115 +246,142 @@
 
 <style>
   .settings-page {
-    height: 100%;
+    min-height: 100%;
     overflow-y: auto;
-    background: linear-gradient(180deg, #ffe600, #ffcc00);
+    padding-bottom: 24px;
+    background:
+      radial-gradient(circle at 14% 10%, rgba(241,164,136,0.22), transparent 38%),
+      radial-gradient(circle at 86% 6%, rgba(136,200,255,0.16), transparent 34%),
+      linear-gradient(180deg, var(--tm-bg-1), var(--tm-bg-0));
   }
 
   .settings-header {
-    padding: 24px 30px;
-    border-bottom: 4px solid #000;
-    background: linear-gradient(135deg, #ffe600, #ffaa00);
+    padding: 26px clamp(16px, 3vw, 34px) 20px;
+    border-bottom: 1px solid var(--tm-border);
+    background:
+      linear-gradient(180deg, rgba(10,24,35,0.9), rgba(9,20,30,0.76)),
+      radial-gradient(circle at 82% -20%, rgba(241,164,136,0.32), transparent 46%);
+    backdrop-filter: blur(8px);
   }
   .settings-title {
-    font-family: var(--fc);
-    font-size: 28px;
-    color: #000;
-    -webkit-text-stroke: 1px #000;
-    letter-spacing: 3px;
+    font-family: var(--fd);
+    font-size: clamp(28px, 3.8vw, 40px);
+    color: var(--tm-text-high);
+    letter-spacing: 0.06em;
+    text-shadow: 0 8px 20px rgba(0,0,0,0.35);
   }
   .settings-sub {
-    font-family: var(--fm);
-    font-size: 10px;
-    color: #555;
-    letter-spacing: 2px;
-    margin-top: 4px;
+    font-family: var(--fb);
+    font-size: clamp(13px, 1.3vw, 15px);
+    color: var(--tm-text-mid);
+    letter-spacing: 0.01em;
+    margin-top: 8px;
   }
   .settings-sync {
     font-family: var(--fm);
-    font-size: 8px;
-    color: #333;
-    margin-top: 4px;
-    letter-spacing: 1px;
+    font-size: 11px;
+    color: var(--tm-text-low);
+    margin-top: 8px;
+    letter-spacing: 0.03em;
   }
 
   .settings-body {
-    max-width: 600px;
+    max-width: 760px;
     margin: 0 auto;
-    padding: 20px;
+    padding: clamp(16px, 2.4vw, 28px) clamp(14px, 2vw, 24px);
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 18px;
   }
 
   .settings-section {
-    background: #fff;
-    border: 3px solid #000;
-    border-radius: 12px;
-    box-shadow: 4px 4px 0 #000;
+    background: var(--tm-surface);
+    border: 1px solid var(--tm-border);
+    border-radius: 14px;
+    box-shadow: 0 16px 30px rgba(0,0,0,.24);
     overflow: hidden;
+    backdrop-filter: blur(7px);
   }
   .settings-section.danger {
-    border-color: #cc0033;
-    box-shadow: 4px 4px 0 rgba(204,0,51,.3);
+    border-color: rgba(255, 114, 129, 0.45);
+    box-shadow: 0 16px 28px rgba(110, 20, 32, 0.3);
   }
 
   .ss-title {
-    font-family: var(--fc);
-    font-size: 14px;
-    letter-spacing: 2px;
-    color: #000;
-    padding: 10px 14px;
-    border-bottom: 2px solid rgba(0,0,0,.1);
-    background: rgba(0,0,0,.02);
+    font-family: var(--fd);
+    font-size: 15px;
+    letter-spacing: 0.05em;
+    color: var(--tm-text-high);
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(172,206,240,0.2);
+    background: rgba(7,16,26,0.45);
   }
 
   .setting-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px;
-    border-bottom: 1px solid rgba(0,0,0,.06);
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(172,206,240,0.12);
   }
   .setting-row:last-child { border-bottom: none; }
 
   .sr-info { flex: 1; }
-  .sr-label { font-family: var(--fm); font-size: 10px; font-weight: 900; color: #000; }
-  .sr-desc { font-family: var(--fm); font-size: 7px; color: #888; margin-top: 1px; }
+  .sr-label { font-family: var(--fb); font-size: 13px; font-weight: 700; color: var(--tm-text-high); }
+  .sr-desc { font-family: var(--fb); font-size: 11px; color: var(--tm-text-low); margin-top: 3px; }
 
   .sr-select {
-    font-family: var(--fm); font-size: 9px; font-weight: 700;
-    padding: 4px 10px; border: 2px solid #000; border-radius: 8px;
-    background: #fff; box-shadow: 2px 2px 0 #000; cursor: pointer;
+    font-family: var(--fm);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 12px;
+    border: 1px solid rgba(172,206,240,0.34);
+    border-radius: 10px;
+    background: rgba(7,16,27,0.75);
+    color: var(--tm-text-high);
+    cursor: pointer;
   }
 
   .speed-btns { display: flex; gap: 3px; }
   .speed-btn {
-    font-family: var(--fm); font-size: 9px; font-weight: 900;
-    width: 32px; height: 28px;
-    border: 2px solid #000; border-radius: 6px;
-    background: #fff; cursor: pointer; transition: all .15s;
-    box-shadow: 2px 2px 0 #000;
+    font-family: var(--fm);
+    font-size: 11px;
+    font-weight: 800;
+    width: 36px;
+    height: 30px;
+    border: 1px solid rgba(172,206,240,0.35);
+    border-radius: 8px;
+    background: rgba(7,16,27,0.75);
+    color: var(--tm-text-mid);
+    cursor: pointer;
+    transition: all .15s;
   }
-  .speed-btn.active { background: var(--pk); color: #fff; }
+  .speed-btn.active {
+    background: linear-gradient(135deg, rgba(136,200,255,0.42), rgba(241,164,136,0.4));
+    color: var(--tm-text-high);
+    border-color: rgba(241,164,136,0.58);
+  }
 
   .toggle-btn {
     width: 42px; height: 22px;
     border-radius: 11px;
-    border: 2px solid #000;
-    background: #ddd;
+    border: 1px solid rgba(172,206,240,0.35);
+    background: rgba(7,16,27,0.82);
     cursor: pointer;
     position: relative;
     transition: background .2s;
-    box-shadow: 2px 2px 0 #000;
     padding: 0;
   }
-  .toggle-btn.on { background: var(--grn); }
+  .toggle-btn.on {
+    background: linear-gradient(135deg, rgba(136,200,255,0.58), rgba(90,190,150,0.6));
+    border-color: rgba(136,200,255,0.66);
+  }
   .toggle-dot {
     width: 16px; height: 16px;
     border-radius: 50%;
-    background: #fff;
-    border: 2px solid #000;
+    background: var(--tm-text-high);
+    border: 1px solid rgba(7,16,27,0.75);
     position: absolute;
     top: 1px; left: 1px;
     transition: left .2s;
@@ -365,23 +392,44 @@
   .account-stats { padding: 10px 14px; }
   .as-row {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 4px 0;
-    font-family: var(--fm); font-size: 9px; color: #555;
-    border-bottom: 1px solid rgba(0,0,0,.04);
+    padding: 7px 0;
+    font-family: var(--fm); font-size: 11px; color: var(--tm-text-low);
+    border-bottom: 1px solid rgba(172,206,240,0.12);
   }
   .as-row:last-child { border-bottom: none; }
-  .as-val { font-weight: 900; color: #000; }
-  .as-val.up { color: #00aa44; }
-  .as-val.dn { color: #cc0033; }
-  .as-val.fire { color: #ff8c3b; }
+  .as-val { font-weight: 800; color: var(--tm-text-high); }
+  .as-val.up { color: #59dfa1; }
+  .as-val.dn { color: #ff7281; }
+  .as-val.fire { color: #f9b578; }
 
   .reset-btn {
-    font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px;
-    padding: 6px 14px; border-radius: 8px;
-    background: #cc0033; color: #fff;
-    border: 2px solid #000;
-    box-shadow: 2px 2px 0 #000;
-    cursor: pointer; transition: all .15s;
+    font-family: var(--fm); font-size: 11px; font-weight: 800; letter-spacing: .06em;
+    padding: 8px 14px; border-radius: 10px;
+    background: linear-gradient(135deg, #ce4557, #f16c7d);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.2);
+    cursor: pointer; transition: all .15s ease;
   }
-  .reset-btn:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 #000; }
+  .reset-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+
+  @media (max-width: 760px) {
+    .settings-header {
+      padding: 20px 14px 16px;
+    }
+    .settings-body {
+      padding: 14px 10px 20px;
+      gap: 12px;
+    }
+    .setting-row {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .sr-select,
+    .speed-btns {
+      width: 100%;
+    }
+    .speed-btns {
+      justify-content: flex-start;
+    }
+  }
 </style>

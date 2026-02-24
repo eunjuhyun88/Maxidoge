@@ -495,7 +495,7 @@
   });
 </script>
 
-<div class="passport-page">
+<div class="passport-page tm-page-shell tm-scroll">
   <div class="passport-sunburst"></div>
   <div class="passport-halftone"></div>
 
@@ -2311,6 +2311,22 @@
 
   .compact-detail {
     margin: var(--sp-space-1) 0 0;
+  }
+
+  /* ── Tone/readability tuning ── */
+  .passport-page {
+    color: var(--tm-text-high);
+  }
+  .passport-page :is(.player-addr, .port-lbl, .section-header, .metric-label, .row-label, .qa-sub) {
+    font-size: clamp(11px, 0.9vw, 14px);
+    line-height: 1.55;
+    color: var(--tm-text-mid);
+  }
+  .passport-page :is(.player-name, .port-val, .section-title) {
+    letter-spacing: 0.03em;
+  }
+  .passport-page :is(.content-panel, .passport-card, .quick-actions .qa-btn) {
+    border-color: rgba(241,164,136,0.26);
   }
 
   @media (max-width: 980px) {

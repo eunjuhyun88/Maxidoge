@@ -197,7 +197,7 @@
   });
 </script>
 
-<div class="home" bind:this={homeEl}>
+<div class="home tm-page-shell tm-scroll" bind:this={homeEl}>
   <!-- Stars layer -->
   <div class="stars" aria-hidden="true"></div>
   <div class="stars2" aria-hidden="true"></div>
@@ -1779,6 +1779,22 @@
   }
   .foot-copy { font-family: var(--fp); font-size: 6px; letter-spacing: 1px; color: rgba(240,237,228,0.2); }
   .foot-tag { font-family: var(--fv); font-size: 14px; color: rgba(232,150,125,0.3); }
+
+  /* ── Tone/readability tuning ── */
+  .home {
+    color: var(--tm-text-high);
+  }
+  .home :is(.hero-sub, .hp-txt, .fc-brief, .feat-detail-desc, .fstep-desc) {
+    font-size: clamp(12px, 1.05vw, 15px);
+    line-height: 1.58;
+    color: var(--tm-text-mid);
+  }
+  .home :is(.hero-btn, .qn, .cta-btn, .fstep-title, .fc-sub) {
+    letter-spacing: 0.04em;
+  }
+  .home :is(.ht, .sq-frame, .feed-r, .fstep) {
+    border-color: rgba(172,206,240,0.22);
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .sr,
