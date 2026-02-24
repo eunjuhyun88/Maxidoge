@@ -121,11 +121,17 @@
   let activeTab: TabType = 'profile';
 
   const TABS: { id: TabType; label: string; icon: string }[] = [
-    { id: 'profile', label: 'PROFILE', icon: '📋' },
-    { id: 'wallet', label: 'WALLET', icon: '💰' },
-    { id: 'positions', label: 'POSITIONS', icon: '📊' },
-    { id: 'arena', label: 'ARENA', icon: '⚔️' },
+    { id: 'profile', label: 'PROFILE', icon: 'ID' },
+    { id: 'wallet', label: 'WALLET', icon: 'WL' },
+    { id: 'positions', label: 'POSITIONS', icon: 'TX' },
+    { id: 'arena', label: 'ARENA', icon: 'AR' },
   ];
+
+  const OPEN_PREVIEW_LIMIT = 4;
+  const MATCH_PREVIEW_LIMIT = 8;
+  $: openPreview = opens.slice(0, OPEN_PREVIEW_LIMIT);
+  $: openOverflow = opens.slice(OPEN_PREVIEW_LIMIT);
+  $: matchPreview = records.slice(0, MATCH_PREVIEW_LIMIT);
 
   // Avatar options
   const AVATAR_OPTIONS = [
@@ -202,6 +208,19 @@
     holdingsSyncAddress = null;
   }
 
+  // If wallet is disconnected after a live sync, clear cached live holdings
+  // to avoid showing stale wallet data from a previous connection.
+  $: if (
+    (!wallet.connected || !wallet.address) &&
+    (holdingsLoaded || liveHoldings.length > 0 || holdingsState === 'live')
+  ) {
+    holdingsSyncAddress = null;
+    liveHoldings = [];
+    holdingsLoaded = false;
+    holdingsState = 'fallback';
+    holdingsStatusMessage = 'Connect wallet to load live holdings.';
+  }
+
   onMount(() => {
     hydrateUserProfile();
     hydrateAgentStats();
@@ -254,7 +273,7 @@
             {#if wallet.connected}
               <div class="player-addr">{wallet.shortAddr} · {wallet.chain}</div>
             {:else}
-              <button class="connect-mini" on:click={openWalletModal}>🔗 CONNECT WALLET</button>
+              <button class="connect-mini" on:click={openWalletModal}>CONNECT WALLET</button>
             {/if}
           </div>
         </div>
@@ -289,7 +308,7 @@
 
         <div class="passport-stamp">
           <span class="stamp-text">{wallet.connected ? 'VERIFIED' : 'UNVERIFIED'}</span>
-          <span class="stamp-icon">🐕</span>
+          <span class="stamp-icon">●</span>
         </div>
       </div>
 
@@ -327,233 +346,338 @@
         {/each}
       </div>
 
+      <div class="quick-actions">
+        <a class="qa-btn qa-terminal" href="/terminal" data-gtm-area="passport" data-gtm-action="open_terminal">
+          QUICK TRADE
+        </a>
+        <a class="qa-btn qa-arena" href="/arena" data-gtm-area="passport" data-gtm-action="open_arena">
+          START ARENA
+        </a>
+        {#if wallet.connected}
+          <div class="qa-chip connected" data-gtm-area="passport" data-gtm-action="wallet_status">
+            <span class="qa-dot"></span>{wallet.shortAddr} CONNECTED
+          </div>
+        {:else}
+          <button class="qa-btn qa-wallet" on:click={openWalletModal} data-gtm-area="passport" data-gtm-action="connect_wallet">
+            CONNECT WALLET
+          </button>
+        {/if}
+      </div>
+
       <!-- ═══ TAB CONTENT ═══ -->
       <div class="tab-content">
 
         <!-- ════ PROFILE TAB ════ -->
         {#if activeTab === 'profile'}
           <div class="profile-tab">
-            <div class="section-header">📊 PERFORMANCE</div>
-            <div class="metrics-grid">
-              <div class="metric-card"><div class="mc-icon">🎯</div><div class="mc-value" class:up={stats.winRate >= 50}>{stats.winRate}%</div><div class="mc-label">WIN RATE</div></div>
-              <div class="metric-card"><div class="mc-icon">🧭</div><div class="mc-value">{stats.directionAccuracy}%</div><div class="mc-label">DIRECTION ACC</div></div>
-              <div class="metric-card"><div class="mc-icon">💡</div><div class="mc-value">{stats.avgConfidence}%</div><div class="mc-label">AVG CONFIDENCE</div></div>
-              <div class="metric-card"><div class="mc-icon">💰</div><div class="mc-value" style="color:{pnlColor(stats.totalPnL)}">{pnlPrefix(stats.totalPnL)}{stats.totalPnL.toFixed(1)}%</div><div class="mc-label">TOTAL PnL</div></div>
-              <div class="metric-card"><div class="mc-icon">⚔️</div><div class="mc-value">{stats.totalMatches}</div><div class="mc-label">MATCHES</div></div>
-              <div class="metric-card"><div class="mc-icon">🔥</div><div class="mc-value fire">{stats.bestStreak}</div><div class="mc-label">BEST STREAK</div></div>
-              <div class="metric-card"><div class="mc-icon">📌</div><div class="mc-value">{stats.trackedSignals}</div><div class="mc-label">TRACKED</div></div>
-              <div class="metric-card"><div class="mc-icon">🤖</div><div class="mc-value">{stats.agentWins}</div><div class="mc-label">AGENT WINS</div></div>
-            </div>
+            <section class="content-panel">
+              <div class="section-header">PERFORMANCE SNAPSHOT</div>
+              <div class="metrics-grid metrics-primary">
+                <div class="metric-card"><div class="mc-icon">🎯</div><div class="mc-value" class:up={stats.winRate >= 50}>{stats.winRate}%</div><div class="mc-label">WIN RATE</div></div>
+                <div class="metric-card"><div class="mc-icon">💰</div><div class="mc-value" style="color:{pnlColor(stats.totalPnL)}">{pnlPrefix(stats.totalPnL)}{stats.totalPnL.toFixed(1)}%</div><div class="mc-label">TOTAL PnL</div></div>
+                <div class="metric-card"><div class="mc-icon">⚔️</div><div class="mc-value">{stats.totalMatches}</div><div class="mc-label">MATCHES</div></div>
+                <div class="metric-card"><div class="mc-icon">🔥</div><div class="mc-value fire">{stats.bestStreak}</div><div class="mc-label">BEST STREAK</div></div>
+              </div>
 
-            <div class="summary-line">
-              {stats.totalMatches > 0
-                ? `${gState.wins}W-${gState.losses}L | ${pnlPrefix(stats.totalPnL)}${stats.totalPnL.toFixed(1)}% PnL | 🔥 ${stats.streak}-streak`
-                : 'No matches yet — Start an Arena battle!'}
-            </div>
+              <details class="detail-block">
+                <summary>MORE PERFORMANCE METRICS</summary>
+                <div class="metrics-grid metrics-detail">
+                  <div class="metric-card"><div class="mc-icon">🧭</div><div class="mc-value">{stats.directionAccuracy}%</div><div class="mc-label">DIRECTION ACC</div></div>
+                  <div class="metric-card"><div class="mc-icon">💡</div><div class="mc-value">{stats.avgConfidence}%</div><div class="mc-label">AVG CONFIDENCE</div></div>
+                  <div class="metric-card"><div class="mc-icon">📌</div><div class="mc-value">{stats.trackedSignals}</div><div class="mc-label">TRACKED</div></div>
+                  <div class="metric-card"><div class="mc-icon">🤖</div><div class="mc-value">{stats.agentWins}</div><div class="mc-label">AGENT WINS</div></div>
+                </div>
+              </details>
 
-            <div class="section-header">🐕 AGENT SQUAD</div>
-            <div class="agent-perf-grid">
-              {#each AGDEFS as ag}
-                {@const ags = agStats[ag.id]}
-                <div class="agent-perf-card" style="border-left-color:{ag.color}">
-                  <div class="apc-head">
-                    {#if ag.img?.def}
-                      <img src={ag.img.def} alt={ag.name} class="apc-img" />
-                    {:else}
-                      <span class="apc-icon">{ag.icon}</span>
-                    {/if}
-                    <div>
-                      <div class="apc-name" style="color:{ag.color}">{ag.name}</div>
-                      <div class="apc-role">{ag.role}</div>
+              <div class="summary-line">
+                {stats.totalMatches > 0
+                  ? `${gState.wins}W-${gState.losses}L | ${pnlPrefix(stats.totalPnL)}${stats.totalPnL.toFixed(1)}% PnL | 🔥 ${stats.streak}-streak`
+                  : 'No matches yet — Start an Arena battle!'}
+              </div>
+            </section>
+
+            <section class="content-panel">
+              <details class="detail-block">
+                <summary>AGENT SQUAD ({AGDEFS.length})</summary>
+                <div class="agent-perf-grid">
+                  {#each AGDEFS as ag}
+                    {@const ags = agStats[ag.id]}
+                    <div class="agent-perf-card" style="border-left-color:{ag.color}">
+                      <div class="apc-head">
+                        {#if ag.img?.def}
+                          <img src={ag.img.def} alt={ag.name} class="apc-img" />
+                        {:else}
+                          <span class="apc-icon">{ag.icon}</span>
+                        {/if}
+                        <div>
+                          <div class="apc-name" style="color:{ag.color}">{ag.name}</div>
+                          <div class="apc-role">{ag.role}</div>
+                        </div>
+                        <div class="apc-level">Lv.{ags?.level || 1}</div>
+                      </div>
+                      <div class="apc-bar-wrap">
+                        <div class="apc-bar" style="width:{Math.min((ags?.xp || 0) / (((ags?.level || 1) + 1) * 100) * 100, 100)}%;background:{ag.color}"></div>
+                      </div>
+                      <div class="apc-xp">XP: {ags?.xp || 0} / {((ags?.level || 1) + 1) * 100}</div>
                     </div>
-                    <div class="apc-level">Lv.{ags?.level || 1}</div>
-                  </div>
-                  <div class="apc-bar-wrap">
-                    <div class="apc-bar" style="width:{Math.min((ags?.xp || 0) / (((ags?.level || 1) + 1) * 100) * 100, 100)}%;background:{ag.color}"></div>
-                  </div>
-                  <div class="apc-xp">XP: {ags?.xp || 0} / {((ags?.level || 1) + 1) * 100}</div>
+                  {/each}
                 </div>
-              {/each}
-            </div>
+              </details>
+            </section>
 
-            <div class="section-header">🏆 BADGES ({earned.length}/{earned.length + locked.length})</div>
-            <div class="badges-grid">
-              {#each earned as badge}
-                <div class="badge-card earned">
-                  <span class="badge-icon">{badge.icon}</span>
-                  <span class="badge-name">{badge.name}</span>
-                  <span class="badge-date">{badge.earnedAt ? new Date(badge.earnedAt).toLocaleDateString() : ''}</span>
+            <section class="content-panel">
+              <details class="detail-block">
+                <summary>BADGES ({earned.length}/{earned.length + locked.length})</summary>
+                <div class="badges-grid">
+                  {#each earned as badge}
+                    <div class="badge-card earned">
+                      <span class="badge-icon">{badge.icon}</span>
+                      <span class="badge-name">{badge.name}</span>
+                      <span class="badge-date">{badge.earnedAt ? new Date(badge.earnedAt).toLocaleDateString() : ''}</span>
+                    </div>
+                  {/each}
+                  {#each locked as badge}
+                    <div class="badge-card locked">
+                      <span class="badge-icon">🔒</span>
+                      <span class="badge-name">{badge.name}</span>
+                      <span class="badge-desc">{badge.description}</span>
+                    </div>
+                  {/each}
                 </div>
-              {/each}
-              {#each locked as badge}
-                <div class="badge-card locked">
-                  <span class="badge-icon">🔒</span>
-                  <span class="badge-name">{badge.name}</span>
-                  <span class="badge-desc">{badge.description}</span>
-                </div>
-              {/each}
-            </div>
+              </details>
+            </section>
           </div>
 
         <!-- ════ WALLET TAB ════ -->
         {:else if activeTab === 'wallet'}
           <div class="wallet-tab">
-            <div class="vb-card">
-              <div class="vb-header"><span class="vb-icon">🏦</span><span class="vb-title">VIRTUAL BALANCE</span></div>
-              <div class="vb-amount">${profile.balance.virtual.toLocaleString()}</div>
-              {#if !wallet.connected}
-                <button class="vb-connect" on:click={openWalletModal}>🔗 CONNECT WALLET FOR DEFI</button>
-              {:else}
-                <div class="vb-connected"><span class="vbc-dot"></span>{wallet.shortAddr} · {wallet.chain} · {wallet.balance.toLocaleString()} USDT</div>
-              {/if}
-            </div>
+            <section class="content-panel">
+              <div class="vb-card">
+                <div class="vb-header"><span class="vb-icon">🏦</span><span class="vb-title">VIRTUAL BALANCE</span></div>
+                <div class="vb-amount">${profile.balance.virtual.toLocaleString()}</div>
+                {#if !wallet.connected}
+                  <button class="vb-connect" on:click={openWalletModal}>CONNECT WALLET FOR DEFI</button>
+                {:else}
+                  <div class="vb-connected"><span class="vbc-dot"></span>{wallet.shortAddr} · {wallet.chain} · {wallet.balance.toLocaleString()} USDT</div>
+                {/if}
+              </div>
+            </section>
 
-            <div class="holdings-status" class:live={holdingsState === 'live'}>
-              <span class="hs-dot"></span>
-              <span>{holdingsStatusMessage}</span>
-            </div>
-
-            <div class="holdings-body">
-              <div class="donut-section">
-                <div class="st">ALLOCATION</div>
-                <div class="donut-wrap">
-                  <svg viewBox="0 0 200 200">
-                    {#each effectiveHoldings as asset, i}
-                      {@const offset = effectiveHoldings.slice(0, i).reduce((s, a) => s + a.allocation * 100, 0)}
-                      {@const pct = asset.allocation * 100}
-                      <circle cx="100" cy="100" r="70" fill="none" stroke={asset.color} stroke-width="30"
-                        stroke-dasharray="{pct * 4.4} {(100 - pct) * 4.4}"
-                        stroke-dashoffset="{-offset * 4.4}" transform="rotate(-90 100 100)" />
-                    {/each}
-                    <circle cx="100" cy="100" r="55" fill="#0a0a1a" />
-                    <text x="100" y="95" text-anchor="middle" fill="#fff" font-size="16" font-weight="900" font-family="var(--fd)">{effectiveHoldings.length}</text>
-                    <text x="100" y="112" text-anchor="middle" fill="#888" font-size="9" font-family="var(--fm)">ASSETS</text>
-                  </svg>
-                </div>
-                <div class="legend">
-                  {#each effectiveHoldings as asset}
-                    <div class="legend-item"><span class="li-dot" style="background:{asset.color}"></span><span class="li-name">{asset.symbol}</span><span class="li-pct">{(asset.allocation * 100).toFixed(0)}%</span></div>
-                  {/each}
-                </div>
+            <section class="content-panel">
+              <div class="holdings-status" class:live={holdingsState === 'live'}>
+                <span class="hs-dot"></span>
+                <span>{holdingsStatusMessage}</span>
               </div>
 
-              <div class="table-section">
-                <div class="st">HOLDINGS</div>
-                <div class="htable">
-                  <div class="hrow header-row"><span class="hc asset-col">ASSET</span><span class="hc">AMOUNT</span><span class="hc">VALUE</span><span class="hc">PnL</span></div>
-                  {#each effectiveHoldings as asset}
-                    {@const assetPnl = calcPnL(asset)}
-                    {@const value = asset.amount * asset.currentPrice}
-                    <div class="hrow">
-                      <div class="hc asset-col"><span class="ai" style="background:{asset.color}">{asset.icon}</span><div><div class="an">{asset.symbol}</div><div class="af">{asset.name}</div></div></div>
-                      <span class="hc num">{asset.amount.toLocaleString()}</span>
-                      <span class="hc num">${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                      <span class="hc num" style="color:{pnlColor(assetPnl.amount)}">{pnlPrefix(assetPnl.percent)}{assetPnl.percent.toFixed(1)}%</span>
+              <div class="wallet-kpis">
+                <div class="wk-item"><span class="wk-k">ASSETS</span><span class="wk-v">{effectiveHoldings.length}</span></div>
+                <div class="wk-item"><span class="wk-k">TOTAL VALUE</span><span class="wk-v">${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span></div>
+                <div class="wk-item"><span class="wk-k">HOLDINGS PnL</span><span class="wk-v" style="color:{pnlColor(totalPnl)}">{pnlPrefix(totalPnlPct)}{totalPnlPct.toFixed(2)}%</span></div>
+              </div>
+
+              <details class="detail-block">
+                <summary>HOLDINGS BREAKDOWN</summary>
+                <div class="holdings-body">
+                  <div class="donut-section">
+                    <div class="st">ALLOCATION</div>
+                    <div class="donut-wrap">
+                      <svg viewBox="0 0 200 200">
+                        {#each effectiveHoldings as asset, i}
+                          {@const offset = effectiveHoldings.slice(0, i).reduce((s, a) => s + a.allocation * 100, 0)}
+                          {@const pct = asset.allocation * 100}
+                          <circle cx="100" cy="100" r="70" fill="none" stroke={asset.color} stroke-width="30"
+                            stroke-dasharray="{pct * 4.4} {(100 - pct) * 4.4}"
+                            stroke-dashoffset="{-offset * 4.4}" transform="rotate(-90 100 100)" />
+                        {/each}
+                        <circle cx="100" cy="100" r="55" fill="#0a0a1a" />
+                        <text x="100" y="95" text-anchor="middle" fill="#fff" font-size="16" font-weight="900" font-family="var(--fd)">{effectiveHoldings.length}</text>
+                        <text x="100" y="112" text-anchor="middle" fill="#888" font-size="9" font-family="var(--fm)">ASSETS</text>
+                      </svg>
                     </div>
-                  {/each}
+                    <div class="legend">
+                      {#each effectiveHoldings as asset}
+                        <div class="legend-item"><span class="li-dot" style="background:{asset.color}"></span><span class="li-name">{asset.symbol}</span><span class="li-pct">{(asset.allocation * 100).toFixed(0)}%</span></div>
+                      {/each}
+                    </div>
+                  </div>
+
+                  <div class="table-section">
+                    <div class="st">HOLDINGS</div>
+                    <div class="htable">
+                      <div class="hrow header-row"><span class="hc asset-col">ASSET</span><span class="hc">AMOUNT</span><span class="hc">VALUE</span><span class="hc">PnL</span></div>
+                      {#each effectiveHoldings as asset}
+                        {@const assetPnl = calcPnL(asset)}
+                        {@const value = asset.amount * asset.currentPrice}
+                        <div class="hrow">
+                          <div class="hc asset-col"><span class="ai" style="background:{asset.color}">{asset.icon}</span><div><div class="an">{asset.symbol}</div><div class="af">{asset.name}</div></div></div>
+                          <span class="hc num">{asset.amount.toLocaleString()}</span>
+                          <span class="hc num">${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                          <span class="hc num" style="color:{pnlColor(assetPnl.amount)}">{pnlPrefix(assetPnl.percent)}{assetPnl.percent.toFixed(1)}%</span>
+                        </div>
+                      {/each}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </details>
+            </section>
           </div>
 
         <!-- ════ POSITIONS TAB ════ -->
         {:else if activeTab === 'positions'}
           <div class="positions-tab">
-            <div class="pos-summary">
-              <div class="ps-item"><div class="psi-label">OPEN</div><div class="psi-value">{opens.length}</div></div>
-              <div class="ps-item"><div class="psi-label">UNREALIZED</div><div class="psi-value" style="color:{pnlColor(unrealizedPnl)}">{pnlPrefix(unrealizedPnl)}{unrealizedPnl.toFixed(2)}%</div></div>
-              <div class="ps-item"><div class="psi-label">TRACKED</div><div class="psi-value" style="color:#ff8c3b">{tracked.length}</div></div>
-              <div class="ps-item"><div class="psi-label">TOTAL PnL</div><div class="psi-value" style="color:{pnlColor(pnl)}">{pnlPrefix(pnl)}{pnl.toFixed(2)}%</div></div>
-            </div>
+            <section class="content-panel">
+              <div class="pos-summary">
+                <div class="ps-item"><div class="psi-label">OPEN</div><div class="psi-value">{opens.length}</div></div>
+                <div class="ps-item"><div class="psi-label">UNREALIZED</div><div class="psi-value" style="color:{pnlColor(unrealizedPnl)}">{pnlPrefix(unrealizedPnl)}{unrealizedPnl.toFixed(2)}%</div></div>
+                <div class="ps-item"><div class="psi-label">TRACKED</div><div class="psi-value" style="color:#ff8c3b">{tracked.length}</div></div>
+                <div class="ps-item"><div class="psi-label">TOTAL PnL</div><div class="psi-value" style="color:{pnlColor(pnl)}">{pnlPrefix(pnl)}{pnl.toFixed(2)}%</div></div>
+              </div>
+            </section>
 
-            {#if opens.length > 0}
-              <div class="pos-section-title">OPEN TRADES</div>
-              {#each opens as trade (trade.id)}
-                <div class="pos-row">
-                  <div class="pr-left">
-                    <span class="pr-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>{trade.dir === 'LONG' ? '▲' : '▼'}{trade.dir}</span>
-                    <span class="pr-pair">{trade.pair}</span>
-                    <span class="pr-src">{trade.source}</span>
+            <section class="content-panel list-panel">
+              {#if opens.length > 0}
+                <div class="pos-section-title">OPEN TRADES</div>
+                {#each openPreview as trade (trade.id)}
+                  <div class="pos-row">
+                    <div class="pr-left">
+                      <span class="pr-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>{trade.dir === 'LONG' ? '▲' : '▼'}{trade.dir}</span>
+                      <span class="pr-pair">{trade.pair}</span>
+                      <span class="pr-src">{trade.source}</span>
+                    </div>
+                    <div class="pr-right">
+                      <span class="pr-entry">${Math.round(trade.entry).toLocaleString()}</span>
+                      <span class="pr-pnl" style="color:{pnlColor(trade.pnlPercent)}">{pnlPrefix(trade.pnlPercent)}{trade.pnlPercent.toFixed(2)}%</span>
+                      <span class="pr-time">{timeSince(trade.openedAt)}</span>
+                    </div>
                   </div>
-                  <div class="pr-right">
-                    <span class="pr-entry">${Math.round(trade.entry).toLocaleString()}</span>
-                    <span class="pr-pnl" style="color:{pnlColor(trade.pnlPercent)}">{pnlPrefix(trade.pnlPercent)}{trade.pnlPercent.toFixed(2)}%</span>
-                    <span class="pr-time">{timeSince(trade.openedAt)}</span>
-                  </div>
-                </div>
-              {/each}
-            {:else}
-              <EmptyState image={CHARACTER_ART.tradeActions} title="NO OPEN POSITIONS" subtitle="Use QUICK LONG/SHORT in the Terminal to start trading" ctaText="GO TO TERMINAL →" ctaHref="/terminal" icon="📊" variant="cyan" compact />
-            {/if}
+                {/each}
+                {#if openOverflow.length > 0}
+                  <details class="detail-block" style="margin-top: 12px;">
+                    <summary>MORE OPEN TRADES ({openOverflow.length})</summary>
+                    {#each openOverflow as trade (trade.id)}
+                      <div class="pos-row">
+                        <div class="pr-left">
+                          <span class="pr-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>{trade.dir === 'LONG' ? '▲' : '▼'}{trade.dir}</span>
+                          <span class="pr-pair">{trade.pair}</span>
+                          <span class="pr-src">{trade.source}</span>
+                        </div>
+                        <div class="pr-right">
+                          <span class="pr-entry">${Math.round(trade.entry).toLocaleString()}</span>
+                          <span class="pr-pnl" style="color:{pnlColor(trade.pnlPercent)}">{pnlPrefix(trade.pnlPercent)}{trade.pnlPercent.toFixed(2)}%</span>
+                          <span class="pr-time">{timeSince(trade.openedAt)}</span>
+                        </div>
+                      </div>
+                    {/each}
+                  </details>
+                {/if}
+              {:else}
+                <EmptyState image={CHARACTER_ART.tradeActions} title="NO OPEN POSITIONS" subtitle="Use QUICK LONG/SHORT in the Terminal to start trading" ctaText="GO TO TERMINAL →" ctaHref="/terminal" icon="📊" variant="cyan" compact />
+              {/if}
 
-            {#if tracked.length > 0}
-              <div class="pos-section-title" style="margin-top:12px">TRACKED SIGNALS</div>
-              {#each tracked as sig (sig.id)}
-                <div class="pos-row tracked">
-                  <div class="pr-left">
-                    <span class="pr-dir" class:long={sig.dir === 'LONG'} class:short={sig.dir === 'SHORT'}>{sig.dir === 'LONG' ? '▲' : '▼'}{sig.dir}</span>
-                    <span class="pr-pair">{sig.pair}</span>
-                    <span class="pr-src">📌 {sig.source}</span>
-                  </div>
-                  <div class="pr-right">
-                    <span class="pr-pnl" style="color:{pnlColor(sig.pnlPercent)}">{pnlPrefix(sig.pnlPercent)}{sig.pnlPercent.toFixed(2)}%</span>
-                    <span class="pr-time">{timeSince(sig.trackedAt)}</span>
-                  </div>
-                </div>
-              {/each}
-            {/if}
+              {#if tracked.length > 0}
+                <details class="detail-block" style="margin-top: 12px;">
+                  <summary>TRACKED SIGNALS ({tracked.length})</summary>
+                  {#each tracked as sig (sig.id)}
+                    <div class="pos-row tracked">
+                      <div class="pr-left">
+                        <span class="pr-dir" class:long={sig.dir === 'LONG'} class:short={sig.dir === 'SHORT'}>{sig.dir === 'LONG' ? '▲' : '▼'}{sig.dir}</span>
+                        <span class="pr-pair">{sig.pair}</span>
+                        <span class="pr-src">📌 {sig.source}</span>
+                      </div>
+                      <div class="pr-right">
+                        <span class="pr-pnl" style="color:{pnlColor(sig.pnlPercent)}">{pnlPrefix(sig.pnlPercent)}{sig.pnlPercent.toFixed(2)}%</span>
+                        <span class="pr-time">{timeSince(sig.trackedAt)}</span>
+                      </div>
+                    </div>
+                  {/each}
+                </details>
+              {/if}
 
-            {#if closed.length > 0}
-              <div class="pos-section-title" style="margin-top:12px">RECENTLY CLOSED ({closed.length})</div>
-              {#each closed.slice(0, 10) as trade (trade.id)}
-                <div class="pos-row closed">
-                  <div class="pr-left">
-                    <span class="pr-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>{trade.dir === 'LONG' ? '▲' : '▼'}</span>
-                    <span class="pr-pair">{trade.pair}</span>
-                  </div>
-                  <div class="pr-right">
-                    <span class="pr-pnl" style="color:{pnlColor(trade.closePnl || 0)}">{pnlPrefix(trade.closePnl || 0)}{(trade.closePnl || 0).toFixed(2)}%</span>
-                  </div>
-                </div>
-              {/each}
-            {/if}
+              {#if closed.length > 0}
+                <details class="detail-block" style="margin-top: 12px;">
+                  <summary>RECENTLY CLOSED ({closed.length})</summary>
+                  {#each closed.slice(0, 10) as trade (trade.id)}
+                    <div class="pos-row closed">
+                      <div class="pr-left">
+                        <span class="pr-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>{trade.dir === 'LONG' ? '▲' : '▼'}</span>
+                        <span class="pr-pair">{trade.pair}</span>
+                      </div>
+                      <div class="pr-right">
+                        <span class="pr-pnl" style="color:{pnlColor(trade.closePnl || 0)}">{pnlPrefix(trade.closePnl || 0)}{(trade.closePnl || 0).toFixed(2)}%</span>
+                      </div>
+                    </div>
+                  {/each}
+                </details>
+              {/if}
+            </section>
           </div>
 
         <!-- ════ ARENA TAB ════ -->
         {:else if activeTab === 'arena'}
           <div class="arena-tab">
-            <div class="arena-stats">
-              <div class="as-item"><div class="asi-val">{records.length}</div><div class="asi-label">MATCHES</div></div>
-              <div class="as-item"><div class="asi-val" style="color:#00ff88">{wr}%</div><div class="asi-label">WIN RATE</div></div>
-              <div class="as-item"><div class="asi-val" style="color:#ff8c3b">🔥 {bStreak}</div><div class="asi-label">BEST STREAK</div></div>
-              <div class="as-item"><div class="asi-val" style="color:#ffd060">{gState.lp.toLocaleString()}</div><div class="asi-label">LP EARNED</div></div>
-            </div>
+            <section class="content-panel">
+              <div class="arena-stats">
+                <div class="as-item"><div class="asi-val">{records.length}</div><div class="asi-label">MATCHES</div></div>
+                <div class="as-item"><div class="asi-val" style="color:#00ff88">{wr}%</div><div class="asi-label">WIN RATE</div></div>
+                <div class="as-item"><div class="asi-val" style="color:#ff8c3b">🔥 {bStreak}</div><div class="asi-label">BEST STREAK</div></div>
+                <div class="as-item"><div class="asi-val" style="color:#ffd060">{gState.lp.toLocaleString()}</div><div class="asi-label">LP EARNED</div></div>
+              </div>
+            </section>
 
-            {#if records.length > 0}
-              <div class="pos-section-title">MATCH HISTORY</div>
-              {#each records.slice(0, 20) as match (match.id)}
-                <div class="match-row" class:win={match.win} class:loss={!match.win}>
-                  <div class="mr-left">
-                    <span class="mr-result" class:win={match.win}>{match.win ? 'WIN' : 'LOSS'}</span>
-                    <span class="mr-num">#{match.matchN}</span>
-                    <span class="mr-time">{timeSince(match.timestamp)}</span>
-                  </div>
-                  <div class="mr-right">
-                    <span class="mr-lp" class:plus={match.lp >= 0} class:minus={match.lp < 0}>{match.lp >= 0 ? '+' : ''}{match.lp} LP</span>
-                    {#if match.hypothesis}
-                      <span class="mr-hyp" class:long={match.hypothesis.dir === 'LONG'} class:short={match.hypothesis.dir === 'SHORT'}>{match.hypothesis.dir}</span>
-                    {/if}
-                    <span class="mr-agents">
-                      {#each (match.agentVotes || []).slice(0, 3) as vote}
-                        <span class="mr-agent-dot" style="background:{vote.color}" title="{vote.name}: {vote.dir}"></span>
+            <section class="content-panel list-panel">
+              {#if records.length > 0}
+                <details class="detail-block">
+                  <summary>MATCH HISTORY ({Math.min(records.length, 20)})</summary>
+                  {#each matchPreview as match (match.id)}
+                    <div class="match-row" class:win={match.win} class:loss={!match.win}>
+                      <div class="mr-left">
+                        <span class="mr-result" class:win={match.win}>{match.win ? 'WIN' : 'LOSS'}</span>
+                        <span class="mr-num">#{match.matchN}</span>
+                        <span class="mr-time">{timeSince(match.timestamp)}</span>
+                      </div>
+                      <div class="mr-right">
+                        <span class="mr-lp" class:plus={match.lp >= 0} class:minus={match.lp < 0}>{match.lp >= 0 ? '+' : ''}{match.lp} LP</span>
+                        {#if match.hypothesis}
+                          <span class="mr-hyp" class:long={match.hypothesis.dir === 'LONG'} class:short={match.hypothesis.dir === 'SHORT'}>{match.hypothesis.dir}</span>
+                        {/if}
+                        <span class="mr-agents">
+                          {#each (match.agentVotes || []).slice(0, 3) as vote}
+                            <span class="mr-agent-dot" style="background:{vote.color}" title="{vote.name}: {vote.dir}"></span>
+                          {/each}
+                        </span>
+                      </div>
+                    </div>
+                  {/each}
+                  {#if records.length > MATCH_PREVIEW_LIMIT}
+                    <details class="detail-block nested-detail">
+                      <summary>OLDER MATCHES ({Math.min(records.length - MATCH_PREVIEW_LIMIT, 12)})</summary>
+                      {#each records.slice(MATCH_PREVIEW_LIMIT, 20) as match (match.id)}
+                        <div class="match-row" class:win={match.win} class:loss={!match.win}>
+                          <div class="mr-left">
+                            <span class="mr-result" class:win={match.win}>{match.win ? 'WIN' : 'LOSS'}</span>
+                            <span class="mr-num">#{match.matchN}</span>
+                            <span class="mr-time">{timeSince(match.timestamp)}</span>
+                          </div>
+                          <div class="mr-right">
+                            <span class="mr-lp" class:plus={match.lp >= 0} class:minus={match.lp < 0}>{match.lp >= 0 ? '+' : ''}{match.lp} LP</span>
+                            {#if match.hypothesis}
+                              <span class="mr-hyp" class:long={match.hypothesis.dir === 'LONG'} class:short={match.hypothesis.dir === 'SHORT'}>{match.hypothesis.dir}</span>
+                            {/if}
+                            <span class="mr-agents">
+                              {#each (match.agentVotes || []).slice(0, 3) as vote}
+                                <span class="mr-agent-dot" style="background:{vote.color}" title="{vote.name}: {vote.dir}"></span>
+                              {/each}
+                            </span>
+                          </div>
+                        </div>
                       {/each}
-                    </span>
-                  </div>
-                </div>
-              {/each}
-            {:else}
-              <EmptyState image={CHARACTER_ART.actionVictory} title="NO ARENA MATCHES YET" subtitle="Challenge the AI agents!" ctaText="GO TO ARENA →" ctaHref="/arena" icon="⚔️" variant="pink" compact />
-            {/if}
+                    </details>
+                  {/if}
+                </details>
+              {:else}
+                <EmptyState image={CHARACTER_ART.actionVictory} title="NO ARENA MATCHES YET" subtitle="Challenge the AI agents!" ctaText="GO TO ARENA →" ctaHref="/arena" icon="⚔️" variant="pink" compact />
+              {/if}
+            </section>
           </div>
         {/if}
       </div>
@@ -563,255 +687,1299 @@
 
 <style>
   .passport-page {
-    height: 100%; overflow: hidden;
-    background: #ffe600;
-    background-image: repeating-conic-gradient(#ffcc00 0deg 10deg, #ffe600 10deg 20deg);
-    display: flex; justify-content: center; position: relative;
+    --sp-bg: #00120a;
+    --sp-bg2: #003122;
+    --sp-pk: #ff8c79;
+    --sp-pk-l: #ffc8c1;
+    --sp-w: #f7dcd6;
+    --sp-dim: rgba(247, 220, 214, 0.5);
+    --sp-soft: rgba(255, 140, 121, 0.15);
+    --sp-soft-2: rgba(255, 140, 121, 0.1);
+    --sp-line: rgba(255, 140, 121, 0.3);
+    --sp-green: #9dcdb9;
+    --sp-red: #ff725d;
+    --sp-gold: #f7dcd6;
+    --sp-font-display: 'Sixtyfour', 'Racing Sans One', 'Press Start 2P', monospace;
+    --sp-font-label: 'Racing Sans One', 'Press Start 2P', monospace;
+    --sp-font-body: 'JetBrains Mono', monospace;
+    --fp: var(--sp-font-label);
+    --fd: var(--sp-font-label);
+    --fm: var(--sp-font-body);
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    background:
+      radial-gradient(circle at 10% 14%, rgba(255, 140, 121, 0.2) 0%, rgba(255, 140, 121, 0) 34%),
+      radial-gradient(circle at 86% 6%, rgba(157, 205, 185, 0.16) 0%, rgba(157, 205, 185, 0) 28%),
+      linear-gradient(180deg, var(--sp-bg2), var(--sp-bg));
   }
+
+  .passport-page::before {
+    content: '';
+    position: absolute;
+    left: -20%;
+    right: -20%;
+    bottom: -14px;
+    height: 32%;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      linear-gradient(90deg, rgba(255, 140, 121, 0.14) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(255, 140, 121, 0.14) 1px, transparent 1px);
+    background-size: 56px 34px;
+    transform: perspective(420px) rotateX(56deg);
+    transform-origin: center top;
+    opacity: 0.24;
+  }
+
+  .passport-page::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 31%;
+    height: 2px;
+    pointer-events: none;
+    z-index: 1;
+    background: rgba(255, 140, 121, 0.72);
+    box-shadow: 0 0 14px rgba(255, 140, 121, 0.4), 0 0 28px rgba(255, 140, 121, 0.18);
+  }
+
   .sunburst {
-    position: absolute; inset: -50%; z-index: 0; pointer-events: none;
-    background: repeating-conic-gradient(transparent 0deg 8deg, rgba(255,180,0,.08) 8deg 16deg);
-    animation: spin 60s linear infinite;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.22;
+    background:
+      radial-gradient(1px 1px at 11% 18%, rgba(255, 255, 255, 0.58) 50%, transparent 50%),
+      radial-gradient(1px 1px at 29% 52%, rgba(255, 255, 255, 0.5) 50%, transparent 50%),
+      radial-gradient(1px 1px at 41% 6%, rgba(255, 255, 255, 0.55) 50%, transparent 50%),
+      radial-gradient(1.2px 1.2px at 66% 23%, rgba(255, 255, 255, 0.55) 50%, transparent 50%),
+      radial-gradient(1px 1px at 84% 68%, rgba(255, 255, 255, 0.5) 50%, transparent 50%),
+      radial-gradient(1.4px 1.4px at 7% 88%, rgba(255, 255, 255, 0.55) 50%, transparent 50%);
+    background-size: 350px 350px;
   }
-  @keyframes spin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+
   .halftone {
-    position: absolute; inset: 0; z-index: 1; pointer-events: none;
-    background-image: radial-gradient(circle, rgba(0,0,0,.04) 1px, transparent 1px);
-    background-size: 8px 8px;
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 3px,
+      rgba(0, 0, 0, 0.08) 3px,
+      rgba(0, 0, 0, 0.08) 4px
+    );
+    opacity: 0.28;
   }
 
   .passport-scroll {
-    position: relative; z-index: 10; width: 100%; max-width: 800px;
-    height: 100%; overflow-y: auto; padding: 16px; box-sizing: border-box;
+    position: relative;
+    z-index: 3;
+    width: 100%;
+    max-width: 1040px;
+    height: 100%;
+    overflow-y: auto;
+    padding: 14px;
+    box-sizing: border-box;
   }
-  .passport-scroll::-webkit-scrollbar { width: 4px; }
-  .passport-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,.2); border-radius: 3px; }
+
+  .passport-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .passport-scroll::-webkit-scrollbar-thumb {
+    background: var(--sp-pk);
+    border-radius: 4px;
+  }
 
   .passport-card {
-    background: #fff; border: 4px solid #000; border-radius: 16px;
-    box-shadow: 6px 6px 0 #000; overflow: hidden; position: relative;
-  }
-  .passport-card::before {
-    content: ''; position: absolute; bottom: 0; right: 0;
-    width: 120px; height: 120px;
-    background: url('/doge/trade-sheet.png') center/cover no-repeat;
-    opacity: .06; border-radius: 16px 0 0 0; pointer-events: none; z-index: 0;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--sp-line);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 100% 0%, rgba(255, 140, 121, 0.18) 0%, rgba(255, 140, 121, 0) 35%),
+      linear-gradient(180deg, rgba(3, 33, 24, 0.92) 0%, rgba(1, 18, 10, 0.96) 100%);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 140, 121, 0.14);
   }
 
-  .card-ribbon { background: linear-gradient(90deg, #0a0a1a, #1a1a2e); padding: 6px 16px; border-bottom: 3px solid #000; }
-  .ribbon-text { font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 4px; color: var(--yel); }
+  .card-ribbon {
+    position: relative;
+    z-index: 2;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.22);
+    border-bottom: 1px solid var(--sp-line);
+  }
 
-  /* ═══ UNIFIED HEADER ═══ */
+  .ribbon-text {
+    font-family: var(--fp);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.3px;
+    color: var(--sp-pk-l);
+  }
+
   .unified-header {
-    display: flex; gap: 14px; padding: 14px 16px;
-    border-bottom: 3px solid #000; position: relative;
-    flex-wrap: wrap; align-items: flex-start;
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 14px;
+    border-bottom: 1px solid var(--sp-line);
+    background: rgba(8, 20, 12, 0.54);
   }
-  .uh-left { display: flex; gap: 12px; align-items: center; flex: 1; min-width: 200px; }
-  .uh-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+
+  .uh-left {
+    display: flex;
+    gap: 12px;
+    min-width: 0;
+    align-items: center;
+  }
+
+  .uh-right {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 245px;
+    align-items: flex-end;
+  }
 
   .doge-avatar {
-    position: relative; width: 64px; height: 64px; border-radius: 14px;
-    border: 4px solid #000; overflow: hidden; box-shadow: 4px 4px 0 #000;
-    flex-shrink: 0; cursor: pointer; background: none; padding: 0; transition: transform .15s;
+    position: relative;
+    width: 72px;
+    height: 72px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--sp-line);
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.15s ease;
   }
-  .doge-avatar:hover { transform: scale(1.05); }
-  .doge-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .avatar-edit { position: absolute; bottom: 2px; right: 2px; background: var(--yel); border-radius: 50%; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 8px; border: 2px solid #000; }
 
-  .player-info { flex: 1; min-width: 0; }
-  .player-name { font-family: var(--fc); font-size: 18px; color: #000; letter-spacing: 1.5px; cursor: pointer; background: none; border: none; padding: 0; text-align: left; transition: opacity .15s; }
-  .player-name:hover { opacity: .7; }
-  .name-pen { font-size: 10px; opacity: .4; }
-  .name-edit { display: flex; gap: 4px; }
-  .name-input { font-family: var(--fc); font-size: 16px; color: #000; border: 2px solid var(--yel); border-radius: 6px; padding: 2px 6px; width: 130px; outline: none; background: #fff8e1; }
-  .name-save { background: var(--yel); border: 2px solid #000; border-radius: 6px; font-size: 14px; cursor: pointer; padding: 2px 8px; font-weight: 900; }
-  .player-tier { font-family: var(--fd); font-size: 11px; font-weight: 900; letter-spacing: 2px; margin-top: 1px; }
-  .player-addr { font-family: var(--fm); font-size: 8px; color: #888; margin-top: 1px; }
-  .connect-mini { font-family: var(--fm); font-size: 7px; font-weight: 700; letter-spacing: 1px; color: #000; background: var(--yel); border: 2px solid #000; border-radius: 6px; padding: 2px 6px; cursor: pointer; margin-top: 2px; transition: all .15s; }
-  .connect-mini:hover { transform: scale(1.05); box-shadow: 2px 2px 0 #000; }
+  .doge-avatar:hover {
+    transform: translateY(-1px);
+  }
 
-  .port-val { text-align: right; }
-  .pv-label { font-family: var(--fm); font-size: 6px; font-weight: 900; letter-spacing: 2px; color: #888; }
-  .pv-amount { font-family: var(--fd); font-size: 22px; font-weight: 900; color: #000; letter-spacing: 1px; }
-  .pv-pnl { font-family: var(--fm); font-size: 9px; font-weight: 700; }
-  .pv-pnl.up { color: #00aa44; } .pv-pnl.down { color: #cc0033; }
+  .doge-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
 
-  .uh-stats { display: flex; gap: 10px; }
-  .uhs { text-align: center; min-width: 36px; }
-  .uhs-val { font-family: var(--fd); font-size: 12px; font-weight: 900; color: #000; display: block; }
-  .uhs-lbl { font-family: var(--fm); font-size: 5px; font-weight: 900; letter-spacing: 1.5px; color: #888; }
+  .avatar-edit {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--sp-pk);
+    color: #111;
+  }
 
-  .passport-stamp { position: absolute; top: -4px; right: -4px; transform: rotate(12deg); border: 3px solid #cc0033; border-radius: 10px; padding: 3px 10px; font-family: var(--fc); color: #cc0033; display: flex; align-items: center; gap: 4px; opacity: .5; }
-  .stamp-text { font-size: 7px; letter-spacing: 2px; } .stamp-icon { font-size: 10px; }
+  .player-info {
+    min-width: 0;
+  }
 
-  /* ═══ AVATAR PICKER ═══ */
-  .avatar-picker { background: #fff8e1; border: 2px solid #000; border-radius: 10px; padding: 10px; margin: 0 16px 8px; box-shadow: 3px 3px 0 #000; }
-  .ap-title { font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; color: #555; margin-bottom: 6px; }
-  .ap-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
-  .ap-opt { width: 100%; aspect-ratio: 1; border-radius: 8px; border: 3px solid transparent; overflow: hidden; cursor: pointer; padding: 0; background: none; transition: all .15s; }
-  .ap-opt:hover { border-color: var(--yel); transform: scale(1.1); }
-  .ap-opt.selected { border-color: #000; box-shadow: 2px 2px 0 #000; }
-  .ap-opt img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .player-name {
+    border: none;
+    background: none;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    color: var(--sp-w);
+    font-family: var(--sp-font-display);
+    font-size: clamp(13px, 1.6vw, 17px);
+    font-weight: 400;
+    letter-spacing: 0.4px;
+  }
 
-  /* ═══ TAB BAR ═══ */
-  .tab-bar { display: flex; background: #0d0d1e; border-bottom: 2px solid rgba(255,255,255,.06); }
-  .tab-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 6px; background: none; border: none; border-bottom: 3px solid transparent; color: rgba(255,255,255,.35); font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 1.5px; cursor: pointer; transition: all .15s; position: relative; }
-  .tab-btn:hover { color: rgba(255,255,255,.6); background: rgba(255,255,255,.02); }
-  .tab-btn.active { color: var(--yel); border-bottom-color: var(--yel); background: rgba(255,230,0,.03); }
-  .tab-icon { font-size: 11px; } .tab-label { letter-spacing: 1.5px; }
-  .tab-badge { position: absolute; top: 2px; right: 8px; background: var(--yel); color: #000; font-family: var(--fd); font-size: 6px; font-weight: 900; min-width: 12px; height: 12px; border-radius: 6px; display: flex; align-items: center; justify-content: center; padding: 0 2px; }
+  .name-pen {
+    font-size: 11px;
+    opacity: 0.55;
+  }
 
-  /* ═══ TAB CONTENT ═══ */
-  .tab-content { padding: 12px; background: linear-gradient(180deg, #0a0a1a, #080818); }
+  .name-edit {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
 
-  /* ═══ PROFILE TAB ═══ */
-  .section-header { font-family: var(--fc); font-size: 13px; color: #fff; letter-spacing: 2px; margin-bottom: 6px; -webkit-text-stroke: .5px rgba(255,255,255,.5); }
-  .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 6px; }
-  .metric-card { background: rgba(255,255,255,.04); border: 2px solid rgba(255,255,255,.08); border-radius: 8px; padding: 6px 4px; text-align: center; transition: transform .15s; }
-  .metric-card:hover { transform: translateY(-1px); background: rgba(255,255,255,.06); }
-  .mc-icon { font-size: 14px; margin-bottom: 1px; }
-  .mc-value { font-family: var(--fd); font-size: 16px; font-weight: 900; color: #fff; line-height: 1; }
-  .mc-value.up { color: var(--grn); } .mc-value.fire { color: #ff8c3b; }
-  .mc-label { font-family: var(--fm); font-size: 5px; font-weight: 900; letter-spacing: 1.5px; color: rgba(255,255,255,.35); margin-top: 1px; }
+  .name-input {
+    width: 160px;
+    border-radius: 7px;
+    border: 1px solid var(--sp-line);
+    background: rgba(0, 0, 0, 0.35);
+    color: var(--sp-w);
+    font-family: var(--fm);
+    font-size: 12px;
+    padding: 6px 8px;
+    outline: none;
+  }
 
-  .summary-line { text-align: center; font-family: var(--fm); font-size: 8px; font-weight: 700; color: rgba(255,255,255,.4); padding: 5px 8px; background: rgba(255,255,255,.03); border: 1px dashed rgba(255,255,255,.1); border-radius: 6px; margin-bottom: 10px; }
+  .name-save {
+    border: 1px solid var(--sp-pk);
+    background: rgba(255, 140, 121, 0.15);
+    color: var(--sp-pk-l);
+    border-radius: 7px;
+    padding: 5px 8px;
+    font-family: var(--fp);
+    font-size: 10px;
+    cursor: pointer;
+  }
 
-  .agent-perf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; margin-bottom: 10px; }
-  .agent-perf-card { border: 2px solid rgba(255,255,255,.08); border-left-width: 4px; border-radius: 8px; padding: 6px; background: rgba(255,255,255,.03); }
-  .apc-head { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
-  .apc-img { width: 24px; height: 24px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,.15); object-fit: cover; }
-  .apc-icon { font-size: 16px; }
-  .apc-name { font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 1px; }
-  .apc-role { font-family: var(--fm); font-size: 5px; color: rgba(255,255,255,.3); }
-  .apc-level { margin-left: auto; font-family: var(--fd); font-size: 9px; font-weight: 900; color: var(--pk); background: rgba(255,45,155,.08); border: 1.5px solid rgba(255,45,155,.3); border-radius: 5px; padding: 1px 5px; }
-  .apc-bar-wrap { height: 3px; background: rgba(255,255,255,.06); border-radius: 2px; overflow: hidden; margin-bottom: 1px; }
-  .apc-bar { height: 100%; border-radius: 2px; transition: width .5s; }
-  .apc-xp { font-family: var(--fm); font-size: 5px; color: rgba(255,255,255,.25); }
+  .player-tier {
+    margin-top: 2px;
+    font-family: var(--fp);
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
 
-  .badges-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 10px; }
-  .badge-card { border: 2px solid rgba(255,255,255,.1); border-radius: 8px; padding: 6px 3px; text-align: center; transition: transform .15s; }
-  .badge-card:hover { transform: translateY(-1px); }
-  .badge-card.earned { background: linear-gradient(135deg, rgba(255,230,0,.1), rgba(255,200,0,.05)); border-color: rgba(255,230,0,.25); }
-  .badge-card.locked { background: rgba(255,255,255,.02); opacity: .5; }
-  .badge-icon { font-size: 18px; display: block; margin-bottom: 1px; }
-  .badge-name { font-family: var(--fm); font-size: 6px; font-weight: 900; letter-spacing: .5px; color: rgba(255,255,255,.6); display: block; }
-  .badge-date { font-family: var(--fm); font-size: 5px; color: rgba(255,255,255,.2); display: block; }
-  .badge-desc { font-family: var(--fm); font-size: 4px; color: rgba(255,255,255,.2); display: block; margin-top: 1px; }
+  .player-addr {
+    margin-top: 5px;
+    color: var(--sp-dim);
+    font-family: var(--fm);
+    font-size: 10px;
+  }
 
-  /* ═══ WALLET TAB ═══ */
-  .vb-card { background: rgba(255,230,0,.05); border: 2px solid rgba(255,230,0,.15); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
-  .vb-header { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
-  .vb-icon { font-size: 14px; } .vb-title { font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.4); }
-  .vb-amount { font-family: var(--fd); font-size: 24px; font-weight: 900; color: var(--yel); letter-spacing: 1px; }
-  .vb-connect { margin-top: 6px; font-family: var(--fm); font-size: 7px; font-weight: 700; letter-spacing: 1px; color: #000; background: var(--yel); border: 2px solid #000; border-radius: 6px; padding: 4px 10px; cursor: pointer; transition: all .15s; }
-  .vb-connect:hover { transform: scale(1.03); box-shadow: 2px 2px 0 #000; }
-  .vb-connected { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.4); margin-top: 3px; display: flex; align-items: center; gap: 5px; }
-  .vbc-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--grn); box-shadow: 0 0 4px var(--grn); }
-  .holdings-status {
+  .connect-mini {
+    margin-top: 5px;
+    border: 1px solid var(--sp-pk);
+    background: rgba(255, 140, 121, 0.12);
+    color: var(--sp-pk-l);
+    border-radius: 7px;
+    padding: 5px 10px;
+    font-family: var(--fp);
+    font-size: 9px;
+    letter-spacing: 0.8px;
+    cursor: pointer;
+  }
+
+  .port-val {
+    text-align: right;
+  }
+
+  .pv-label {
+    color: var(--sp-dim);
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1.2px;
+  }
+
+  .pv-amount {
+    margin-top: 4px;
+    color: var(--sp-w);
+    font-family: var(--sp-font-display);
+    font-size: clamp(18px, 2vw, 24px);
+    font-weight: 400;
+    line-height: 1.08;
+  }
+
+  .pv-pnl {
+    margin-top: 4px;
+    font-family: var(--fp);
+    font-size: 9px;
+    letter-spacing: 0.8px;
+  }
+
+  .pv-pnl.up {
+    color: var(--sp-green);
+  }
+
+  .pv-pnl.down {
+    color: var(--sp-red);
+  }
+
+  .uh-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(48px, 1fr));
+    gap: 6px;
+  }
+
+  .uhs {
+    padding: 7px 6px;
+    border-radius: 8px;
+    border: 1px solid var(--sp-soft);
+    background: rgba(0, 0, 0, 0.25);
+    text-align: center;
+  }
+
+  .uhs-val {
+    display: block;
+    color: var(--sp-w);
+    font-family: var(--fd);
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .uhs-lbl {
+    display: block;
+    margin-top: 4px;
+    color: var(--sp-dim);
+    font-family: var(--fp);
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+
+  .passport-stamp {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 140, 121, 0.42);
+    border-radius: 8px;
+    color: var(--sp-pk-l);
+    background: rgba(255, 140, 121, 0.08);
+    transform: rotate(8deg);
+    font-family: var(--fp);
+  }
+
+  .stamp-text {
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+
+  .stamp-icon {
+    font-size: 7px;
+    opacity: 0.8;
+  }
+
+  .avatar-picker {
+    margin: 10px 14px 12px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--sp-line);
+    background: rgba(0, 0, 0, 0.22);
+  }
+
+  .ap-title {
+    margin-bottom: 8px;
+    color: var(--sp-dim);
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+
+  .ap-grid {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .ap-opt {
+    border: 1px solid transparent;
+    border-radius: 8px;
+    overflow: hidden;
+    padding: 0;
+    background: none;
+    cursor: pointer;
+    aspect-ratio: 1;
+  }
+
+  .ap-opt:hover,
+  .ap-opt.selected {
+    border-color: var(--sp-pk);
+  }
+
+  .ap-opt img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .tab-bar {
+    display: flex;
+    background: rgba(0, 0, 0, 0.22);
+    border-top: 1px solid var(--sp-line);
+    border-bottom: 1px solid var(--sp-line);
+  }
+
+  .tab-btn {
+    position: relative;
+    flex: 1;
+    min-height: 42px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--sp-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-family: var(--fp);
+    font-size: 9px;
+    letter-spacing: 1px;
+    cursor: pointer;
+  }
+
+  .tab-btn:hover {
+    color: var(--sp-w);
+    background: rgba(255, 140, 121, 0.06);
+  }
+
+  .tab-btn.active {
+    color: var(--sp-pk-l);
+    border-bottom-color: var(--sp-pk);
+    background: rgba(255, 140, 121, 0.08);
+  }
+
+  .tab-icon {
+    min-width: 20px;
+    height: 18px;
+    border-radius: 999px;
+    border: 1px solid var(--sp-soft);
+    background: rgba(0, 0, 0, 0.28);
+    color: var(--sp-pk-l);
+    font-family: var(--sp-font-label);
+    font-size: 8px;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+  }
+
+  .tab-label {
+    letter-spacing: 1px;
+  }
+
+  .tab-badge {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--sp-pk);
+    color: #111;
+    font-family: var(--fp);
+    font-size: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--sp-soft);
+    background: rgba(0, 0, 0, 0.16);
+  }
+
+  .qa-btn,
+  .qa-chip {
+    min-height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0 12px;
+    text-decoration: none;
+    white-space: nowrap;
+    font-family: var(--fp);
+    font-size: 9px;
+    letter-spacing: 0.8px;
+  }
+
+  .qa-btn {
+    border: 1px solid var(--sp-line);
+    color: var(--sp-w);
+    background: rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+  }
+
+  .qa-btn:hover {
+    background: rgba(255, 140, 121, 0.12);
+    border-color: rgba(255, 140, 121, 0.42);
+  }
+
+  .qa-terminal {
+    color: var(--sp-pk-l);
+  }
+
+  .qa-arena {
+    color: var(--sp-green);
+  }
+
+  .qa-wallet {
+    color: #cbefff;
+  }
+
+  .qa-chip {
+    margin-left: auto;
+    color: var(--sp-green);
+    border: 1px solid rgba(157, 205, 185, 0.3);
+    background: rgba(157, 205, 185, 0.06);
+  }
+
+  .qa-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--sp-green);
+    box-shadow: 0 0 6px rgba(157, 205, 185, 0.8);
+  }
+
+  .tab-content {
+    padding: 12px;
+    background: linear-gradient(180deg, rgba(14, 37, 21, 0.56), rgba(8, 20, 12, 0.82));
+  }
+
+  .profile-tab,
+  .wallet-tab,
+  .positions-tab,
+  .arena-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .content-panel {
+    border: 1px solid var(--sp-soft);
+    border-radius: 12px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.24);
+  }
+
+  .list-panel {
+    padding-top: 10px;
+  }
+
+  .section-header {
+    margin-bottom: 10px;
+    color: var(--sp-pk-l);
+    font-family: var(--fp);
+    font-size: 9px;
+    letter-spacing: 1.2px;
+  }
+
+  .metrics-grid,
+  .pos-summary,
+  .arena-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .metric-card,
+  .ps-item,
+  .as-item,
+  .wk-item {
+    border: 1px solid var(--sp-soft);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 10px 8px;
+    text-align: center;
+  }
+
+  .metrics-detail {
+    margin-top: 8px;
+  }
+
+  .mc-icon {
+    font-size: 14px;
+    margin-bottom: 3px;
+  }
+
+  .mc-value,
+  .psi-value,
+  .asi-val,
+  .wk-v {
+    color: var(--sp-w);
+    font-family: var(--fd);
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .mc-value.up {
+    color: var(--sp-green);
+  }
+
+  .mc-value.fire {
+    color: var(--sp-gold);
+  }
+
+  .mc-label,
+  .psi-label,
+  .asi-label,
+  .wk-k {
+    margin-top: 4px;
+    color: var(--sp-dim);
+    font-family: var(--fp);
+    font-size: 7px;
+    letter-spacing: 0.9px;
+  }
+
+  .summary-line {
+    margin-top: 10px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: 1px dashed var(--sp-soft);
+    color: var(--sp-dim);
+    text-align: center;
+    font-family: var(--fm);
+    font-size: 10px;
+  }
+
+  .detail-block {
+    margin-top: 10px;
+    border: 1px solid var(--sp-soft);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.02);
+    overflow: hidden;
+  }
+
+  .detail-block summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    padding: 10px 12px;
+    color: var(--sp-pk-l);
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1px;
+    border-bottom: 1px solid transparent;
+  }
+
+  .detail-block[open] summary {
+    border-bottom-color: var(--sp-soft);
+    background: rgba(255, 140, 121, 0.08);
+  }
+
+  .detail-block summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .detail-block summary::before {
+    content: '▸';
+    margin-right: 7px;
+    display: inline-block;
+    transition: transform 0.12s ease;
+  }
+
+  .detail-block[open] summary::before {
+    transform: rotate(90deg);
+  }
+
+  .agent-perf-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .agent-perf-card {
+    border: 1px solid var(--sp-soft);
+    border-left-width: 3px;
+    border-radius: 8px;
+    padding: 9px;
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .apc-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 6px;
+  }
+
+  .apc-img {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    object-fit: cover;
+  }
+
+  .apc-icon {
+    font-size: 18px;
+  }
+
+  .apc-name {
+    font-family: var(--fm);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .apc-role {
+    color: var(--sp-dim);
+    font-family: var(--fm);
+    font-size: 9px;
+  }
+
+  .apc-level {
+    margin-left: auto;
+    border-radius: 7px;
+    padding: 2px 6px;
+    color: var(--sp-pk-l);
+    border: 1px solid var(--sp-soft);
+    font-family: var(--fp);
+    font-size: 8px;
+  }
+
+  .apc-bar-wrap {
+    height: 5px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
+    margin-bottom: 4px;
+  }
+
+  .apc-bar {
+    height: 100%;
+    border-radius: 999px;
+  }
+
+  .apc-xp {
+    color: var(--sp-dim);
+    font-family: var(--fm);
+    font-size: 9px;
+  }
+
+  .badges-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .badge-card {
+    border: 1px solid var(--sp-soft);
+    border-radius: 8px;
+    text-align: center;
+    padding: 9px 6px;
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .badge-card.earned {
+    background: rgba(157, 205, 185, 0.09);
+    border-color: rgba(157, 205, 185, 0.26);
+  }
+
+  .badge-card.locked {
+    opacity: 0.62;
+  }
+
+  .badge-icon {
+    display: block;
+    font-size: 18px;
+    margin-bottom: 3px;
+  }
+
+  .badge-name {
+    display: block;
+    color: var(--sp-w);
+    font-family: var(--fm);
+    font-size: 10px;
+  }
+
+  .badge-date,
+  .badge-desc {
+    display: block;
+    margin-top: 3px;
+    color: var(--sp-dim);
+    font-family: var(--fm);
+    font-size: 8px;
+  }
+
+  .vb-card {
+    border: 1px solid var(--sp-line);
+    border-radius: 10px;
+    background: rgba(255, 140, 121, 0.08);
+    padding: 12px;
+  }
+
+  .vb-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .vb-icon {
+    font-size: 14px;
+  }
+
+  .vb-title {
+    color: var(--sp-dim);
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+
+  .vb-amount {
+    margin-top: 5px;
+    color: var(--sp-pk-l);
+    font-family: var(--sp-font-display);
+    font-size: clamp(18px, 2.1vw, 24px);
+    line-height: 1.1;
+  }
+
+  .vb-connect {
+    margin-top: 10px;
+    border: 1px solid var(--sp-pk);
+    background: rgba(255, 140, 121, 0.16);
+    color: var(--sp-pk-l);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 0.8px;
+    cursor: pointer;
+  }
+
+  .vb-connected {
+    margin-top: 8px;
+    color: var(--sp-w);
+    font-family: var(--fm);
+    font-size: 10px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 8px;
-    padding: 4px 8px;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,.12);
-    background: rgba(255,255,255,.03);
-    color: rgba(255,255,255,.55);
-    font-family: var(--fm);
-    font-size: 7px;
-    font-weight: 700;
-    letter-spacing: .8px;
   }
-  .holdings-status.live { border-color: rgba(0,255,136,.3); color: rgba(220,255,236,.9); }
-  .hs-dot {
-    width: 6px;
-    height: 6px;
+
+  .vbc-dot {
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: #ff8c3b;
-    box-shadow: 0 0 4px rgba(255,140,59,.6);
+    background: var(--sp-green);
+    box-shadow: 0 0 5px rgba(157, 205, 185, 0.7);
+  }
+
+  .holdings-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px;
+    margin-bottom: 10px;
+    border: 1px solid var(--sp-soft);
+    border-radius: 999px;
+    color: var(--sp-dim);
+    font-family: var(--fm);
+    font-size: 9px;
+  }
+
+  .holdings-status.live {
+    border-color: rgba(157, 205, 185, 0.32);
+    color: var(--sp-green);
+  }
+
+  .hs-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--sp-pk);
+  }
+
+  .holdings-status.live .hs-dot {
+    background: var(--sp-green);
+  }
+
+  .wallet-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .holdings-body {
+    display: grid;
+    grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+  }
+
+  .st {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--sp-soft);
+    color: var(--sp-dim);
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+
+  .donut-section {
+    border-right: 1px solid var(--sp-soft);
+  }
+
+  .donut-wrap {
+    padding: 8px 12px;
+  }
+
+  .donut-wrap svg {
+    width: 100%;
+    max-width: 170px;
+    display: block;
+    margin: 0 auto;
+  }
+
+  .legend {
+    padding: 0 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--sp-w);
+    font-family: var(--fm);
+    font-size: 10px;
+  }
+
+  .li-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
     flex-shrink: 0;
   }
-  .holdings-status.live .hs-dot { background: var(--grn); box-shadow: 0 0 5px rgba(0,255,136,.75); }
 
-  .holdings-body { display: grid; grid-template-columns: 200px 1fr; gap: 0; background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; overflow: hidden; }
-  .st { font-size: 8px; font-family: var(--fd); font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.5); padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
-  .donut-section { border-right: 1px solid rgba(255,255,255,.06); }
-  .donut-wrap { padding: 6px 16px; }
-  .donut-wrap svg { width: 100%; max-width: 160px; display: block; margin: 0 auto; }
-  .legend { padding: 0 10px 8px; display: flex; flex-direction: column; gap: 3px; }
-  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 8px; font-family: var(--fm); color: #ccc; }
-  .li-dot { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; } .li-name { font-weight: 700; } .li-pct { margin-left: auto; color: #888; font-weight: 600; }
-  .table-section { overflow-x: auto; }
-  .htable { padding: 0 8px 8px; }
-  .hrow { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 5px; padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,.04); align-items: center; }
-  .hrow:not(.header-row):hover { background: rgba(255,255,255,.02); }
-  .header-row { font-size: 6px; font-family: var(--fd); font-weight: 900; letter-spacing: 2px; color: #555; border-bottom: 1px solid rgba(255,255,255,.08); }
-  .hc { font-size: 8px; font-family: var(--fm); color: #ccc; } .hc.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .asset-col { display: flex; align-items: center; gap: 5px; }
-  .ai { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; color: #fff; flex-shrink: 0; }
-  .an { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #fff; letter-spacing: 1px; }
-  .af { font-size: 6px; color: #666; font-family: var(--fm); }
+  .li-name {
+    font-weight: 700;
+  }
 
-  /* ═══ POSITIONS TAB ═══ */
-  .pos-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 10px; }
-  .ps-item { text-align: center; padding: 8px 4px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); border-radius: 8px; }
-  .psi-label { font-family: var(--fm); font-size: 5px; font-weight: 900; letter-spacing: 1.5px; color: rgba(255,255,255,.35); margin-bottom: 1px; }
-  .psi-value { font-family: var(--fd); font-size: 14px; font-weight: 900; color: #fff; }
-  .pos-section-title { font-family: var(--fm); font-size: 6px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.3); margin-bottom: 3px; }
+  .li-pct {
+    margin-left: auto;
+    color: var(--sp-dim);
+  }
 
-  .pos-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px; border-bottom: 1px solid rgba(255,255,255,.04); border-radius: 5px; transition: background .1s; }
-  .pos-row:hover { background: rgba(255,255,255,.03); }
-  .pos-row.tracked { background: rgba(255,140,59,.03); }
-  .pos-row.closed { opacity: .5; }
-  .pr-left { display: flex; align-items: center; gap: 5px; }
-  .pr-dir { font-family: var(--fm); font-size: 6px; font-weight: 900; letter-spacing: .5px; padding: 2px 5px; border-radius: 3px; border: 1px solid; }
-  .pr-dir.long { color: var(--grn); border-color: rgba(0,255,136,.3); background: rgba(0,255,136,.08); }
-  .pr-dir.short { color: var(--red); border-color: rgba(255,45,85,.3); background: rgba(255,45,85,.08); }
-  .pr-pair { font-family: var(--fm); font-size: 9px; font-weight: 700; color: rgba(255,255,255,.7); }
-  .pr-src { font-family: var(--fm); font-size: 6px; color: rgba(255,255,255,.25); background: rgba(255,255,255,.04); padding: 1px 3px; border-radius: 3px; }
-  .pr-right { display: flex; align-items: center; gap: 6px; }
-  .pr-entry { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.4); }
-  .pr-pnl { font-family: var(--fd); font-size: 10px; font-weight: 900; min-width: 44px; text-align: right; }
-  .pr-time { font-family: var(--fm); font-size: 6px; color: rgba(255,255,255,.2); }
+  .table-section {
+    overflow-x: auto;
+  }
 
-  /* ═══ ARENA TAB ═══ */
-  .arena-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 10px; }
-  .as-item { text-align: center; padding: 8px 4px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); border-radius: 8px; }
-  .asi-val { font-family: var(--fd); font-size: 16px; font-weight: 900; color: #fff; }
-  .asi-label { font-family: var(--fm); font-size: 5px; font-weight: 900; letter-spacing: 1.5px; color: rgba(255,255,255,.35); margin-top: 1px; }
+  .htable {
+    min-width: 450px;
+    padding: 0 8px 8px;
+  }
 
-  .match-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px; border-bottom: 1px solid rgba(255,255,255,.04); border-radius: 5px; transition: background .1s; }
-  .match-row:hover { background: rgba(255,255,255,.03); }
-  .match-row.win { border-left: 3px solid var(--grn); } .match-row.loss { border-left: 3px solid var(--red); }
-  .mr-left { display: flex; align-items: center; gap: 5px; }
-  .mr-result { font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 1px; padding: 2px 5px; border-radius: 3px; }
-  .mr-result.win { color: var(--grn); background: rgba(0,255,136,.1); }
-  .mr-result:not(.win) { color: var(--red); background: rgba(255,45,85,.1); }
-  .mr-num { font-family: var(--fd); font-size: 9px; color: rgba(255,255,255,.5); }
-  .mr-time { font-family: var(--fm); font-size: 6px; color: rgba(255,255,255,.2); }
-  .mr-right { display: flex; align-items: center; gap: 6px; }
-  .mr-lp { font-family: var(--fd); font-size: 10px; font-weight: 900; }
-  .mr-lp.plus { color: var(--grn); } .mr-lp.minus { color: var(--red); }
-  .mr-hyp { font-family: var(--fm); font-size: 6px; font-weight: 900; padding: 1px 3px; border-radius: 3px; border: 1px solid; }
-  .mr-hyp.long { color: var(--grn); border-color: rgba(0,255,136,.3); }
-  .mr-hyp.short { color: var(--red); border-color: rgba(255,45,85,.3); }
-  .mr-agents { display: flex; gap: 2px; }
-  .mr-agent-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+  .hrow {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr 1fr;
+    gap: 7px;
+    align-items: center;
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
 
-  /* ═══ RESPONSIVE ═══ */
-  @media (max-width: 640px) {
-    .passport-scroll { padding: 10px; }
-    .unified-header { flex-direction: column; }
-    .uh-right { align-items: flex-start; width: 100%; flex-direction: row; justify-content: space-between; gap: 10px; }
-    .port-val { text-align: left; }
-    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
-    .badges-grid { grid-template-columns: repeat(3, 1fr); }
-    .agent-perf-grid { grid-template-columns: 1fr; }
-    .holdings-body { grid-template-columns: 1fr; }
-    .donut-section { border-right: none; border-bottom: 1px solid rgba(255,255,255,.06); }
-    .pos-summary { grid-template-columns: repeat(2, 1fr); }
-    .arena-stats { grid-template-columns: repeat(2, 1fr); }
-    .ap-grid { grid-template-columns: repeat(4, 1fr); }
+  .hrow:not(.header-row):hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .header-row {
+    color: var(--sp-dim);
+    font-family: var(--fp);
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+
+  .hc {
+    color: var(--sp-w);
+    font-family: var(--fm);
+    font-size: 10px;
+  }
+
+  .hc.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .asset-col {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .ai {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .an {
+    color: var(--sp-w);
+    font-family: var(--fd);
+    font-size: 10px;
+  }
+
+  .af {
+    color: var(--sp-dim);
+    font-family: var(--fm);
+    font-size: 8px;
+    margin-top: 2px;
+  }
+
+  .pos-section-title {
+    margin-bottom: 6px;
+    color: var(--sp-pk-l);
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+
+  .pos-row,
+  .match-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 7px;
+  }
+
+  .pos-row:hover,
+  .match-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .pos-row.tracked {
+    background: rgba(255, 140, 121, 0.08);
+  }
+
+  .pos-row.closed {
+    opacity: 0.67;
+  }
+
+  .pr-left,
+  .mr-left {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .pr-dir,
+  .mr-result {
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 0.8px;
+    border-radius: 6px;
+    padding: 3px 6px;
+    border: 1px solid;
+    flex-shrink: 0;
+  }
+
+  .pr-dir.long {
+    color: var(--sp-green);
+    border-color: rgba(157, 205, 185, 0.35);
+    background: rgba(157, 205, 185, 0.1);
+  }
+
+  .pr-dir.short {
+    color: var(--sp-red);
+    border-color: rgba(255, 114, 93, 0.35);
+    background: rgba(255, 114, 93, 0.1);
+  }
+
+  .pr-pair {
+    color: var(--sp-w);
+    font-family: var(--fm);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .pr-src {
+    color: var(--sp-dim);
+    font-family: var(--fm);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    white-space: nowrap;
+  }
+
+  .pr-right,
+  .mr-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .pr-entry,
+  .pr-time,
+  .mr-time {
+    color: var(--sp-dim);
+    font-family: var(--fm);
+    font-size: 9px;
+  }
+
+  .pr-pnl,
+  .mr-lp {
+    font-family: var(--fd);
+    font-size: 12px;
+    min-width: 56px;
+    text-align: right;
+  }
+
+  .match-row.win {
+    border-left: 2px solid var(--sp-green);
+  }
+
+  .match-row.loss {
+    border-left: 2px solid var(--sp-red);
+  }
+
+  .mr-result {
+    border: none;
+  }
+
+  .mr-result.win {
+    color: var(--sp-green);
+    background: rgba(157, 205, 185, 0.1);
+  }
+
+  .mr-result:not(.win) {
+    color: var(--sp-red);
+    background: rgba(255, 114, 93, 0.12);
+  }
+
+  .mr-num {
+    color: var(--sp-w);
+    font-family: var(--fm);
+    font-size: 10px;
+  }
+
+  .mr-lp.plus {
+    color: var(--sp-green);
+  }
+
+  .mr-lp.minus {
+    color: var(--sp-red);
+  }
+
+  .mr-hyp {
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 0.8px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    border: 1px solid;
+  }
+
+  .mr-hyp.long {
+    color: var(--sp-green);
+    border-color: rgba(157, 205, 185, 0.36);
+  }
+
+  .mr-hyp.short {
+    color: var(--sp-red);
+    border-color: rgba(255, 114, 93, 0.36);
+  }
+
+  .mr-agents {
+    display: flex;
+    gap: 4px;
+  }
+
+  .mr-agent-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .nested-detail {
+    margin: 8px 10px 10px;
+    border-style: dashed;
+  }
+
+  @media (max-width: 980px) {
+    .passport-scroll {
+      padding: 10px;
+    }
+
+    .unified-header {
+      grid-template-columns: 1fr;
+    }
+
+    .uh-right {
+      min-width: 0;
+      align-items: flex-start;
+    }
+
+    .port-val {
+      text-align: left;
+    }
+
+    .uh-stats,
+    .metrics-grid,
+    .pos-summary,
+    .arena-stats,
+    .wallet-kpis {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .qa-chip {
+      margin-left: 0;
+    }
+
+    .ap-grid {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .agent-perf-grid,
+    .badges-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .holdings-body {
+      grid-template-columns: 1fr;
+    }
+
+    .donut-section {
+      border-right: none;
+      border-bottom: 1px solid var(--sp-soft);
+    }
+
+    .ap-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .pos-row,
+    .match-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .pr-right,
+    .mr-right {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .passport-stamp {
+      position: static;
+      transform: rotate(0deg);
+      align-self: flex-start;
+      margin-top: 6px;
+    }
   }
 </style>

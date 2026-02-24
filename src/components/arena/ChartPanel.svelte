@@ -52,6 +52,7 @@
   let volumePaneIndex: number | null = null;
   let rsiPaneIndex: number | null = null;
   let klineCache: BinanceKline[] = [];
+  let _klineIndexByTime = new Map<number, number>();
   let _isLoadingMore = false;
   let _noMoreHistory = false; // true when Binance returns 0 older candles
   let _currentSymbol = '';
@@ -151,6 +152,9 @@
   let detectedPatterns: ChartPatternDetection[] = [];
   let patternLineSeries: any[] = [];
   let _patternSignature = '';
+  let patternPanelCollapsed = false;
+  let selectedPatternId: string | null = null;
+  let selectedPattern: ChartPatternDetection | null = null;
 
   export let agentAnnotations: Array<{
     id: string; icon: string; name: string; color: string; label: string;
@@ -164,6 +168,8 @@
   $: state = $gameState;
   $: symbol = pairToSymbol(state.pair);
   $: interval = toBinanceInterval(state.timeframe);
+  $: pairBaseLabel = (state.pair?.split('/')?.[0] || 'BTC').toUpperCase();
+  $: pairQuoteLabel = (state.pair?.split('/')?.[1] || 'USDT').toUpperCase();
 
   type IndicatorKey = 'ma20' | 'ma60' | 'ma120' | 'ma7' | 'ma25' | 'ma99' | 'rsi' | 'vol';
   let indicatorEnabled: Record<IndicatorKey, boolean> = {
@@ -360,6 +366,29 @@
     return v.toFixed(2);
   }
 
+  function formatPatternTime(ts: number) {
+    if (!Number.isFinite(ts) || ts <= 0) return '—';
+    return new Date(ts * 1000).toLocaleTimeString('ko-KR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  }
+
+  function patternKindLabel(kind: ChartPatternDetection['kind']) {
+    if (kind === 'head_and_shoulders') return '헤드앤숄더';
+    if (kind === 'falling_wedge') return '하락쐐기';
+    return kind;
+  }
+
+  function patternStatusLabel(status: ChartPatternDetection['status']) {
+    return status === 'CONFIRMED' ? '확정' : '형성중';
+  }
+
+  function patternDirectionLabel(direction: ChartPatternDetection['direction']) {
+    return direction === 'BULLISH' ? '상방' : '하방';
+  }
+
   function toChartPrice(y: number): number | null {
     if (!series) return null;
     try { return series.coordinateToPrice(y); } catch { return null; }
@@ -368,6 +397,30 @@
   function toChartY(price: number): number | null {
     if (!series) return null;
     try { return series.priceToCoordinate(price); } catch { return null; }
+  }
+
+  function rebuildKlineIndexMap() {
+    const next = new Map<number, number>();
+    for (let i = 0; i < klineCache.length; i += 1) {
+      next.set(klineCache[i].time, i);
+    }
+    _klineIndexByTime = next;
+  }
+
+  function toOverlayX(time: number): number | null {
+    if (!chart) return null;
+    try {
+      const direct = chart.timeScale().timeToCoordinate(time);
+      if (Number.isFinite(direct)) return direct;
+    } catch {}
+
+    const idx = _klineIndexByTime.get(time);
+    if (idx === undefined) return null;
+    try {
+      const logical = chart.timeScale().logicalToCoordinate(idx);
+      if (Number.isFinite(logical)) return logical;
+    } catch {}
+    return null;
   }
 
   function clampRoundPrice(v: number) {
@@ -1130,6 +1183,112 @@
       const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
       if (preview) drawTradePreview(ctx, preview);
     }
+    drawPatternOverlays(ctx);
+  }
+
+  function toOverlayPoint(time: number, price: number): { x: number; y: number } | null {
+    if (!chart || !drawingCanvas) return null;
+    if (!Number.isFinite(time) || !Number.isFinite(price)) return null;
+    const x = toOverlayX(time);
+    const y = toChartY(price);
+    if (x == null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  }
+
+  function drawPatternTag(
+    ctx: CanvasRenderingContext2D,
+    point: { x: number; y: number },
+    text: string,
+    color: string
+  ) {
+    if (!drawingCanvas) return;
+    ctx.save();
+    ctx.font = "700 9px 'JetBrains Mono', monospace";
+    const padX = 6;
+    const h = 16;
+    const w = Math.ceil(ctx.measureText(text).width) + padX * 2;
+    const x = Math.max(4, Math.min(point.x + 8, drawingCanvas.width - w - 4));
+    const y = Math.max(4, Math.min(point.y - h - 8, drawingCanvas.height - h - 4));
+
+    ctx.fillStyle = withAlpha('#05070d', 0.84);
+    ctx.strokeStyle = withAlpha(color, 0.72);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = withAlpha(color, 0.96);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + padX, y + h / 2);
+    ctx.restore();
+  }
+
+  function drawPatternOverlays(ctx: CanvasRenderingContext2D) {
+    if (!drawingCanvas || !chart || chartMode !== 'agent' || detectedPatterns.length === 0) return;
+
+    for (const pattern of detectedPatterns.slice(0, 3)) {
+      const active = !selectedPatternId || selectedPatternId === pattern.id;
+      const lineAlpha = active ? 0.92 : 0.45;
+      const fillAlpha = active ? 0.16 : 0.07;
+
+      const upperGuide = pattern.guideLines.find((g) => g.label === 'upper');
+      const lowerGuide = pattern.guideLines.find((g) => g.label === 'lower');
+      if (upperGuide && lowerGuide) {
+        const p1 = toOverlayPoint(upperGuide.from.time, upperGuide.from.price);
+        const p2 = toOverlayPoint(upperGuide.to.time, upperGuide.to.price);
+        const p3 = toOverlayPoint(lowerGuide.to.time, lowerGuide.to.price);
+        const p4 = toOverlayPoint(lowerGuide.from.time, lowerGuide.from.price);
+        if (p1 && p2 && p3 && p4) {
+          ctx.save();
+          ctx.fillStyle = withAlpha(upperGuide.color, fillAlpha);
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p3.x, p3.y);
+          ctx.lineTo(p4.x, p4.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      for (const guide of pattern.guideLines) {
+        const from = toOverlayPoint(guide.from.time, guide.from.price);
+        const to = toOverlayPoint(guide.to.time, guide.to.price);
+        if (!from || !to) continue;
+
+        ctx.save();
+        ctx.strokeStyle = withAlpha(guide.color, lineAlpha);
+        ctx.lineWidth = active ? (guide.style === 'dashed' ? 2 : 2.2) : 1.4;
+        ctx.setLineDash(guide.style === 'dashed' ? [7, 5] : []);
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (active) {
+          ctx.fillStyle = withAlpha(guide.color, 0.95);
+          ctx.beginPath();
+          ctx.arc(from.x, from.y, 2.2, 0, Math.PI * 2);
+          ctx.arc(to.x, to.y, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      const marker = toOverlayPoint(pattern.markerTime, pattern.markerPrice);
+      if (!marker) continue;
+      const tagColor = pattern.direction === 'BULLISH' ? '#58d78d' : '#ff657a';
+      const statusLabel = pattern.status === 'CONFIRMED' ? 'OK' : 'PEND';
+      drawPatternTag(
+        ctx,
+        marker,
+        `${pattern.shortName} ${statusLabel} ${Math.round(pattern.confidence * 100)}%`,
+        tagColor
+      );
+    }
   }
 
   function resizeDrawingCanvas() {
@@ -1160,7 +1319,7 @@
         try {
           const lineSeries = chart.addSeries(lwcModule.LineSeries, {
             color: guide.color,
-            lineWidth: pattern.status === 'CONFIRMED' ? 2 : 1.5,
+            lineWidth: pattern.status === 'CONFIRMED' ? 2.5 : 2,
             lineStyle: guide.style === 'dashed' ? 2 : 0,
             priceLineVisible: false,
             lastValueVisible: false,
@@ -1205,6 +1364,7 @@
       _patternSignature = '';
       applyCombinedMarkers();
       clearPatternLineSeries();
+      renderDrawings();
       return;
     }
 
@@ -1212,13 +1372,49 @@
     const signature = next
       .map((p) => `${p.id}:${p.status}:${Math.round(p.confidence * 100)}`)
       .join('|');
-    if (signature === _patternSignature) return;
+    if (signature === _patternSignature) {
+      renderDrawings();
+      return;
+    }
 
     _patternSignature = signature;
     detectedPatterns = next;
     patternMarkers = next.map(toPatternMarker);
     applyCombinedMarkers();
     applyPatternLineSeries();
+    renderDrawings();
+  }
+
+  function forcePatternScan() {
+    if (!chart || !series || klineCache.length < 30) {
+      pushChartNotice('패턴 스캔용 데이터가 부족합니다');
+      return;
+    }
+    _patternSignature = '';
+    runPatternDetection();
+    if (detectedPatterns.length === 0) {
+      pushChartNotice('패턴 미감지 · 조건 미충족');
+      return;
+    }
+    const summary = detectedPatterns
+      .slice(0, 2)
+      .map((p) => `${p.shortName} ${Math.round(p.confidence * 100)}%`)
+      .join(' · ');
+    pushChartNotice(`패턴 ${detectedPatterns.length}개 감지 · ${summary}`);
+  }
+
+  $: selectedPattern = (() => {
+    if (detectedPatterns.length === 0) {
+      selectedPatternId = null;
+      return null;
+    }
+    if (!selectedPatternId || !detectedPatterns.some((p) => p.id === selectedPatternId)) {
+      selectedPatternId = detectedPatterns[0].id;
+    }
+    return detectedPatterns.find((p) => p.id === selectedPatternId) ?? detectedPatterns[0];
+  })();
+  $: if (selectedPatternId) {
+    renderDrawings();
   }
 
   // ═══════════════════════════════════════════
@@ -1372,15 +1568,25 @@
         _indicatorProfileApplied = advancedMode ? `advanced:${chartVisualMode}` : 'basic';
       }
 
+      const compactViewport = isCompactViewport();
       chart = lwc.createChart(chartContainer, {
         width: chartContainer.clientWidth, height: chartContainer.clientHeight,
-        layout: { background: { type: lwc.ColorType.Solid, color: chartTheme.bg }, textColor: chartTheme.text, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 },
+        layout: {
+          background: { type: lwc.ColorType.Solid, color: chartTheme.bg },
+          textColor: chartTheme.text,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: compactViewport ? 12 : 11
+        },
         grid: { vertLines: { color: chartTheme.grid }, horzLines: { color: chartTheme.grid } },
-        crosshair: { mode: lwc.CrosshairMode.Normal },
+        crosshair: {
+          mode: lwc.CrosshairMode.Normal,
+          vertLine: { labelBackgroundColor: withAlpha('#122031', 0.94) },
+          horzLine: { labelBackgroundColor: withAlpha('#122031', 0.94) }
+        },
         rightPriceScale: {
           autoScale: true,
           borderColor: chartTheme.border,
-          minimumWidth: 74,
+          minimumWidth: compactViewport ? 88 : 74,
           scaleMargins: { top: 0.04, bottom: 0.08 }
         },
         timeScale: {
@@ -1454,6 +1660,7 @@
       chart.panes()[rsiIdx].setStretchFactor(0.12);
       applyTimeScale();
       applyIndicatorVisibility();
+      resizeDrawingCanvas();
 
       await loadKlines();
 
@@ -1462,6 +1669,7 @@
         if (range && range.from < 20 && !_isLoadingMore && !_noMoreHistory) {
           loadMoreHistory();
         }
+        renderDrawings();
       });
 
       const ro = new ResizeObserver(() => {
@@ -1482,6 +1690,7 @@
         else if (k === 'f') fitChartRange();
         else if (k === 'h') setDrawingMode('hline');
         else if (k === 't') setDrawingMode('trendline');
+        else if (k === 'p') forcePatternScan();
         else if (enableTradeLineEntry && k === 'l') setDrawingMode('longentry');
         else if (enableTradeLineEntry && k === 's') setDrawingMode('shortentry');
       };
@@ -1518,6 +1727,7 @@
 
       // Prepend to cache
       klineCache = [...unique, ...klineCache];
+      rebuildKlineIndexMap();
 
       // Re-set all series data
       series.setData(klineCache.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close })));
@@ -1559,6 +1769,7 @@
     detectedPatterns = [];
     patternMarkers = [];
     _patternSignature = '';
+    _klineIndexByTime = new Map<number, number>();
     applyCombinedMarkers();
     clearPatternLineSeries();
     isLoading = true; error = '';
@@ -1583,6 +1794,7 @@
 
       // ═══ Indicators ═══
       klineCache = klines;
+      rebuildKlineIndexMap();
       const closes = klines.map(k => ({ time: k.time, close: k.close }));
 
       if (ma7Series) ma7Series.setData(computeSMA(closes, 7));
@@ -1654,7 +1866,8 @@
         if (isUpdate) klineCache[klineCache.length - 1] = kline;
         else klineCache.push(kline);
         const cLen = klineCache.length;
-        if (!isUpdate) runPatternDetection();
+        _klineIndexByTime.set(kline.time, cLen - 1);
+        runPatternDetection();
 
         // MA — simple running average from last N
         if (ma7Series && cLen >= 7) {
@@ -1845,6 +2058,13 @@
 <div class="chart-wrapper" class:tv-like={isTvLikePreset}>
   <div class="chart-bar">
     <div class="bar-top top-meta">
+      <div class="pair-summary">
+        <span class="pair-name">{pairBaseLabel}/{pairQuoteLabel}</span>
+        <span class="pair-last">${formatPrice(livePrice)}</span>
+        <span class="pair-move" class:up={priceChange24h >= 0} class:down={priceChange24h < 0}>
+          {priceChange24h >= 0 ? '+' : '-'}{Math.abs(priceChange24h).toFixed(2)}%
+        </span>
+      </div>
       <div class="market-stats">
         <div class="mstat">
           <span class="mstat-k">24H LOW</span>
@@ -1928,18 +2148,19 @@
               SCAN
             </button>
           {/if}
+          <button
+            class="scan-btn pattern-trigger"
+            on:click={forcePatternScan}
+            title="Re-scan head and shoulders / falling wedge patterns"
+          >
+            PATTERN
+          </button>
 
           {#if advancedMode && indicatorStripState === 'hidden' && !isTvLikePreset}
             <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>지표 ON</button>
           {/if}
         {/if}
 
-        <div class="price-info compact">
-          <span class="cprc">${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          <span class="pchg" class:up={priceChange24h >= 0} class:down={priceChange24h < 0}>
-            {priceChange24h >= 0 ? '▲' : '▼'}{Math.abs(priceChange24h).toFixed(2)}%
-          </span>
-        </div>
       </div>
     </div>
 
@@ -2090,8 +2311,59 @@
       <div class="chart-notice">{chartNotice}</div>
     {/if}
 
+    {#if chartMode === 'agent' && detectedPatterns.length > 0}
+      <div class="pattern-panel">
+        <div class="pattern-head">
+          <span>PATTERN LAB</span>
+          <button
+            class="pattern-collapse"
+            type="button"
+            on:click={() => patternPanelCollapsed = !patternPanelCollapsed}
+          >
+            {patternPanelCollapsed ? '+' : '−'}
+          </button>
+        </div>
+        {#if !patternPanelCollapsed}
+          <div class="pattern-tabs">
+            {#each detectedPatterns.slice(0, 3) as pat (pat.id)}
+              <button
+                type="button"
+                class="pattern-tab"
+                class:active={selectedPattern?.id === pat.id}
+                class:bull={pat.direction === 'BULLISH'}
+                class:bear={pat.direction === 'BEARISH'}
+                on:click={() => selectedPatternId = pat.id}
+              >
+                {pat.shortName} {(pat.confidence * 100).toFixed(0)}%
+              </button>
+            {/each}
+          </div>
+          {#if selectedPattern}
+            <div class="pattern-card" class:bull={selectedPattern.direction === 'BULLISH'} class:bear={selectedPattern.direction === 'BEARISH'}>
+              <div class="pattern-name">{patternKindLabel(selectedPattern.kind)}</div>
+              <div class="pattern-meta">
+                <span>{patternStatusLabel(selectedPattern.status)}</span>
+                <span>{patternDirectionLabel(selectedPattern.direction)}</span>
+                <span>신뢰도 {(selectedPattern.confidence * 100).toFixed(0)}%</span>
+              </div>
+              <div class="pattern-range">
+                {formatPatternTime(selectedPattern.startTime)} → {formatPatternTime(selectedPattern.endTime)}
+              </div>
+              {#if selectedPattern.guideLines.length > 0}
+                <div class="pattern-guides">
+                  {#each selectedPattern.guideLines.slice(0, 3) as guide (guide.id)}
+                    <span>{guide.label}: {formatPrice(guide.to.price)}</span>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+        {/if}
+      </div>
+    {/if}
+
     {#if showPosition && posEntry !== null && posTp !== null && posSl !== null}
-      <div class="pos-overlay">
+      <div class="pos-overlay" class:with-pattern={chartMode === 'agent' && detectedPatterns.length > 0}>
         <div class="pos-badge {posDir.toLowerCase()}">
           {posDir === 'LONG' ? '🚀 LONG' : posDir === 'SHORT' ? '💀 SHORT' : '— NEUTRAL'}
         </div>
@@ -2246,27 +2518,70 @@
 <style>
   .chart-wrapper { display: flex; flex-direction: column; height: 100%; background: #0a0a1a; overflow: hidden; }
   .chart-bar {
-    padding: 3px 8px 3px;
-    border-bottom: 3px solid #000;
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     background: linear-gradient(90deg, #1a1a3a, #0a0a2a);
     font-size: 10px;
     font-family: var(--fm);
     flex-shrink: 0;
   }
-  .bar-top {
-    display: none;
-  }
   .bar-top.top-meta {
+    display: flex;
     align-items: center;
+    gap: 10px;
     min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 1px;
   }
+  .bar-top.top-meta::-webkit-scrollbar {
+    height: 3px;
+  }
+  .bar-top.top-meta::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+  }
+  .pair-summary {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: max-content;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .pair-name {
+    color: rgba(232, 237, 247, 0.92);
+    font-family: var(--fd);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: .3px;
+  }
+  .pair-last {
+    color: #f5f8ff;
+    font-family: var(--fd);
+    font-size: 19px;
+    font-weight: 900;
+    letter-spacing: .35px;
+    line-height: 1;
+  }
+  .pair-move {
+    font-family: var(--fd);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .2px;
+  }
+  .pair-move.up { color: #00ff88; }
+  .pair-move.down { color: #ff2d55; }
+  .pair-move:not(.up):not(.down) { color: rgba(190, 198, 214, 0.9); }
   .bar-left {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     min-width: max-content;
     flex: 0 0 auto;
   }
@@ -2277,7 +2592,7 @@
   .market-stats {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
     min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
@@ -2292,43 +2607,43 @@
   }
   .mstat {
     display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 24px;
-    padding: 0 8px;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,.12);
-    background: rgba(255,255,255,.04);
+    align-items: baseline;
+    gap: 5px;
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
     white-space: nowrap;
   }
   .mstat.wide {
-    min-width: 160px;
-    justify-content: space-between;
+    min-width: auto;
   }
   .mstat-k {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
-    letter-spacing: .5px;
-    color: rgba(255,255,255,.58);
+    letter-spacing: .55px;
+    color: rgba(187, 198, 216, 0.66);
   }
   .mstat-v {
     font-family: var(--fd);
-    font-size: 10px;
+    font-size: 13px;
     font-weight: 800;
-    letter-spacing: .35px;
+    letter-spacing: .2px;
     color: rgba(255,255,255,.92);
   }
   .bar-tools {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
+    padding-top: 2px;
     padding-bottom: 1px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
   .bar-tools::-webkit-scrollbar { height: 3px; }
   .bar-tools::-webkit-scrollbar-thumb {
@@ -2357,7 +2672,7 @@
     background: rgba(255, 255, 255, 0.18);
     border-radius: 999px;
   }
-  .live-indicator { font-size: 9px; font-weight: 700; color: var(--grn); display: flex; align-items: center; gap: 3px; letter-spacing: .9px; }
+  .live-indicator { font-size: 10px; font-weight: 800; color: var(--grn); display: flex; align-items: center; gap: 4px; letter-spacing: .75px; }
   .live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--grn); animation: pulse .8s infinite; }
   .live-dot.err { background: #ff2d55; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
@@ -2386,50 +2701,51 @@
   .ma-vals { display: flex; gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
   .ma-tag { font-size: 8px; font-family: var(--fm); font-weight: 700; letter-spacing: .3px; opacity: 1; }
 
-  .price-info {
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-    margin-left: 5px;
-    padding-left: 5px;
-    border-left: 1px solid rgba(255,255,255,.12);
-    white-space: nowrap;
-    flex: 0 0 auto;
-  }
-  .price-info.compact {
-    margin-left: 8px;
-  }
-  .cprc { font-size: 15px; font-weight: 700; color: #fff; font-family: var(--fd); line-height: 1; }
-  .pchg { font-size: 11px; font-weight: 700; }
-  .pchg.up { color: #00ff88; }
-  .pchg.down { color: #ff2d55; }
-
   @media (max-width: 1280px) {
-    .cprc { font-size: 14px; }
-    .mstat-v { font-size: 9px; }
-    .mstat.wide { min-width: 146px; }
-  }
-
-  @media (min-width: 1900px) {
-    .bar-top.top-meta {
-      display: flex;
-    }
+    .pair-last { font-size: 17px; }
+    .mstat-v { font-size: 12px; }
   }
 
   @media (max-width: 768px) {
     .chart-bar {
-      padding: 4px 6px;
-      gap: 3px;
-    }
-    .bar-left {
+      padding: 5px 7px;
       gap: 4px;
     }
-    .live-indicator {
+    .bar-top.top-meta {
+      gap: 8px;
+    }
+    .pair-summary {
+      gap: 6px;
+    }
+    .pair-name {
+      font-size: 12px;
+      letter-spacing: .25px;
+    }
+    .pair-last {
+      font-size: 15px;
+    }
+    .pair-move {
+      font-size: 11px;
+    }
+    .market-stats {
+      gap: 8px;
+    }
+    .mstat-k {
       font-size: 8px;
-      letter-spacing: .75px;
+      letter-spacing: .45px;
+    }
+    .mstat-v {
+      font-size: 11px;
+    }
+    .bar-left {
+      gap: 5px;
+    }
+    .live-indicator {
+      font-size: 10px;
+      letter-spacing: .6px;
     }
     .pair-slot {
-      min-width: 124px;
+      min-width: 138px;
       flex: 0 0 auto;
     }
     .bar-tools {
@@ -2440,46 +2756,32 @@
       flex: 0 0 auto;
     }
     .tfbtn {
-      height: 20px;
-      padding: 0 6px;
-      font-size: 8px;
-      letter-spacing: .4px;
+      height: 24px;
+      padding: 0 8px;
+      font-size: 10px;
+      letter-spacing: .32px;
       white-space: nowrap;
     }
     .bar-controls {
       gap: 3px;
     }
     .mode-toggle .mode-btn {
-      min-height: 20px;
-      padding: 0 6px;
-      font-size: 8px;
-      letter-spacing: .45px;
+      min-height: 24px;
+      padding: 0 8px;
+      font-size: 10px;
+      letter-spacing: .3px;
     }
     .draw-tools .draw-btn {
-      width: 20px;
-      height: 20px;
-      font-size: 8px;
+      width: 24px;
+      height: 24px;
+      font-size: 10px;
     }
     .scan-btn {
-      min-height: 20px;
-      height: 20px;
-      padding: 0 6px;
-      font-size: 8px;
-      letter-spacing: .4px;
-    }
-    .price-info {
-      margin-left: 5px;
-      width: auto;
-      border-left: 1px solid rgba(255,255,255,.12);
-      padding-left: 5px;
-      gap: 4px;
-    }
-    .cprc {
-      font-size: 11px;
-      letter-spacing: .2px;
-    }
-    .pchg {
-      font-size: 8px;
+      min-height: 24px;
+      height: 24px;
+      padding: 0 8px;
+      font-size: 10px;
+      letter-spacing: .28px;
     }
     .ma-vals {
       gap: 6px;
@@ -2580,6 +2882,15 @@
     .scale-btn.wide { min-width: 40px; }
     .strip-restore-btn { padding: 2px 6px; font-size: 8px; }
     .chart-notice { bottom: 36px; }
+    .pattern-panel {
+      top: 6px;
+      right: 6px;
+      width: min(240px, calc(100% - 12px));
+      padding: 6px;
+      gap: 5px;
+    }
+    .pattern-name { font-size: 9px; }
+    .pos-overlay.with-pattern { top: 104px; }
     .drag-indicator { bottom: 30px; }
     .trade-plan-overlay {
       left: 8px;
@@ -2657,6 +2968,16 @@
     border-color: rgba(79, 209, 142, 0.82);
     background: linear-gradient(135deg, rgba(39, 195, 145, 0.5), rgba(39, 195, 145, 0.28));
     color: #f6fff9;
+  }
+  .scan-btn.pattern-trigger {
+    border-color: rgba(255, 140, 160, 0.45);
+    background: linear-gradient(135deg, rgba(255, 120, 144, 0.28), rgba(255, 120, 144, 0.12));
+    color: #ffdbe2;
+  }
+  .scan-btn.pattern-trigger:hover {
+    border-color: rgba(255, 140, 160, 0.7);
+    background: linear-gradient(135deg, rgba(255, 120, 144, 0.4), rgba(255, 120, 144, 0.2));
+    color: #fff2f5;
   }
 
   .draw-tools { display: flex; gap: 2px; margin-left: 0; padding-left: 0; border-left: none; }
@@ -2845,6 +3166,117 @@
     pointer-events: none;
     white-space: nowrap;
   }
+  .pattern-panel {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 13;
+    width: min(280px, calc(100% - 16px));
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(8, 13, 22, 0.88);
+    backdrop-filter: blur(4px);
+    box-shadow: 0 10px 28px rgba(0,0,0,.36);
+    padding: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .pattern-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--fd);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .9px;
+    color: rgba(255,255,255,.88);
+  }
+  .pattern-collapse {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.08);
+    color: rgba(255,255,255,.9);
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .pattern-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .pattern-tab {
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.06);
+    color: rgba(255,255,255,.86);
+    padding: 2px 7px;
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .35px;
+    cursor: pointer;
+  }
+  .pattern-tab.active {
+    box-shadow: 0 0 0 1px rgba(255,255,255,.2) inset;
+  }
+  .pattern-tab.bull.active {
+    border-color: rgba(111, 242, 171, .65);
+    color: #9af5c6;
+    background: rgba(78, 199, 132, .22);
+  }
+  .pattern-tab.bear.active {
+    border-color: rgba(255, 140, 160, .65);
+    color: #ffd2db;
+    background: rgba(234, 94, 124, .24);
+  }
+  .pattern-card {
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.15);
+    background: rgba(255,255,255,.04);
+    padding: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .pattern-card.bull {
+    border-color: rgba(111, 242, 171, .38);
+    background: rgba(111, 242, 171, .1);
+  }
+  .pattern-card.bear {
+    border-color: rgba(255, 140, 160, .38);
+    background: rgba(255, 140, 160, .1);
+  }
+  .pattern-name {
+    font-family: var(--fd);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .5px;
+    color: #f6f9ff;
+  }
+  .pattern-meta {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.8);
+  }
+  .pattern-range {
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.66);
+  }
+  .pattern-guides {
+    display: grid;
+    gap: 3px;
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.86);
+  }
 
   .tv-container { flex: 1; position: relative; overflow: hidden; background: #0a0a1a; }
   .tv-container :global(iframe) { width: 100% !important; height: 100% !important; border: none !important; }
@@ -2925,6 +3357,7 @@
   .error-badge { position: absolute; top: 6px; left: 6px; padding: 3px 8px; border-radius: 4px; background: rgba(255,45,85,.2); border: 1px solid rgba(255,45,85,.4); color: #ff2d55; font-size: 8px; font-family: var(--fm); font-weight: 700; z-index: 5; }
 
   .pos-overlay { position: absolute; top: 6px; right: 6px; z-index: 12; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+  .pos-overlay.with-pattern { top: 124px; }
   .pos-badge { padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; border: 2px solid; }
   .pos-badge.long { background: rgba(0,255,136,.2); border-color: #00ff88; color: #00ff88; }
   .pos-badge.short { background: rgba(255,45,85,.2); border-color: #ff2d55; color: #ff2d55; }
@@ -3237,6 +3670,17 @@
     border-color: rgba(38, 166, 154, 0.8);
     background: rgba(38, 166, 154, 0.33);
     color: #f2ffff;
+  }
+  .chart-wrapper.tv-like .scan-btn.pattern-btn {
+    border-color: rgba(38, 166, 154, 0.58);
+    background: rgba(38, 166, 154, 0.24);
+    color: #d8fffb;
+  }
+  .chart-wrapper.tv-like .scan-btn.pattern-btn:hover {
+    border-color: rgba(38, 166, 154, 0.8);
+    background: rgba(38, 166, 154, 0.34);
+    color: #f1ffff;
+    box-shadow: none;
   }
   .chart-wrapper.tv-like .draw-btn.active {
     border-color: rgba(79, 140, 255, 0.8);

@@ -4,7 +4,8 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ## Entry Format
 
-- ID: `W-YYYYMMDD-###`
+- ID: `W-YYYYMMDD-HHMM-<repo>-<agent>` (예: `W-20260225-0035-passport-codex`)
+- Unified mirror ID (optional): main 머지 시 unified 로그에 기록한 대응 항목 ID
 - Start (KST):
 - End (KST):
 - Branch:
@@ -988,4 +989,78 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Commit hash: PENDING (바로 다음 로컬 커밋)
 - Merge hash: N/A
 - Push status: SKIPPED (사용자 지시)
+- Status: DONE
+
+### W-20260225-0035-passport-codex
+
+- Start (KST): 2026-02-25 00:35
+- Agent: Codex (GPT-5)
+- Branch: `codex/passport-uiux-v2`
+- Scope (planned):
+  - AGENTS 규칙을 로컬 로그 우선 + 통합 시점 중앙 요약 방식으로 개편
+  - 로그 ID 규칙을 시간+repo+agent 조합으로 고유화
+  - 문서 규칙 정합성(AGENTS/docs README/watch log header) 맞춤
+- Overlap check (before work):
+  - `## codex/passport-uiux-v2...origin/codex/passport-uiux-v2` (clean)
+  - unified 로그 저장소는 기존 변경 존재(`M docs/AGENT_WATCH_LOG.md`, 기존 untracked 1건)
+- Status: IN_PROGRESS
+
+### W-20260225-0035-passport-codex (finish addendum)
+
+- End (KST): 2026-02-25 00:39
+- Agent: Codex (GPT-5)
+- Branch: `codex/passport-uiux-v2`
+- Changes (actual):
+  - `/Users/ej/Downloads/maxidoge-clones/frontend-passport/AGENTS.md`
+    - 개발 로그는 로컬 기록, unified 로그는 main 머지 시점 통합 요약만 기록하도록 규칙 분리
+    - 작업 ID 포맷을 `W-YYYYMMDD-HHMM-<repo>-<agent>`로 고정
+  - `/Users/ej/Downloads/maxidoge-clones/frontend-passport/docs/README.md`
+    - 리다이렉트 안내에 로컬/통합 로그 역할 분리 반영
+  - `/Users/ej/Downloads/maxidoge-clones/frontend-passport/docs/AGENT_WATCH_LOG.md`
+    - Entry Format에 고유 ID 규칙 + optional unified mirror ID 필드 추가
+- Diff vs plan:
+  - 없음
+- Validation:
+  - `npm run check`: PASS (0 errors, 0 warnings)
+  - `npm run build`: PASS
+- Commit hash: PENDING (this task atomic commit)
+- Merge hash: N/A
+- Push status: PENDING
+- Status: DONE
+
+### W-20260225-0045-passport-codex
+
+- Start (KST): 2026-02-25 00:45
+- Agent: Codex (GPT-5)
+- Branch: `codex/passport-uiux-v2`
+- Scope (planned):
+  - `codex/passport-uiux-v2`를 `main`에 머지
+  - feature/main 양쪽에서 `npm run check` + `npm run build` 재검증
+  - `origin/main` 푸시 및 통합 로그 요약 반영
+- Overlap check (before work):
+  - `## codex/passport-uiux-v2...origin/codex/passport-uiux-v2` (clean)
+  - single worktree(`/Users/ej/Downloads/maxidoge-clones/frontend-passport`) 확인
+- Status: IN_PROGRESS
+
+### W-20260225-0045-passport-codex (finish addendum)
+
+- End (KST): 2026-02-25 00:48
+- Agent: Codex (GPT-5)
+- Branch / merge target:
+  - source: `codex/passport-uiux-v2` (`4e4973a`)
+  - target: `main`
+- Changes (actual):
+  - `main` 로컬 브랜치 생성(`origin/main` 추적)
+  - `main`에서 `codex/passport-uiux-v2` 머지 실행(`--no-ff`)
+  - 머지 커밋 생성: `f8318b2`
+- Diff vs plan:
+  - 없음
+- Validation:
+  - feature(`codex/passport-uiux-v2`) `npm run check`: PASS
+  - feature(`codex/passport-uiux-v2`) `npm run build`: PASS
+  - main(`merge result`) `npm run check`: PASS
+  - main(`merge result`) `npm run build`: PASS
+- Commit / Push:
+  - merge commit: `f8318b2`
+  - push target: `origin/main` (pending in this task)
 - Status: DONE
