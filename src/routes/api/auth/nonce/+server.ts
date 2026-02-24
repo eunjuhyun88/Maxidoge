@@ -3,16 +3,18 @@ import type { RequestHandler } from './$types';
 import { isValidEthAddress, issueWalletNonce, normalizeEthAddress } from '$lib/server/walletAuthRepository';
 import { authNonceLimiter } from '$lib/server/rateLimit';
 import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
-
-function getClientIp(request: Request): string | null {
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  if (!forwardedFor) return null;
-  const ip = forwardedFor.split(',')[0]?.trim() || null;
-  return ip || null;
-}
+import { evaluateIpReputation } from '$lib/server/ipReputation';
+import { isBodyTooLarge, readTurnstileToken } from '$lib/server/requestGuards';
+import { verifyTurnstile } from '$lib/server/turnstile';
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-  const ip = getClientAddress();
+  const fallbackIp = getClientAddress();
+  const reputation = evaluateIpReputation(request, fallbackIp);
+  if (!reputation.allowed) {
+    return json({ error: 'Request blocked by security policy' }, { status: 403 });
+  }
+
+  const ip = reputation.clientIp || fallbackIp || 'unknown';
   if (!authNonceLimiter.check(ip)) {
     return json({ error: 'Too many nonce requests. Please wait.' }, { status: 429 });
   }
@@ -25,9 +27,20 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   if (!distributedAllowed) {
     return json({ error: 'Too many nonce requests. Please wait.' }, { status: 429 });
   }
+  if (isBodyTooLarge(request, 8 * 1024)) {
+    return json({ error: 'Request body too large' }, { status: 413 });
+  }
 
   try {
     const body = await request.json();
+    const turnstile = await verifyTurnstile({
+      token: readTurnstileToken(body),
+      remoteIp: reputation.clientIp || fallbackIp || null,
+    });
+    if (!turnstile.ok) {
+      return json({ error: 'Bot verification failed' }, { status: 403 });
+    }
+
     const addressRaw = typeof body?.address === 'string' ? body.address.trim() : '';
     const provider = typeof body?.provider === 'string' ? body.provider.trim() : null;
     const chainRaw = typeof body?.chain === 'string' ? body.chain.trim().toUpperCase() : '';
@@ -45,7 +58,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
       address: normalizeEthAddress(addressRaw),
       provider,
       userAgent: request.headers.get('user-agent'),
-      issuedIp: getClientIp(request),
+      issuedIp: reputation.clientIp || fallbackIp || null,
       ttlMinutes: 10,
     });
 
