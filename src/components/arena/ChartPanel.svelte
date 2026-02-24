@@ -52,6 +52,7 @@
   let volumePaneIndex: number | null = null;
   let rsiPaneIndex: number | null = null;
   let klineCache: BinanceKline[] = [];
+  let _klineIndexByTime = new Map<number, number>();
   let _isLoadingMore = false;
   let _noMoreHistory = false; // true when Binance returns 0 older candles
   let _currentSymbol = '';
@@ -396,6 +397,30 @@
   function toChartY(price: number): number | null {
     if (!series) return null;
     try { return series.priceToCoordinate(price); } catch { return null; }
+  }
+
+  function rebuildKlineIndexMap() {
+    const next = new Map<number, number>();
+    for (let i = 0; i < klineCache.length; i += 1) {
+      next.set(klineCache[i].time, i);
+    }
+    _klineIndexByTime = next;
+  }
+
+  function toOverlayX(time: number): number | null {
+    if (!chart) return null;
+    try {
+      const direct = chart.timeScale().timeToCoordinate(time);
+      if (Number.isFinite(direct)) return direct;
+    } catch {}
+
+    const idx = _klineIndexByTime.get(time);
+    if (idx === undefined) return null;
+    try {
+      const logical = chart.timeScale().logicalToCoordinate(idx);
+      if (Number.isFinite(logical)) return logical;
+    } catch {}
+    return null;
   }
 
   function clampRoundPrice(v: number) {
@@ -1126,7 +1151,6 @@
     const ctx = drawingCanvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-    drawPatternOverlays(ctx);
     for (const d of drawings) {
       ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.5;
       if (d.type === 'hline') { ctx.setLineDash([6, 3]); ctx.moveTo(0, d.points[0].y); ctx.lineTo(drawingCanvas.width, d.points[0].y); }
@@ -1159,19 +1183,16 @@
       const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
       if (preview) drawTradePreview(ctx, preview);
     }
+    drawPatternOverlays(ctx);
   }
 
   function toOverlayPoint(time: number, price: number): { x: number; y: number } | null {
     if (!chart || !drawingCanvas) return null;
     if (!Number.isFinite(time) || !Number.isFinite(price)) return null;
-    try {
-      const x = chart.timeScale().timeToCoordinate(time as any);
-      const y = toChartY(price);
-      if (!Number.isFinite(x) || y === null || !Number.isFinite(y)) return null;
-      return { x, y };
-    } catch {
-      return null;
-    }
+    const x = toOverlayX(time);
+    const y = toChartY(price);
+    if (x == null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
   }
 
   function drawPatternTag(
@@ -1298,7 +1319,7 @@
         try {
           const lineSeries = chart.addSeries(lwcModule.LineSeries, {
             color: guide.color,
-            lineWidth: pattern.status === 'CONFIRMED' ? 2 : 1.5,
+            lineWidth: pattern.status === 'CONFIRMED' ? 2.5 : 2,
             lineStyle: guide.style === 'dashed' ? 2 : 0,
             priceLineVisible: false,
             lastValueVisible: false,
@@ -1351,7 +1372,10 @@
     const signature = next
       .map((p) => `${p.id}:${p.status}:${Math.round(p.confidence * 100)}`)
       .join('|');
-    if (signature === _patternSignature) return;
+    if (signature === _patternSignature) {
+      renderDrawings();
+      return;
+    }
 
     _patternSignature = signature;
     detectedPatterns = next;
@@ -1362,6 +1386,11 @@
   }
 
   function forcePatternScan() {
+    if (!chart || !series || klineCache.length < 30) {
+      pushChartNotice('패턴 스캔용 데이터가 부족합니다');
+      return;
+    }
+    _patternSignature = '';
     runPatternDetection();
     if (detectedPatterns.length === 0) {
       pushChartNotice('패턴 미감지 · 조건 미충족');
@@ -1631,6 +1660,7 @@
       chart.panes()[rsiIdx].setStretchFactor(0.12);
       applyTimeScale();
       applyIndicatorVisibility();
+      resizeDrawingCanvas();
 
       await loadKlines();
 
@@ -1660,6 +1690,7 @@
         else if (k === 'f') fitChartRange();
         else if (k === 'h') setDrawingMode('hline');
         else if (k === 't') setDrawingMode('trendline');
+        else if (k === 'p') forcePatternScan();
         else if (enableTradeLineEntry && k === 'l') setDrawingMode('longentry');
         else if (enableTradeLineEntry && k === 's') setDrawingMode('shortentry');
       };
@@ -1696,6 +1727,7 @@
 
       // Prepend to cache
       klineCache = [...unique, ...klineCache];
+      rebuildKlineIndexMap();
 
       // Re-set all series data
       series.setData(klineCache.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close })));
@@ -1737,6 +1769,7 @@
     detectedPatterns = [];
     patternMarkers = [];
     _patternSignature = '';
+    _klineIndexByTime = new Map<number, number>();
     applyCombinedMarkers();
     clearPatternLineSeries();
     isLoading = true; error = '';
@@ -1761,6 +1794,7 @@
 
       // ═══ Indicators ═══
       klineCache = klines;
+      rebuildKlineIndexMap();
       const closes = klines.map(k => ({ time: k.time, close: k.close }));
 
       if (ma7Series) ma7Series.setData(computeSMA(closes, 7));
@@ -1832,6 +1866,7 @@
         if (isUpdate) klineCache[klineCache.length - 1] = kline;
         else klineCache.push(kline);
         const cLen = klineCache.length;
+        _klineIndexByTime.set(kline.time, cLen - 1);
         runPatternDetection();
 
         // MA — simple running average from last N
@@ -3635,6 +3670,17 @@
     border-color: rgba(38, 166, 154, 0.8);
     background: rgba(38, 166, 154, 0.33);
     color: #f2ffff;
+  }
+  .chart-wrapper.tv-like .scan-btn.pattern-btn {
+    border-color: rgba(38, 166, 154, 0.58);
+    background: rgba(38, 166, 154, 0.24);
+    color: #d8fffb;
+  }
+  .chart-wrapper.tv-like .scan-btn.pattern-btn:hover {
+    border-color: rgba(38, 166, 154, 0.8);
+    background: rgba(38, 166, 154, 0.34);
+    color: #f1ffff;
+    box-shadow: none;
   }
   .chart-wrapper.tv-like .draw-btn.active {
     border-color: rgba(79, 140, 255, 0.8);
