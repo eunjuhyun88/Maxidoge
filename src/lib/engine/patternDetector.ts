@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import type { BinanceKline } from './types';
+import { PATTERN_DETECTOR_CONFIG } from './patternDetectorConfig';
 
 export type ChartPatternKind = 'head_and_shoulders' | 'falling_wedge';
 export type ChartPatternDirection = 'BULLISH' | 'BEARISH';
@@ -44,26 +45,37 @@ type Pivot = {
   kind: 'high' | 'low';
 };
 
-const HS_LOOKBACK_BARS = 220;
-const HS_MIN_BAR_GAP = 3;
-const HS_SIDE_SEARCH = 3;
-const HS_MAX_SHOULDER_DIFF = 0.06;
-const HS_MIN_HEAD_LIFT = 0.009;
-const HS_MIN_VALLEY_DEPTH = 0.01;
-const HS_BREAK_BUFFER = 0.002;
-const HS_BREAK_MAX_BARS = 48;
+const HS_LOOKBACK_BARS = PATTERN_DETECTOR_CONFIG.headAndShoulders.lookbackBars;
+const HS_MIN_BAR_GAP = PATTERN_DETECTOR_CONFIG.headAndShoulders.minBarGap;
+const HS_SIDE_SEARCH = PATTERN_DETECTOR_CONFIG.headAndShoulders.sideSearch;
+const HS_MAX_SHOULDER_DIFF = PATTERN_DETECTOR_CONFIG.headAndShoulders.maxShoulderDiff;
+const HS_MIN_HEAD_LIFT = PATTERN_DETECTOR_CONFIG.headAndShoulders.minHeadLift;
+const HS_MIN_VALLEY_DEPTH = PATTERN_DETECTOR_CONFIG.headAndShoulders.minValleyDepth;
+const HS_BREAK_BUFFER = PATTERN_DETECTOR_CONFIG.headAndShoulders.breakBuffer;
+const HS_BREAK_MAX_BARS = PATTERN_DETECTOR_CONFIG.headAndShoulders.breakMaxBars;
 
-const WEDGE_WINDOWS = [36, 48, 60];
-const WEDGE_MIN_POINTS = 3;
-const WEDGE_MIN_CONTRACTION = 0.3;
-const WEDGE_SLOPE_RATIO = 1.18;
-const WEDGE_BREAK_BUFFER = 0.0015;
-const WEDGE_MIN_LINE_FIT = 0.5;
-const WEDGE_MIN_UPPER_DROP = 0.02;
-const WEDGE_MIN_LOWER_DROP = 0.01;
-const WEDGE_MIN_BAND_COVERAGE = 0.64;
-const WEDGE_MIN_APEX_AHEAD = 0;
-const WEDGE_MAX_APEX_AHEAD = 1.35;
+const WEDGE_WINDOWS = PATTERN_DETECTOR_CONFIG.fallingWedge.windows;
+const WEDGE_MIN_POINTS = PATTERN_DETECTOR_CONFIG.fallingWedge.minPoints;
+const WEDGE_MIN_CONTRACTION = PATTERN_DETECTOR_CONFIG.fallingWedge.minContraction;
+const WEDGE_SLOPE_RATIO = PATTERN_DETECTOR_CONFIG.fallingWedge.slopeRatio;
+const WEDGE_BREAK_BUFFER = PATTERN_DETECTOR_CONFIG.fallingWedge.breakBuffer;
+const WEDGE_MIN_LINE_FIT = PATTERN_DETECTOR_CONFIG.fallingWedge.minLineFit;
+const WEDGE_MIN_UPPER_DROP = PATTERN_DETECTOR_CONFIG.fallingWedge.minUpperDrop;
+const WEDGE_MIN_LOWER_DROP = PATTERN_DETECTOR_CONFIG.fallingWedge.minLowerDrop;
+const WEDGE_MIN_BAND_COVERAGE = PATTERN_DETECTOR_CONFIG.fallingWedge.minBandCoverage;
+const WEDGE_MIN_APEX_AHEAD = PATTERN_DETECTOR_CONFIG.fallingWedge.minApexAhead;
+const WEDGE_MAX_APEX_AHEAD = PATTERN_DETECTOR_CONFIG.fallingWedge.maxApexAhead;
+
+const WEDGE_FB_MIN_SLOPE_RATIO = PATTERN_DETECTOR_CONFIG.fallback.fallingWedge.minSlopeRatio;
+const WEDGE_FB_MIN_LINE_FIT = PATTERN_DETECTOR_CONFIG.fallback.fallingWedge.minLineFit;
+const WEDGE_FB_MIN_CONTRACTION = PATTERN_DETECTOR_CONFIG.fallback.fallingWedge.minContraction;
+const WEDGE_FB_MIN_UPPER_DROP = PATTERN_DETECTOR_CONFIG.fallback.fallingWedge.minUpperDrop;
+const WEDGE_FB_MIN_LOWER_DROP = PATTERN_DETECTOR_CONFIG.fallback.fallingWedge.minLowerDrop;
+const WEDGE_FB_MIN_BAND_COVERAGE = PATTERN_DETECTOR_CONFIG.fallback.fallingWedge.minBandCoverage;
+const WEDGE_FB_MIN_APEX_AHEAD = PATTERN_DETECTOR_CONFIG.fallback.fallingWedge.minApexAhead;
+const WEDGE_FB_MAX_APEX_AHEAD = PATTERN_DETECTOR_CONFIG.fallback.fallingWedge.maxApexAhead;
+const WEDGE_FB_CONFIRMED_BREAK_FACTOR = PATTERN_DETECTOR_CONFIG.fallback.fallingWedge.confirmedBreakBufferFactor;
+const WEDGE_FB_MIN_FORMING_CONFIDENCE = PATTERN_DETECTOR_CONFIG.fallback.fallingWedge.minFormingConfidence;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -600,9 +612,9 @@ function detectFallingWedgeFallback(klines: BinanceKline[]): ChartPatternDetecti
   const upReg = linearRegression(highs);
   const lowReg = linearRegression(lows);
   if (!(upReg.slope < 0 && lowReg.slope < 0)) return null;
-  if (!(Math.abs(upReg.slope) > Math.abs(lowReg.slope) * 1.2)) return null;
+  if (!(Math.abs(upReg.slope) > Math.abs(lowReg.slope) * WEDGE_FB_MIN_SLOPE_RATIO)) return null;
   const lineFit = clamp((upReg.r2 + lowReg.r2) / 2, 0, 1);
-  if (lineFit < 0.62) return null;
+  if (lineFit < WEDGE_FB_MIN_LINE_FIT) return null;
 
   const upperAt = (idx: number) => upReg.slope * idx + upReg.intercept;
   const lowerAt = (idx: number) => lowReg.slope * idx + lowReg.intercept;
@@ -613,33 +625,33 @@ function detectFallingWedgeFallback(klines: BinanceKline[]): ChartPatternDetecti
   if (widthStart <= 0 || widthEnd <= 0) return null;
 
   const contraction = 1 - widthEnd / widthStart;
-  if (contraction < 0.24) return null;
+  if (contraction < WEDGE_FB_MIN_CONTRACTION) return null;
   const upperDrop = relativeDrop(upperAt(start), upperAt(end));
   const lowerDrop = relativeDrop(lowerAt(start), lowerAt(end));
-  if (upperDrop < 0.03 || lowerDrop < 0.015) return null;
+  if (upperDrop < WEDGE_FB_MIN_UPPER_DROP || lowerDrop < WEDGE_FB_MIN_LOWER_DROP) return null;
   const bandCoverage = computeBandCoverage(klines, start, end, upperAt, lowerAt);
-  if (bandCoverage < 0.72) return null;
+  if (bandCoverage < WEDGE_FB_MIN_BAND_COVERAGE) return null;
   const apexX = computeApexPosition(upReg, lowReg);
   if (apexX == null) return null;
   const apexAhead = (apexX - end) / Math.max(span, 1);
-  if (apexAhead < 0 || apexAhead > 1.1) return null;
+  if (apexAhead < WEDGE_FB_MIN_APEX_AHEAD || apexAhead > WEDGE_FB_MAX_APEX_AHEAD) return null;
 
   const upperNow = upperAt(end);
   if (!isFiniteNum(upperNow) || upperNow <= 0) return null;
-  const isConfirmed = marker.close > upperNow * (1 + WEDGE_BREAK_BUFFER * 0.7);
+  const isConfirmed = marker.close > upperNow * (1 + WEDGE_BREAK_BUFFER * WEDGE_FB_CONFIRMED_BREAK_FACTOR);
 
   const slopeGap = clamp((Math.abs(upReg.slope) / Math.max(Math.abs(lowReg.slope), 1e-9) - 1) / 0.55, 0, 1);
-  const coverageScore = clamp((bandCoverage - 0.72) / 0.24, 0, 1);
+  const coverageScore = clamp((bandCoverage - WEDGE_FB_MIN_BAND_COVERAGE) / WEDGE_FB_MIN_CONTRACTION, 0, 1);
   const confidence = clamp(
     0.28
       + lineFit * 0.28
-      + clamp((contraction - 0.24) / 0.36, 0, 1) * 0.2
+      + clamp((contraction - WEDGE_FB_MIN_CONTRACTION) / 0.36, 0, 1) * 0.2
       + slopeGap * 0.14
       + coverageScore * 0.1,
     0.3,
     0.9
   );
-  if (!isConfirmed && confidence < 0.64) return null;
+  if (!isConfirmed && confidence < WEDGE_FB_MIN_FORMING_CONFIDENCE) return null;
 
   return {
     id: `fw-fb-${klines[start].time}-${marker.time}`,

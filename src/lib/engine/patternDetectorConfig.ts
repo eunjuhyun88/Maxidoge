@@ -1,0 +1,40 @@
+export const PATTERN_DETECTOR_CONFIG = {
+  headAndShoulders: {
+    lookbackBars: 220,
+    minBarGap: 3,
+    sideSearch: 3,
+    maxShoulderDiff: 0.06,
+    minHeadLift: 0.009,
+    minValleyDepth: 0.01,
+    breakBuffer: 0.002,
+    breakMaxBars: 48,
+  },
+  fallingWedge: {
+    windows: [36, 48, 60],
+    minPoints: 3,
+    minContraction: 0.3,
+    slopeRatio: 1.18,
+    breakBuffer: 0.0015,
+    minLineFit: 0.5,
+    minUpperDrop: 0.02,
+    minLowerDrop: 0.01,
+    minBandCoverage: 0.64,
+    minApexAhead: 0,
+    maxApexAhead: 1.35,
+  },
+  fallback: {
+    fallingWedge: {
+      minSlopeRatio: 1.2,
+      minLineFit: 0.62,
+      minContraction: 0.24,
+      minUpperDrop: 0.03,
+      minLowerDrop: 0.015,
+      minBandCoverage: 0.72,
+      minApexAhead: 0,
+      maxApexAhead: 1.1,
+      confirmedBreakBufferFactor: 0.7,
+      minFormingConfidence: 0.64,
+    },
+  },
+} as const;
+
