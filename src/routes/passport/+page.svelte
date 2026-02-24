@@ -11,6 +11,21 @@
   import { gameState } from '$lib/stores/gameState';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import { fetchHoldings } from '$lib/api/portfolioApi';
+  import {
+    fetchPassportLearningStatus,
+    fetchPassportLearningDatasets,
+    fetchPassportLearningEvals,
+    fetchPassportLearningTrainJobs,
+    fetchPassportLearningReports,
+    runPassportLearningWorker,
+    queuePassportRetrainJob,
+    generatePassportLearningReport,
+    type PassportLearningStatus,
+    type PassportDatasetVersion,
+    type PassportEvalReport,
+    type PassportTrainJob,
+    type PassportReport
+  } from '$lib/api/passportLearningApi';
   import { livePrices } from '$lib/stores/priceStore';
   import EmptyState from '../../components/shared/EmptyState.svelte';
 
@@ -342,6 +357,35 @@
   })();
 
   $: learningInsight = (() => {
+    if (learningStatusRemote) {
+      if (learningStatusRemote.outbox.failed > 0 || learningStatusRemote.trainJobs.failed > 0) {
+        return {
+          key: 'AI LEARNING READINESS',
+          value: 'ATTENTION',
+          sub: `Outbox failed ${learningStatusRemote.outbox.failed} · Jobs failed ${learningStatusRemote.trainJobs.failed}`,
+          tone: 'bad'
+        } satisfies FocusInsight;
+      }
+
+      if (learningStatusRemote.outbox.processing > 0 || learningStatusRemote.trainJobs.running > 0) {
+        return {
+          key: 'AI LEARNING READINESS',
+          value: 'PIPELINE RUNNING',
+          sub: `Processing ${learningStatusRemote.outbox.processing} events · Running ${learningStatusRemote.trainJobs.running} jobs`,
+          tone: 'warn'
+        } satisfies FocusInsight;
+      }
+
+      if (learningStatusRemote.latestDataset) {
+        return {
+          key: 'AI LEARNING READINESS',
+          value: 'PIPELINE SYNCED',
+          sub: `Latest dataset ${learningStatusRemote.latestDataset.versionLabel} (${learningStatusRemote.latestDataset.sampleCount} samples)`,
+          tone: 'good'
+        } satisfies FocusInsight;
+      }
+    }
+
     if (learningSamples >= 40) {
       return {
         key: 'AI LEARNING READINESS',
@@ -374,6 +418,152 @@
     actionInsight,
     learningInsight
   ];
+
+  let learningStatusRemote: PassportLearningStatus | null = null;
+  let learningDatasetsRemote: PassportDatasetVersion[] = [];
+  let learningEvalsRemote: PassportEvalReport[] = [];
+  let learningTrainJobsRemote: PassportTrainJob[] = [];
+  let learningReportsRemote: PassportReport[] = [];
+  let learningHydrated = false;
+  let learningRefreshing = false;
+  let learningActionRunning = false;
+  let learningActionMessage = '';
+  let learningErrorMessage = '';
+
+  function formatDateTime(ts: number | null | undefined): string {
+    if (!ts || !Number.isFinite(ts)) return '-';
+    return new Date(ts).toLocaleString();
+  }
+
+  function formatAgo(ts: number | null | undefined): string {
+    if (!ts || !Number.isFinite(ts)) return '-';
+    const sec = Math.floor((Date.now() - ts) / 1000);
+    if (sec < 60) return `${sec}s ago`;
+    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+    return `${Math.floor(sec / 86400)}d ago`;
+  }
+
+  function statusColor(status: string | null | undefined): string {
+    const normalized = (status || '').toLowerCase();
+    if (normalized === 'failed' || normalized === 'fail') return '#ff725d';
+    if (normalized === 'running' || normalized === 'processing') return '#ffd060';
+    if (normalized === 'succeeded' || normalized === 'done' || normalized === 'pass' || normalized === 'ready') return '#9dffcf';
+    if (normalized === 'queued' || normalized === 'pending' || normalized === 'draft') return '#8bd8ff';
+    return '#c9c2bf';
+  }
+
+  function compactSummary(text: string, maxLen = 240): string {
+    const normalized = text.replace(/\s+/g, ' ').trim();
+    if (normalized.length <= maxLen) return normalized;
+    return `${normalized.slice(0, maxLen - 1)}…`;
+  }
+
+  function evalMetricsPreview(metrics: Record<string, unknown>): string {
+    const pairs = Object.entries(metrics).slice(0, 3);
+    if (pairs.length === 0) return 'No metrics';
+    return pairs
+      .map(([k, v]) => `${k}: ${typeof v === 'number' ? v.toFixed(3) : String(v)}`)
+      .join(' · ');
+  }
+
+  async function hydrateLearningPanel() {
+    learningRefreshing = true;
+    learningErrorMessage = '';
+    try {
+      const [status, datasets, evals, jobs, reports] = await Promise.all([
+        fetchPassportLearningStatus(),
+        fetchPassportLearningDatasets({ limit: 6 }),
+        fetchPassportLearningEvals({ limit: 6 }),
+        fetchPassportLearningTrainJobs(6),
+        fetchPassportLearningReports({ limit: 4 }),
+      ]);
+      learningStatusRemote = status;
+      learningDatasetsRemote = datasets;
+      learningEvalsRemote = evals;
+      learningTrainJobsRemote = jobs;
+      learningReportsRemote = reports;
+      learningHydrated = true;
+    } catch (error) {
+      learningErrorMessage = error instanceof Error ? error.message : 'Failed to load learning pipeline';
+      learningHydrated = true;
+    } finally {
+      learningRefreshing = false;
+    }
+  }
+
+  async function runLearningWorkerNow() {
+    if (learningActionRunning) return;
+    learningActionRunning = true;
+    learningActionMessage = '';
+    const worker = await runPassportLearningWorker({
+      workerId: `passport-ui:${Date.now()}`,
+      limit: 50,
+    });
+    if (!worker) {
+      learningErrorMessage = 'Worker run failed. Check auth or DB connection.';
+    } else {
+      learningActionMessage = `Worker ${worker.workerId} processed ${worker.processed}/${worker.claimed} events`;
+      learningErrorMessage = '';
+    }
+    await hydrateLearningPanel();
+    learningActionRunning = false;
+  }
+
+  async function queueLearningRetrainNow() {
+    if (learningActionRunning) return;
+    learningActionRunning = true;
+    learningActionMessage = '';
+    const datasetVersionIds = learningDatasetsRemote.slice(0, 3).map((item) => item.datasetVersionId);
+    const job = await queuePassportRetrainJob({
+      modelRole: 'policy',
+      targetModelVersion: `policy-ui-${Date.now()}`,
+      datasetVersionIds,
+      triggerReason: 'manual_passport_ui',
+    });
+    if (!job) {
+      learningErrorMessage = 'Failed to queue retrain job.';
+    } else {
+      learningActionMessage = `Retrain job queued: ${job.targetModelVersion}`;
+      learningErrorMessage = '';
+    }
+    await hydrateLearningPanel();
+    learningActionRunning = false;
+  }
+
+  async function generateLearningReportNow() {
+    if (learningActionRunning) return;
+    learningActionRunning = true;
+    learningActionMessage = '';
+    const report = await generatePassportLearningReport({
+      reportType: 'on_demand',
+      summary: `# Passport AI Report\n\n- generated_at: ${new Date().toISOString()}\n- closed_win_rate: ${closedWinRate}%\n- avg_win: ${avgWinPnl.toFixed(2)}%\n- avg_loss: ${avgLossPnl.toFixed(2)}%\n- long_bias: ${longBiasPct}%`,
+    });
+    if (!report) {
+      learningErrorMessage = 'Failed to generate report draft.';
+    } else {
+      learningActionMessage = `Report generated: ${report.modelVersion}`;
+      learningErrorMessage = '';
+    }
+    await hydrateLearningPanel();
+    learningActionRunning = false;
+  }
+
+  $: learningOpsConnected = Boolean(
+    learningStatusRemote || learningDatasetsRemote.length || learningEvalsRemote.length || learningTrainJobsRemote.length || learningReportsRemote.length
+  );
+
+  $: learningPipelineState = (() => {
+    if (!learningStatusRemote) return 'LOCAL_ONLY';
+    if (learningStatusRemote.outbox.failed > 0 || learningStatusRemote.trainJobs.failed > 0) return 'ATTENTION';
+    if (learningStatusRemote.outbox.processing > 0 || learningStatusRemote.trainJobs.running > 0) return 'RUNNING';
+    if (learningStatusRemote.latestDataset) return 'SYNCED';
+    return 'BOOTSTRAP';
+  })();
+
+  $: latestLearningStatusLine = learningStatusRemote
+    ? `Outbox P:${learningStatusRemote.outbox.pending} / R:${learningStatusRemote.outbox.processing} / F:${learningStatusRemote.outbox.failed} · Jobs Q:${learningStatusRemote.trainJobs.queued} / Run:${learningStatusRemote.trainJobs.running} / OK:${learningStatusRemote.trainJobs.succeeded}`
+    : 'Learning backend is not connected for this user/session yet.';
 
   // Avatar options
   const AVATAR_OPTIONS = [
@@ -492,6 +682,8 @@
     if (!wallet.connected || !wallet.address) {
       void hydrateHoldings();
     }
+
+    void hydrateLearningPanel();
   });
 </script>
 
@@ -659,6 +851,150 @@
                   ? `${gState.wins}W-${gState.losses}L | ${pnlPrefix(stats.totalPnL)}${stats.totalPnL.toFixed(1)}% PnL | 🔥 ${stats.streak}-streak`
                   : 'No matches yet — Start an Arena battle!'}
               </div>
+            </section>
+
+            <section class="content-panel">
+              <div class="section-header">AI LEARNING PIPELINE</div>
+
+              <div class="ml-action-row">
+                <button class="qa-btn qa-sync" on:click={hydrateLearningPanel} disabled={learningRefreshing}>
+                  {learningRefreshing ? 'REFRESHING...' : 'REFRESH'}
+                </button>
+                <button class="qa-btn qa-terminal" on:click={runLearningWorkerNow} disabled={learningActionRunning}>
+                  RUN WORKER
+                </button>
+                <button class="qa-btn qa-arena" on:click={queueLearningRetrainNow} disabled={learningActionRunning}>
+                  QUEUE RETRAIN
+                </button>
+                <button class="qa-btn qa-wallet" on:click={generateLearningReportNow} disabled={learningActionRunning}>
+                  GENERATE REPORT
+                </button>
+              </div>
+
+              {#if learningActionMessage}
+                <div class="ml-info-line">{learningActionMessage}</div>
+              {/if}
+
+              {#if learningErrorMessage}
+                <div class="ml-error-line">{learningErrorMessage}</div>
+              {/if}
+
+              <div class="metrics-grid metrics-detail">
+                <div class="metric-card">
+                  <div class="mc-icon">📦</div>
+                  <div class="mc-value" style="color:{statusColor(learningPipelineState)}">{learningPipelineState}</div>
+                  <div class="mc-label">PIPELINE</div>
+                </div>
+                <div class="metric-card">
+                  <div class="mc-icon">⏳</div>
+                  <div class="mc-value">{learningStatusRemote?.outbox.pending ?? 0}</div>
+                  <div class="mc-label">OUTBOX PENDING</div>
+                </div>
+                <div class="metric-card">
+                  <div class="mc-icon">🛠️</div>
+                  <div class="mc-value">{learningStatusRemote?.trainJobs.running ?? 0}</div>
+                  <div class="mc-label">TRAIN RUNNING</div>
+                </div>
+                <div class="metric-card">
+                  <div class="mc-icon">🧾</div>
+                  <div class="mc-value">{learningReportsRemote.length}</div>
+                  <div class="mc-label">REPORTS</div>
+                </div>
+              </div>
+
+              <div class="summary-line">{latestLearningStatusLine}</div>
+
+              <details class="detail-block">
+                <summary>LEARNING REPORTS ({learningReportsRemote.length})</summary>
+                {#if learningReportsRemote.length === 0}
+                  <div class="ml-empty-row">
+                    {learningHydrated
+                      ? 'No report snapshot yet. Use GENERATE REPORT to create the first analysis.'
+                      : 'Loading reports...'}
+                  </div>
+                {:else}
+                  {#each learningReportsRemote as report (report.reportId)}
+                    <div class="pos-row">
+                      <div class="pr-left">
+                        <span class="pr-pair">{report.reportType.toUpperCase()}</span>
+                        <span class="pr-src">{report.modelName}:{report.modelVersion}</span>
+                      </div>
+                      <div class="pr-right">
+                        <span class="pr-pnl" style="color:{statusColor(report.status)}">{report.status.toUpperCase()}</span>
+                        <span class="pr-time">{formatDateTime(report.createdAt)}</span>
+                      </div>
+                    </div>
+                    <div class="ml-summary-preview">{compactSummary(report.summary)}</div>
+                  {/each}
+                {/if}
+              </details>
+
+              <details class="detail-block">
+                <summary>DATASETS ({learningDatasetsRemote.length})</summary>
+                {#if learningDatasetsRemote.length === 0}
+                  <div class="ml-empty-row">No dataset versions found yet.</div>
+                {:else}
+                  {#each learningDatasetsRemote as dataset (dataset.datasetVersionId)}
+                    <div class="pos-row">
+                      <div class="pr-left">
+                        <span class="pr-pair">{dataset.versionLabel}</span>
+                        <span class="pr-src">{dataset.datasetType.toUpperCase()} · {dataset.sampleCount} samples</span>
+                      </div>
+                      <div class="pr-right">
+                        <span class="pr-pnl" style="color:{statusColor(dataset.status)}">{dataset.status.toUpperCase()}</span>
+                        <span class="pr-time">{formatAgo(dataset.createdAt)}</span>
+                      </div>
+                    </div>
+                  {/each}
+                {/if}
+              </details>
+
+              <details class="detail-block">
+                <summary>TRAIN JOBS ({learningTrainJobsRemote.length})</summary>
+                {#if learningTrainJobsRemote.length === 0}
+                  <div class="ml-empty-row">No train jobs yet.</div>
+                {:else}
+                  {#each learningTrainJobsRemote as job (job.trainJobId)}
+                    <div class="pos-row">
+                      <div class="pr-left">
+                        <span class="pr-pair">{job.trainType.toUpperCase()} · {job.modelRole.toUpperCase()}</span>
+                        <span class="pr-src">{job.targetModelVersion}</span>
+                      </div>
+                      <div class="pr-right">
+                        <span class="pr-pnl" style="color:{statusColor(job.status)}">{job.status.toUpperCase()}</span>
+                        <span class="pr-time">{formatAgo(job.createdAt)}</span>
+                      </div>
+                    </div>
+                  {/each}
+                {/if}
+              </details>
+
+              <details class="detail-block">
+                <summary>EVAL REPORTS ({learningEvalsRemote.length})</summary>
+                {#if learningEvalsRemote.length === 0}
+                  <div class="ml-empty-row">No evaluation reports yet.</div>
+                {:else}
+                  {#each learningEvalsRemote as evalReport (evalReport.evalId)}
+                    <div class="pos-row">
+                      <div class="pr-left">
+                        <span class="pr-pair">{evalReport.evalScope.toUpperCase()}</span>
+                        <span class="pr-src">{evalReport.modelVersion}</span>
+                      </div>
+                      <div class="pr-right">
+                        <span class="pr-pnl" style="color:{statusColor(evalReport.gateResult)}">{evalReport.gateResult.toUpperCase()}</span>
+                        <span class="pr-time">{formatAgo(evalReport.createdAt)}</span>
+                      </div>
+                    </div>
+                    <div class="ml-metric-preview">{evalMetricsPreview(evalReport.metrics)}</div>
+                  {/each}
+                {/if}
+              </details>
+
+              {#if !learningOpsConnected && learningHydrated}
+                <div class="ml-empty-row">
+                  Learning pipeline rows are empty. This is expected before outbox worker and first train/report cycle.
+                </div>
+              {/if}
             </section>
 
             <section class="content-panel">
@@ -1549,6 +1885,11 @@
     cursor: default;
   }
 
+  .qa-btn:disabled {
+    opacity: 0.62;
+    cursor: default;
+  }
+
   .qa-wallet {
     color: #cbefff;
   }
@@ -1733,6 +2074,57 @@
     text-align: center;
     font-family: var(--fm);
     font-size: 12px;
+  }
+
+  .ml-action-row {
+    margin-top: var(--sp-space-2);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-space-2);
+  }
+
+  .ml-info-line,
+  .ml-error-line,
+  .ml-empty-row {
+    margin-top: var(--sp-space-2);
+    border-radius: 8px;
+    padding: var(--sp-space-2) var(--sp-space-3);
+    font-family: var(--fm);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .ml-info-line {
+    color: #a9f0ff;
+    border: 1px solid rgba(139, 216, 255, 0.28);
+    background: rgba(139, 216, 255, 0.08);
+  }
+
+  .ml-error-line {
+    color: #ffd2ca;
+    border: 1px solid rgba(255, 114, 93, 0.34);
+    background: rgba(255, 114, 93, 0.08);
+  }
+
+  .ml-empty-row {
+    color: var(--sp-dim);
+    border: 1px dashed var(--sp-soft);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .ml-summary-preview,
+  .ml-metric-preview {
+    margin: 0 var(--sp-space-3) var(--sp-space-3);
+    border-radius: 7px;
+    border: 1px solid var(--sp-soft);
+    background: rgba(0, 0, 0, 0.2);
+    padding: var(--sp-space-2) var(--sp-space-3);
+    color: var(--sp-dim);
+    font-family: var(--fm);
+    font-size: 11px;
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .detail-block {
