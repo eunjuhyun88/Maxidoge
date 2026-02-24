@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- 012: Passport ML Pipeline Foundation (ORPO / Retraining)
+-- 0006: Passport ML Pipeline Foundation (ORPO / Retraining)
 -- Outbox + inference lineage + datasets + train jobs + eval + reports
 -- ═══════════════════════════════════════════════════════════════
 
