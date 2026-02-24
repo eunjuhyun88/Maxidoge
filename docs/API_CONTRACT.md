@@ -1,6 +1,7 @@
 # MAXI DOGE v3 API Contract
 
 작성일: 2026-02-22  
+수정일: 2026-02-23 (Arena v3 PvP/Tournament 계약 반영)  
 목적: FE/BE 분리 개발을 위해 Arena/Live/Market API 계약을 고정한다.
 Doc index: `docs/README.md`
 
@@ -30,7 +31,19 @@ Doc index: `docs/README.md`
 }
 ```
 
-## 2. Arena Match API
+## 2. Arena / PvP / Tournament API
+
+Arena v3 모드 enum:
+1. `PVE`
+2. `PVP`
+3. `TOURNAMENT`
+
+Arena phase enum (서버 authoritative):
+1. `DRAFT`
+2. `ANALYSIS`
+3. `HYPOTHESIS`
+4. `BATTLE`
+5. `RESULT`
 
 ## 2.1 POST `/api/arena/match/create`
 
@@ -40,9 +53,16 @@ Doc index: `docs/README.md`
 {
   "pair": "BTC/USDT",
   "timeframe": "4h",
-  "mode": "AI"
+  "mode": "PVE",
+  "entryContext": {
+    "source": "lobby"
+  }
 }
 ```
+
+모드별 추가 필드:
+1. `mode=PVP`: `entryContext.pvpPoolId` 선택적 사용
+2. `mode=TOURNAMENT`: `entryContext.tournamentId`, `entryContext.round` 필요
 
 응답:
 
@@ -51,9 +71,11 @@ Doc index: `docs/README.md`
   "ok": true,
   "data": {
     "matchId": "uuid",
+    "mode": "PVE",
     "phase": "DRAFT",
     "pair": "BTC/USDT",
     "timeframe": "4h",
+    "draftDeadlineAt": "2026-02-22T10:01:00.000Z",
     "createdAt": "2026-02-22T10:00:00.000Z"
   }
 }
@@ -61,8 +83,11 @@ Doc index: `docs/README.md`
 
 에러:
 1. `400 INVALID_PAIR`
-2. `401 UNAUTHORIZED`
-3. `500 INTERNAL_ERROR`
+2. `400 INVALID_MODE`
+3. `401 UNAUTHORIZED`
+4. `404 PVP_POOL_NOT_FOUND`
+5. `404 TOURNAMENT_NOT_FOUND`
+6. `500 INTERNAL_ERROR`
 
 ## 2.2 POST `/api/arena/match/:id/draft`
 
@@ -70,11 +95,13 @@ Doc index: `docs/README.md`
 
 ```json
 {
+  "orpoModel": "BASE65",
   "draft": [
     { "agentId": "STRUCTURE", "specId": "structure_base", "weight": 40 },
     { "agentId": "DERIV", "specId": "deriv_squeeze_hunter", "weight": 35 },
     { "agentId": "FLOW", "specId": "flow_base", "weight": 25 }
-  ]
+  ],
+  "submitReason": "manual"
 }
 ```
 
@@ -82,7 +109,9 @@ Doc index: `docs/README.md`
 1. agent 3개 고정
 2. 중복 agent 금지
 3. weight 합계 100
-4. spec unlock 여부 확인
+4. 개별 weight 10~80
+5. spec unlock 여부 확인
+6. 토너먼트 매치면 ban된 agent 포함 금지
 
 응답:
 
@@ -91,12 +120,17 @@ Doc index: `docs/README.md`
   "ok": true,
   "data": {
     "matchId": "uuid",
+    "mode": "PVE",
     "phase": "ANALYSIS",
     "acceptedDraft": [
       { "agentId": "STRUCTURE", "specId": "structure_base", "weight": 40 },
       { "agentId": "DERIV", "specId": "deriv_squeeze_hunter", "weight": 35 },
       { "agentId": "FLOW", "specId": "flow_base", "weight": 25 }
-    ]
+    ],
+    "adjustments": {
+      "synergyBonusPct": 3,
+      "conflictPenaltyPct": 0
+    }
   }
 }
 ```
@@ -104,8 +138,9 @@ Doc index: `docs/README.md`
 에러:
 1. `400 INVALID_DRAFT`
 2. `400 SPEC_LOCKED`
-3. `404 MATCH_NOT_FOUND`
-4. `409 INVALID_PHASE`
+3. `400 BANNED_AGENT_SELECTED`
+4. `404 MATCH_NOT_FOUND`
+5. `409 INVALID_PHASE`
 
 ## 2.3 POST `/api/arena/match/:id/analyze`
 
@@ -124,6 +159,7 @@ Doc index: `docs/README.md`
   "ok": true,
   "data": {
     "matchId": "uuid",
+    "mode": "PVE",
     "phase": "HYPOTHESIS",
     "outputs": [
       {
@@ -163,8 +199,8 @@ Doc index: `docs/README.md`
 ## 2.4 POST `/api/arena/match/:id/hypothesis`
 
 `overrideMode` 정의:
-- `"AGENT_FOLLOW"`: 에이전트 합산 방향을 그대로 수용
-- `"USER_OVERRIDE"`: 유저가 에이전트와 다른 방향을 선택 (LP 보상에 영향 가능)
+1. `"AGENT_FOLLOW"`: 에이전트 합산 방향을 그대로 수용
+2. `"USER_OVERRIDE"`: 유저가 에이전트와 다른 방향을 선택 (LP 보상에 영향 가능)
 
 요청:
 
@@ -172,10 +208,14 @@ Doc index: `docs/README.md`
 {
   "direction": "LONG",
   "overrideMode": "AGENT_FOLLOW",
+  "userConfidence": 4,
+  "evidenceTags": ["EMA_UP", "OI_SUPPORT"],
   "entry": 68100.2,
   "tp": 69150.0,
   "sl": 67520.5,
-  "rr": 1.8
+  "rr": 1.8,
+  "exitProfile": "BALANCED",
+  "autoSubmitted": false
 }
 ```
 
@@ -187,8 +227,11 @@ Doc index: `docs/README.md`
   "data": {
     "matchId": "uuid",
     "phase": "BATTLE",
+    "battleEndsAt": "2026-02-23T10:00:00.000Z",
     "userPrediction": {
       "direction": "LONG",
+      "overrideMode": "AGENT_FOLLOW",
+      "userConfidence": 4,
       "entry": 68100.2,
       "tp": 69150.0,
       "sl": 67520.5,
@@ -203,7 +246,28 @@ Doc index: `docs/README.md`
 2. `409 INVALID_PHASE`
 3. `404 MATCH_NOT_FOUND`
 
-## 2.5 GET `/api/arena/match/:id/result`
+## 2.5 GET `/api/arena/match/:id/battle` (SSE)
+
+SSE 이벤트:
+1. `battle_snapshot`
+2. `decision_window`
+3. `price_tick`
+4. `pnl_update`
+5. `battle_end`
+
+`decision_window` payload 예시:
+
+```json
+{
+  "type": "decision_window",
+  "windowIndex": 3,
+  "startedAt": "2026-02-22T10:30:00.000Z",
+  "endsAt": "2026-02-22T10:30:10.000Z",
+  "actions": ["BUY", "SELL", "HOLD"]
+}
+```
+
+## 2.6 GET `/api/arena/match/:id/result`
 
 응답:
 
@@ -212,13 +276,16 @@ Doc index: `docs/README.md`
   "ok": true,
   "data": {
     "matchId": "uuid",
+    "mode": "PVP",
     "phase": "RESULT",
     "outcome": {
       "won": true,
-      "lpDelta": 18,
+      "lpDelta": 25,
+      "eloDelta": 14,
       "entryPrice": 68100.2,
       "exitPrice": 69210.0,
-      "priceChangePct": 1.63
+      "priceChangePct": 1.63,
+      "fbs": 84.2
     },
     "progression": {
       "lpTotal": 1246,
@@ -232,6 +299,216 @@ Doc index: `docs/README.md`
       { "agentId": "STRUCTURE", "correct": true, "direction": "LONG", "confidence": 71 },
       { "agentId": "DERIV", "correct": true, "direction": "LONG", "confidence": 64 },
       { "agentId": "FLOW", "correct": false, "direction": "SHORT", "confidence": 58 }
+    ]
+  }
+}
+```
+
+## 2.7 POST `/api/pvp/pool/create`
+
+요청:
+
+```json
+{
+  "pair": "BTC/USDT",
+  "timeframe": "4h",
+  "autoAccept": true
+}
+```
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "poolId": "uuid",
+    "status": "WAITING",
+    "pair": "BTC/USDT",
+    "timeframe": "4h",
+    "expiresAt": "2026-02-22T14:00:00.000Z"
+  }
+}
+```
+
+에러:
+1. `403 PVP_LOCKED`
+2. `409 ACTIVE_PVP_LIMIT_REACHED`
+3. `422 INVALID_POOL_REQUEST`
+
+## 2.8 GET `/api/pvp/pool/available?pair=BTC/USDT&limit=20`
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "records": [
+      {
+        "poolId": "uuid",
+        "pair": "BTC/USDT",
+        "timeframe": "4h",
+        "creatorTier": "SILVER",
+        "creatorElo": 1420,
+        "status": "WAITING",
+        "createdAt": "2026-02-22T10:00:00.000Z",
+        "expiresAt": "2026-02-22T14:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+## 2.9 POST `/api/pvp/pool/:id/accept`
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "poolId": "uuid",
+    "status": "MATCHED",
+    "matchId": "uuid",
+    "opponent": {
+      "userId": "uuid",
+      "nickname": "jin",
+      "tier": "SILVER",
+      "elo": 1420
+    }
+  }
+}
+```
+
+에러:
+1. `404 POOL_NOT_FOUND`
+2. `409 POOL_NOT_AVAILABLE`
+3. `409 SELF_MATCH_FORBIDDEN`
+
+## 2.10 GET `/api/tournaments/active`
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "records": [
+      {
+        "tournamentId": "uuid",
+        "type": "DAILY_SPRINT",
+        "pair": "BTC/USDT",
+        "status": "REG_OPEN",
+        "maxPlayers": 8,
+        "registeredPlayers": 6,
+        "entryFeeLp": 50,
+        "startAt": "2026-02-23T18:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+## 2.11 POST `/api/tournaments/:id/register`
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "tournamentId": "uuid",
+    "registered": true,
+    "seed": 12,
+    "lpDelta": -50
+  }
+}
+```
+
+에러:
+1. `403 TOURNAMENT_LOCKED`
+2. `409 ALREADY_REGISTERED`
+3. `422 INSUFFICIENT_LP`
+
+## 2.12 GET `/api/tournaments/:id/bracket`
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "tournamentId": "uuid",
+    "round": 2,
+    "matches": [
+      {
+        "matchIndex": 1,
+        "userA": { "userId": "uuid", "nickname": "kim" },
+        "userB": { "userId": "uuid", "nickname": "park" },
+        "winnerId": null,
+        "matchId": "uuid"
+      }
+    ]
+  }
+}
+```
+
+## 2.13 POST `/api/tournaments/:id/ban`
+
+요청:
+
+```json
+{
+  "matchId": "uuid",
+  "bannedAgentId": "DERIV"
+}
+```
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "matchId": "uuid",
+    "banPhase": {
+      "myBan": "DERIV",
+      "opponentBan": null,
+      "pickStartsAt": "2026-02-23T18:00:20.000Z"
+    }
+  }
+}
+```
+
+## 2.14 POST `/api/tournaments/:id/draft`
+
+요청:
+
+```json
+{
+  "matchId": "uuid",
+  "orpoModel": "BASE65",
+  "draft": [
+    { "agentId": "FLOW", "specId": "flow_base", "weight": 35 },
+    { "agentId": "SENTI", "specId": "senti_base", "weight": 35 },
+    { "agentId": "MACRO", "specId": "macro_base", "weight": 30 }
+  ]
+}
+```
+
+응답:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "matchId": "uuid",
+    "phase": "ANALYSIS",
+    "acceptedDraft": [
+      { "agentId": "FLOW", "specId": "flow_base", "weight": 35 },
+      { "agentId": "SENTI", "specId": "senti_base", "weight": 35 },
+      { "agentId": "MACRO", "specId": "macro_base", "weight": 30 }
     ]
   }
 }
@@ -319,6 +596,23 @@ SSE 이벤트:
 2. GET `/api/coingecko/global`
 3. GET `/api/yahoo/:symbol`
 
+## 4.3 DexScreener Proxy routes (B-11 확장)
+
+rate-limit 참고:
+1. latest 계열: 60 req/min (DexScreener 문서 기준)
+2. 서버는 클라이언트 직접호출 대신 아래 프록시를 사용
+
+엔드포인트:
+1. GET `/api/market/dex/token-profiles?limit=20`
+2. GET `/api/market/dex/community-takeovers?limit=20`
+3. GET `/api/market/dex/ads?limit=20`
+4. GET `/api/market/dex/token-boosts?mode=latest|top&limit=20`
+5. GET `/api/market/dex/search?q=BTC`
+6. GET `/api/market/dex/pairs/:chainId/:pairId`
+7. GET `/api/market/dex/token-pairs/:chainId/:tokenAddress`
+8. GET `/api/market/dex/tokens/:chainId/:tokenAddresses`
+9. GET `/api/market/dex/orders/:chainId/:tokenAddress`
+
 ## 5. Progression API (Optional Read Endpoint)
 
 ## 5.1 GET `/api/profile/progression`
@@ -369,11 +663,12 @@ SSE 이벤트:
 
 ## 8. Contract Test Checklist
 
-1. create -> draft -> analyze -> hypothesis -> result 순서 강제
-2. draft weight 합 100 검증
-3. spec unlock 검증
-4. phase mismatch 시 409 반환
-5. legacy `/api/matches` 경로 정상 응답
+1. create -> draft -> analyze -> hypothesis -> battle -> result 순서 강제
+2. draft weight 합 100 + agent 3개 + unlock + ban 적용 검증
+3. phase mismatch 시 409 반환
+4. PVP pool 상태 전이(`WAITING -> MATCHED -> EXPIRED/CANCELLED`) 검증
+5. Tournament register/ban/draft/bracket 흐름 검증
+6. legacy `/api/matches` 경로 정상 응답
 
 ## 9. Terminal Scan / Intel / Chat Contract
 

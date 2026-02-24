@@ -10,6 +10,7 @@ import {
   createSimulatedWalletConnection
 } from '$lib/wallet/simulatedWallet';
 import { resolveLifecyclePhase } from './progressionRules';
+import { fetchAuthSession, type AuthUserPayload } from '$lib/api/auth';
 
 export type UserTier = 'guest' | 'registered' | 'connected' | 'verified';
 
@@ -36,7 +37,7 @@ export interface WalletState {
 
   // UI state
   showWalletModal: boolean;
-  walletModalStep: 'welcome' | 'wallet-select' | 'connecting' | 'sign-message' | 'connected' | 'signup' | 'demo-intro' | 'profile';
+  walletModalStep: 'welcome' | 'wallet-select' | 'connecting' | 'sign-message' | 'connected' | 'signup' | 'login' | 'demo-intro' | 'profile';
   signature: string | null;
 }
 
@@ -78,11 +79,15 @@ function loadWallet(): WalletState {
 
 export const walletStore = writable<WalletState>(loadWallet());
 
-// Persist
+// Persist (300ms 디바운스 — 매 업데이트마다 JSON.stringify + localStorage 쓰기 방지)
+let _walletPersistTimer: ReturnType<typeof setTimeout> | null = null;
 walletStore.subscribe(w => {
   if (typeof window === 'undefined') return;
-  const { showWalletModal, walletModalStep, signature, ...persistable } = w;
-  localStorage.setItem(STORAGE_KEYS.wallet, JSON.stringify(persistable));
+  if (_walletPersistTimer) clearTimeout(_walletPersistTimer);
+  _walletPersistTimer = setTimeout(() => {
+    const { showWalletModal, walletModalStep, signature, ...persistable } = w;
+    localStorage.setItem(STORAGE_KEYS.wallet, JSON.stringify(persistable));
+  }, 300);
 });
 
 // Derived stores
@@ -90,15 +95,97 @@ export const isWalletConnected = derived(walletStore, $w => $w.connected);
 export const userTier = derived(walletStore, $w => $w.tier);
 export const userPhase = derived(walletStore, $w => $w.phase);
 
+let _authHydrated = false;
+let _authHydrationPromise: Promise<void> | null = null;
+
+function normalizeTier(value: unknown, fallback: UserTier): UserTier {
+  const tier = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (tier === 'verified' || tier === 'connected' || tier === 'registered' || tier === 'guest') {
+    return tier;
+  }
+  return fallback;
+}
+
+function toShortAddr(address: string | null): string | null {
+  if (!address || address.length < 10) return null;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+export function applyAuthenticatedUser(user: AuthUserPayload) {
+  walletStore.update((w) => {
+    const walletAddress = typeof user.walletAddress === 'string'
+      ? user.walletAddress
+      : typeof user.wallet === 'string'
+        ? user.wallet
+        : null;
+    const keepLiveConnection = w.connected && !!w.address;
+    const address = keepLiveConnection ? w.address : walletAddress;
+    const shortAddr = keepLiveConnection ? w.shortAddr : toShortAddr(address);
+    const phase = Number.isFinite(Number(user.phase)) ? Math.max(1, Number(user.phase)) : Math.max(1, w.phase);
+
+    return {
+      ...w,
+      email: user.email || w.email,
+      nickname: user.nickname || w.nickname,
+      tier: normalizeTier(user.tier, keepLiveConnection ? 'connected' : 'registered'),
+      phase,
+      hasCompletedOnboarding: true,
+      showWalletModal: false,
+      walletModalStep: 'profile',
+      address,
+      shortAddr,
+    };
+  });
+}
+
+export function clearAuthenticatedUser() {
+  walletStore.update((w) => ({
+    ...w,
+    email: null,
+    nickname: null,
+    tier: w.connected ? 'connected' : 'guest',
+    showWalletModal: false,
+    walletModalStep: w.connected ? 'connected' : 'welcome',
+  }));
+}
+
+export async function hydrateAuthSession(force = false) {
+  if (typeof window === 'undefined') return;
+  if (_authHydrated && !force) return;
+  if (_authHydrationPromise) return _authHydrationPromise;
+
+  _authHydrationPromise = (async () => {
+    try {
+      const res = await fetchAuthSession();
+      if (res.authenticated && res.user) {
+        applyAuthenticatedUser(res.user);
+      } else {
+        clearAuthenticatedUser();
+      }
+      _authHydrated = true;
+    } catch (error) {
+      console.warn('[walletStore] auth session hydrate failed', error);
+    }
+  })();
+
+  try {
+    await _authHydrationPromise;
+  } finally {
+    _authHydrationPromise = null;
+  }
+}
+
 // ═══ Actions ═══
 
 export function openWalletModal() {
   walletStore.update(w => {
-    // New flow: wallet first → then email
-    const step = w.connected && w.email ? 'profile'
-      : w.connected && !w.email ? 'signup'
-      : w.tier !== 'guest' && !w.connected ? 'wallet-select'
-      : 'welcome';
+    // Wallet-first flow:
+    // connected + account => profile
+    // connected only => choose login/signup from connected step
+    // account only (session restored) but no wallet => reconnect wallet first
+    const step = w.connected
+      ? (w.email ? 'profile' : 'connected')
+      : (w.email ? 'wallet-select' : 'welcome');
     return { ...w, showWalletModal: true, walletModalStep: step };
   });
 }

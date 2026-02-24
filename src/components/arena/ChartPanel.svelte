@@ -9,6 +9,7 @@
     subscribeMiniTicker,
     type BinanceKline
   } from '$lib/api/binance';
+  import { updatePrice } from '$lib/stores/priceStore';
   import {
     CORE_TIMEFRAME_OPTIONS,
     normalizeTimeframe,
@@ -16,10 +17,15 @@
     toTradingViewInterval,
   } from '$lib/utils/timeframe';
   import { openQuickTrade } from '$lib/stores/quickTradeStore';
+  import {
+    detectChartPatterns,
+    type ChartPatternDetection,
+  } from '$lib/engine/patternDetector';
   import TokenDropdown from '../shared/TokenDropdown.svelte';
 
   const dispatch = createEventDispatcher<{
     scanrequest: { source: 'chart-bar'; pair: string; timeframe: string };
+    chatrequest: { source: 'chart-bar'; pair: string; timeframe: string };
     priceUpdate: { price: number };
     dragTP: { price: number };
     dragSL: { price: number };
@@ -28,6 +34,7 @@
 
   let chartContainer: HTMLDivElement;
   let chart: any;
+  let lwcModule: any = null;
   let series: any;
   let volumeSeries: any;
   let cleanup: (() => void) | null = null;
@@ -99,6 +106,20 @@
   let drawings: DrawingItem[] = [];
   let currentDrawing: { type: 'trendline'; points: Array<{ x: number; y: number }> } | null = null;
   let tradePreview: { mode: 'longentry' | 'shortentry'; startX: number; startY: number; cursorX: number; cursorY: number } | null = null;
+  type TradePlanDraft = {
+    pair: string;
+    previewDir: 'LONG' | 'SHORT';
+    entry: number;
+    sl: number;
+    tp: number;
+    rr: number;
+    riskPct: number;
+    longRatio: number;
+  };
+  let pendingTradePlan: TradePlanDraft | null = null;
+  let ratioTrackEl: HTMLButtonElement | null = null;
+  let _ratioDragPointerId: number | null = null;
+  let _ratioDragBound = false;
   let isDrawing = false;
   let chartNotice = '';
   let _chartNoticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -115,11 +136,24 @@
   export let showPosition = false;
   export let advancedMode = false;
   export let enableTradeLineEntry = false;
+  export let uiPreset: 'default' | 'tradingview' = 'default';
+  export let requireTradeConfirm = false;
+  export let chatFirstMode = false;
+  export let chatTradeReady = false;
+  export let chatTradeDir: 'LONG' | 'SHORT' = 'LONG';
 
-  export let agentMarkers: Array<{
+  type ChartMarker = {
     time: number; position: 'aboveBar' | 'belowBar'; color: string;
     shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'; text: string;
-  }> = [];
+  };
+  export let agentMarkers: ChartMarker[] = [];
+  let patternMarkers: ChartMarker[] = [];
+  let detectedPatterns: ChartPatternDetection[] = [];
+  let patternLineSeries: any[] = [];
+  let _patternSignature = '';
+  let patternPanelCollapsed = false;
+  let selectedPatternId: string | null = null;
+  let selectedPattern: ChartPatternDetection | null = null;
 
   export let agentAnnotations: Array<{
     id: string; icon: string; name: string; color: string; label: string;
@@ -133,6 +167,8 @@
   $: state = $gameState;
   $: symbol = pairToSymbol(state.pair);
   $: interval = toBinanceInterval(state.timeframe);
+  $: pairBaseLabel = (state.pair?.split('/')?.[0] || 'BTC').toUpperCase();
+  $: pairQuoteLabel = (state.pair?.split('/')?.[1] || 'USDT').toUpperCase();
 
   type IndicatorKey = 'ma20' | 'ma60' | 'ma120' | 'ma7' | 'ma25' | 'ma99' | 'rsi' | 'vol';
   let indicatorEnabled: Record<IndicatorKey, boolean> = {
@@ -147,7 +183,8 @@
   };
   let chartVisualMode: 'focus' | 'full' = 'focus';
   let showIndicatorLegend = true;
-  let indicatorStripState: 'expanded' | 'collapsed' | 'hidden' = 'expanded';
+  let indicatorStripState: 'expanded' | 'collapsed' | 'hidden' = 'collapsed';
+  $: isTvLikePreset = uiPreset === 'tradingview';
   let _indicatorProfileApplied: string | null = null;
   const BAR_SPACING_MIN = 5;
   const BAR_SPACING_MAX = 28;
@@ -155,6 +192,10 @@
   const BAR_SPACING_DEFAULT = 14;
   let barSpacing = BAR_SPACING_DEFAULT;
   let autoScaleY = true;
+
+  function isCompactViewport(): boolean {
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+  }
 
   type ChartTheme = {
     bg: string;
@@ -324,6 +365,29 @@
     return v.toFixed(2);
   }
 
+  function formatPatternTime(ts: number) {
+    if (!Number.isFinite(ts) || ts <= 0) return '—';
+    return new Date(ts * 1000).toLocaleTimeString('ko-KR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  }
+
+  function patternKindLabel(kind: ChartPatternDetection['kind']) {
+    if (kind === 'head_and_shoulders') return '헤드앤숄더';
+    if (kind === 'falling_wedge') return '하락쐐기';
+    return kind;
+  }
+
+  function patternStatusLabel(status: ChartPatternDetection['status']) {
+    return status === 'CONFIRMED' ? '확정' : '형성중';
+  }
+
+  function patternDirectionLabel(direction: ChartPatternDetection['direction']) {
+    return direction === 'BULLISH' ? '상방' : '하방';
+  }
+
   function toChartPrice(y: number): number | null {
     if (!series) return null;
     try { return series.coordinateToPrice(y); } catch { return null; }
@@ -357,6 +421,113 @@
     openQuickTrade(pair, dir, entryPx, tp, sl, 'chart-line', `${dir} line-entry`);
     gtmEvent('terminal_line_entry_open', { pair, dir, entry: entryPx, tp, sl, rr });
     pushChartNotice(`${dir} 진입 생성 · ENTRY ${formatPrice(entryPx)} · TP ${formatPrice(tp)} · SL ${formatPrice(sl)} · RR 1:${rr.toFixed(1)}`);
+  }
+
+  function clampRatio(v: number): number {
+    return Math.max(0, Math.min(100, Math.round(v)));
+  }
+
+  function setTradePlanRatio(nextLongRatio: number) {
+    if (!pendingTradePlan) return;
+    const longRatio = clampRatio(nextLongRatio);
+    if (pendingTradePlan.longRatio === longRatio) return;
+    pendingTradePlan = { ...pendingTradePlan, longRatio };
+  }
+
+  function getPlannedTradeOrder(plan: TradePlanDraft) {
+    const dir: 'LONG' | 'SHORT' = plan.longRatio >= 50 ? 'LONG' : 'SHORT';
+    const rr = Number.isFinite(plan.rr) && plan.rr > 0 ? plan.rr : LINE_ENTRY_DEFAULT_RR;
+    const risk = Math.max(Math.abs(plan.entry - plan.sl), Math.max(0.0001, Math.abs(plan.entry) * 0.001));
+    const sl = clampRoundPrice(dir === 'LONG' ? plan.entry - risk : plan.entry + risk);
+    const tp = clampRoundPrice(dir === 'LONG' ? plan.entry + risk * rr : plan.entry - risk * rr);
+    return {
+      pair: plan.pair,
+      dir,
+      entry: clampRoundPrice(plan.entry),
+      sl,
+      tp,
+      rr,
+      riskPct: (risk / Math.max(Math.abs(plan.entry), 1)) * 100,
+      longRatio: plan.longRatio,
+      shortRatio: 100 - plan.longRatio,
+    };
+  }
+
+  function openTradeFromPlan() {
+    if (!pendingTradePlan) return;
+    const planned = getPlannedTradeOrder(pendingTradePlan);
+    openQuickTrade(
+      planned.pair,
+      planned.dir,
+      planned.entry,
+      planned.tp,
+      planned.sl,
+      'chart-plan',
+      `ratio L${planned.longRatio}:S${planned.shortRatio}`
+    );
+    gtmEvent('terminal_chart_plan_open', {
+      pair: planned.pair,
+      dir: planned.dir,
+      entry: planned.entry,
+      tp: planned.tp,
+      sl: planned.sl,
+      rr: planned.rr,
+      longRatio: planned.longRatio,
+      shortRatio: planned.shortRatio,
+    });
+    pushChartNotice(
+      `포지션 생성 · ${planned.dir} ${planned.longRatio}:${planned.shortRatio} · ENTRY ${formatPrice(planned.entry)}`
+    );
+    pendingTradePlan = null;
+  }
+
+  function cancelTradePlan() {
+    pendingTradePlan = null;
+    pushChartNotice('포지션 생성 취소');
+  }
+
+  function ratioFromClientX(clientX: number): number | null {
+    if (!ratioTrackEl) return null;
+    const rect = ratioTrackEl.getBoundingClientRect();
+    if (!Number.isFinite(rect.width) || rect.width <= 0) return null;
+    const pct = ((clientX - rect.left) / rect.width) * 100;
+    return clampRatio(pct);
+  }
+
+  function onRatioPointerMove(e: PointerEvent) {
+    if (_ratioDragPointerId === null || e.pointerId !== _ratioDragPointerId) return;
+    const ratio = ratioFromClientX(e.clientX);
+    if (ratio === null) return;
+    setTradePlanRatio(ratio);
+  }
+
+  function unbindRatioDrag() {
+    if (!_ratioDragBound || typeof window === 'undefined') return;
+    window.removeEventListener('pointermove', onRatioPointerMove);
+    window.removeEventListener('pointerup', onRatioPointerUp);
+    _ratioDragBound = false;
+    _ratioDragPointerId = null;
+  }
+
+  function onRatioPointerUp(e: PointerEvent) {
+    if (_ratioDragPointerId !== null && e.pointerId === _ratioDragPointerId) {
+      unbindRatioDrag();
+    }
+  }
+
+  function bindRatioDrag() {
+    if (_ratioDragBound || typeof window === 'undefined') return;
+    window.addEventListener('pointermove', onRatioPointerMove);
+    window.addEventListener('pointerup', onRatioPointerUp);
+    _ratioDragBound = true;
+  }
+
+  function handleRatioPointerDown(e: PointerEvent) {
+    if (!pendingTradePlan) return;
+    _ratioDragPointerId = e.pointerId;
+    const ratio = ratioFromClientX(e.clientX);
+    if (ratio !== null) setTradePlanRatio(ratio);
+    bindRatioDrag();
   }
 
   function clampToCanvas(v: number, max: number) {
@@ -605,9 +776,19 @@
   }
 
   function setIndicatorStripState(next: 'expanded' | 'collapsed' | 'hidden') {
+    if (isTvLikePreset && next !== 'collapsed') return;
     if (indicatorStripState === next) return;
     indicatorStripState = next;
     gtmEvent('terminal_indicator_strip_state', { state: next });
+  }
+
+  $: if (isTvLikePreset) {
+    if (indicatorStripState !== 'hidden') indicatorStripState = 'hidden';
+    if (showIndicatorLegend) showIndicatorLegend = false;
+  }
+
+  $: if (!pendingTradePlan) {
+    unbindRatioDrag();
   }
 
   $: {
@@ -831,6 +1012,7 @@
     isDrawing = false;
     currentDrawing = null;
     tradePreview = null;
+    if (mode !== 'none') pendingTradePlan = null;
     unbindGlobalDrawingMouseUp();
     renderDrawings();
   }
@@ -838,6 +1020,7 @@
     drawings = [];
     currentDrawing = null;
     tradePreview = null;
+    pendingTradePlan = null;
     isDrawing = false;
     drawingMode = 'none';
     unbindGlobalDrawingMouseUp();
@@ -881,8 +1064,22 @@
     if (!preview) {
       pushChartNotice('라인 진입 계산 실패');
     } else {
-      openTradeByLine(preview.dir, preview.entry, preview.sl, preview.rr);
       drawings = [...drawings, makeTradeBoxDrawing(preview)];
+      if (requireTradeConfirm) {
+        pendingTradePlan = {
+          pair: state.pair || 'BTC/USDT',
+          previewDir: preview.dir,
+          entry: preview.entry,
+          sl: preview.sl,
+          tp: preview.tp,
+          rr: preview.rr,
+          riskPct: preview.riskPct,
+          longRatio: preview.dir === 'LONG' ? 70 : 30,
+        };
+        pushChartNotice('드래그 완료 · 비율 조정 후 포지션 생성 버튼을 누르세요');
+      } else {
+        openTradeByLine(preview.dir, preview.entry, preview.sl, preview.rr);
+      }
     }
     isDrawing = false;
     currentDrawing = null;
@@ -929,6 +1126,7 @@
     const ctx = drawingCanvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    drawPatternOverlays(ctx);
     for (const d of drawings) {
       ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.5;
       if (d.type === 'hline') { ctx.setLineDash([6, 3]); ctx.moveTo(0, d.points[0].y); ctx.lineTo(drawingCanvas.width, d.points[0].y); }
@@ -963,10 +1161,230 @@
     }
   }
 
+  function toOverlayPoint(time: number, price: number): { x: number; y: number } | null {
+    if (!chart || !drawingCanvas) return null;
+    if (!Number.isFinite(time) || !Number.isFinite(price)) return null;
+    try {
+      const x = chart.timeScale().timeToCoordinate(time as any);
+      const y = toChartY(price);
+      if (!Number.isFinite(x) || y === null || !Number.isFinite(y)) return null;
+      return { x, y };
+    } catch {
+      return null;
+    }
+  }
+
+  function drawPatternTag(
+    ctx: CanvasRenderingContext2D,
+    point: { x: number; y: number },
+    text: string,
+    color: string
+  ) {
+    if (!drawingCanvas) return;
+    ctx.save();
+    ctx.font = "700 9px 'JetBrains Mono', monospace";
+    const padX = 6;
+    const h = 16;
+    const w = Math.ceil(ctx.measureText(text).width) + padX * 2;
+    const x = Math.max(4, Math.min(point.x + 8, drawingCanvas.width - w - 4));
+    const y = Math.max(4, Math.min(point.y - h - 8, drawingCanvas.height - h - 4));
+
+    ctx.fillStyle = withAlpha('#05070d', 0.84);
+    ctx.strokeStyle = withAlpha(color, 0.72);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = withAlpha(color, 0.96);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + padX, y + h / 2);
+    ctx.restore();
+  }
+
+  function drawPatternOverlays(ctx: CanvasRenderingContext2D) {
+    if (!drawingCanvas || !chart || chartMode !== 'agent' || detectedPatterns.length === 0) return;
+
+    for (const pattern of detectedPatterns.slice(0, 3)) {
+      const active = !selectedPatternId || selectedPatternId === pattern.id;
+      const lineAlpha = active ? 0.92 : 0.45;
+      const fillAlpha = active ? 0.16 : 0.07;
+
+      const upperGuide = pattern.guideLines.find((g) => g.label === 'upper');
+      const lowerGuide = pattern.guideLines.find((g) => g.label === 'lower');
+      if (upperGuide && lowerGuide) {
+        const p1 = toOverlayPoint(upperGuide.from.time, upperGuide.from.price);
+        const p2 = toOverlayPoint(upperGuide.to.time, upperGuide.to.price);
+        const p3 = toOverlayPoint(lowerGuide.to.time, lowerGuide.to.price);
+        const p4 = toOverlayPoint(lowerGuide.from.time, lowerGuide.from.price);
+        if (p1 && p2 && p3 && p4) {
+          ctx.save();
+          ctx.fillStyle = withAlpha(upperGuide.color, fillAlpha);
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p3.x, p3.y);
+          ctx.lineTo(p4.x, p4.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      for (const guide of pattern.guideLines) {
+        const from = toOverlayPoint(guide.from.time, guide.from.price);
+        const to = toOverlayPoint(guide.to.time, guide.to.price);
+        if (!from || !to) continue;
+
+        ctx.save();
+        ctx.strokeStyle = withAlpha(guide.color, lineAlpha);
+        ctx.lineWidth = active ? (guide.style === 'dashed' ? 2 : 2.2) : 1.4;
+        ctx.setLineDash(guide.style === 'dashed' ? [7, 5] : []);
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (active) {
+          ctx.fillStyle = withAlpha(guide.color, 0.95);
+          ctx.beginPath();
+          ctx.arc(from.x, from.y, 2.2, 0, Math.PI * 2);
+          ctx.arc(to.x, to.y, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      const marker = toOverlayPoint(pattern.markerTime, pattern.markerPrice);
+      if (!marker) continue;
+      const tagColor = pattern.direction === 'BULLISH' ? '#58d78d' : '#ff657a';
+      const statusLabel = pattern.status === 'CONFIRMED' ? 'OK' : 'PEND';
+      drawPatternTag(
+        ctx,
+        marker,
+        `${pattern.shortName} ${statusLabel} ${Math.round(pattern.confidence * 100)}%`,
+        tagColor
+      );
+    }
+  }
+
   function resizeDrawingCanvas() {
     if (!drawingCanvas || !chartContainer) return;
     drawingCanvas.width = chartContainer.clientWidth;
     drawingCanvas.height = chartContainer.clientHeight;
+    renderDrawings();
+  }
+
+  function clearPatternLineSeries() {
+    if (!chart || patternLineSeries.length === 0) {
+      patternLineSeries = [];
+      return;
+    }
+    for (const lineSeries of patternLineSeries) {
+      try { chart.removeSeries(lineSeries); } catch {}
+    }
+    patternLineSeries = [];
+  }
+
+  function applyPatternLineSeries() {
+    if (!chart || !lwcModule) return;
+    clearPatternLineSeries();
+    if (detectedPatterns.length === 0) return;
+
+    for (const pattern of detectedPatterns) {
+      for (const guide of pattern.guideLines) {
+        try {
+          const lineSeries = chart.addSeries(lwcModule.LineSeries, {
+            color: guide.color,
+            lineWidth: pattern.status === 'CONFIRMED' ? 2 : 1.5,
+            lineStyle: guide.style === 'dashed' ? 2 : 0,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          lineSeries.setData([
+            { time: guide.from.time, value: guide.from.price },
+            { time: guide.to.time, value: guide.to.price },
+          ]);
+          patternLineSeries.push(lineSeries);
+        } catch (err) {
+          console.error('[ChartPanel] pattern line render error', err);
+        }
+      }
+    }
+  }
+
+  function toPatternMarker(pattern: ChartPatternDetection): ChartMarker {
+    const isBear = pattern.direction === 'BEARISH';
+    const isConfirmed = pattern.status === 'CONFIRMED';
+    const confidencePct = Math.round(pattern.confidence * 100);
+    return {
+      time: pattern.markerTime,
+      position: isBear ? 'aboveBar' : 'belowBar',
+      color: isBear ? '#ff657a' : '#58d78d',
+      shape: isConfirmed ? (isBear ? 'arrowDown' : 'arrowUp') : 'circle',
+      text: `${pattern.shortName} ${isConfirmed ? 'OK' : 'PEND'} ${confidencePct}%`,
+    };
+  }
+
+  function applyCombinedMarkers() {
+    if (!series) return;
+    try {
+      series.setMarkers([...agentMarkers, ...patternMarkers]);
+    } catch {}
+  }
+
+  function runPatternDetection() {
+    if (!chart || !series || klineCache.length < 30) {
+      detectedPatterns = [];
+      patternMarkers = [];
+      _patternSignature = '';
+      applyCombinedMarkers();
+      clearPatternLineSeries();
+      renderDrawings();
+      return;
+    }
+
+    const next = detectChartPatterns(klineCache, { maxPatterns: 3, pivotLookaround: 2 });
+    const signature = next
+      .map((p) => `${p.id}:${p.status}:${Math.round(p.confidence * 100)}`)
+      .join('|');
+    if (signature === _patternSignature) return;
+
+    _patternSignature = signature;
+    detectedPatterns = next;
+    patternMarkers = next.map(toPatternMarker);
+    applyCombinedMarkers();
+    applyPatternLineSeries();
+    renderDrawings();
+  }
+
+  function forcePatternScan() {
+    runPatternDetection();
+    if (detectedPatterns.length === 0) {
+      pushChartNotice('패턴 미감지 · 조건 미충족');
+      return;
+    }
+    const summary = detectedPatterns
+      .slice(0, 2)
+      .map((p) => `${p.shortName} ${Math.round(p.confidence * 100)}%`)
+      .join(' · ');
+    pushChartNotice(`패턴 ${detectedPatterns.length}개 감지 · ${summary}`);
+  }
+
+  $: selectedPattern = (() => {
+    if (detectedPatterns.length === 0) {
+      selectedPatternId = null;
+      return null;
+    }
+    if (!selectedPatternId || !detectedPatterns.some((p) => p.id === selectedPatternId)) {
+      selectedPatternId = detectedPatterns[0].id;
+    }
+    return detectedPatterns.find((p) => p.id === selectedPatternId) ?? detectedPatterns[0];
+  })();
+  $: if (selectedPatternId) {
     renderDrawings();
   }
 
@@ -976,11 +1394,15 @@
 
   let livePrice = 0;
   let priceChange24h = 0;
+  let high24h = 0;
+  let low24h = 0;
+  let quoteVolume24h = 0;
   let isLoading = true;
   let error = '';
 
   let _priceUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   let _pendingPrice: number | null = null;
+  let _pendingPairBase: string | null = null;
   function normalizeMarketPrice(price: number): number {
     if (!Number.isFinite(price)) return 0;
     const abs = Math.abs(price);
@@ -989,18 +1411,40 @@
     return Number(price.toFixed(6));
   }
 
+  /** priceStore에 즉시 반영 (초기 로드 시 호출) */
+  function flushPriceUpdate(price: number, pairBase: string) {
+    const normalized = normalizeMarketPrice(price);
+    updatePrice(pairBase, normalized, 'rest');
+  }
+
+  /** WS 실시간 업데이트용 2초 스로틀 (pairBase도 함께 저장하여 클로저 버그 방지) */
   function throttledPriceUpdate(price: number, pairBase: string) {
     _pendingPrice = price;
+    _pendingPairBase = pairBase;
     if (_priceUpdateTimer) return;
     _priceUpdateTimer = setTimeout(() => {
-      if (_pendingPrice !== null) {
-        gameState.update(s => ({
-          ...s,
-          prices: { ...s.prices, [pairBase]: normalizeMarketPrice(_pendingPrice!) }
-        }));
+      if (_pendingPrice !== null && _pendingPairBase !== null) {
+        const normalized = normalizeMarketPrice(_pendingPrice!);
+        // S-03: priceStore가 단일 소스
+        updatePrice(_pendingPairBase!, normalized, 'ws');
       }
-      _priceUpdateTimer = null; _pendingPrice = null;
+      _priceUpdateTimer = null; _pendingPrice = null; _pendingPairBase = null;
     }, 2000);
+  }
+
+  function hydrate24hStatsFromKlines(klines: BinanceKline[]) {
+    if (!Array.isArray(klines) || klines.length === 0) return;
+    let hi = Number.NEGATIVE_INFINITY;
+    let lo = Number.POSITIVE_INFINITY;
+    let qv = 0;
+    for (const k of klines) {
+      if (Number.isFinite(k.high)) hi = Math.max(hi, k.high);
+      if (Number.isFinite(k.low)) lo = Math.min(lo, k.low);
+      if (Number.isFinite(k.volume) && Number.isFinite(k.close)) qv += k.volume * k.close;
+    }
+    if (Number.isFinite(hi) && hi > 0) high24h = hi;
+    if (Number.isFinite(lo) && lo > 0) low24h = lo;
+    if (Number.isFinite(qv) && qv > 0) quoteVolume24h = qv;
   }
 
   $: if (series && showPosition && posEntry !== null && posTp !== null && posSl !== null) { updatePositionLines(posEntry, posTp, posSl, posDir); }
@@ -1070,7 +1514,7 @@
 
   function priceFromY(y: number): number | null { if (!series) return null; try { return series.coordinateToPrice(y); } catch { return null; } }
 
-  $: if (series && agentMarkers.length > 0) { try { series.setMarkers(agentMarkers); } catch {} }
+  $: if (series) { applyCombinedMarkers(); }
 
   export function getCurrentPrice() { return livePrice; }
 
@@ -1080,22 +1524,40 @@
 
   onMount(async () => {
     try {
-      const lwc = await import('lightweight-charts');
+      lwcModule = await import('lightweight-charts');
+      const lwc = lwcModule;
       chartTheme = resolveChartTheme(chartContainer);
+
+      if (advancedMode && indicatorStripState === 'expanded') {
+        indicatorStripState = 'collapsed';
+        showIndicatorLegend = false;
+        chartVisualMode = 'focus';
+      }
+
       if (_indicatorProfileApplied === null) {
         applyIndicatorProfile();
         _indicatorProfileApplied = advancedMode ? `advanced:${chartVisualMode}` : 'basic';
       }
 
+      const compactViewport = isCompactViewport();
       chart = lwc.createChart(chartContainer, {
         width: chartContainer.clientWidth, height: chartContainer.clientHeight,
-        layout: { background: { type: lwc.ColorType.Solid, color: chartTheme.bg }, textColor: chartTheme.text, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 },
+        layout: {
+          background: { type: lwc.ColorType.Solid, color: chartTheme.bg },
+          textColor: chartTheme.text,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: compactViewport ? 12 : 11
+        },
         grid: { vertLines: { color: chartTheme.grid }, horzLines: { color: chartTheme.grid } },
-        crosshair: { mode: lwc.CrosshairMode.Normal },
+        crosshair: {
+          mode: lwc.CrosshairMode.Normal,
+          vertLine: { labelBackgroundColor: withAlpha('#122031', 0.94) },
+          horzLine: { labelBackgroundColor: withAlpha('#122031', 0.94) }
+        },
         rightPriceScale: {
           autoScale: true,
           borderColor: chartTheme.border,
-          minimumWidth: 74,
+          minimumWidth: compactViewport ? 88 : 74,
           scaleMargins: { top: 0.04, bottom: 0.08 }
         },
         timeScale: {
@@ -1177,6 +1639,7 @@
         if (range && range.from < 20 && !_isLoadingMore && !_noMoreHistory) {
           loadMoreHistory();
         }
+        renderDrawings();
       });
 
       const ro = new ResizeObserver(() => {
@@ -1208,6 +1671,7 @@
         if (wsCleanup) wsCleanup();
         if (priceWsCleanup) priceWsCleanup();
         clearPositionLines();
+        clearPatternLineSeries();
         destroyTradingView();
         if (chart) chart.remove();
       };
@@ -1254,6 +1718,7 @@
         if (rsiData.length > 0) rsiVal = rsiData[rsiData.length - 1].value;
       }
       latestVolume = klineCache[klineCache.length - 1]?.volume || 0;
+      runPatternDetection();
       // Don't call fitContent — preserve user's scroll position
     } catch (e) {
       console.error('[ChartPanel] loadMoreHistory error:', e);
@@ -1269,6 +1734,11 @@
     _currentSymbol = sym;
     _currentInterval = intv;
     _noMoreHistory = false;
+    detectedPatterns = [];
+    patternMarkers = [];
+    _patternSignature = '';
+    applyCombinedMarkers();
+    clearPatternLineSeries();
     isLoading = true; error = '';
 
     try {
@@ -1304,6 +1774,7 @@
         rsiSeries.setData(rsiData);
         if (rsiData.length > 0) rsiVal = rsiData[rsiData.length - 1].value;
       }
+      runPatternDetection();
 
       // Cache MA display values
       const len = klines.length;
@@ -1319,11 +1790,21 @@
       livePrice = lastKline.close;
       if (ticker24 && Number.isFinite(Number(ticker24.priceChangePercent))) {
         priceChange24h = Number(ticker24.priceChangePercent);
+        const parsedHigh = Number((ticker24 as any).highPrice);
+        const parsedLow = Number((ticker24 as any).lowPrice);
+        const parsedQuoteVol = Number((ticker24 as any).quoteVolume);
+        if (Number.isFinite(parsedHigh) && parsedHigh > 0) high24h = parsedHigh;
+        if (Number.isFinite(parsedLow) && parsedLow > 0) low24h = parsedLow;
+        if (Number.isFinite(parsedQuoteVol) && parsedQuoteVol > 0) quoteVolume24h = parsedQuoteVol;
       } else if (len > 6) {
         priceChange24h = ((lastKline.close - klines[len - 7].close) / klines[len - 7].close) * 100;
+        hydrate24hStatsFromKlines(klines);
+      } else {
+        hydrate24hStatsFromKlines(klines);
       }
 
-      throttledPriceUpdate(lastKline.close, pairBase);
+      // 초기 kline 로드 시 즉시 priceStore에 반영 (Header 즉시 업데이트)
+      flushPriceUpdate(lastKline.close, pairBase);
       dispatch('priceUpdate', { price: lastKline.close });
       chart.timeScale().fitContent();
 
@@ -1351,6 +1832,7 @@
         if (isUpdate) klineCache[klineCache.length - 1] = kline;
         else klineCache.push(kline);
         const cLen = klineCache.length;
+        runPatternDetection();
 
         // MA — simple running average from last N
         if (ma7Series && cLen >= 7) {
@@ -1395,13 +1877,24 @@
       });
 
       // Keep displayed price synced to trade ticker (closer match with TradingView quote).
-      priceWsCleanup = subscribeMiniTicker([sym], (update) => {
-        const tick = update[sym];
-        if (!Number.isFinite(tick) || tick <= 0) return;
-        livePrice = tick;
-        throttledPriceUpdate(tick, pairBase);
-        dispatch('priceUpdate', { price: tick });
-      });
+      priceWsCleanup = subscribeMiniTicker(
+        [sym],
+        (update) => {
+          const tick = update[sym];
+          if (!Number.isFinite(tick) || tick <= 0) return;
+          livePrice = tick;
+          throttledPriceUpdate(tick, pairBase);
+          dispatch('priceUpdate', { price: tick });
+        },
+        (updates) => {
+          const full = updates[sym];
+          if (!full) return;
+          if (Number.isFinite(full.change24h)) priceChange24h = full.change24h;
+          if (Number.isFinite(full.high24h) && full.high24h > 0) high24h = full.high24h;
+          if (Number.isFinite(full.low24h) && full.low24h > 0) low24h = full.low24h;
+          if (Number.isFinite(full.volume24h) && full.volume24h > 0) quoteVolume24h = full.volume24h;
+        }
+      );
 
       isLoading = false;
     } catch (e: any) {
@@ -1449,12 +1942,14 @@
 
   function changePair(pair: string) {
     gtmEvent('terminal_pair_change', { pair });
+    pendingTradePlan = null;
     gameState.update(s => ({ ...s, pair }));
     loadKlines(pairToSymbol(pair), interval);
   }
   function changeTF(tf: string) {
     const normalized = normalizeTimeframe(tf);
     gtmEvent('terminal_timeframe_change', { timeframe: normalized });
+    pendingTradePlan = null;
     gameState.update(s => ({ ...s, timeframe: normalized }));
     loadKlines(symbol, toBinanceInterval(normalized));
   }
@@ -1472,6 +1967,44 @@
     });
   }
 
+  function requestChatAssist() {
+    gtmEvent('terminal_chat_request_chart', {
+      source: 'chart-bar',
+      pair: state.pair,
+      timeframe: state.timeframe,
+      tradeReady: chatTradeReady,
+      tradeDir: chatTradeDir,
+    });
+    if (chatTradeReady) {
+      void activateTradeDrawing(chatTradeDir);
+      pushChartNotice(`${chatTradeDir} 드래그 모드 활성화`);
+      return;
+    }
+    dispatch('chatrequest', {
+      source: 'chart-bar',
+      pair: state.pair,
+      timeframe: state.timeframe,
+    });
+    pushChartNotice('채팅 탭에서 질문 후 거래를 시작하세요');
+  }
+
+  export async function activateTradeDrawing(dir: 'LONG' | 'SHORT' = 'LONG') {
+    if (!enableTradeLineEntry) return;
+    if (chartMode !== 'agent') {
+      await setChartMode('agent');
+      await tick();
+    }
+    const mode: DrawingMode = dir === 'SHORT' ? 'shortentry' : 'longentry';
+    setDrawingMode(mode);
+    gtmEvent('terminal_trade_drawing_activate', {
+      source: 'chat-first',
+      dir,
+      pair: state.pair,
+      timeframe: state.timeframe,
+    });
+    pushChartNotice(`${dir} 드래그 모드 시작 · 차트에서 드래그해 ENTRY/TP/SL 생성`);
+  }
+
   onDestroy(() => {
     if (_priceUpdateTimer) clearTimeout(_priceUpdateTimer);
     if (_tvInitTimer) clearTimeout(_tvInitTimer);
@@ -1479,6 +2012,7 @@
     if (_chartNoticeTimer) clearTimeout(_chartNoticeTimer);
     if (_drawRAF) cancelAnimationFrame(_drawRAF);
     unbindGlobalDrawingMouseUp();
+    unbindRatioDrag();
     if (cleanup) cleanup();
     if (wsCleanup) wsCleanup();
     if (priceWsCleanup) priceWsCleanup();
@@ -1486,68 +2020,140 @@
   });
 </script>
 
-<div class="chart-wrapper">
+<div class="chart-wrapper" class:tv-like={isTvLikePreset}>
   <div class="chart-bar">
-    <div class="live-indicator">
-      <span class="live-dot" class:err={!!error}></span>
-      {error ? 'OFFLINE' : 'LIVE'}
-    </div>
-
-    <TokenDropdown value={state.pair} compact on:select={e => changePair(e.detail.pair)} />
-
-    <div class="tf-btns">
-      {#each CORE_TIMEFRAME_OPTIONS as tf}
-        <button
-          class="tfbtn"
-          class:active={normalizeTimeframe(state.timeframe) === tf.value}
-          on:click={() => changeTF(tf.value)}
-        >
-          {tf.label}
-        </button>
-      {/each}
-    </div>
-
-    <div class="mode-toggle">
-      <button class="mode-btn" class:active={chartMode === 'agent'} on:click={() => setChartMode('agent')}>
-        <span class="mode-icon">&#9889;</span> AGENT
-      </button>
-      <button class="mode-btn" class:active={chartMode === 'trading'} on:click={() => setChartMode('trading')}>
-        <span class="mode-icon">&#128208;</span> TRADING
-      </button>
-    </div>
-
-    <button class="scan-btn" on:click={requestAgentScan} title="Run agent scan for current market">
-      SCAN
-    </button>
-
-    {#if chartMode === 'agent'}
-      <div class="draw-tools">
-        <button class="draw-btn" class:active={drawingMode === 'hline'} on:click={() => setDrawingMode(drawingMode === 'hline' ? 'none' : 'hline')} title="Horizontal Line">&#x2500;</button>
-        <button class="draw-btn" class:active={drawingMode === 'trendline'} on:click={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
-        {#if enableTradeLineEntry}
-          <button class="draw-btn long-tool" class:active={drawingMode === 'longentry'} on:click={() => setDrawingMode(drawingMode === 'longentry' ? 'none' : 'longentry')} title="LONG RR Box (L) · drag once">L</button>
-          <button class="draw-btn short-tool" class:active={drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'shortentry' ? 'none' : 'shortentry')} title="SHORT RR Box (S) · drag once">S</button>
+    <div class="bar-top top-meta">
+      <div class="pair-summary">
+        {#if chartMode === 'trading'}
+          <span class="pair-name">{pairBaseLabel}/{pairQuoteLabel}</span>
         {/if}
-        <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
+        <span class="pair-k">LAST</span>
+        <span class="pair-last">${formatPrice(livePrice)}</span>
+        <span class="pair-move" class:up={priceChange24h >= 0} class:down={priceChange24h < 0}>
+          {priceChange24h >= 0 ? '+' : '-'}{Math.abs(priceChange24h).toFixed(2)}%
+        </span>
       </div>
-    {/if}
+      <div class="market-stats">
+        <div class="mstat">
+          <span class="mstat-k">24H LOW</span>
+          <span class="mstat-v">{low24h > 0 ? formatPrice(low24h) : '—'}</span>
+        </div>
+        <div class="mstat">
+          <span class="mstat-k">24H HIGH</span>
+          <span class="mstat-v">{high24h > 0 ? formatPrice(high24h) : '—'}</span>
+        </div>
+        <div class="mstat wide">
+          <span class="mstat-k">24H VOL(USDT)</span>
+          <span class="mstat-v">{quoteVolume24h > 0 ? formatCompact(quoteVolume24h) : '—'}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bar-tools">
+      <div class="bar-left">
+        <div class="live-indicator">
+          <span class="live-dot" class:err={!!error}></span>
+          {error ? 'OFFLINE' : 'LIVE'}
+        </div>
+
+        {#if chartMode === 'agent'}
+          <div class="pair-slot">
+            <TokenDropdown value={state.pair} compact={isCompactViewport()} on:select={e => changePair(e.detail.pair)} />
+          </div>
+        {/if}
+
+        <div class="tf-compact">
+          <span class="tf-compact-label">TF</span>
+          <select
+            class="tf-compact-select"
+            value={normalizeTimeframe(state.timeframe)}
+            on:change={(e) => changeTF((e.currentTarget as HTMLSelectElement).value)}
+            aria-label="Timeframe"
+          >
+            {#each CORE_TIMEFRAME_OPTIONS as tf}
+              <option value={tf.value}>{tf.label}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
+
+      <div class="tf-btns">
+        {#each CORE_TIMEFRAME_OPTIONS as tf}
+          <button
+            class="tfbtn"
+            class:active={normalizeTimeframe(state.timeframe) === tf.value}
+            on:click={() => changeTF(tf.value)}
+          >
+            {tf.label}
+          </button>
+        {/each}
+      </div>
+
+      <div class="bar-controls">
+        <div class="mode-toggle">
+          <button class="mode-btn" class:active={chartMode === 'agent'} on:click={() => setChartMode('agent')}>
+            AGENT
+          </button>
+          <button class="mode-btn" class:active={chartMode === 'trading'} on:click={() => setChartMode('trading')}>
+            TRADING
+          </button>
+        </div>
+
+        {#if chartMode === 'agent'}
+          <div class="draw-tools">
+            {#if !isTvLikePreset}
+              <button class="draw-btn" class:active={drawingMode === 'hline'} on:click={() => setDrawingMode(drawingMode === 'hline' ? 'none' : 'hline')} title="Horizontal Line">&#x2500;</button>
+              <button class="draw-btn" class:active={drawingMode === 'trendline'} on:click={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
+            {/if}
+            {#if enableTradeLineEntry}
+              <button class="draw-btn long-tool" class:active={drawingMode === 'longentry'} on:click={() => setDrawingMode(drawingMode === 'longentry' ? 'none' : 'longentry')} title="LONG RR Box (L) · drag once">L</button>
+              <button class="draw-btn short-tool" class:active={drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'shortentry' ? 'none' : 'shortentry')} title="SHORT RR Box (S) · drag once">S</button>
+            {/if}
+            <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
+          </div>
+        {/if}
+
+        {#if chartMode === 'agent'}
+          {#if chatFirstMode}
+            <button
+              class="scan-btn chat-trigger"
+              class:ready={chatTradeReady}
+              on:click={requestChatAssist}
+              title={chatTradeReady ? `AI answer ready. Start ${chatTradeDir} drag on chart.` : 'Open Intel chat and ask AI first'}
+            >
+              {chatTradeReady ? `START ${chatTradeDir}` : 'OPEN CHAT'}
+            </button>
+          {:else}
+            <button class="scan-btn" on:click={requestAgentScan} title="Run agent scan for current market">
+              SCAN
+            </button>
+          {/if}
+          <button
+            class="scan-btn pattern-trigger"
+            on:click={forcePatternScan}
+            title="Re-scan head and shoulders / falling wedge patterns"
+          >
+            PATTERN
+          </button>
+
+          {#if advancedMode && indicatorStripState === 'hidden' && !isTvLikePreset}
+            <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>지표 ON</button>
+          {/if}
+        {/if}
+
+      </div>
+    </div>
 
     {#if chartMode === 'agent' && klineCache.length > 0 && !advancedMode}
-      <div class="ma-vals">
-        <span class="ma-tag" style="color:{chartTheme.ma7}">MA(7) {ma7Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
-        <span class="ma-tag" style="color:{chartTheme.ma25}">MA(25) {ma25Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
-        <span class="ma-tag" style="color:{chartTheme.ma99}">MA(99) {ma99Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+      <div class="bar-meta">
+        <div class="ma-vals">
+          <span class="ma-tag" style="color:{chartTheme.ma7}">MA(7) {ma7Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+          <span class="ma-tag" style="color:{chartTheme.ma25}">MA(25) {ma25Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+          <span class="ma-tag" style="color:{chartTheme.ma99}">MA(99) {ma99Val.toLocaleString('en-US',{maximumFractionDigits:1})}</span>
+          <span class="ma-tag">RSI14 {Number.isFinite(rsiVal) ? rsiVal.toFixed(2) : '—'}</span>
+          <span class="ma-tag">VOL {formatCompact(latestVolume)}</span>
+        </div>
       </div>
-    {/if}
-
-    <div class="price-info">
-      <span class="cprc">${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-      <span class="pchg" class:up={priceChange24h >= 0} class:down={priceChange24h < 0}>
-        {priceChange24h >= 0 ? '▲' : '▼'}{Math.abs(priceChange24h).toFixed(2)}%
-      </span>
-    </div>
-    {#if chartMode === 'agent' && advancedMode && indicatorStripState === 'hidden'}
-      <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>지표 ON</button>
     {/if}
   </div>
 
@@ -1564,7 +2170,7 @@
         <button class="ind-chip" class:on={indicatorEnabled.ma60} on:click={() => toggleIndicator('ma60')} style="--ind-color:{chartTheme.ma60}">
           MA60 <span>{formatPrice(ma60Val)}</span>
         </button>
-        <button class="ind-chip" class:on={indicatorEnabled.ma120} on:click={() => toggleIndicator('ma120')} style="--ind-color:{chartTheme.ma120}">
+        <button class="ind-chip optional" class:on={indicatorEnabled.ma120} on:click={() => toggleIndicator('ma120')} style="--ind-color:{chartTheme.ma120}">
           MA120 <span>{formatPrice(ma120Val)}</span>
         </button>
         {#if chartVisualMode === 'full'}
@@ -1579,31 +2185,33 @@
           </button>
         {/if}
         <button class="ind-chip" class:on={indicatorEnabled.rsi} on:click={() => toggleIndicator('rsi')} style="--ind-color:{chartTheme.rsi}">
-          RSI14(상대강도) <span>{Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
+          RSI14 <span>{Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
         </button>
         <button class="ind-chip" class:on={indicatorEnabled.vol} on:click={() => toggleIndicator('vol')} style="--ind-color:{chartTheme.candleUp}">
-          VOL(거래량) <span>{formatCompact(latestVolume)}</span>
+          VOL <span>{formatCompact(latestVolume)}</span>
         </button>
         <button class="legend-chip" class:on={showIndicatorLegend} on:click={toggleIndicatorLegend}>LABELS</button>
         <button class="legend-chip" on:click={() => setIndicatorStripState('collapsed')}>접기</button>
         <button class="legend-chip danger" on:click={() => setIndicatorStripState('hidden')}>끄기</button>
         {#if enableTradeLineEntry}
-          <span class="ind-hint">H/T/L/S · L/S는 드래그 1회로 ENTRY/SL/TP 생성 · +/- 줌 · F 맞춤 · 0 리셋 · Esc 취소</span>
+          <span class="ind-hint">L/S 드래그 · +/- 줌 · 0 리셋</span>
         {/if}
       {:else}
         <div class="collapsed-summary">
           <span class="sum-title">INDICATORS</span>
           <span class="sum-item">MA20 {formatPrice(ma20Val)}</span>
           <span class="sum-item">MA60 {formatPrice(ma60Val)}</span>
-          <span class="sum-item">MA120 {formatPrice(ma120Val)}</span>
-          <span class="sum-item">RSI14(상대강도) {Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
-          <span class="sum-item">VOL(거래량) {formatCompact(latestVolume)}</span>
+          <span class="sum-item optional">MA120 {formatPrice(ma120Val)}</span>
+          <span class="sum-item">RSI14 {Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
+          <span class="sum-item">VOL {formatCompact(latestVolume)}</span>
         </div>
-        <div class="strip-actions">
-          <button class="legend-chip" class:on={showIndicatorLegend} on:click={toggleIndicatorLegend}>LABELS</button>
-          <button class="legend-chip" on:click={() => setIndicatorStripState('expanded')}>펴기</button>
-          <button class="legend-chip danger" on:click={() => setIndicatorStripState('hidden')}>끄기</button>
-        </div>
+        {#if !isTvLikePreset}
+          <div class="strip-actions">
+            <button class="legend-chip" class:on={showIndicatorLegend} on:click={toggleIndicatorLegend}>LABELS</button>
+            <button class="legend-chip" on:click={() => setIndicatorStripState('expanded')}>펴기</button>
+            <button class="legend-chip danger" on:click={() => setIndicatorStripState('hidden')}>끄기</button>
+          </div>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -1683,8 +2291,59 @@
       <div class="chart-notice">{chartNotice}</div>
     {/if}
 
+    {#if chartMode === 'agent' && detectedPatterns.length > 0}
+      <div class="pattern-panel">
+        <div class="pattern-head">
+          <span>PATTERN LAB</span>
+          <button
+            class="pattern-collapse"
+            type="button"
+            on:click={() => patternPanelCollapsed = !patternPanelCollapsed}
+          >
+            {patternPanelCollapsed ? '+' : '−'}
+          </button>
+        </div>
+        {#if !patternPanelCollapsed}
+          <div class="pattern-tabs">
+            {#each detectedPatterns.slice(0, 3) as pat (pat.id)}
+              <button
+                type="button"
+                class="pattern-tab"
+                class:active={selectedPattern?.id === pat.id}
+                class:bull={pat.direction === 'BULLISH'}
+                class:bear={pat.direction === 'BEARISH'}
+                on:click={() => selectedPatternId = pat.id}
+              >
+                {pat.shortName} {(pat.confidence * 100).toFixed(0)}%
+              </button>
+            {/each}
+          </div>
+          {#if selectedPattern}
+            <div class="pattern-card" class:bull={selectedPattern.direction === 'BULLISH'} class:bear={selectedPattern.direction === 'BEARISH'}>
+              <div class="pattern-name">{patternKindLabel(selectedPattern.kind)}</div>
+              <div class="pattern-meta">
+                <span>{patternStatusLabel(selectedPattern.status)}</span>
+                <span>{patternDirectionLabel(selectedPattern.direction)}</span>
+                <span>신뢰도 {(selectedPattern.confidence * 100).toFixed(0)}%</span>
+              </div>
+              <div class="pattern-range">
+                {formatPatternTime(selectedPattern.startTime)} → {formatPatternTime(selectedPattern.endTime)}
+              </div>
+              {#if selectedPattern.guideLines.length > 0}
+                <div class="pattern-guides">
+                  {#each selectedPattern.guideLines.slice(0, 3) as guide (guide.id)}
+                    <span>{guide.label}: {formatPrice(guide.to.price)}</span>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+        {/if}
+      </div>
+    {/if}
+
     {#if showPosition && posEntry !== null && posTp !== null && posSl !== null}
-      <div class="pos-overlay">
+      <div class="pos-overlay" class:with-pattern={chartMode === 'agent' && detectedPatterns.length > 0}>
         <div class="pos-badge {posDir.toLowerCase()}">
           {posDir === 'LONG' ? '🚀 LONG' : posDir === 'SHORT' ? '💀 SHORT' : '— NEUTRAL'}
         </div>
@@ -1695,6 +2354,51 @@
         </div>
         <div class="pos-rr">R:R 1:{(Math.abs(posTp - posEntry) / Math.max(1, Math.abs(posEntry - posSl))).toFixed(1)}</div>
         <div class="pos-hint">DRAG or SCROLL lines to adjust</div>
+      </div>
+    {/if}
+
+    {#if pendingTradePlan}
+      {@const planned = getPlannedTradeOrder(pendingTradePlan)}
+      <div class="trade-plan-overlay">
+        <div class="trade-plan-header">
+          <span class="plan-title">TRADE PLANNER</span>
+          <button type="button" class="plan-close" on:click={cancelTradePlan}>✕</button>
+        </div>
+        <div class="trade-plan-grid">
+          <div class="plan-row"><span>SIGNAL</span><strong>{pendingTradePlan.previewDir}</strong></div>
+          <div class="plan-row"><span>ENTRY</span><strong>{formatPrice(planned.entry)}</strong></div>
+          <div class="plan-row"><span>TP</span><strong class="tp">{formatPrice(planned.tp)}</strong></div>
+          <div class="plan-row"><span>SL</span><strong class="sl">{formatPrice(planned.sl)}</strong></div>
+          <div class="plan-row"><span>RISK</span><strong>{planned.riskPct.toFixed(2)}%</strong></div>
+          <div class="plan-row"><span>R:R</span><strong>1:{planned.rr.toFixed(1)}</strong></div>
+        </div>
+        <div class="plan-ratio-meta">
+          <span class:active={planned.dir === 'LONG'}>LONG {planned.longRatio}%</span>
+          <span class:active={planned.dir === 'SHORT'}>SHORT {planned.shortRatio}%</span>
+        </div>
+        <button
+          type="button"
+          class="plan-ratio-track"
+          bind:this={ratioTrackEl}
+          on:pointerdown={handleRatioPointerDown}
+          aria-label="Adjust long short ratio"
+        >
+          <div class="plan-ratio-long" style="width:{planned.longRatio}%"></div>
+          <div class="plan-ratio-knob" style="left:calc({planned.longRatio}% - 8px)"></div>
+        </button>
+        <div class="plan-ratio-presets">
+          <button type="button" on:click={() => setTradePlanRatio(80)}>80/20</button>
+          <button type="button" on:click={() => setTradePlanRatio(65)}>65/35</button>
+          <button type="button" on:click={() => setTradePlanRatio(50)}>50/50</button>
+          <button type="button" on:click={() => setTradePlanRatio(35)}>35/65</button>
+          <button type="button" on:click={() => setTradePlanRatio(20)}>20/80</button>
+        </div>
+        <div class="plan-actions">
+          <button type="button" class="plan-action ghost" on:click={cancelTradePlan}>취소</button>
+          <button type="button" class="plan-action primary" class:long={planned.dir === 'LONG'} class:short={planned.dir === 'SHORT'} on:click={openTradeFromPlan}>
+            포지션 생성 ({planned.dir})
+          </button>
+        </div>
       </div>
     {/if}
 
@@ -1755,13 +2459,25 @@
 
   <div class="chart-footer">
     <span class="src-badge">{chartMode === 'trading' ? 'TV' : 'BINANCE'}</span>
-    {#if chartMode === 'agent' && indicatorEnabled.vol}
+    {#if chartMode === 'agent' && indicatorEnabled.vol && !isTvLikePreset}
       <span class="footer-ind vol" title="Volume · 거래량">VOL(거래량) {latestVolume > 0 ? formatCompact(latestVolume) : '—'}</span>
     {/if}
-    {#if chartMode === 'agent' && indicatorEnabled.rsi}
+    {#if chartMode === 'agent' && indicatorEnabled.rsi && !isTvLikePreset}
       <span class="footer-ind rsi" title="RSI14 · 상대강도지수">RSI14(상대강도) {rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
     {/if}
-    {#if chartMode === 'agent' && drawings.length > 0}
+    {#if chartMode === 'agent' && detectedPatterns.length > 0}
+      {#each detectedPatterns.slice(0, 2) as pat (pat.id)}
+        <span
+          class="pattern-pill"
+          class:bull={pat.direction === 'BULLISH'}
+          class:bear={pat.direction === 'BEARISH'}
+          class:forming={pat.status === 'FORMING'}
+        >
+          {pat.shortName} {pat.status === 'CONFIRMED' ? 'OK' : 'PEND'} {(pat.confidence * 100).toFixed(0)}%
+        </span>
+      {/each}
+    {/if}
+    {#if chartMode === 'agent' && drawings.length > 0 && !isTvLikePreset}
       <span class="draw-count">DRAW {drawings.length}</span>
     {/if}
     {#if showPosition}
@@ -1780,30 +2496,354 @@
 </div>
 
 <style>
-  .chart-wrapper { display: flex; flex-direction: column; height: 100%; background: #0a0a1a; overflow: hidden; }
-  .chart-bar {
-    padding: 6px 10px; border-bottom: 3px solid #000; display: flex; align-items: center; gap: 7px;
-    background: linear-gradient(90deg, #1a1a3a, #0a0a2a); font-size: 10px; font-family: var(--fm);
-    flex-shrink: 0; flex-wrap: wrap; row-gap: 3px;
+  .chart-wrapper {
+    --cp-font-2xs: clamp(8px, 0.56vw, 9px);
+    --cp-font-xs: clamp(9px, 0.64vw, 10px);
+    --cp-font-sm: clamp(10px, 0.74vw, 11px);
+    --cp-font-md: clamp(11px, 0.86vw, 13px);
+    --cp-font-lg: clamp(15px, 1.15vw, 18px);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #0a0a1a;
+    overflow: hidden;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
-  .live-indicator { font-size: 9px; font-weight: 700; color: var(--grn); display: flex; align-items: center; gap: 3px; letter-spacing: .9px; margin-right: 4px; }
+  .chart-bar {
+    padding: 3px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: linear-gradient(90deg, #1a1a3a, #0a0a2a);
+    font-size: 10px;
+    font-family: var(--fm);
+    flex-shrink: 0;
+  }
+  .bar-top.top-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 1px;
+  }
+  .bar-top.top-meta::-webkit-scrollbar {
+    height: 2px;
+  }
+  .bar-top.top-meta::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+  }
+  .pair-summary {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: max-content;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .pair-name {
+    color: rgba(232, 237, 247, 0.92);
+    font-family: var(--fd);
+    font-size: var(--cp-font-md);
+    font-weight: 800;
+    letter-spacing: .18px;
+  }
+  .pair-k {
+    color: rgba(187, 198, 216, 0.66);
+    font-family: var(--fm);
+    font-size: var(--cp-font-2xs);
+    font-weight: 700;
+    letter-spacing: .42px;
+  }
+  .pair-last {
+    color: #f5f8ff;
+    font-family: var(--fd);
+    font-size: var(--cp-font-lg);
+    font-weight: 900;
+    letter-spacing: .18px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .pair-move {
+    font-family: var(--fd);
+    font-size: var(--cp-font-sm);
+    font-weight: 800;
+    letter-spacing: .12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .pair-move.up { color: #00ff88; }
+  .pair-move.down { color: #ff2d55; }
+  .pair-move:not(.up):not(.down) { color: rgba(190, 198, 214, 0.9); }
+  .bar-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: max-content;
+    flex: 0 0 auto;
+  }
+  .pair-slot {
+    min-width: 128px;
+    flex: 0 1 auto;
+  }
+  .market-stats {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 1px;
+  }
+  .market-stats::-webkit-scrollbar { height: 2px; }
+  .market-stats::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+  }
+  .mstat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    white-space: nowrap;
+  }
+  .mstat.wide {
+    min-width: auto;
+  }
+  .mstat-k {
+    font-family: var(--fm);
+    font-size: var(--cp-font-2xs);
+    font-weight: 700;
+    letter-spacing: .4px;
+    color: rgba(187, 198, 216, 0.66);
+  }
+  .mstat-v {
+    font-family: var(--fd);
+    font-size: var(--cp-font-md);
+    font-weight: 800;
+    letter-spacing: .12px;
+    color: rgba(255,255,255,.92);
+    font-variant-numeric: tabular-nums;
+  }
+  .bar-tools {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .bar-tools::-webkit-scrollbar { height: 2px; }
+  .bar-tools::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+  }
+  .bar-controls {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-width: max-content;
+    flex: 0 0 auto;
+  }
+  .bar-meta {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 1px;
+  }
+  .bar-meta::-webkit-scrollbar { height: 2px; }
+  .bar-meta::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+  }
+  .live-indicator { font-size: var(--cp-font-xs); font-weight: 800; color: var(--grn); display: flex; align-items: center; gap: 4px; letter-spacing: .45px; }
   .live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--grn); animation: pulse .8s infinite; }
   .live-dot.err { background: #ff2d55; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-  .tf-btns { display: flex; gap: 2px; }
-  .tfbtn { padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #b8c0cc; font-size: 9px; font-family: var(--fd); font-weight: 700; letter-spacing: .8px; cursor: pointer; transition: all .15s; }
+  .tf-btns {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 1px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tf-btns::-webkit-scrollbar { height: 2px; }
+  .tf-btns::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+  }
+  .tf-compact {
+    display: none;
+    align-items: center;
+    gap: 3px;
+    margin-left: 1px;
+    min-width: max-content;
+    flex: 0 0 auto;
+  }
+  .tf-compact-label {
+    color: rgba(187, 198, 216, 0.66);
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .5px;
+  }
+  .tf-compact-select {
+    height: 24px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.06);
+    color: rgba(232, 237, 247, 0.92);
+    font-family: var(--fd);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .35px;
+    padding: 0 24px 0 8px;
+    appearance: none;
+    cursor: pointer;
+  }
+  .tf-compact-select:focus-visible {
+    outline: 1px solid rgba(255,230,0,.45);
+    outline-offset: 1px;
+  }
+  .tfbtn { padding: 2px 7px; border-radius: 4px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #b8c0cc; font-size: var(--cp-font-2xs); font-family: var(--fd); font-weight: 700; letter-spacing: .3px; cursor: pointer; transition: all .15s; }
   .tfbtn:hover { background: rgba(255,255,255,.1); color: #fff; }
   .tfbtn.active { background: rgba(255,230,0,.15); color: #ffe600; border-color: rgba(255,230,0,.3); }
 
-  .ma-vals { display: flex; gap: 6px; flex-wrap: wrap; }
-  .ma-tag { font-size: 8px; font-family: var(--fm); font-weight: 700; letter-spacing: .3px; opacity: 1; }
+  .ma-vals { display: flex; gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
+  .ma-tag { font-size: var(--cp-font-2xs); font-family: var(--fm); font-weight: 700; letter-spacing: .2px; opacity: 1; }
 
-  .price-info { margin-left: auto; display: flex; align-items: baseline; gap: 6px; }
-  .cprc { font-size: 20px; font-weight: 700; color: #fff; font-family: var(--fd); }
-  .pchg { font-size: 12px; font-weight: 700; }
-  .pchg.up { color: #00ff88; }
-  .pchg.down { color: #ff2d55; }
+  @media (max-width: 1280px) {
+    .pair-last { font-size: clamp(14px, 1.05vw, 16px); }
+    .mstat-v { font-size: clamp(10px, 0.72vw, 11px); }
+  }
+
+  @media (max-width: 1180px) {
+    .tf-btns {
+      display: none;
+    }
+    .tf-compact {
+      display: inline-flex;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .chart-bar {
+      padding: 4px 6px;
+      gap: 3px;
+    }
+    .bar-top.top-meta {
+      gap: 6px;
+    }
+    .pair-summary {
+      gap: 6px;
+    }
+    .pair-k {
+      font-size: 8px;
+      letter-spacing: .42px;
+    }
+    .pair-name {
+      font-size: 12px;
+      letter-spacing: .25px;
+    }
+    .pair-last {
+      font-size: 14px;
+    }
+    .pair-move {
+      font-size: 10px;
+    }
+    .market-stats {
+      gap: 6px;
+    }
+    .mstat-k {
+      font-size: 8px;
+      letter-spacing: .45px;
+    }
+    .mstat-v {
+      font-size: 11px;
+    }
+    .bar-left {
+      gap: 4px;
+    }
+    .live-indicator {
+      font-size: 10px;
+      letter-spacing: .6px;
+    }
+    .pair-slot {
+      min-width: 138px;
+      flex: 0 0 auto;
+    }
+    .bar-tools {
+      gap: 4px;
+    }
+    .tf-btns {
+      width: auto;
+      flex: 0 0 auto;
+    }
+    .tf-compact {
+      margin-left: 0;
+    }
+    .tf-compact-select {
+      height: 24px;
+      font-size: 10px;
+      padding: 0 20px 0 7px;
+    }
+    .tfbtn {
+      height: 22px;
+      padding: 0 7px;
+      font-size: 9px;
+      letter-spacing: .32px;
+      white-space: nowrap;
+    }
+    .bar-controls {
+      gap: 2px;
+    }
+    .mode-toggle .mode-btn {
+      min-height: 22px;
+      padding: 0 7px;
+      font-size: 9px;
+      letter-spacing: .3px;
+    }
+    .draw-tools .draw-btn {
+      width: 22px;
+      height: 22px;
+      font-size: 9px;
+    }
+    .scan-btn {
+      min-height: 22px;
+      height: 22px;
+      padding: 0 7px;
+      font-size: 9px;
+      letter-spacing: .28px;
+    }
+    .ma-vals {
+      gap: 6px;
+    }
+  }
 
   .chart-container { flex: 1; position: relative; overflow: hidden; }
   .chart-container.hidden-chart { display: none; }
@@ -1899,7 +2939,25 @@
     .scale-btn.wide { min-width: 40px; }
     .strip-restore-btn { padding: 2px 6px; font-size: 8px; }
     .chart-notice { bottom: 36px; }
+    .pattern-panel {
+      top: 6px;
+      right: 6px;
+      width: min(240px, calc(100% - 12px));
+      padding: 6px;
+      gap: 5px;
+    }
+    .pattern-name { font-size: 9px; }
+    .pos-overlay.with-pattern { top: 104px; }
     .drag-indicator { bottom: 30px; }
+    .trade-plan-overlay {
+      left: 8px;
+      right: 8px;
+      width: auto;
+      bottom: 42px;
+      padding: 8px;
+    }
+    .plan-ratio-track { height: 22px; }
+    .plan-action { padding: 6px 8px; }
   }
   .legend-item {
     --legend-color: #aaa;
@@ -1921,23 +2979,23 @@
     box-shadow: 0 0 6px var(--legend-color);
   }
 
-  .mode-toggle { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1.5px solid rgba(255,230,0,.25); margin-left: 4px; }
-  .mode-btn { padding: 3px 10px; background: rgba(255,255,255,.03); border: none; color: #b2b9c5; font-size: 9px; font-family: var(--fd); font-weight: 800; letter-spacing: .9px; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .mode-toggle { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,230,0,.25); margin-left: 0; }
+  .mode-btn { padding: 2px 8px; background: rgba(255,255,255,.03); border: none; color: #b2b9c5; font-size: var(--cp-font-2xs); font-family: var(--fd); font-weight: 800; letter-spacing: .4px; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 2px; white-space: nowrap; }
   .mode-btn:first-child { border-right: 1px solid rgba(255,230,0,.15); }
   .mode-btn:hover { background: rgba(255,230,0,.08); color: #ccc; }
   .mode-btn.active { background: linear-gradient(135deg, rgba(255,230,0,.2), rgba(255,180,0,.15)); color: #ffe600; text-shadow: 0 0 8px rgba(255,230,0,.5); }
   .mode-icon { font-size: 10px; line-height: 1; }
   .scan-btn {
-    height: 24px;
-    padding: 0 10px;
+    height: 22px;
+    padding: 0 8px;
     border-radius: 4px;
-    border: 1.5px solid rgba(255,230,0,.35);
+    border: 1px solid rgba(255,230,0,.35);
     background: linear-gradient(135deg, rgba(255,230,0,.2), rgba(255,180,0,.12));
     color: #ffe600;
-    font-size: 9px;
+    font-size: var(--cp-font-2xs);
     font-family: var(--fd);
     font-weight: 900;
-    letter-spacing: .85px;
+    letter-spacing: .45px;
     cursor: pointer;
     transition: all .15s;
     white-space: nowrap;
@@ -1948,9 +3006,39 @@
     color: #fff3bf;
     box-shadow: 0 0 10px rgba(255,230,0,.26);
   }
+  .scan-btn.chat-trigger {
+    border-color: rgba(120, 218, 255, 0.4);
+    background: linear-gradient(135deg, rgba(94, 161, 255, 0.34), rgba(94, 161, 255, 0.18));
+    color: #d6edff;
+  }
+  .scan-btn.chat-trigger:hover {
+    border-color: rgba(120, 218, 255, 0.62);
+    background: linear-gradient(135deg, rgba(94, 161, 255, 0.46), rgba(94, 161, 255, 0.24));
+    color: #f0f8ff;
+  }
+  .scan-btn.chat-trigger.ready {
+    border-color: rgba(79, 209, 142, 0.62);
+    background: linear-gradient(135deg, rgba(39, 195, 145, 0.38), rgba(39, 195, 145, 0.2));
+    color: #dcfff0;
+  }
+  .scan-btn.chat-trigger.ready:hover {
+    border-color: rgba(79, 209, 142, 0.82);
+    background: linear-gradient(135deg, rgba(39, 195, 145, 0.5), rgba(39, 195, 145, 0.28));
+    color: #f6fff9;
+  }
+  .scan-btn.pattern-trigger {
+    border-color: rgba(255, 140, 160, 0.45);
+    background: linear-gradient(135deg, rgba(255, 120, 144, 0.28), rgba(255, 120, 144, 0.12));
+    color: #ffdbe2;
+  }
+  .scan-btn.pattern-trigger:hover {
+    border-color: rgba(255, 140, 160, 0.7);
+    background: linear-gradient(135deg, rgba(255, 120, 144, 0.4), rgba(255, 120, 144, 0.2));
+    color: #fff2f5;
+  }
 
-  .draw-tools { display: flex; gap: 2px; margin-left: 2px; padding-left: 4px; border-left: 1px solid rgba(255,255,255,.06); }
-  .draw-btn { width: 24px; height: 20px; border-radius: 4px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: #b5bdc9; font-size: 11px; font-family: monospace; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
+  .draw-tools { display: flex; gap: 2px; margin-left: 0; padding-left: 0; border-left: none; }
+  .draw-btn { width: 22px; height: 19px; border-radius: 4px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: #b5bdc9; font-size: var(--cp-font-sm); font-family: monospace; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
   .draw-btn:hover { background: rgba(255,230,0,.1); color: #ffe600; border-color: rgba(255,230,0,.3); }
   .draw-btn.active { background: rgba(255,230,0,.2); color: #ffe600; border-color: #ffe600; box-shadow: 0 0 6px rgba(255,230,0,.3); }
   .draw-btn.long-tool { font-family: var(--fd); font-size: 8px; color: #5cd4a0; border-color: rgba(92,212,160,.22); }
@@ -1963,23 +3051,34 @@
 
   .indicator-strip {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
+    gap: 4px;
+    padding: 4px 8px;
     border-bottom: 1px solid rgba(255,255,255,.06);
     background: rgba(255,255,255,.03);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
   }
   .indicator-strip.collapsed {
-    justify-content: space-between;
-    gap: 8px;
+    justify-content: flex-start;
+    gap: 6px;
   }
   .collapsed-summary {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
     min-width: 0;
-    flex-wrap: wrap;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 1px;
   }
   .sum-title {
     font-family: var(--fd);
@@ -1990,16 +3089,17 @@
   }
   .sum-item {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 7px;
     color: rgba(255,255,255,.74);
-    letter-spacing: .35px;
+    letter-spacing: .25px;
     white-space: nowrap;
   }
   .strip-actions {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    margin-left: auto;
+    margin-left: 0;
+    flex: 0 0 auto;
   }
   .view-mode {
     display: inline-flex;
@@ -2038,7 +3138,7 @@
     background: rgba(255,255,255,.05);
     color: rgba(255,255,255,.74);
     border-radius: 12px;
-    padding: 3px 8px;
+    padding: 2px 7px;
     font-family: var(--fm);
     font-size: 9px;
     font-weight: 800;
@@ -2057,6 +3157,7 @@
     box-shadow: inset 0 0 0 1px rgba(255,255,255,.1);
   }
   .ind-chip.muted { opacity: .72; }
+  .ind-chip.optional { opacity: .88; }
   .ind-chip:hover {
     color: #fff;
     border-color: rgba(255,255,255,.24);
@@ -2073,7 +3174,7 @@
     background: rgba(255,255,255,.04);
     color: rgba(255,255,255,.78);
     border-radius: 10px;
-    padding: 3px 8px;
+    padding: 2px 7px;
     font-family: var(--fd);
     font-size: 8px;
     font-weight: 800;
@@ -2121,6 +3222,117 @@
     box-shadow: 0 8px 24px rgba(0,0,0,.4);
     pointer-events: none;
     white-space: nowrap;
+  }
+  .pattern-panel {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 13;
+    width: min(280px, calc(100% - 16px));
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(8, 13, 22, 0.88);
+    backdrop-filter: blur(4px);
+    box-shadow: 0 10px 28px rgba(0,0,0,.36);
+    padding: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .pattern-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--fd);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .9px;
+    color: rgba(255,255,255,.88);
+  }
+  .pattern-collapse {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.08);
+    color: rgba(255,255,255,.9);
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .pattern-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .pattern-tab {
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.06);
+    color: rgba(255,255,255,.86);
+    padding: 2px 7px;
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .35px;
+    cursor: pointer;
+  }
+  .pattern-tab.active {
+    box-shadow: 0 0 0 1px rgba(255,255,255,.2) inset;
+  }
+  .pattern-tab.bull.active {
+    border-color: rgba(111, 242, 171, .65);
+    color: #9af5c6;
+    background: rgba(78, 199, 132, .22);
+  }
+  .pattern-tab.bear.active {
+    border-color: rgba(255, 140, 160, .65);
+    color: #ffd2db;
+    background: rgba(234, 94, 124, .24);
+  }
+  .pattern-card {
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.15);
+    background: rgba(255,255,255,.04);
+    padding: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .pattern-card.bull {
+    border-color: rgba(111, 242, 171, .38);
+    background: rgba(111, 242, 171, .1);
+  }
+  .pattern-card.bear {
+    border-color: rgba(255, 140, 160, .38);
+    background: rgba(255, 140, 160, .1);
+  }
+  .pattern-name {
+    font-family: var(--fd);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .5px;
+    color: #f6f9ff;
+  }
+  .pattern-meta {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.8);
+  }
+  .pattern-range {
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.66);
+  }
+  .pattern-guides {
+    display: grid;
+    gap: 3px;
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.86);
   }
 
   .tv-container { flex: 1; position: relative; overflow: hidden; background: #0a0a1a; }
@@ -2202,6 +3414,7 @@
   .error-badge { position: absolute; top: 6px; left: 6px; padding: 3px 8px; border-radius: 4px; background: rgba(255,45,85,.2); border: 1px solid rgba(255,45,85,.4); color: #ff2d55; font-size: 8px; font-family: var(--fm); font-weight: 700; z-index: 5; }
 
   .pos-overlay { position: absolute; top: 6px; right: 6px; z-index: 12; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+  .pos-overlay.with-pattern { top: 124px; }
   .pos-badge { padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; border: 2px solid; }
   .pos-badge.long { background: rgba(0,255,136,.2); border-color: #00ff88; color: #00ff88; }
   .pos-badge.short { background: rgba(255,45,85,.2); border-color: #ff2d55; color: #ff2d55; }
@@ -2214,6 +3427,174 @@
   .pos-hint { font-size: 7px; color: rgba(255,255,255,.5); font-family: var(--fm); letter-spacing: .5px; text-align: right; margin-top: 2px; }
   .pos-levels .highlight { background: rgba(255,255,255,.15); padding: 0 4px; border-radius: 3px; animation: lineHover .5s ease infinite; }
   @keyframes lineHover { 0%,100%{opacity:1} 50%{opacity:.7} }
+
+  .trade-plan-overlay {
+    position: absolute;
+    right: 10px;
+    bottom: 54px;
+    z-index: 16;
+    width: min(320px, calc(100% - 20px));
+    border-radius: 12px;
+    border: 1px solid rgba(138, 150, 172, 0.35);
+    background: rgba(17, 23, 35, 0.92);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .trade-plan-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .plan-title {
+    font-family: var(--fd);
+    font-size: 10px;
+    letter-spacing: 1px;
+    font-weight: 900;
+    color: #d8dfeb;
+  }
+  .plan-close {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.75);
+    border-radius: 6px;
+    width: 22px;
+    height: 20px;
+    cursor: pointer;
+  }
+  .plan-close:hover {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .trade-plan-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 10px;
+  }
+  .plan-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: var(--fm);
+    font-size: 9px;
+    color: rgba(216, 223, 235, 0.82);
+  }
+  .plan-row strong {
+    font-family: var(--fd);
+    font-size: 10px;
+    letter-spacing: .35px;
+    color: #f5f7fb;
+  }
+  .plan-row strong.tp { color: #27c391; }
+  .plan-row strong.sl { color: #e95b6a; }
+  .plan-ratio-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--fd);
+    font-size: 9px;
+    letter-spacing: .6px;
+    color: rgba(255, 255, 255, 0.65);
+  }
+  .plan-ratio-meta span.active {
+    color: #f0f3fb;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.22);
+  }
+  .plan-ratio-track {
+    position: relative;
+    height: 24px;
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: linear-gradient(90deg, rgba(39, 195, 145, 0.2), rgba(233, 91, 106, 0.2));
+    cursor: ew-resize;
+    touch-action: none;
+    appearance: none;
+    display: block;
+    width: 100%;
+    padding: 0;
+  }
+  .plan-ratio-long {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: linear-gradient(90deg, rgba(39, 195, 145, 0.45), rgba(39, 195, 145, 0.2));
+    border-right: 1px solid rgba(0, 0, 0, 0.28);
+  }
+  .plan-ratio-knob {
+    position: absolute;
+    top: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    background: #f4f7ff;
+    box-shadow: 0 0 0 2px rgba(17, 23, 35, 0.6);
+    pointer-events: none;
+  }
+  .plan-ratio-presets {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .plan-ratio-presets button {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.82);
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-family: var(--fd);
+    font-size: 8px;
+    letter-spacing: .5px;
+    cursor: pointer;
+  }
+  .plan-ratio-presets button:hover {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.36);
+    background: rgba(255, 255, 255, 0.11);
+  }
+  .plan-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .plan-action {
+    flex: 1;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 7px 10px;
+    font-family: var(--fd);
+    font-size: 9px;
+    letter-spacing: .8px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .plan-action.ghost {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.82);
+  }
+  .plan-action.ghost:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .plan-action.primary {
+    color: #fff;
+    border-color: transparent;
+  }
+  .plan-action.primary.long {
+    background: linear-gradient(135deg, rgba(39, 195, 145, 0.45), rgba(39, 195, 145, 0.7));
+  }
+  .plan-action.primary.short {
+    background: linear-gradient(135deg, rgba(233, 91, 106, 0.45), rgba(233, 91, 106, 0.7));
+  }
+  .plan-action.primary:hover {
+    filter: brightness(1.08);
+  }
 
   .drag-indicator { position: absolute; bottom: 38px; left: 50%; transform: translateX(-50%); z-index: 15; padding: 4px 12px; border-radius: 6px; background: rgba(255,230,0,.9); color: #000; font-size: 9px; font-weight: 900; font-family: var(--fd); letter-spacing: 1.6px; animation: dragPulse .5s ease infinite; }
   @keyframes dragPulse { 0%,100% { opacity: 1 } 50% { opacity: .6 } }
@@ -2236,7 +3617,7 @@
   .ann-popup-label { font-family: var(--fm); font-size: 9px; font-weight: 900; color: #fff; margin-bottom: 2px; }
   .ann-popup-detail { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.74); line-height: 1.4; }
 
-  .chart-footer { padding: 3px 10px; border-top: 1px solid rgba(255,255,255,.05); background: rgba(0,0,0,.3); display: flex; align-items: center; gap: 8px; font-size: 8px; font-family: var(--fm); color: rgba(255,255,255,.62); flex-shrink: 0; }
+  .chart-footer { padding: 2px 8px; border-top: 1px solid rgba(255,255,255,.05); background: rgba(0,0,0,.3); display: flex; align-items: center; gap: 6px; font-size: var(--cp-font-2xs); font-family: var(--fm); color: rgba(255,255,255,.62); flex-shrink: 0; }
   .src-badge { color: #ffe600; font-weight: 700; }
   .src-ws { margin-left: auto; color: #00ff88; }
   .footer-ind { font-weight: 800; letter-spacing: .4px; }
@@ -2244,5 +3625,123 @@
   .footer-ind.rsi { color: #d6a8ff; }
   .pos-active { color: #ffba30; font-weight: 700; animation: pulse .8s infinite; }
   .draw-count { color: #ffe600; font-weight: 700; }
+  .pattern-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.18);
+    font-weight: 800;
+    letter-spacing: .3px;
+    background: rgba(255,255,255,.05);
+    color: #ddd;
+  }
+  .pattern-pill.bull {
+    color: #6ff2ab;
+    border-color: rgba(111,242,171,.35);
+    background: rgba(111,242,171,.1);
+  }
+  .pattern-pill.bear {
+    color: #ff8ca0;
+    border-color: rgba(255,140,160,.35);
+    background: rgba(255,140,160,.1);
+  }
+  .pattern-pill.forming {
+    opacity: .8;
+  }
   .agent-feed-text { flex: 1; color: rgba(255,255,255,.62); font-size: 8px; font-weight: 600; letter-spacing: .5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Keep internal sections fixed-height friendly; pane resizing is handled at terminal layout level. */
+  .chart-container,
+  .indicator-strip {
+    resize: none;
+  }
+
+  @media (max-width: 1580px) {
+    .ind-hint { display: none; }
+  }
+
+  @media (max-width: 1450px) {
+    .ind-chip.optional { display: none; }
+  }
+
+  @media (max-width: 520px) {
+    .sum-title {
+      display: none;
+    }
+    .sum-item.optional {
+      display: none;
+    }
+  }
+
+  .chart-wrapper.tv-like {
+    --blk: #131722;
+    --fg: #b2b5be;
+    --yel: #4f8cff;
+    --grn: #26a69a;
+    --red: #ef5350;
+    --pk: #b388ff;
+    --cyan: #5ea1ff;
+    --ora: #ffb74d;
+    background: #131722;
+  }
+  .chart-wrapper.tv-like .chart-bar {
+    background: #131722;
+    border-bottom: 1px solid #2a2e39;
+    gap: 4px;
+  }
+  .chart-wrapper.tv-like .indicator-strip {
+    border-bottom-color: #2a2e39;
+    background: #131722;
+  }
+  .chart-wrapper.tv-like .chart-footer {
+    border-top-color: #2a2e39;
+    background: #131722;
+  }
+  .chart-wrapper.tv-like .mode-toggle {
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+  .chart-wrapper.tv-like .mode-btn.active {
+    background: rgba(79, 140, 255, 0.2);
+    color: #e6f0ff;
+    text-shadow: none;
+  }
+  .chart-wrapper.tv-like .scan-btn {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(79, 140, 255, 0.2);
+    color: #e6f0ff;
+  }
+  .chart-wrapper.tv-like .scan-btn:hover {
+    border-color: rgba(79, 140, 255, 0.6);
+    background: rgba(79, 140, 255, 0.3);
+    color: #fff;
+    box-shadow: none;
+  }
+  .chart-wrapper.tv-like .scan-btn.chat-trigger.ready {
+    border-color: rgba(38, 166, 154, 0.62);
+    background: rgba(38, 166, 154, 0.24);
+    color: #d9fffa;
+  }
+  .chart-wrapper.tv-like .scan-btn.chat-trigger.ready:hover {
+    border-color: rgba(38, 166, 154, 0.8);
+    background: rgba(38, 166, 154, 0.33);
+    color: #f2ffff;
+  }
+  .chart-wrapper.tv-like .draw-btn.active {
+    border-color: rgba(79, 140, 255, 0.8);
+    background: rgba(79, 140, 255, 0.24);
+    box-shadow: none;
+  }
+  .chart-wrapper.tv-like .tfbtn.active {
+    color: #e6f0ff;
+    border-color: rgba(79, 140, 255, 0.8);
+    background: rgba(79, 140, 255, 0.22);
+  }
+  .chart-wrapper.tv-like .live-indicator {
+    color: #8bd0ff;
+  }
+  .chart-wrapper.tv-like .live-dot {
+    background: #8bd0ff;
+  }
 </style>

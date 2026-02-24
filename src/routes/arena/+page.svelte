@@ -1,14 +1,19 @@
 <script lang="ts">
+  import '$lib/styles/arena-tone.css';
   import { gameState } from '$lib/stores/gameState';
   import { recordAgentMatch } from '$lib/stores/agentData';
   import { AGDEFS, SOURCES } from '$lib/data/agents';
   import { sfx } from '$lib/audio/sfx';
   import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_GATHER, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, DOGE_VOTE_LONG, DOGE_WORDS, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
+  import { normalizeAgentId } from '$lib/engine/agents';
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, resetPhaseInit, startAnalysisFromDraft } from '$lib/engine/gameLoop';
   import { calculateLP, determineConsensus } from '$lib/engine/scoring';
   import Lobby from '../../components/arena/Lobby.svelte';
   import ChartPanel from '../../components/arena/ChartPanel.svelte';
   import HypothesisPanel from '../../components/arena/HypothesisPanel.svelte';
+  import ArenaHUD from '../../components/arena/ArenaHUD.svelte';
+  import ArenaEventCard from '../../components/arena/ArenaEventCard.svelte';
+  import ArenaRewardModal from '../../components/arena/ArenaRewardModal.svelte';
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
   import MatchHistory from '../../components/arena/MatchHistory.svelte';
   import SpeechBubble from '../../components/arena/SpeechBubble.svelte';
@@ -20,12 +25,24 @@
   import { onMount, onDestroy } from 'svelte';
   import { isWalletConnected, connectWallet, recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
+  import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket } from '$lib/api/arenaApi';
+  import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
+  import type { DraftSelection } from '$lib/engine/types';
 
   $: walletOk = $isWalletConnected;
 
   $: state = $gameState;
+  $: modeLabel = state.arenaMode;
+  $: tournamentInfo = state.tournament;
+  $: resultOverlayTitle = state.arenaMode === 'TOURNAMENT'
+    ? (resultData.win ? '🏆 TOURNAMENT WIN 🏆' : '☠ TOURNAMENT LOSS ☠')
+    : state.arenaMode === 'PVP'
+      ? (resultData.win ? '🏆 YOU WIN! 🏆' : '💀 YOU LOSE 💀')
+      : (resultData.win ? '🏁 PVE CLEAR' : '❌ PVE FAILED');
   // Active agents for this match
   $: activeAgents = AGDEFS.filter(a => state.selectedAgents.includes(a.id));
+  $: railRank = [...activeAgents].sort((a, b) => b.conf - a.conf);
+  $: longBalance = Math.max(0, Math.min(100, Math.round(state.score)));
 
   // UI state
   let findings: Array<{def: typeof AGDEFS[0]; visible: boolean}> = [];
@@ -41,17 +58,83 @@
   let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = [];
   let historyOpen = false;
   let matchHistoryOpen = false;
+  let arenaRailTab: 'rank' | 'log' | 'map' = 'rank';
+
+  type ArenaLiveEvent = {
+    id: number;
+    icon: string;
+    title: string;
+    detail: string;
+    severity: 'LOW' | 'MID' | 'HIGH';
+    tint: string;
+    expiresAt: number;
+  };
+  const LIVE_EVENT_TTL_MS = 8000;
+  const LIVE_EVENT_DECK: Record<'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE', Array<Omit<ArenaLiveEvent, 'id' | 'expiresAt'>>> = {
+    ANALYSIS: [
+      { icon: '🛰️', title: 'VOL SHIFT', detail: 'Micro volatility spike detected on last swing.', severity: 'MID', tint: '#6fd6ff' },
+      { icon: '🐋', title: 'WHALE TRACE', detail: 'On-chain flow leaning to directional build-up.', severity: 'LOW', tint: '#7ef0c2' },
+      { icon: '📡', title: 'SOCIAL PULSE', detail: 'Narrative momentum rising in high-beta clusters.', severity: 'LOW', tint: '#89a8ff' },
+    ],
+    HYPOTHESIS: [
+      { icon: '⏱️', title: 'ENTRY WINDOW', detail: 'Timing edge narrows. Tighten your trigger zone.', severity: 'MID', tint: '#7ecbff' },
+      { icon: '🧭', title: 'BIAS CHECK', detail: 'Model confidence diverges across macro and flow.', severity: 'HIGH', tint: '#ff8ea5' },
+      { icon: '🛡️', title: 'RISK GATE', detail: 'Suggested risk budget below 2% per attempt.', severity: 'LOW', tint: '#76f2bf' },
+    ],
+    BATTLE: [
+      { icon: '🌌', title: 'MOMENTUM BURST', detail: 'Directional acceleration in active candle range.', severity: 'HIGH', tint: '#ff9b7f' },
+      { icon: '💥', title: 'LIQUIDITY SWEEP', detail: 'Fast wick event cleared a nearby stop pocket.', severity: 'MID', tint: '#ffb26f' },
+      { icon: '📈', title: 'TREND HOLD', detail: 'Price structure remains aligned with current bias.', severity: 'LOW', tint: '#65f4c0' },
+    ],
+  };
+
+  let liveEvents: ArenaLiveEvent[] = [];
+  let liveEventTimer: ReturnType<typeof setInterval> | null = null;
+  let rewardVisible = false;
+  let rewardXp = 0;
+  let rewardStreak = 0;
+  let rewardBadges: string[] = [];
+
+  $: hudPhaseProgress = ({ DRAFT: 0.1, ANALYSIS: 0.35, HYPOTHESIS: 0.55, BATTLE: 0.78, RESULT: 1 } as const)[state.phase] ?? 0.1;
+
+  // ═══════ SERVER SYNC STATE ═══════
+  let serverMatchId: string | null = null;
+  let serverAnalysis: AnalyzeResponse | null = null;
+  let apiError: string | null = null;
 
   // Squad Config handlers
-  function onSquadDeploy(e: CustomEvent<{ config: import('$lib/stores/gameState').SquadConfig }>) {
+  async function onSquadDeploy(e: CustomEvent<{ config: import('$lib/stores/gameState').SquadConfig }>) {
     gameState.update(s => ({ ...s, squadConfig: e.detail.config }));
     clearFeed();
     pushFeedItem({
       agentId: 'system', agentName: 'SYSTEM', agentIcon: '🐕',
-      agentColor: '#ffe600',
+      agentColor: '#E8967D',
       text: `Squad configured! Risk: ${e.detail.config.riskLevel.toUpperCase()} · TF: ${formatTimeframeLabel(e.detail.config.timeframe)} · Analysis starting...`,
       phase: 'DRAFT'
     });
+
+    // ── Server sync: create match + submit draft ──
+    const currentState = $gameState;
+    try {
+      apiError = null;
+      const matchRes = await createArenaMatch(currentState.pair, e.detail.config.timeframe);
+      serverMatchId = matchRes.matchId;
+
+      // Build draft from selected agents (equal weight for now)
+      const agentCount = currentState.selectedAgents.length;
+      if (agentCount <= 0) throw new Error('No agents selected for draft');
+      const weight = Math.round(100 / agentCount);
+      const draft: DraftSelection[] = currentState.selectedAgents.map((agentId, i) => ({
+        agentId: normalizeAgentId(agentId),
+        specId: 'base',
+        weight: i === agentCount - 1 ? 100 - weight * (agentCount - 1) : weight,
+      }));
+      await submitArenaDraft(serverMatchId, draft);
+    } catch (err) {
+      console.warn('[Arena] Server sync failed (match continues locally):', err);
+      apiError = (err as Error).message;
+    }
+
     startAnalysisFromDraft();
   }
 
@@ -64,6 +147,7 @@
   let hypothesisVisible = false;
   let hypothesisTimer = 45;
   let hypothesisInterval: ReturnType<typeof setInterval> | null = null;
+  let _battleInterval: ReturnType<typeof setInterval> | null = null;
 
   // ═══════ REPLAY STATE ═══════
   let replayState = createReplayState();
@@ -78,7 +162,7 @@
     // Close history panel
     historyOpen = false;
 
-    addFeed('🎬', 'REPLAY', '#c840ff', `Replaying Match #${record.matchN}...`);
+    addFeed('🎬', 'REPLAY', '#66CCE6', `Replaying Match #${record.matchN}...`);
     executeReplayStep(0);
   }
 
@@ -86,7 +170,7 @@
     if (stepIdx >= replaySteps.length || !replayState.active) {
       // Replay finished
       replayState = { ...replayState, active: false };
-      addFeed('🎬', 'REPLAY', '#c840ff', 'Replay complete!');
+      addFeed('🎬', 'REPLAY', '#66CCE6', 'Replay complete!');
       return;
     }
 
@@ -96,11 +180,11 @@
 
     switch (step.type) {
       case 'deploy':
-        addFeed('🐕', 'REPLAY', '#c840ff', `Agents deployed: ${step.agents.length} agents`);
+        addFeed('🐕', 'REPLAY', '#66CCE6', `Agents deployed: ${step.agents.length} agents`);
         break;
       case 'hypothesis':
         if (step.hypothesis) {
-          addFeed('🐕', 'REPLAY', '#c840ff', `Your call: ${step.hypothesis.dir} · R:R 1:${step.hypothesis.rr.toFixed(1)}`);
+          addFeed('🐕', 'REPLAY', '#66CCE6', `Your call: ${step.hypothesis.dir} · R:R 1:${step.hypothesis.rr.toFixed(1)}`);
         }
         break;
       case 'scout':
@@ -111,16 +195,16 @@
         });
         break;
       case 'council':
-        addFeed('🗳', 'REPLAY', '#c840ff', 'Council deliberation...');
+        addFeed('🗳', 'REPLAY', '#66CCE6', 'Council deliberation...');
         break;
       case 'verdict':
-        addFeed('★', 'REPLAY', '#c840ff', `Consensus: ${step.consensusType?.toUpperCase() || 'UNKNOWN'}`);
+        addFeed('★', 'REPLAY', '#66CCE6', `Consensus: ${step.consensusType?.toUpperCase() || 'UNKNOWN'}`);
         break;
       case 'battle':
-        addFeed('⚔', 'REPLAY', '#c840ff', `Battle result: ${step.battleResult?.toUpperCase() || 'UNKNOWN'}`);
+        addFeed('⚔', 'REPLAY', '#66CCE6', `Battle result: ${step.battleResult?.toUpperCase() || 'UNKNOWN'}`);
         break;
       case 'result':
-        addFeed(step.win ? '🏆' : '😢', 'REPLAY', step.win ? '#00cc66' : '#ff2d55',
+        addFeed(step.win ? '🏆' : '😢', 'REPLAY', step.win ? '#00CC88' : '#FF5E7A',
           `${step.win ? 'WIN' : 'LOSS'} · ${step.lp > 0 ? '+' : ''}${step.lp} LP`);
         break;
     }
@@ -330,6 +414,9 @@
   }
 
   let feedCursorTimer: ReturnType<typeof setTimeout> | null = null;
+  let compareAutoTimer: ReturnType<typeof setTimeout> | null = null;
+  let pvpShowTimer: ReturnType<typeof setTimeout> | null = null;
+  let _arenaDestroyed = false; // guard for fire-and-forget timers after unmount
 
   function addFeed(icon: string, name: string, color: string, text: string, dir?: string) {
     // Add with 'new' flag for slide-in animation + blinking cursor
@@ -344,7 +431,7 @@
   }
 
   function dogeFloat() {
-    const colors = ['#ff2d55', '#ff2d9b', '#00d4ff', '#00ff88', '#c840ff', '#ffe600'];
+    const colors = ['#FF5E7A', '#E8967D', '#66CCE6', '#00CC88', '#DCB970', '#F0EDE4'];
     const n = 3 + Math.floor(Math.random() * 3);
     for (let i = 0; i < n; i++) {
       setTimeout(() => {
@@ -359,6 +446,55 @@
         setTimeout(() => { floatingWords = floatingWords.filter(w => w.id !== id); }, 2500);
       }, i * 200);
     }
+  }
+
+  function clearLiveEventTimer() {
+    if (liveEventTimer) {
+      clearInterval(liveEventTimer);
+      liveEventTimer = null;
+    }
+  }
+
+  function trimExpiredEvents() {
+    const now = Date.now();
+    liveEvents = liveEvents.filter((ev) => ev.expiresAt > now);
+  }
+
+  function pushLiveEvent(phase: 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE') {
+    const bucket = LIVE_EVENT_DECK[phase];
+    if (!bucket || bucket.length === 0) return;
+    const picked = bucket[Math.floor(Math.random() * bucket.length)];
+    const ev: ArenaLiveEvent = {
+      ...picked,
+      id: Date.now() + Math.floor(Math.random() * 10000),
+      expiresAt: Date.now() + LIVE_EVENT_TTL_MS
+    };
+    liveEvents = [ev, ...liveEvents].slice(0, 3);
+    addFeed(ev.icon, 'EVENT', ev.tint, `${ev.title} · ${ev.detail}`);
+    setTimeout(() => {
+      liveEvents = liveEvents.filter((item) => item.id !== ev.id);
+    }, LIVE_EVENT_TTL_MS + 60);
+  }
+
+  function startLiveEventStream(phase: 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE') {
+    clearLiveEventTimer();
+    trimExpiredEvents();
+    pushLiveEvent(phase);
+    const cadence = phase === 'BATTLE' ? 3600 : phase === 'HYPOTHESIS' ? 4400 : 5000;
+    liveEventTimer = setInterval(() => {
+      if (_arenaDestroyed) return;
+      trimExpiredEvents();
+      pushLiveEvent(phase);
+    }, Math.max(2200, Math.round(cadence / Math.max(1, state.speed || 1))));
+  }
+
+  function clearArenaDynamics() {
+    clearLiveEventTimer();
+    liveEvents = [];
+    rewardVisible = false;
+    rewardXp = 0;
+    rewardStreak = 0;
+    rewardBadges = [];
   }
 
   // ═══════ HYPOTHESIS HANDLERS ═══════
@@ -401,8 +537,15 @@
     chartPosSl = h.sl;
     chartPosDir = h.dir;
 
-    addFeed('🐕', 'YOU', '#ffe600', `${h.dir} · TP $${h.tp.toLocaleString()} · SL $${h.sl.toLocaleString()} · R:R 1:${h.rr}`, h.dir);
+    addFeed('🐕', 'YOU', '#E8967D', `${h.dir} · TP $${h.tp.toLocaleString()} · SL $${h.sl.toLocaleString()} · R:R 1:${h.rr}`, h.dir);
     sfx.vote();
+
+    // ── Server sync: submit hypothesis ──
+    if (serverMatchId) {
+      const dirMap: Record<string, 'LONG' | 'SHORT' | 'NEUTRAL'> = { LONG: 'LONG', SHORT: 'SHORT', NEUTRAL: 'NEUTRAL' };
+      submitArenaHypothesis(serverMatchId, dirMap[h.dir] || 'NEUTRAL', h.conf)
+        .catch(err => console.warn('[Arena] Hypothesis sync failed:', err));
+    }
 
     // HYPOTHESIS -> BATTLE
     advancePhase();
@@ -459,6 +602,7 @@
   }
 
   function initDraft() {
+    clearArenaDynamics();
     findings = [];
     verdictVisible = false;
     resultVisible = false;
@@ -477,7 +621,7 @@
     initAgentStates();
     sfx.enter();
     dogeFloat();
-    addFeed('🐕', 'ARENA', '#ff2d9b', 'Draft locked. Preparing analysis...');
+    addFeed('🐕', 'ARENA', '#E8967D', 'Draft locked. Preparing analysis...');
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
         setAgentState(ag.id, 'alert');
@@ -487,13 +631,27 @@
   }
 
   function initAnalysis() {
+    startLiveEventStream('ANALYSIS');
     initScout();
     initGather();
     initCouncil();
-    addFeed('🔍', 'ANALYSIS', '#cc6600', '5-agent analysis pipeline running...');
+    addFeed('🔍', 'ANALYSIS', '#66CCE6', '5-agent analysis pipeline running...');
+
+    // ── Server sync: run analysis in background ──
+    if (serverMatchId) {
+      runArenaAnalysis(serverMatchId)
+        .then(res => {
+          serverAnalysis = res;
+          console.log('[Arena] Server analysis complete:', res.meta);
+        })
+        .catch(err => {
+          console.warn('[Arena] Server analysis failed:', err);
+        });
+    }
   }
 
   function initHypothesis() {
+    startLiveEventStream('HYPOTHESIS');
     // Show hypothesis panel for user prediction
     hypothesisVisible = true;
     floatDir = null; // Reset floating dir bar
@@ -532,12 +690,12 @@
         chartPosTp = price * 1.02;
         chartPosSl = price * 0.985;
         chartPosDir = 'NEUTRAL';
-        addFeed('⏰', 'TIMEOUT', '#888', 'Time expired — auto-skip');
+        addFeed('⏰', 'TIMEOUT', '#93A699', 'Time expired — auto-skip');
         advancePhase();
       }
     }, 1000);
 
-    addFeed('🐕', 'ARENA', '#9900cc', 'HYPOTHESIS: pick direction and set TP/SL.');
+    addFeed('🐕', 'ARENA', '#66CCE6', 'HYPOTHESIS: pick direction and set TP/SL.');
 
     // Agents go into think state
     activeAgents.forEach((ag, i) => {
@@ -551,7 +709,7 @@
   function initPreview() {
     previewVisible = true;
     const h = state.hypothesis;
-    addFeed('👁', 'PREVIEW', '#ff6600', `Position: ${h?.dir || 'NEUTRAL'} · Entry $${(h?.entry || 0).toLocaleString()} · R:R 1:${(h?.rr || 1).toFixed(1)}`);
+    addFeed('👁', 'PREVIEW', '#DCB970', `Position: ${h?.dir || 'NEUTRAL'} · Entry $${(h?.entry || 0).toLocaleString()} · R:R 1:${(h?.rr || 1).toFixed(1)}`);
 
     // Agents look at the position
     activeAgents.forEach((ag, i) => {
@@ -572,12 +730,12 @@
     if (previewAutoTimer) { clearTimeout(previewAutoTimer); previewAutoTimer = null; }
     previewVisible = false;
     sfx.charge();
-    addFeed('✅', 'CONFIRMED', '#00cc66', 'Position confirmed — scouting begins!');
+    addFeed('✅', 'CONFIRMED', '#00CC88', 'Position confirmed — scouting begins!');
     advancePhase();
   }
 
   function initScout() {
-    addFeed('🔍', 'SCOUT', '#cc6600', 'Agents scouting data sources...');
+    addFeed('🔍', 'SCOUT', '#66CCE6', 'Agents scouting data sources...');
     // Generate chart annotations from active agents
     generateAnnotations();
     // Generate agent signal markers on chart
@@ -599,6 +757,7 @@
       const targetSource = pair?.source || SOURCES[i % SOURCES.length];
 
       setTimeout(() => {
+        if (_arenaDestroyed) return;
         // Phase 1: Walk toward data source — move agent position
         setAgentState(ag.id, 'walk');
         if (targetSource) {
@@ -612,17 +771,20 @@
         sfx.scan();
 
         setTimeout(() => {
+          if (_arenaDestroyed) return;
           // Phase 2: Arrive at source + charge up energy
           setAgentState(ag.id, 'charge');
           setAgentEnergy(ag.id, 30);
           setSpeech(ag.id, ag.speech.scout, 800 / speed);
 
           setTimeout(() => {
+            if (_arenaDestroyed) return;
             // Phase 3: Energy full → show finding (at source)
             setAgentEnergy(ag.id, 75);
             addFeed(ag.icon, ag.name, ag.color, ag.finding.title, ag.dir);
 
             setTimeout(() => {
+              if (_arenaDestroyed) return;
               // Phase 4: Full charge + decision — return to original position
               setAgentEnergy(ag.id, 100);
               sfx.charge();
@@ -641,7 +803,7 @@
 
               // Phase 5: Return to idle stance
               setTimeout(() => {
-                setAgentState(ag.id, 'idle');
+                if (!_arenaDestroyed) setAgentState(ag.id, 'idle');
               }, 500 / speed);
             }, 300 / speed);
           }, 300 / speed);
@@ -652,7 +814,7 @@
 
   function initGather() {
     councilActive = true;
-    addFeed('📊', 'GATHER', '#cc6600', 'Gathering analysis data...');
+    addFeed('📊', 'GATHER', '#66CCE6', 'Gathering analysis data...');
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
         setAgentState(ag.id, 'vote');
@@ -662,7 +824,7 @@
   }
 
   function initCouncil() {
-    addFeed('🗳', 'COUNCIL', '#cc0066', 'Agents voting on direction...');
+    addFeed('🗳', 'COUNCIL', '#E8967D', 'Agents voting on direction...');
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
         const dir = ag.dir;
@@ -706,7 +868,7 @@
 
     sfx.verdict();
     dogeFloat();
-    addFeed('⭐', 'VERDICT', '#cc0066', `Agent verdict: ${agentDir} · Score ${score} · ${bullish}/${activeAgents.length} agree`, agentDir);
+    addFeed('⭐', 'VERDICT', '#E8967D', `Agent verdict: ${agentDir} · Score ${score} · ${bullish}/${activeAgents.length} agree`, agentDir);
     activeAgents.forEach((ag, i) => {
       setTimeout(() => {
         setAgentState(ag.id, 'jump');
@@ -748,21 +910,25 @@
       hypothesis: s.hypothesis ? { ...s.hypothesis, consensusType: consensus.type, lpMult: consensus.lpMult } : s.hypothesis
     }));
 
-    addFeed('⚔️', 'COMPARE', '#ff6600', `${consensus.badge} — You: ${userDir} vs Agents: ${agentDir}`);
+    addFeed('⚔️', 'COMPARE', '#DCB970', `${consensus.badge} — You: ${userDir} vs Agents: ${agentDir}`);
     sfx.charge();
 
     // Auto-advance after compare display
     const speed = state.speed || 3;
-    setTimeout(() => {
+    if (compareAutoTimer) clearTimeout(compareAutoTimer);
+    compareAutoTimer = setTimeout(() => {
+      compareAutoTimer = null;
+      if (_arenaDestroyed) return;
       compareVisible = false;
       advancePhase();
     }, 4000 / speed);
   }
 
   function initBattle() {
+    startLiveEventStream('BATTLE');
     verdictVisible = false;
     compareVisible = false;
-    addFeed('⚔', 'BATTLE', '#cc0033', 'Battle in progress!');
+    addFeed('⚔', 'BATTLE', '#FF5E7A', 'Battle in progress!');
     activeAgents.forEach((ag, i) => {
       setAgentState(ag.id, 'alert');
       setSpeech(ag.id, DOGE_BATTLE[i % DOGE_BATTLE.length], 400);
@@ -788,7 +954,8 @@
     }
 
     let elapsed = 0;
-    const battleInterval = setInterval(() => {
+    if (_battleInterval) clearInterval(_battleInterval);
+    _battleInterval = setInterval(() => {
       elapsed += 500;
       gameState.update(s => {
         const price = s.prices.BTC * (1 + (Math.random() - 0.48) * 0.0015);
@@ -796,7 +963,7 @@
         const tpHit = isLong ? price >= pos.tp : price <= pos.tp;
         const slHit = isLong ? price <= pos.sl : price >= pos.sl;
         if (tpHit || slHit || elapsed >= 8000) {
-          clearInterval(battleInterval);
+          if (_battleInterval) { clearInterval(_battleInterval); _battleInterval = null; }
           const result = tpHit ? 'tp' : slHit ? 'sl' : (price > pos.entry ? 'time_win' : 'time_loss');
           setTimeout(() => advancePhase(), 500);
           return { ...s, prices: { ...s.prices, BTC: price }, battleResult: result };
@@ -807,6 +974,8 @@
   }
 
   function initResult() {
+    clearLiveEventTimer();
+    liveEvents = [];
     const myScore = Math.round(state.score);
     const oppScore = Math.round(50 + Math.random() * 35);
     const br = state.battleResult;
@@ -880,12 +1049,38 @@
       `${win ? 'WIN' : 'LOSS'} · M${state.matchN + 1} · ${state.hypothesis?.dir || 'NEUTRAL'} · ${consensus.type}`
     );
 
+    // ── Server sync: resolve match ──
+    if (serverMatchId) {
+      const exitP = state.prices.BTC;
+      resolveArenaMatch(serverMatchId, exitP)
+        .then(res => {
+          console.log('[Arena] Match resolved on server:', res.result);
+        })
+        .catch(err => console.warn('[Arena] Resolve sync failed:', err));
+    }
+
     resultData = {
       win,
       lp: lpChange,
       tag: resultTag,
       motto: win ? WIN_MOTTOS[Math.floor(Math.random() * WIN_MOTTOS.length)] : LOSE_MOTTOS[Math.floor(Math.random() * LOSE_MOTTOS.length)]
     };
+
+    const streakNow = win ? state.streak + 1 : 0;
+    const scoreBonus = Math.round(Math.max(0, myScore - 45) * 1.15);
+    const winBonus = win ? 42 : 12;
+    const streakBonus = streakNow >= 2 ? streakNow * 10 : 0;
+    const consensusBonus = Math.round(consensus.lpMult * 16);
+    rewardXp = winBonus + scoreBonus + streakBonus + consensusBonus;
+    rewardStreak = streakNow;
+    rewardBadges = [
+      win ? 'MISSION CLEAR' : 'FIELD REPORT',
+      myScore >= 80 ? 'PRECISION+' : '',
+      consensus.type === 'consensus' ? 'COUNCIL SYNC' : consensus.type === 'partial' ? 'PARTIAL READ' : 'HIGH DIVERGENCE',
+      streakNow >= 3 ? 'STREAK ENGINE' : ''
+    ].filter(Boolean);
+    rewardVisible = true;
+
     resultVisible = true;
 
     if (win) {
@@ -897,14 +1092,16 @@
       activeAgents.forEach(ag => { setAgentState(ag.id, 'sad'); setSpeech(ag.id, DOGE_LOSE[Math.floor(Math.random() * DOGE_LOSE.length)], 800); });
     }
 
-    addFeed(win ? '🏆' : '💀', 'RESULT', win ? '#00aa44' : '#ff2d55',
+    addFeed(win ? '🏆' : '💀', 'RESULT', win ? '#00CC88' : '#FF5E7A',
       win ? `WIN! +${lpChange} LP [${resultTag}]` : `LOSE [${resultTag}] ${lpChange} LP`);
 
-    setTimeout(() => { pvpVisible = true; }, 1500);
+    if (pvpShowTimer) clearTimeout(pvpShowTimer);
+    pvpShowTimer = setTimeout(() => { pvpShowTimer = null; if (!_arenaDestroyed) pvpVisible = true; }, 1500);
     gameState.update((s) => ({ ...s, running: false, timer: 0 }));
   }
 
   function initCooldown() {
+    clearArenaDynamics();
     verdictVisible = false;
     resultVisible = false;
     councilActive = false;
@@ -919,6 +1116,10 @@
   }
 
   function goLobby() {
+    clearArenaDynamics();
+    serverMatchId = null;
+    serverAnalysis = null;
+    apiError = null;
     pvpVisible = false;
     resultVisible = false;
     verdictVisible = false;
@@ -928,10 +1129,27 @@
     floatDir = null;
     showChartPosition = false;
     if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
-    gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'DRAFT', timer: 0 }));
+    gameState.update(s => ({
+      ...s,
+      inLobby: true,
+      running: false,
+      phase: 'DRAFT',
+      timer: 0,
+      tournament: {
+        tournamentId: null,
+        round: null,
+        type: null,
+        pair: null,
+        entryFeeLp: null,
+      }
+    }));
   }
 
   function playAgain() {
+    clearArenaDynamics();
+    serverMatchId = null;
+    serverAnalysis = null;
+    apiError = null;
     pvpVisible = false;
     resultVisible = false;
     verdictVisible = false;
@@ -945,20 +1163,84 @@
     engineStartMatch();
   }
 
+  // ═══════ BRACKET STATE ═══════
+  let bracketMatches: TournamentBracketMatch[] = [];
+  let bracketRound = 1;
+  let bracketLoading = false;
+
+  async function loadBracket() {
+    if (!state.tournament?.tournamentId) return;
+    bracketLoading = true;
+    try {
+      const res = await getTournamentBracket(state.tournament.tournamentId);
+      bracketMatches = res.matches;
+      bracketRound = res.round;
+    } catch (e) {
+      console.warn('[Arena] bracket load failed:', e);
+    } finally {
+      bracketLoading = false;
+    }
+  }
+
+  // Load bracket when switching to MAP tab in tournament mode
+  $: if (arenaRailTab === 'map' && state.arenaMode === 'TOURNAMENT') {
+    loadBracket();
+  }
+
+  // ═══════ ESC KEY HANDLER ═══════
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !state.inLobby) {
+      e.preventDefault();
+      if (state.phase === 'RESULT' || pvpVisible || resultVisible) {
+        goLobby();
+      } else if (confirmingExit) {
+        confirmingExit = false;
+      } else {
+        confirmingExit = true;
+        setTimeout(() => { confirmingExit = false; }, 3000);
+      }
+    }
+  }
+
+  let confirmingExit = false;
+
+  function confirmGoLobby() {
+    if (state.phase === 'RESULT' || pvpVisible || state.phase === 'DRAFT') {
+      goLobby();
+    } else if (confirmingExit) {
+      goLobby();
+    } else {
+      confirmingExit = true;
+      setTimeout(() => { confirmingExit = false; }, 3000);
+    }
+  }
+
   onMount(() => {
     setPhaseInitCallback(onPhaseInit);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', handleKeydown);
+    }
   });
 
   onDestroy(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', handleKeydown);
+    }
+    _arenaDestroyed = true;
     if (hypothesisInterval) clearInterval(hypothesisInterval);
+    if (_battleInterval) clearInterval(_battleInterval);
     if (previewAutoTimer) clearTimeout(previewAutoTimer);
     if (replayTimer) clearTimeout(replayTimer);
+    if (feedCursorTimer) clearTimeout(feedCursorTimer);
+    if (compareAutoTimer) clearTimeout(compareAutoTimer);
+    if (pvpShowTimer) clearTimeout(pvpShowTimer);
+    clearLiveEventTimer();
     // Clean up typing timers
     Object.values(speechTimers).forEach(t => clearInterval(t));
   });
 </script>
 
-<div class="arena-page">
+<div class="arena-page arena-space-theme">
   <!-- Wallet Gate Overlay -->
   {#if !walletOk}
     <div class="wallet-gate">
@@ -974,15 +1256,59 @@
     </div>
   {/if}
 
+  <!-- API Sync Status -->
+  {#if apiError}
+    <div class="api-status error">⚠️ Offline mode</div>
+  {:else if serverMatchId}
+    <div class="api-status synced">🟢 Synced</div>
+  {/if}
+
   {#if state.inLobby}
     <Lobby />
   {:else if state.phase === 'DRAFT'}
     <SquadConfig selectedAgents={state.selectedAgents} on:deploy={onSquadDeploy} on:back={onSquadBack} />
   {:else}
-    <!-- Match History Toggle -->
-    <button class="mh-toggle" on:click={() => matchHistoryOpen = !matchHistoryOpen}>
-      📋 {state.wins}W-{state.losses}L
-    </button>
+    <!-- ═══════ TOP ARENA NAV BAR ═══════ -->
+    <div class="arena-topbar">
+      <button class="atb-back" on:click={confirmGoLobby}>
+        {#if confirmingExit}
+          <span class="atb-confirm-pulse">EXIT? CLICK AGAIN</span>
+        {:else}
+          <span class="atb-arrow">←</span> LOBBY
+        {/if}
+      </button>
+      <div class="atb-phase-track">
+        <div class="atb-phase done">
+          <span class="atp-dot"></span><span class="atp-label">DRAFT</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'ANALYSIS'} class:done={['HYPOTHESIS','BATTLE','RESULT'].includes(state.phase)}>
+          <span class="atp-dot"></span><span class="atp-label">SCAN</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'HYPOTHESIS'} class:done={['BATTLE','RESULT'].includes(state.phase)}>
+          <span class="atp-dot"></span><span class="atp-label">HYPO</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'BATTLE'} class:done={state.phase === 'RESULT'}>
+          <span class="atp-dot"></span><span class="atp-label">BATTLE</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'RESULT'}>
+          <span class="atp-dot"></span><span class="atp-label">RESULT</span>
+        </div>
+      </div>
+      <div class="atb-right">
+        <div class="atb-mode" class:pvp={state.arenaMode === 'PVP'} class:tour={state.arenaMode === 'TOURNAMENT'}>
+          {modeLabel}{#if state.arenaMode === 'TOURNAMENT' && tournamentInfo.round} · R{tournamentInfo.round}{/if}
+        </div>
+        <div class="atb-stats">
+          <span class="atb-lp">⚡{state.lp}</span>
+          <span class="atb-wl">{state.wins}W-{state.losses}L</span>
+        </div>
+        <button class="atb-hist" on:click={() => matchHistoryOpen = !matchHistoryOpen}>📋</button>
+      </div>
+    </div>
     <MatchHistory visible={matchHistoryOpen} on:close={() => matchHistoryOpen = false} />
 
       <div class="battle-layout">
@@ -1063,19 +1389,25 @@
           <div class="sr">
             <svg viewBox="0 0 44 44">
               <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="3"/>
-              <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00ff88' : '#ff2d55'} stroke-width="3"
+              <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00CC88' : '#FF5E7A'} stroke-width="3"
                 stroke-dasharray="{state.score * 1.13} 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
             </svg>
             <span class="n">{state.score}</span>
           </div>
           <div>
-            <div class="sdir" style="color:{state.score >= 60 ? '#00ff88' : '#ff2d55'}">{state.score >= 60 ? 'LONG' : 'SHORT'}</div>
+            <div class="sdir" style="color:{state.score >= 60 ? '#00CC88' : '#FF5E7A'}">{state.score >= 60 ? 'LONG' : 'SHORT'}</div>
             <div class="smeta">{activeAgents.length} agents · M{state.matchN}</div>
           </div>
           <div class="score-stats">
             <span class="ss-item">🔥{state.streak}</span>
             <span class="ss-item">{state.wins}W-{state.losses}L</span>
             <span class="ss-item lp">⚡{state.lp} LP</span>
+          </div>
+          <div class="mode-badge" class:tour={state.arenaMode === 'TOURNAMENT'} class:pvp={state.arenaMode === 'PVP'}>
+            {modeLabel}
+            {#if state.arenaMode === 'TOURNAMENT' && tournamentInfo.tournamentId}
+              · R{tournamentInfo.round ?? 1}
+            {/if}
           </div>
           {#if state.hypothesis}
             <div class="hypo-badge {state.hypothesis.dir.toLowerCase()}">
@@ -1088,30 +1420,38 @@
 
       <!-- ═══════ RIGHT: BATTLE ARENA ═══════ -->
       <div class="arena-side">
-        <!-- Background Layers -->
-        <div class="sunburst"></div>
-        <div class="halftone"></div>
-        <div class="ground"></div>
-
-        <!-- Rainbow Swirl Decorations (corners) -->
-        <div class="rainbow-swirl tl"></div>
-        <div class="rainbow-swirl br"></div>
-
-        <!-- Comic Bursts -->
-        <div class="comic-burst boom" style="left:3%;top:8%">BOOM!</div>
-        <div class="comic-burst pow" style="left:72%;top:50%">POW!</div>
-        <div class="comic-burst wow" style="left:35%;top:3%">WOW!</div>
-        <div class="comic-burst zap" style="left:85%;top:10%">ZAP!</div>
-
-        <!-- Floating sticker emojis -->
-        {#each ['🐕','⭐','💰','🔥','💎','🚀','⚡','🎯'] as emoji, i}
-          <div class="sticker" style="left:{8+i*12}%;top:{6+Math.sin(i)*18}%;animation-delay:{i*0.5}s;font-size:{18+Math.random()*12}px">{emoji}</div>
-        {/each}
-
-        <!-- Floating crypto coins -->
-        <div class="crypto-coin" style="left:15%;top:20%;animation-delay:0s">₿</div>
-        <div class="crypto-coin" style="left:80%;top:25%;animation-delay:1.2s">Ξ</div>
-        <div class="crypto-coin" style="left:55%;top:12%;animation-delay:2.5s">◎</div>
+        <!-- Retro collage background -->
+        <div class="arena-texture arena-stars"></div>
+        <div class="arena-texture arena-rainbow"></div>
+        <div class="arena-texture arena-grid"></div>
+        <div class="arena-texture arena-doodle"></div>
+        <div class="arena-vignette"></div>
+        <ArenaHUD
+          phaseName={phaseLabel.name}
+          timer={state.timer}
+          score={state.score}
+          streak={state.streak}
+          lp={state.lp}
+          mode={modeLabel}
+          phaseProgress={hudPhaseProgress}
+        />
+        {#if liveEvents.length > 0}
+          <div class="live-event-stack">
+            {#each liveEvents as ev (ev.id)}
+              <ArenaEventCard
+                icon={ev.icon}
+                title={ev.title}
+                detail={ev.detail}
+                severity={ev.severity}
+                tint={ev.tint}
+                freshness={Math.max(0, Math.min(1, (ev.expiresAt - Date.now()) / LIVE_EVENT_TTL_MS))}
+              />
+            {/each}
+          </div>
+        {/if}
+        <div class="battle-floor">
+          <span>ARENA SIGNAL PLANE</span>
+        </div>
 
         <!-- Data Sources -->
         {#each SOURCES as src}
@@ -1149,7 +1489,7 @@
             <div class="wr">
               <!-- State Reaction Emoji -->
               <div class="react">
-                {#if agState.state === 'walk'}🏃{:else if agState.state === 'think'}🤔{:else if agState.state === 'charge'}🔥{:else if agState.state === 'vote'}🗳️{:else if agState.state === 'jump'}💪{:else if agState.state === 'sad'}😢{:else if agState.state === 'alert'}⚡{/if}
+                {#if agState.state === 'walk'}SCOUT{:else if agState.state === 'think'}SYNC{:else if agState.state === 'charge'}PULSE{:else if agState.state === 'vote'}VOTE{:else if agState.state === 'jump'}BOOST{:else if agState.state === 'sad'}MISS{:else if agState.state === 'alert'}LOCK{/if}
               </div>
 
               <!-- Energy Aura (during charge/vote) -->
@@ -1200,10 +1540,57 @@
 
         <!-- Phase Display -->
         <div class="phase-display">
-          <div class="phase-emoji">{phaseLabel.emoji}</div>
+          <div class="phase-dot" style="background:{phaseLabel.color}"></div>
           <div class="phase-name" style="color:{phaseLabel.color}">{phaseLabel.name}</div>
           <div class="phase-timer">{state.timer > 0 ? Math.ceil(state.timer) + 's' : '--'}</div>
         </div>
+
+        <!-- Right Rail (reference UI - partial) -->
+        <aside class="arena-rail">
+          <div class="rail-head">
+            <div class="rail-pair">{state.pair} · {formatTimeframeLabel(state.squadConfig.timeframe)}</div>
+            <div class="rail-price">${Number.isFinite(state.prices.BTC) ? Math.round(state.prices.BTC).toLocaleString() : '--'}</div>
+          </div>
+          <div class="rail-tabs">
+            <button class:active={arenaRailTab === 'rank'} on:click={() => arenaRailTab = 'rank'}>RANK</button>
+            <button class:active={arenaRailTab === 'log'} on:click={() => arenaRailTab = 'log'}>LOG</button>
+            <button class:active={arenaRailTab === 'map'} on:click={() => arenaRailTab = 'map'}>MAP</button>
+          </div>
+          <div class="rail-body">
+            {#if arenaRailTab === 'rank'}
+              {#if railRank.length === 0}
+                <div class="rail-empty">No agents in this round</div>
+              {:else}
+                {#each railRank as ag, idx}
+                  <div class="rail-row">
+                    <span class="rail-rank">{idx + 1}</span>
+                    <span class="rail-name" style="color:{ag.color}">{ag.name}</span>
+                    <span class="rail-dir {ag.dir.toLowerCase()}">{ag.dir}</span>
+                    <span class="rail-conf">{ag.conf}%</span>
+                  </div>
+                {/each}
+              {/if}
+            {:else if arenaRailTab === 'log'}
+              {#if feedMessages.length === 0}
+                <div class="rail-empty">No logs yet</div>
+              {:else}
+                {#each feedMessages.slice(0, 10) as msg}
+                  <div class="rail-log">
+                    <span class="rl-name" style="color:{msg.color}">{msg.name}</span>
+                    <span class="rl-text">{msg.text}</span>
+                  </div>
+                {/each}
+              {/if}
+            {:else}
+              <div class="rail-map">
+                <div class="rm-item"><span>MODE</span><b>{modeLabel}</b></div>
+                <div class="rm-item"><span>AGENTS</span><b>{activeAgents.length}</b></div>
+                <div class="rm-item"><span>SCORE</span><b>{Math.round(state.score)}</b></div>
+                <div class="rm-item"><span>LP</span><b>{state.lp}</b></div>
+              </div>
+            {/if}
+          </div>
+        </aside>
 
         <!-- Feed Log -->
         <div class="feed-panel">
@@ -1220,6 +1607,14 @@
         </div>
 
         <!-- ═══════ COMPARE OVERLAY ═══════ -->
+        <ArenaRewardModal
+          visible={rewardVisible}
+          xpGain={rewardXp}
+          streak={rewardStreak}
+          badges={rewardBadges}
+          on:close={() => { rewardVisible = false; }}
+        />
+
         {#if compareVisible}
           <div class="compare-overlay">
             <div class="compare-card">
@@ -1265,7 +1660,7 @@
 
               <!-- LP Multiplier -->
               <div class="compare-mult">
-                LP MULTIPLIER: <span class="mult-val" style="color:{compareData.consensus.lpMult >= 1.5 ? '#00ff88' : compareData.consensus.lpMult >= 1 ? '#ffe600' : '#ff2d55'}">x{compareData.consensus.lpMult}</span>
+                LP MULTIPLIER: <span class="mult-val" style="color:{compareData.consensus.lpMult >= 1.5 ? '#00CC88' : compareData.consensus.lpMult >= 1 ? '#DCB970' : '#FF5E7A'}">x{compareData.consensus.lpMult}</span>
               </div>
             </div>
           </div>
@@ -1278,7 +1673,7 @@
               <div class="verdict-score">
                 <svg viewBox="0 0 44 44">
                   <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(0,0,0,.1)" stroke-width="3"/>
-                  <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00cc66' : '#ff2d55'} stroke-width="3"
+                  <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00CC88' : '#FF5E7A'} stroke-width="3"
                     stroke-dasharray="{state.score * 1.13} 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
                 </svg>
                 <span class="vs-num">{Math.round(state.score)}</span>
@@ -1309,7 +1704,12 @@
         {#if pvpVisible}
           <div class="pvp-overlay">
             <div class="pvp-card">
-              <div class="pvp-title">{resultData.win ? '🏆 YOU WIN! 🏆' : '💀 YOU LOSE 💀'}</div>
+              <div class="pvp-title">{resultOverlayTitle}</div>
+              {#if state.arenaMode === 'TOURNAMENT' && tournamentInfo.tournamentId}
+                <div class="pvp-label tour-meta">
+                  {tournamentInfo.type ?? 'TOURNAMENT'} · {tournamentInfo.pair ?? state.pair} · ROUND {tournamentInfo.round ?? 1}
+                </div>
+              {/if}
               <div class="pvp-scores">
                 <div class="pvp-side">
                   <div class="pvp-label">YOUR SCORE</div>
@@ -1380,6 +1780,14 @@
             {/if}
           </div>
         {/if}
+
+        <div class="arena-balance">
+          <span>LONG</span>
+          <div class="ab-track">
+            <div class="ab-fill" style="width:{longBalance}%"></div>
+          </div>
+          <span>SHORT</span>
+        </div>
       </div>
     </div>
   {/if}
@@ -1387,7 +1795,195 @@
 
 <style>
   .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; }
+  .arena-space-theme {
+    --space-line: rgba(117, 224, 255, 0.32);
+    --space-line-strong: rgba(153, 230, 255, 0.58);
+    --space-surface: rgba(6, 13, 31, 0.86);
+    --space-surface-soft: rgba(8, 18, 41, 0.68);
+    --space-text: #ecf7ff;
+    --space-text-soft: rgba(195, 222, 255, 0.84);
+    --space-accent: #68d8ff;
+    --space-accent-2: #ff9f70;
+    --space-good: #1effa0;
+    --space-bad: #ff607c;
+  }
+  .arena-space-theme::before {
+    content: '';
+    position: absolute;
+    inset: -20% -10%;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(circle at 16% 18%, rgba(123, 215, 255, 0.2), transparent 36%),
+      radial-gradient(circle at 85% 12%, rgba(255, 164, 110, 0.14), transparent 34%),
+      radial-gradient(circle at 70% 82%, rgba(125, 140, 255, 0.12), transparent 38%);
+    animation: spaceDrift 30s linear infinite alternate;
+  }
+  .arena-space-theme::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: radial-gradient(circle at center, rgba(255,255,255,.55) 0 1px, transparent 1.5px);
+    background-size: 3px 3px;
+    opacity: 0.065;
+    mix-blend-mode: screen;
+  }
+  @keyframes spaceDrift {
+    from { transform: translate3d(-2%, 0, 0) scale(1); }
+    to { transform: translate3d(2%, -2%, 0) scale(1.03); }
+  }
+
   .battle-layout { display: grid; grid-template-columns: 45% 1fr; height: 100%; overflow: hidden; }
+
+  .arena-topbar {
+    position: relative;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--space-line);
+    background:
+      linear-gradient(180deg, rgba(4, 12, 31, 0.95), rgba(4, 10, 23, 0.88)),
+      radial-gradient(circle at 8% -20%, rgba(109, 212, 255, 0.22), transparent 40%);
+    backdrop-filter: blur(10px);
+  }
+  .atb-back {
+    border: 1px solid var(--space-line-strong);
+    border-radius: 999px;
+    background: rgba(11, 24, 48, 0.72);
+    color: var(--space-text);
+    font: 800 10px/1 var(--fd);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    padding: 7px 13px;
+    cursor: pointer;
+    transition: transform .16s ease, border-color .16s ease, background .16s ease;
+  }
+  .atb-back:hover {
+    transform: translateY(-1px);
+    border-color: rgba(128, 232, 255, 0.9);
+    background: rgba(10, 30, 63, 0.84);
+  }
+  .atb-arrow {
+    margin-right: 5px;
+  }
+  .atb-confirm-pulse {
+    color: #ff9c89;
+    animation: pulseWarn .9s ease-in-out infinite;
+  }
+  @keyframes pulseWarn {
+    0%, 100% { opacity: .8; }
+    50% { opacity: 1; }
+  }
+  .atb-phase-track {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+  }
+  .atb-phase {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: .62;
+    transition: opacity .2s ease, filter .2s ease;
+  }
+  .atb-phase.active,
+  .atb-phase.done {
+    opacity: 1;
+  }
+  .atp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid rgba(181, 216, 255, 0.5);
+    background: rgba(120, 167, 232, 0.35);
+    box-shadow: 0 0 0 rgba(104, 216, 255, 0);
+  }
+  .atb-phase.active .atp-dot {
+    background: #6bd8ff;
+    box-shadow: 0 0 10px rgba(107, 216, 255, 0.85);
+  }
+  .atb-phase.done .atp-dot {
+    background: #1effa0;
+    border-color: rgba(130, 255, 207, 0.9);
+  }
+  .atp-label {
+    font: 800 8px/1 var(--fd);
+    letter-spacing: 1.3px;
+    color: var(--space-text-soft);
+    white-space: nowrap;
+  }
+  .atb-connector {
+    width: 20px;
+    height: 1px;
+    margin: 0 4px;
+    background: linear-gradient(90deg, rgba(108, 165, 241, 0.18), rgba(106, 225, 255, 0.55), rgba(108, 165, 241, 0.18));
+  }
+  .atb-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .atb-mode {
+    border: 1px solid rgba(115, 221, 255, 0.62);
+    border-radius: 999px;
+    background: rgba(33, 113, 173, 0.2);
+    color: #c6ebff;
+    font: 800 8px/1 var(--fd);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    padding: 4px 8px;
+  }
+  .atb-mode.pvp {
+    border-color: rgba(255, 158, 112, 0.7);
+    background: rgba(198, 93, 52, 0.18);
+    color: #ffd7bb;
+  }
+  .atb-mode.tour {
+    border-color: rgba(249, 199, 127, 0.72);
+    background: rgba(186, 133, 54, 0.18);
+    color: #ffdeb2;
+  }
+  .atb-stats {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font: 700 8px/1 var(--fm);
+    color: var(--space-text-soft);
+  }
+  .atb-lp {
+    color: #ffd39e;
+  }
+  .atb-hist {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid rgba(136, 221, 255, 0.62);
+    background: rgba(13, 32, 56, 0.8);
+    color: #d7edff;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .atb-hist:hover {
+    border-color: rgba(170, 239, 255, 0.92);
+    background: rgba(21, 55, 95, 0.9);
+  }
+
+  .live-event-stack {
+    position: absolute;
+    z-index: 21;
+    top: 70px;
+    left: 10px;
+    width: min(328px, calc(100% - 220px));
+    display: grid;
+    gap: 7px;
+    pointer-events: none;
+  }
 
   /* Match History Toggle */
   .mh-toggle {
@@ -1406,8 +2002,15 @@
     transition: all .15s;
   }
   .mh-toggle:hover { background: #ffe600; }
-  .chart-side { display: flex; flex-direction: column; background: #0a0a1a; overflow: hidden; border-right: 4px solid #000; position: relative; }
-  .arena-side { position: relative; overflow: hidden; background: radial-gradient(ellipse at center, #fff2a0 0%, #ffe600 40%, #ffcc00 80%, #ffaa00 100%); }
+  .chart-side { display: flex; flex-direction: column; background: #05060a; overflow: hidden; border-right: 2px solid #2f3f66; position: relative; }
+  .arena-side {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 45% 25%, rgba(122, 153, 255, .24), transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(255, 86, 149, .18), transparent 45%),
+      linear-gradient(180deg, #04070f 0%, #060b16 56%, #080f1b 100%);
+  }
 
   /* ═══════ HYPOTHESIS SIDEBAR ═══════ */
   .hypo-sidebar {
@@ -1439,6 +2042,28 @@
   .score-stats { display: flex; gap: 8px; margin-left: auto; }
   .ss-item { font-size: 8px; font-weight: 700; font-family: var(--fm); color: #aaa; }
   .ss-item.lp { color: #ffe600; }
+  .mode-badge {
+    padding: 3px 8px;
+    border: 1.5px solid rgba(232,150,125,.55);
+    background: rgba(232,150,125,.09);
+    color: #e8967d;
+    font-size: 8px;
+    font-family: var(--fd);
+    font-weight: 900;
+    letter-spacing: 1px;
+    border-radius: 7px;
+    white-space: nowrap;
+  }
+  .mode-badge.pvp {
+    border-color: rgba(102,204,230,.55);
+    background: rgba(102,204,230,.1);
+    color: #66cce6;
+  }
+  .mode-badge.tour {
+    border-color: rgba(220,185,112,.65);
+    background: rgba(220,185,112,.12);
+    color: #dcb970;
+  }
 
   /* Hypothesis Badge in score bar */
   .hypo-badge {
@@ -1452,102 +2077,110 @@
   .mbtn { padding: 6px 16px; border-radius: 16px; background: #ffe600; border: 3px solid #000; color: #000; font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
   .mbtn:hover { background: #ffcc00; }
 
-  /* Arena Background — Pop Art / Comic */
-  .sunburst {
-    position: absolute; inset: -80%; z-index: 0; pointer-events: none;
-    background: repeating-conic-gradient(
-      #ffe600 0deg 6deg, #ffcc00 6deg 12deg, #ffdd33 12deg 18deg, #ffd000 18deg 24deg
-    );
-    animation: sunSpin 90s linear infinite;
-    will-change: transform; contain: strict;
-    opacity: .35;
+  /* Arena Background — Retro Space + Collage */
+  .arena-texture {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    z-index: 0;
   }
-  @keyframes sunSpin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
-  .halftone {
-    position: absolute; inset: 0; z-index: 1; pointer-events: none;
-    background-image: radial-gradient(circle, rgba(0,0,0,.06) 2px, transparent 2px);
-    background-size: 12px 12px;
+  .arena-stars {
+    background-image: url('/arena/references/14-o.png');
+    opacity: .34;
+    mix-blend-mode: screen;
+    filter: saturate(1.1) contrast(1.12);
   }
-  /* Stage platform where agents stand */
-  .ground {
-    position: absolute; bottom: 0; left: 0; right: 0; height: 15%; z-index: 2; pointer-events: none;
-    background: linear-gradient(180deg, #ff8c00 0%, #e67300 40%, #cc5500 100%);
-    border-top: 5px solid #000;
-    box-shadow: inset 0 6px 0 rgba(255,255,255,.2), inset 0 -4px 12px rgba(0,0,0,.15);
+  .arena-rainbow {
+    background-image: url('/arena/references/03-o.png');
+    opacity: .44;
+    mix-blend-mode: screen;
+    filter: saturate(1.2) contrast(1.06);
   }
-  .ground::before {
-    content: 'MAXI⚡DOGE  ARENA';
-    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
-    font-family: var(--fc); font-size: 11px; font-weight: 900; letter-spacing: 6px;
-    color: rgba(255,255,255,.5); text-shadow: 2px 2px 0 rgba(0,0,0,.2);
+  .arena-grid {
+    background-image: url('/arena/references/02-o.png');
+    opacity: .16;
+    mix-blend-mode: lighten;
+    transform: scale(1.05);
+  }
+  .arena-doodle {
+    background-image: url('/arena/references/cs-robert-a1-o.png');
+    opacity: .18;
+    mix-blend-mode: soft-light;
+    filter: grayscale(.12) contrast(1.2);
+  }
+  .arena-vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background:
+      radial-gradient(circle at 50% 54%, transparent 18%, rgba(2, 7, 18, .4) 58%, rgba(1, 4, 12, .7) 100%),
+      linear-gradient(180deg, rgba(5, 8, 18, .04) 0%, rgba(1, 3, 11, .62) 100%);
+  }
+  .battle-floor {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    height: 14%;
+    border-top: 1px solid rgba(140, 176, 255, .34);
+    background:
+      linear-gradient(180deg, rgba(14, 18, 36, .2) 0%, rgba(7, 11, 24, .82) 35%, rgba(6, 10, 20, .95) 100%),
+      repeating-linear-gradient(90deg, rgba(106, 143, 255, .08) 0 1px, transparent 1px 46px);
+    backdrop-filter: blur(2px);
+  }
+  .battle-floor span {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--fd);
+    font-size: 8px;
+    letter-spacing: 4px;
+    color: rgba(177, 204, 255, .72);
+    text-transform: uppercase;
     white-space: nowrap;
   }
 
-  /* Comic Bursts — BOLD POP ART */
-  .comic-burst {
-    position: absolute; z-index: 3; pointer-events: none;
-    font-family: var(--fc); font-weight: 900; font-style: italic;
-    color: #fff; opacity: .85;
-    transform: rotate(var(--rot, -5deg));
-    animation: burstPop 3s ease-in-out infinite;
-    -webkit-text-stroke: 3px #000;
-    text-shadow: 4px 4px 0 #000, 0 0 20px rgba(255,200,0,.5);
-    filter: drop-shadow(3px 3px 0 rgba(0,0,0,.4));
-  }
-  .boom { font-size: 52px; --rot: -8deg; color: #ff3d5c; }
-  .pow { font-size: 44px; --rot: 5deg; color: #00ff88; }
-  .wow { font-size: 48px; --rot: -3deg; color: #ffe600; }
-  @keyframes burstPop { 0%,100% { transform: rotate(var(--rot, 0)) scale(1) } 50% { transform: rotate(var(--rot, 0)) scale(1.15) } }
-
-  /* Stickers — more visible */
-  .sticker { position: absolute; z-index: 2; pointer-events: none; opacity: .5; animation: stickerFloat 6s ease-in-out infinite; filter: drop-shadow(3px 3px 0 rgba(0,0,0,.3)); will-change: transform; contain: layout style; }
-  @keyframes stickerFloat { 0%,100% { transform: translateY(0) rotate(-8deg) scale(1) } 50% { transform: translateY(-18px) rotate(8deg) scale(1.1) } }
-
-  /* Rainbow Swirl Decorations */
-  .rainbow-swirl {
-    position: absolute; z-index: 2; pointer-events: none;
-    width: 140px; height: 140px;
-    border-radius: 50%;
-    background: conic-gradient(
-      #ff3d5c, #ff8c3b, #ffe600, #00ff88, #00d4ff, #a855f7, #ff3d5c
-    );
-    opacity: .35;
-    animation: swirlSpin 8s linear infinite;
-    filter: blur(3px);
-  }
-  .rainbow-swirl.tl { top: -30px; left: -30px; }
-  .rainbow-swirl.br { bottom: 12%; right: -30px; animation-direction: reverse; }
-  @keyframes swirlSpin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
-
-  /* Crypto coin float */
-  .crypto-coin {
-    position: absolute; z-index: 3; pointer-events: none;
-    font-size: 28px; font-weight: 900;
-    color: #fff;
-    text-shadow: 2px 2px 0 #000, 0 0 10px rgba(255,230,0,.6);
-    -webkit-text-stroke: 1.5px #000;
-    animation: coinFloat 5s ease-in-out infinite;
-    opacity: .6;
-  }
-  @keyframes coinFloat {
-    0%,100% { transform: translateY(0) rotate(-10deg) scale(1); }
-    50% { transform: translateY(-20px) rotate(10deg) scale(1.1); }
-  }
-
-  .zap { font-size: 36px; --rot: 8deg; color: #a855f7; }
-
   /* Data Sources */
   .dsrc { position: absolute; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; transform: translate(-50%, -50%); }
-  .dp { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: transparent; border: 2px solid rgba(0,0,0,.08); animation: dpPulse 2s ease infinite; will-change: transform, opacity; contain: strict; }
+  .dp { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: transparent; border: 1px solid rgba(146,181,255,.35); animation: dpPulse 2s ease infinite; will-change: transform, opacity; contain: strict; }
   @keyframes dpPulse { 0%,100% { transform: scale(1); opacity: .3 } 50% { transform: scale(1.3); opacity: 0 } }
-  .di { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: #fff; border: 3px solid; box-shadow: 4px 4px 0 #000; }
-  .dl { font-size: 7px; color: #000; letter-spacing: 2px; font-family: var(--fd); font-weight: 900; background: #fff; padding: 2px 6px; border-radius: 8px; border: 1px solid rgba(0,0,0,.2); }
+  .di {
+    width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px;
+    background: rgba(8,13,28,.86);
+    border: 2px solid;
+    box-shadow: 0 0 0 1px rgba(153,189,255,.28), 0 10px 18px rgba(0,0,0,.34);
+    backdrop-filter: blur(4px);
+  }
+  .dl {
+    font-size: 7px; color: #d7e9ff; letter-spacing: 2px; font-family: var(--fd); font-weight: 900;
+    background: rgba(7,12,26,.76); padding: 2px 6px; border-radius: 8px;
+    border: 1px solid rgba(152,188,255,.35);
+  }
 
   /* Council Table */
-  .ctable { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90px; height: 55px; border-radius: 50%; border: 3px dashed rgba(0,0,0,.15); background: rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; z-index: 4; transition: all .3s; }
-  .ctable.on { border-color: #000; border-style: solid; border-width: 4px; background: rgba(255,255,255,.2); box-shadow: 0 0 30px rgba(255,45,155,.2), 4px 4px 0 rgba(0,0,0,.3); }
-  .cl { font-size: 6px; color: rgba(0,0,0,.25); letter-spacing: 2px; font-family: var(--fd); font-weight: 900; }
-  .ctable.on .cl { color: #000; }
+  .ctable {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 108px; height: 58px; border-radius: 999px;
+    border: 1px dashed rgba(149,184,255,.45);
+    background: rgba(5,11,24,.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 4; transition: all .3s;
+    backdrop-filter: blur(3px);
+  }
+  .ctable.on {
+    border-color: rgba(152,193,255,.9);
+    border-style: solid;
+    background: rgba(7,13,28,.72);
+    box-shadow: 0 0 28px rgba(113, 160, 255, .35);
+  }
+  .cl { font-size: 7px; color: rgba(176, 201, 255, .56); letter-spacing: 3px; font-family: var(--fd); font-weight: 900; }
+  .ctable.on .cl { color: #dff1ff; }
 
   /* Agent Sprites */
   .ag {
@@ -1715,7 +2348,20 @@
     border: 3px solid #000; z-index: 3; text-shadow: 0 1px 0 #000;
     box-shadow: 2px 2px 0 #000;
   }
-  .ag .react { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 18px; z-index: 15; filter: drop-shadow(1px 1px 0 #000); }
+  .ag .react {
+    position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+    font-size: 6px; z-index: 15;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(130, 175, 255, .52);
+    background: rgba(4, 9, 20, .74);
+    color: #b8dbff;
+    letter-spacing: 1.5px;
+    font-family: var(--fd);
+    font-weight: 900;
+    text-transform: uppercase;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,.35));
+  }
   .ag .nm {
     font-size: 8px; font-weight: 900; letter-spacing: 2px; margin-top: 4px;
     font-family: var(--fd); background: #fff; padding: 2px 8px; border-radius: 8px;
@@ -1725,10 +2371,25 @@
   .ag .efill { height: 100%; border-radius: 2px; transition: width .3s; }
 
   /* Phase Display */
-  .phase-display { position: absolute; top: 8px; right: 8px; z-index: 15; background: #fff; border-radius: 12px; padding: 6px 14px; border: 3px solid #000; box-shadow: 3px 3px 0 #000; text-align: center; }
-  .phase-emoji { font-size: 14px; }
-  .phase-name { font-size: 11px; font-weight: 900; font-family: var(--fc); letter-spacing: 2px; }
-  .phase-timer { font-size: 9px; font-family: var(--fm); color: #666; font-weight: 700; }
+  .phase-display {
+    position: absolute; top: 8px; right: 8px; z-index: 15;
+    background: rgba(5, 10, 23, .82);
+    border-radius: 12px;
+    padding: 8px 14px;
+    border: 1px solid rgba(146,179,255,.58);
+    box-shadow: 0 10px 24px rgba(0,0,0,.4);
+    text-align: center;
+    backdrop-filter: blur(5px);
+  }
+  .phase-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    margin: 0 auto 6px;
+    box-shadow: 0 0 10px currentColor;
+  }
+  .phase-name { font-size: 10px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; text-transform: uppercase; }
+  .phase-timer { font-size: 9px; font-family: var(--fm); color: #8fb2ec; font-weight: 700; }
 
   /* Agent Decision Card (below sprite) */
   .ag-decision {
@@ -1767,10 +2428,18 @@
 
   /* Feed */
   .feed-panel { position: absolute; bottom: 14%; left: 8px; right: 8px; z-index: 14; max-height: 70px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
-  .feed-msg { display: flex; align-items: center; gap: 4px; font-size: 7px; font-family: var(--fm); background: rgba(255,255,255,.7); padding: 2px 6px; border-radius: 4px; backdrop-filter: blur(2px); }
+  .feed-msg {
+    display: flex; align-items: center; gap: 4px; font-size: 7px; font-family: var(--fm);
+    background: rgba(4, 9, 20, .74);
+    border: 1px solid rgba(141, 173, 255, .3);
+    color: #a9c8ff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    backdrop-filter: blur(5px);
+  }
   .feed-icon { font-size: 8px; }
   .feed-name { font-weight: 900; font-size: 7px; }
-  .feed-text { color: #333; flex: 1; }
+  .feed-text { color: #b9d4ff; flex: 1; }
   .feed-dir { font-size: 6px; padding: 1px 4px; border-radius: 4px; font-weight: 900; }
   .feed-dir.long { background: #00ff88; color: #000; }
   .feed-dir.short { background: #ff2d55; color: #fff; }
@@ -1900,6 +2569,13 @@
   .pvp-scores { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 12px 0; }
   .pvp-side { text-align: center; }
   .pvp-label { font-size: 7px; color: #888; font-family: var(--fd); letter-spacing: 2px; }
+  .pvp-label.tour-meta {
+    margin-top: 2px;
+    margin-bottom: 8px;
+    font-size: 8px;
+    color: #8b6c27;
+    letter-spacing: 1px;
+  }
   .pvp-score { font-size: 28px; font-weight: 900; font-family: var(--fc); }
   .pvp-vs { font-size: 14px; font-weight: 900; font-family: var(--fc); color: #888; }
   .pvp-lp { font-size: 16px; font-weight: 900; font-family: var(--fd); margin: 8px 0; }
@@ -1924,21 +2600,48 @@
   @keyframes dogeUp { 0% { opacity: 1; transform: translateY(0) rotate(-5deg) scale(1); } 100% { opacity: 0; transform: translateY(-100px) rotate(15deg) scale(1.5); } }
 
   /* History */
-  .hist-btn { position: absolute; bottom: 14%; right: 8px; z-index: 16; padding: 4px 10px; border-radius: 8px; background: #fff; border: 2px solid #000; font-size: 8px; font-weight: 700; cursor: pointer; box-shadow: 2px 2px 0 #000; }
-  .hist-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 180px; z-index: 50; background: #fff; border-left: 4px solid #000; padding: 10px; overflow-y: auto; box-shadow: -4px 0 20px rgba(0,0,0,.2); }
-  .hist-header { display: flex; align-items: center; justify-content: space-between; font-size: 9px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; margin-bottom: 8px; border-bottom: 2px solid #000; padding-bottom: 6px; }
-  .hist-close { background: none; border: none; font-size: 14px; cursor: pointer; }
-  .hitem { display: flex; align-items: center; gap: 4px; padding: 3px 0; border-bottom: 1px solid #eee; font-size: 8px; font-family: var(--fm); }
-  .hnum { font-weight: 700; color: #888; width: 24px; }
+  .hist-btn {
+    position: absolute; bottom: 14%; right: 8px; z-index: 16;
+    padding: 4px 10px; border-radius: 8px;
+    background: rgba(5, 11, 24, .8);
+    border: 1px solid rgba(136, 171, 255, .5);
+    color: #bdd8ff;
+    font-size: 8px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 8px 18px rgba(0,0,0,.35);
+  }
+  .hist-panel {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 180px; z-index: 50;
+    background: rgba(6, 11, 24, .94);
+    border-left: 1px solid rgba(140, 174, 255, .42);
+    color: #d4e7ff;
+    padding: 10px; overflow-y: auto;
+    box-shadow: -6px 0 20px rgba(0,0,0,.4);
+    backdrop-filter: blur(4px);
+  }
+  .hist-header {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 9px; font-weight: 900; font-family: var(--fd);
+    letter-spacing: 2px; margin-bottom: 8px;
+    border-bottom: 1px solid rgba(151, 184, 255, .35);
+    padding-bottom: 6px;
+    color: #cfe4ff;
+  }
+  .hist-close { background: none; border: none; font-size: 14px; cursor: pointer; color: #9fc2ff; }
+  .hitem {
+    display: flex; align-items: center; gap: 4px; padding: 3px 0;
+    border-bottom: 1px solid rgba(134, 166, 235, .15);
+    font-size: 8px; font-family: var(--fm);
+  }
+  .hnum { font-weight: 700; color: #83a8df; width: 24px; }
   .hres { font-weight: 900; font-size: 7px; padding: 1px 5px; border-radius: 4px; }
   .hres.w { background: #00ff88; color: #000; }
   .hres.l { background: #ff2d55; color: #fff; }
   .hlp { font-weight: 700; }
   .hlp.pos { color: #00cc66; }
   .hlp.neg { color: #ff2d55; }
-  .hscore { color: #888; margin-left: auto; }
+  .hscore { color: #8caedc; margin-left: auto; }
   .hstreak { font-size: 7px; }
-  .hist-empty { text-align: center; color: #aaa; font-size: 9px; padding: 20px 0; }
+  .hist-empty { text-align: center; color: #7f99bf; font-size: 9px; padding: 20px 0; }
 
   /* ═══════ REPLAY BANNER ═══════ */
   .replay-banner {
@@ -2146,12 +2849,313 @@
     box-shadow: 1px 1px 0 #000;
   }
 
+  /* ═══════ PARTIAL REFERENCE UI LAYER (OUR TONE) ═══════ */
+  .arena-rail {
+    position: absolute;
+    top: 52px;
+    right: 10px;
+    bottom: 38px;
+    width: 190px;
+    z-index: 14;
+    border: 1px solid var(--arena-line);
+    background: rgba(8, 18, 13, 0.92);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    backdrop-filter: blur(4px);
+  }
+  .rail-head {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--arena-line-soft);
+    background: linear-gradient(180deg, rgba(232, 150, 125, 0.15), rgba(8, 18, 13, 0.2));
+  }
+  .rail-pair {
+    font-family: var(--fd);
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: var(--arena-accent);
+  }
+  .rail-price {
+    margin-top: 3px;
+    font-family: var(--fd);
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--arena-text);
+    letter-spacing: 1px;
+  }
+  .rail-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid var(--arena-line-soft);
+    border-bottom: 1px solid var(--arena-line-soft);
+  }
+  .rail-tabs button {
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: var(--arena-text-muted);
+    font-family: var(--fd);
+    font-size: 7px;
+    letter-spacing: 1px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .rail-tabs button.active {
+    color: var(--arena-text);
+    background: rgba(232, 150, 125, 0.15);
+    box-shadow: inset 0 -2px 0 rgba(232, 150, 125, 0.95);
+  }
+  .rail-body {
+    flex: 1;
+    overflow-y: auto;
+  }
+  .rail-body::-webkit-scrollbar {
+    width: 2px;
+  }
+  .rail-body::-webkit-scrollbar-thumb {
+    background: rgba(232, 150, 125, 0.35);
+  }
+  .rail-row {
+    display: grid;
+    grid-template-columns: 14px 1fr auto auto;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--arena-line-soft);
+  }
+  .rail-rank {
+    font-family: var(--fm);
+    font-size: 7px;
+    color: rgba(240, 237, 228, 0.45);
+    text-align: center;
+  }
+  .rail-name {
+    font-family: var(--fd);
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rail-dir {
+    font-family: var(--fm);
+    font-size: 6px;
+    border: 1px solid;
+    padding: 1px 4px;
+    letter-spacing: 1px;
+  }
+  .rail-dir.long {
+    color: var(--arena-good);
+    border-color: rgba(0, 204, 136, 0.45);
+    background: rgba(0, 204, 136, 0.12);
+  }
+  .rail-dir.short {
+    color: var(--arena-bad);
+    border-color: rgba(255, 94, 122, 0.42);
+    background: rgba(255, 94, 122, 0.1);
+  }
+  .rail-dir.neutral {
+    color: var(--arena-warn);
+    border-color: rgba(220, 185, 112, 0.5);
+    background: rgba(220, 185, 112, 0.12);
+  }
+  .rail-conf {
+    font-family: var(--fm);
+    font-size: 7px;
+    color: var(--arena-accent-2);
+    min-width: 26px;
+    text-align: right;
+  }
+  .rail-log {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--arena-line-soft);
+    display: grid;
+    gap: 2px;
+  }
+  .rl-name {
+    font-family: var(--fd);
+    font-size: 7px;
+    letter-spacing: 1px;
+    font-weight: 900;
+  }
+  .rl-text {
+    font-family: var(--fm);
+    font-size: 7px;
+    line-height: 1.35;
+    color: var(--arena-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rail-map {
+    padding: 7px;
+    display: grid;
+    gap: 6px;
+  }
+  .rm-item {
+    padding: 7px 8px;
+    border: 1px solid var(--arena-line-soft);
+    background: rgba(10, 22, 17, 0.78);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .rm-item span {
+    font-family: var(--fm);
+    font-size: 7px;
+    color: var(--arena-text-muted);
+    letter-spacing: 1px;
+  }
+  .rm-item b {
+    font-family: var(--fd);
+    font-size: 8px;
+    color: var(--arena-text);
+    letter-spacing: 1px;
+  }
+  .rail-empty {
+    padding: 18px 10px;
+    text-align: center;
+    color: rgba(240, 237, 228, 0.45);
+    font-family: var(--fm);
+    font-size: 8px;
+  }
+
+  .arena-balance {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    z-index: 15;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+  }
+  .arena-balance > span {
+    font-family: var(--fm);
+    font-size: 7px;
+    letter-spacing: 1px;
+    color: var(--arena-text-muted);
+  }
+  .ab-track {
+    height: 6px;
+    border: 1px solid var(--arena-line-soft);
+    background: linear-gradient(90deg, rgba(0, 204, 136, 0.12), rgba(255, 94, 122, 0.18));
+    position: relative;
+    overflow: hidden;
+  }
+  .ab-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--arena-good), var(--arena-accent-2));
+    transition: width .3s ease;
+  }
+
+  .feed-panel {
+    left: 8px;
+    right: 206px;
+    max-height: 82px;
+  }
+  .feed-msg {
+    border-color: var(--arena-line-soft);
+    background: rgba(8, 18, 13, 0.78);
+    color: var(--arena-text);
+  }
+  .feed-text {
+    color: var(--arena-text-dim);
+  }
+  .hist-btn {
+    right: 206px;
+  }
+
+  @media (max-width: 1150px) {
+    .arena-rail {
+      width: 170px;
+    }
+    .feed-panel {
+      right: 184px;
+    }
+    .hist-btn {
+      right: 184px;
+    }
+    .atb-phase-track {
+      justify-content: flex-start;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .atb-phase-track::-webkit-scrollbar {
+      display: none;
+    }
+    .live-event-stack {
+      width: min(288px, calc(100% - 190px));
+    }
+  }
+  @media (max-width: 900px) {
+    .arena-rail {
+      display: none;
+    }
+    .feed-panel {
+      right: 8px;
+    }
+    .hist-btn {
+      right: 8px;
+    }
+    .arena-topbar {
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        'back right'
+        'track track';
+      row-gap: 8px;
+    }
+    .atb-back {
+      grid-area: back;
+      justify-self: start;
+    }
+    .atb-right {
+      grid-area: right;
+      justify-self: end;
+    }
+    .atb-phase-track {
+      grid-area: track;
+      justify-content: flex-start;
+      width: 100%;
+    }
+    .live-event-stack {
+      width: min(300px, calc(100% - 18px));
+      top: 106px;
+    }
+    .phase-display {
+      top: 110px;
+    }
+  }
+
   @keyframes popIn { from { transform: translate(-50%, -50%) scale(.8); opacity: 0 } to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }
   @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 
   @media (max-width: 768px) {
     .battle-layout { grid-template-columns: 1fr; grid-template-rows: 45% 1fr; }
     .chart-side { border-right: none; border-bottom: 4px solid #000; }
+    .atp-label {
+      font-size: 7px;
+      letter-spacing: 1px;
+    }
+    .atb-connector {
+      width: 12px;
+      margin: 0 3px;
+    }
+    .atb-back {
+      font-size: 9px;
+      padding: 6px 10px;
+    }
+    .atb-hist {
+      width: 28px;
+      height: 28px;
+    }
+    .live-event-stack {
+      top: 98px;
+    }
   }
 
   /* ── Wallet Gate ── */
@@ -2230,4 +3234,19 @@
     letter-spacing: .5px;
     position: relative; z-index: 1;
   }
+
+  /* ═══════ API SYNC STATUS ═══════ */
+  .api-status {
+    position: fixed;
+    bottom: 8px;
+    right: 8px;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    z-index: 100;
+    opacity: 0.7;
+    font-family: monospace;
+  }
+  .api-status.synced { background: rgba(0,170,68,0.2); color: #00aa44; }
+  .api-status.error { background: rgba(255,45,85,0.15); color: #ff6666; }
 </style>

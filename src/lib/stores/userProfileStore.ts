@@ -11,7 +11,7 @@ import { totalQuickPnL, openTradeCount } from './quickTradeStore';
 import { STORAGE_KEYS } from './storageKeys';
 import { fetchPassportApi, fetchProfileApi, updateProfileApi } from '$lib/api/profileApi';
 
-export type ProfileTier = 'bronze' | 'silver' | 'gold' | 'diamond';
+export type ProfileTier = 'bronze' | 'silver' | 'gold' | 'diamond' | 'master';
 
 export interface Badge {
   id: string;
@@ -98,33 +98,58 @@ function createDefault(): UserProfile {
 
 export const userProfileStore = writable<UserProfile>(loadProfile());
 
-// Persist (debounced)
+// Persist (debounced) + badge sync to server
 let _profileSave: ReturnType<typeof setTimeout> | null = null;
+let _badgeSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let _lastBadgeHash = '';
 userProfileStore.subscribe(p => {
   if (typeof window === 'undefined') return;
   if (_profileSave) clearTimeout(_profileSave);
   _profileSave = setTimeout(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
   }, 500);
+
+  // Badge → server sync (debounced 2s, only when earned badges change)
+  const earnedHash = JSON.stringify(p.badges.filter(b => b.earnedAt !== null).map(b => b.id));
+  if (earnedHash !== _lastBadgeHash && _lastBadgeHash !== '') {
+    if (_badgeSyncTimer) clearTimeout(_badgeSyncTimer);
+    _badgeSyncTimer = setTimeout(() => {
+      void updateProfileApi({ badges: p.badges });
+    }, 2000);
+  }
+  _lastBadgeHash = earnedHash;
 });
 
-// ═══ Auto-sync from walletStore ═══
+// ═══ Auto-sync from walletStore (S-02: LP → tier 자동 갱신 포함) ═══
+let _prevLP = -1;
 walletStore.subscribe(w => {
   userProfileStore.update(p => {
+    let changed = false;
+    let next = p;
+
+    // 주소/닉네임 변경
     if (w.address !== p.address || w.nickname !== p.username) {
-      return {
-        ...p,
-        address: w.address,
-        username: w.nickname || p.username,
-      };
+      next = { ...next, address: w.address, username: w.nickname || p.username };
+      changed = true;
     }
-    return p;
+
+    // LP 변경 → tier 갱신 (S-02 통합: LP 기반 단일 소스)
+    if (w.totalLP !== _prevLP) {
+      _prevLP = w.totalLP;
+      const newTier = calcTierFromLP(w.totalLP);
+      if (newTier !== next.tier) {
+        next = { ...next, tier: newTier };
+        changed = true;
+      }
+    }
+
+    return changed ? next : p;
   });
 });
 
 function normalizeDisplayTier(value: unknown): ProfileTier {
   const tier = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (tier === 'diamond' || tier === 'gold' || tier === 'silver') return tier;
+  if (tier === 'master' || tier === 'diamond' || tier === 'gold' || tier === 'silver') return tier;
   return 'bronze';
 }
 
@@ -145,46 +170,54 @@ function mergeBadges(existing: Badge[], remoteBadges: unknown[]): Badge[] {
 }
 
 let _profileHydrated = false;
+let _profileHydratePromise: Promise<void> | null = null;
 export async function hydrateUserProfile(force = false) {
   if (typeof window === 'undefined') return;
   if (_profileHydrated && !force) return;
+  if (_profileHydratePromise) return _profileHydratePromise;
 
-  const [profile, passport] = await Promise.all([fetchProfileApi(), fetchPassportApi()]);
-  if (!profile && !passport) return;
+  _profileHydratePromise = (async () => {
+    const [profile, passport] = await Promise.all([fetchProfileApi(), fetchPassportApi()]);
+    if (!profile && !passport) return;
 
-  userProfileStore.update((p) => {
-    const nextStats = {
-      ...p.stats,
-      winRate: Number(passport?.winRate ?? p.stats.winRate),
-      totalMatches: Number(passport?.totalMatches ?? profile?.stats?.totalMatches ?? p.stats.totalMatches),
-      totalPnL: Number(passport?.totalPnl ?? profile?.stats?.totalPnl ?? p.stats.totalPnL),
-      streak: Number(passport?.streak ?? profile?.stats?.streak ?? p.stats.streak),
-      bestStreak: Number(passport?.bestStreak ?? profile?.stats?.bestStreak ?? p.stats.bestStreak),
-      trackedSignals: Number(passport?.trackedSignals ?? p.stats.trackedSignals),
-      directionAccuracy: Number(passport?.winRate ?? p.stats.directionAccuracy),
-    };
+    userProfileStore.update((p) => {
+      const nextStats = {
+        ...p.stats,
+        winRate: Number(passport?.winRate ?? p.stats.winRate),
+        totalMatches: Number(passport?.totalMatches ?? profile?.stats?.totalMatches ?? p.stats.totalMatches),
+        totalPnL: Number(passport?.totalPnl ?? profile?.stats?.totalPnl ?? p.stats.totalPnL),
+        streak: Number(passport?.streak ?? profile?.stats?.streak ?? p.stats.streak),
+        bestStreak: Number(passport?.bestStreak ?? profile?.stats?.bestStreak ?? p.stats.bestStreak),
+        trackedSignals: Number(passport?.trackedSignals ?? p.stats.trackedSignals),
+        directionAccuracy: Number(passport?.winRate ?? p.stats.directionAccuracy),
+      };
 
-    const nextTier = normalizeDisplayTier(passport?.tier || profile?.stats?.displayTier || p.tier);
-    const nextProfile: UserProfile = {
-      ...p,
-      address: profile?.walletAddress ?? p.address,
-      username: profile?.nickname || p.username,
-      tier: nextTier,
-      avatar: profile?.avatar || p.avatar,
-      stats: nextStats,
-      joinedAt: Number(profile?.createdAt ?? p.joinedAt),
-    };
+      const nextTier = normalizeDisplayTier(passport?.tier || profile?.stats?.displayTier || p.tier);
+      const nextProfile: UserProfile = {
+        ...p,
+        address: profile?.walletAddress ?? p.address,
+        username: profile?.nickname || p.username,
+        tier: nextTier,
+        avatar: profile?.avatar || p.avatar,
+        stats: nextStats,
+        joinedAt: Number(profile?.createdAt ?? p.joinedAt),
+      };
 
-    nextProfile.badges = mergeBadges(nextProfile.badges, passport?.badges ?? profile?.stats?.badges ?? []);
-    return nextProfile;
-  });
+      nextProfile.badges = mergeBadges(nextProfile.badges, passport?.badges ?? profile?.stats?.badges ?? []);
+      return nextProfile;
+    });
 
-  _profileHydrated = true;
+    _profileHydrated = true;
+  })();
+
+  try {
+    await _profileHydratePromise;
+  } finally {
+    _profileHydratePromise = null;
+  }
 }
 
-if (typeof window !== 'undefined') {
-  void hydrateUserProfile();
-}
+// 자동 hydration은 hydrateDomainStores() 단일 진입점에서 수행한다.
 
 // ═══ Auto-sync from matchHistoryStore ═══
 matchHistoryStore.subscribe($mh => {
@@ -246,12 +279,13 @@ matchHistoryStore.subscribe($mh => {
   }));
 });
 
-// ═══ Tier Calculation ═══
-function calcTier(stats: UserProfile['stats']): ProfileTier {
-  if (stats.totalMatches >= 50 && stats.winRate >= 65 && stats.totalPnL >= 30) return 'diamond';
-  if (stats.totalMatches >= 25 && stats.winRate >= 55 && stats.totalPnL >= 10) return 'gold';
-  if (stats.totalMatches >= 10 && stats.winRate >= 45) return 'silver';
-  return 'bronze';
+// ═══ Tier Calculation (S-02 통합: LP 기반 단일 소스) ═══
+// progressionRules.ts의 getTier() 사용. PnL/winRate 기반 레거시 제거.
+import { getTier, tierToDisplay } from './progressionRules';
+
+function calcTierFromLP(lp: number): ProfileTier {
+  const { tier } = getTier(lp);
+  return tierToDisplay(tier) as ProfileTier;
 }
 
 // ═══ Badge Check ═══
@@ -270,8 +304,8 @@ function checkBadges(profile: UserProfile): Badge[] {
       case 'pnl_10': earned = s.totalPnL >= 10; break;
       case 'pnl_50': earned = s.totalPnL >= 50; break;
       case 'winrate_70': earned = s.winRate >= 70 && s.totalMatches >= 10; break;
-      case 'tier_gold': earned = profile.tier === 'gold' || profile.tier === 'diamond'; break;
-      case 'tier_diamond': earned = profile.tier === 'diamond'; break;
+      case 'tier_gold': earned = profile.tier === 'gold' || profile.tier === 'diamond' || profile.tier === 'master'; break;
+      case 'tier_diamond': earned = profile.tier === 'diamond' || profile.tier === 'master'; break;
       case 'first_track': earned = s.trackedSignals >= 1; break;
     }
     return earned ? { ...badge, earnedAt: Date.now() } : badge;
@@ -283,8 +317,17 @@ function checkBadges(profile: UserProfile): Badge[] {
 export function syncPnL(pnl: number) {
   userProfileStore.update(p => {
     const newStats = { ...p.stats, totalPnL: +pnl.toFixed(2) };
-    const newTier = calcTier(newStats);
-    const updated = { ...p, stats: newStats, tier: newTier };
+    const updated = { ...p, stats: newStats };
+    updated.badges = checkBadges(updated);
+    return updated;
+  });
+}
+
+/** LP 변경 시 호출 — tier를 LP 기반으로 갱신 */
+export function syncLP(lp: number) {
+  userProfileStore.update(p => {
+    const newTier = calcTierFromLP(lp);
+    const updated = { ...p, tier: newTier };
     updated.badges = checkBadges(updated);
     return updated;
   });

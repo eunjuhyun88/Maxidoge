@@ -1,88 +1,54 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { gameState } from '$lib/stores/gameState';
-  import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
+  import { walletStore, isWalletConnected, openWalletModal, hydrateAuthSession } from '$lib/stores/walletStore';
   import { hydrateDomainStores } from '$lib/stores/hydration';
-  import { fetchPrices, subscribeMiniTicker } from '$lib/api/binance';
+  import { livePrices } from '$lib/stores/priceStore';
+  import { updatePrice } from '$lib/stores/priceStore';
+  import { fetchPrice } from '$lib/api/binance';
+  import { TOKEN_MAP } from '$lib/data/tokens';
 
   $: state = $gameState;
   $: wallet = $walletStore;
   $: connected = $isWalletConnected;
+  $: liveP = $livePrices;
 
   // Derive active route from actual URL
   $: activePath = $page.url.pathname;
 
-  let wsCleanup: (() => void) | null = null;
-  function normalizePrice(price: number): number {
-    if (!Number.isFinite(price)) return 0;
-    const abs = Math.abs(price);
-    if (abs >= 1000) return Number(price.toFixed(2));
-    if (abs >= 1) return Number(price.toFixed(4));
-    return Number(price.toFixed(6));
-  }
-
   // Navigation items
   const NAV_ITEMS = [
-    { path: '/terminal', label: 'TERMINAL', icon: '//'},
-    { path: '/arena', label: 'ARENA', icon: '>>', accent: true },
-    { path: '/signals', label: 'COMMUNITY', icon: '::' },
-    { path: '/oracle', label: 'ORACLE', icon: '**' },
-    { path: '/passport', label: 'HOLDING', icon: '##' },
+    { path: '/terminal', label: 'TERMINAL', desc: '실시간 차트와 스캔' },
+    { path: '/arena', label: 'ARENA', desc: '드래프트와 배틀', accent: true },
+    { path: '/signals', label: 'COMMUNITY', desc: '시그널, 오라클 리더보드, 라이브 피드' },
+    { path: '/passport', label: 'PASSPORT', desc: '내 기록과 포트폴리오' },
   ];
 
-  onMount(async () => {
+  // ─── 페어 변경 시 priceStore에 없는 토큰 가격 자동 fetch ────
+  let _lastFetchedToken = '';
+  $: {
+    const token = state.pair.split('/')[0] || 'BTC';
+    if (token !== _lastFetchedToken && !(token in liveP)) {
+      _lastFetchedToken = token;
+      const tokDef = TOKEN_MAP.get(token);
+      if (tokDef) {
+        fetchPrice(tokDef.binanceSymbol).then(price => {
+          if (Number.isFinite(price) && price > 0) {
+            updatePrice(token, price, 'rest');
+          }
+        }).catch(() => {/* 실패 시 ChartPanel에서 kline 로드 후 업데이트됨 */});
+      }
+    }
+  }
+
+  onMount(() => {
+    void hydrateAuthSession();
     void hydrateDomainStores();
-
-    try {
-      const prices = await fetchPrices(['BTCUSDT', 'ETHUSDT', 'SOLUSDT']);
-      const btc = prices['BTCUSDT'] || state.prices.BTC;
-      const eth = prices['ETHUSDT'] || state.prices.ETH;
-      const sol = prices['SOLUSDT'] || state.prices.SOL;
-      gameState.update(s => ({
-        ...s,
-        prices: {
-          BTC: normalizePrice(btc),
-          ETH: normalizePrice(eth),
-          SOL: normalizePrice(sol)
-        },
-        bases: {
-          BTC: normalizePrice(btc),
-          ETH: normalizePrice(eth),
-          SOL: normalizePrice(sol)
-        }
-      }));
-    } catch (e) {
-      console.warn('[Header] Failed to fetch initial prices, using defaults');
-    }
-
-    try {
-      let _pendingPrices: Record<string, number> = {};
-      let _priceFlushTimer: ReturnType<typeof setTimeout> | null = null;
-      wsCleanup = subscribeMiniTicker(['BTCUSDT', 'ETHUSDT', 'SOLUSDT'], (update) => {
-        Object.assign(_pendingPrices, update);
-        if (_priceFlushTimer) return;
-        _priceFlushTimer = setTimeout(() => {
-          _priceFlushTimer = null;
-          const batch = _pendingPrices;
-          _pendingPrices = {};
-          gameState.update(s => {
-            const newPrices = { ...s.prices };
-            if (batch['BTCUSDT']) newPrices.BTC = normalizePrice(batch['BTCUSDT']);
-            if (batch['ETHUSDT']) newPrices.ETH = normalizePrice(batch['ETHUSDT']);
-            if (batch['SOLUSDT']) newPrices.SOL = normalizePrice(batch['SOLUSDT'] || s.prices.SOL);
-            return { ...s, prices: newPrices };
-          });
-        }, 350);
-      });
-    } catch (e) {
-      console.warn('[Header] WebSocket connection failed');
-    }
-  });
-
-  onDestroy(() => {
-    if (wsCleanup) wsCleanup();
+    // NOTE: WS 가격 구독은 +layout.svelte에서 전역으로 관리 (S-03)
+    // Header는 priceStore를 읽기만 함
+    // 페어 변경 시 위의 reactive block이 REST fetch 보완
   });
 
   function nav(path: string) {
@@ -113,47 +79,52 @@
   }
 
   $: selectedToken = state.pair.split('/')[0] || 'BTC';
-  $: selectedPrice = state.prices[selectedToken as keyof typeof state.prices] || state.prices.BTC;
+  // 선택된 토큰의 가격만 표시. 없으면 0 (BTC 가격으로 폴백하지 않음)
+  $: selectedPrice = liveP[selectedToken] || 0;
   $: selectedBase = state.bases[selectedToken as keyof typeof state.bases] || state.bases.BTC;
-  $: selectedPriceText = Number(selectedPrice || 0).toLocaleString('en-US', {
-    minimumFractionDigits: selectedPrice >= 1000 ? 2 : 4,
-    maximumFractionDigits: selectedPrice >= 1000 ? 2 : 4
-  });
+  $: selectedPriceText = selectedPrice > 0
+    ? Number(selectedPrice).toLocaleString('en-US', {
+        minimumFractionDigits: selectedPrice >= 1000 ? 2 : 4,
+        maximumFractionDigits: selectedPrice >= 1000 ? 2 : 4
+      })
+    : '---';
 </script>
 
 <nav id="nav">
-  {#if activePath !== '/'}
-    <button class="nav-back" on:click={handleBack}>←</button>
-  {/if}
+  <div class="nav-main">
+    {#if activePath !== '/'}
+      <button class="nav-back" on:click={handleBack}>BACK</button>
+    {/if}
 
-  <button class="nav-logo" on:click={() => nav('/')}>
-    MAXI<span class="bolt">⚡</span>DOGE
-  </button>
-
-  <div class="nav-sep"></div>
-
-  <div class="selected-ticker">
-    <span class="st-pair">{state.pair}</span>
-    <span class="st-price">${selectedPriceText}</span>
-  </div>
-
-  <div class="nav-sep"></div>
-
-  {#each NAV_ITEMS as item}
-    <button
-      class="nav-tab"
-      class:active={isActive(item.path)}
-      class:arena-accent={item.accent}
-      on:click={() => nav(item.path)}
-    >
-      <span class="tab-icon">{item.icon}</span>
-      {item.label}
+    <button class="nav-logo" on:click={() => nav('/')}>
+      MAXIDOGE
     </button>
-  {/each}
+
+    <div class="nav-sep"></div>
+
+    <div class="selected-ticker">
+      <span class="st-pair">{state.pair}</span>
+      <span class="st-price">${selectedPriceText}</span>
+    </div>
+
+    <div class="nav-sep"></div>
+
+    {#each NAV_ITEMS as item}
+      <button
+        class="nav-tab"
+        class:active={isActive(item.path)}
+        class:arena-accent={item.accent}
+        title={`${item.label} · ${item.desc}`}
+        aria-label={`${item.label}: ${item.desc}`}
+        on:click={() => nav(item.path)}
+      >
+        {item.label}
+      </button>
+    {/each}
+  </div>
 
   <div class="nav-right">
     <div class="score-badge">
-      <span class="score-bolt">⚡</span>
       SCORE <b>{Math.round(state.score)}</b>
     </div>
 
@@ -168,7 +139,7 @@
       </button>
     {/if}
 
-    <button class="settings-btn" on:click={() => nav('/settings')}>⚙</button>
+    <button class="settings-btn" title="SETTINGS" aria-label="SETTINGS" on:click={() => nav('/settings')}>SET</button>
   </div>
 </nav>
 
@@ -191,6 +162,13 @@
     height: 42px;
     font-family: var(--fp, 'Press Start 2P', monospace);
     color: #F0EDE4;
+  }
+  .nav-main {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
 
   .nav-back {
@@ -224,11 +202,6 @@
     transition: opacity .15s;
   }
   .nav-logo:hover { opacity: 0.8; }
-  .bolt {
-    color: #E8967D;
-    text-shadow: 0 0 8px rgba(232,150,125,0.5);
-  }
-
   .nav-sep {
     width: 1px;
     height: 18px;
@@ -267,7 +240,6 @@
     height: 100%;
     display: flex;
     align-items: center;
-    gap: 4px;
     border: none;
     border-right: 1px solid rgba(232,150,125,0.06);
     background: none;
@@ -298,16 +270,9 @@
     background: rgba(232,150,125,0.12);
   }
 
-  .tab-icon {
-    font-size: 8px;
-    opacity: 0.5;
-    line-height: 1;
-  }
-  .nav-tab.active .tab-icon { opacity: 1; }
-
   /* ── Right Section ── */
   .nav-right {
-    margin-left: auto;
+    margin-left: 8px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -332,11 +297,6 @@
     font-size: 10px;
     color: #F0EDE4;
   }
-  .score-bolt {
-    font-size: 10px;
-    text-shadow: 0 0 6px rgba(232,150,125,0.5);
-  }
-
   /* ── Wallet ── */
   .wallet-btn {
     font-family: var(--fp);
@@ -373,15 +333,91 @@
   }
 
   .settings-btn {
-    font-size: 14px;
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: rgba(240,237,228,0.55);
     background: none;
-    border: none;
+    border: 1px solid rgba(232,150,125,0.2);
+    border-radius: 4px;
     cursor: pointer;
-    padding: 2px 4px;
+    padding: 3px 7px;
     transition: all .15s;
-    line-height: 1;
-    opacity: 0.4;
-    filter: grayscale(1);
+    line-height: 1.1;
   }
-  .settings-btn:hover { opacity: 0.8; filter: none; }
+  .settings-btn:hover {
+    color: #F0EDE4;
+    border-color: rgba(232,150,125,0.45);
+    background: rgba(232,150,125,0.08);
+  }
+
+  /* Mobile/tablet: prevent header information from clipping */
+  @media (max-width: 900px) {
+    #nav {
+      padding: 0 8px;
+    }
+    .nav-main {
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-x;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
+    }
+    .nav-main::-webkit-scrollbar { display: none; }
+
+    .nav-back {
+      font-size: 11px;
+      padding: 2px 6px;
+      margin-right: 4px;
+    }
+    .nav-logo {
+      font-size: 10px;
+      letter-spacing: 0.8px;
+    }
+    .nav-sep { display: none; }
+    .selected-ticker { display: none; }
+
+    .nav-tab {
+      font-size: 7px;
+      padding: 0 6px;
+      letter-spacing: 0.8px;
+    }
+
+    .score-badge { display: none; }
+    .settings-btn { display: none; }
+
+    .wallet-btn {
+      font-size: 8px;
+      padding: 3px 8px;
+      white-space: nowrap;
+      max-width: 96px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .wallet-btn.connected {
+      font-size: 7px;
+      padding: 3px 7px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    #nav {
+      padding: 0 6px;
+    }
+
+    .nav-tab {
+      font-size: 6px;
+      min-width: max-content;
+      padding: 0 5px;
+      justify-content: center;
+      border-right-color: rgba(232, 150, 125, 0.03);
+    }
+
+    .wallet-btn {
+      max-width: 76px;
+      font-size: 7px;
+      padding: 3px 6px;
+    }
+  }
 </style>

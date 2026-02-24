@@ -13,6 +13,7 @@
   $: wallet = $walletStore;
   $: profile = $userProfileStore;
   $: trackedSigs = $activeSignalCount;
+  $: openPos = $openTradeCount;
 
   $: btcPrice = state.prices.BTC;
   $: ethPrice = state.prices.ETH;
@@ -23,9 +24,9 @@
 
   const FEATURES = [
     { label: 'WAR ROOM', sub: 'TERMINAL', brief: 'YOU MISSED THE PUMP BECAUSE YOU WERE SLEEPING. NEVER AGAIN.', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
-      detail: '7 AI AGENTS RUN 24/7 — SCANNING CHARTS, TRACKING WHALES, READING DERIVATIVES, AND MONITORING SOCIAL SENTIMENT ACROSS 200+ PAIRS. YOU OPEN YOUR EYES. THE INTEL IS ALREADY THERE.',
-      stats: [{ k: 'AI AGENTS', v: '7' }, { k: 'PAIRS', v: '200+' }, { k: 'SCAN PATTERNS', v: '28' }] },
-    { label: 'AI vs YOU', sub: 'ARENA', brief: 'SUBMIT YOUR CALL. 7 AI AGENTS CHALLENGE EVERY ANGLE.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
+      detail: '8 AI AGENTS RUN 24/7 — SCANNING CHARTS, TRACKING WHALES, READING DERIVATIVES, AND MONITORING SOCIAL SENTIMENT ACROSS 200+ PAIRS. YOU OPEN YOUR EYES. THE INTEL IS ALREADY THERE.',
+      stats: [{ k: 'AI AGENTS', v: '8' }, { k: 'PAIRS', v: '200+' }, { k: 'SCAN PATTERNS', v: '28' }] },
+    { label: 'AI vs YOU', sub: 'ARENA', brief: 'SUBMIT YOUR CALL. 8 AI AGENTS CHALLENGE EVERY ANGLE.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
       detail: 'THINK YOU FOUND THE TRADE? SUBMIT IT. 8 AI AGENTS WILL ANALYZE YOUR ENTRY, TP, SL, AND R:R FROM EVERY ANGLE — STRUCTURE, FLOW, DERIVATIVES, SENTIMENT, MACRO. IF YOUR THESIS SURVIVES 5 PHASES, IT MIGHT ACTUALLY WORK.',
       stats: [{ k: 'PHASES', v: '5' }, { k: 'AI JUDGES', v: '8' }, { k: 'REWARDS', v: 'XP+RANK' }] },
     { label: 'AI SCANNER', sub: 'SIGNALS', brief: 'THE MARKET WHISPERS BEFORE IT SCREAMS. WE HEAR IT FIRST.', img: '/blockparty/f5-doge-fire.png', path: '/signals',
@@ -49,17 +50,24 @@
   let selectedFeature: number | null = null;
   let heroRightEl: HTMLDivElement;
   let heroLeftEl: HTMLDivElement;
+  let prefersReducedMotion = false;
 
   function selectFeature(i: number) {
     selectedFeature = selectedFeature === i ? null : i;
     // Reset left panel scroll to top when switching views
-    if (heroLeftEl) heroLeftEl.scrollTop = 0;
+    if (heroLeftEl) {
+      heroLeftEl.scrollTo({
+        top: 0,
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      });
+    }
   }
 
   /** Scroll hijacking: right panel scrolls first, then page.
    *  Captured on window so we intercept BEFORE native scroll. */
   function onWheel(e: WheelEvent) {
-    if (!heroRightEl || window.innerWidth <= 900) return;
+    if (!heroRightEl || window.innerWidth <= 900 || prefersReducedMotion) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
 
     // Only when hero section occupies viewport
     const heroSection = document.querySelector('.hero');
@@ -87,6 +95,18 @@
     // At boundary → don't prevent → page scrolls naturally
   }
 
+  function onHeroKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && selectedFeature !== null) {
+      selectedFeature = null;
+      if (heroLeftEl) {
+        heroLeftEl.scrollTo({
+          top: 0,
+          behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        });
+      }
+    }
+  }
+
   const FLOW_STEPS = [
     { num: '01', title: 'CONNECT', desc: 'LINK WALLET IN 30 SECONDS. NO KYC. START FREE.', img: '/blockparty/f5-doge-excited.png', pct: 100 },
     { num: '02', title: 'SET CONDITIONS', desc: 'TYPE "OI COMPRESSION" OR "WHALE DEPOSIT" — SCANNER DOES THE REST.', img: '/blockparty/f5-doge-chart.png', pct: 85 },
@@ -97,9 +117,10 @@
   /* ── Animation system ── */
   let homeEl: HTMLDivElement;
   let heroReady = false;
+  let heroIntroTimer: ReturnType<typeof setTimeout> | null = null;
 
   function onScroll() {
-    if (!homeEl) return;
+    if (!homeEl || prefersReducedMotion) return;
     const vh = homeEl.clientHeight;
     const pxEls = homeEl.querySelectorAll<HTMLElement>('[data-px]');
     for (const el of pxEls) {
@@ -111,39 +132,67 @@
   }
 
   onMount(() => {
-    // Hero intro: direct DOM add to bypass Svelte scoping
-    setTimeout(() => {
-      const heroEl = document.querySelector('.hero');
-      if (heroEl) heroEl.classList.add('hero-go');
-    }, 300);
+    heroIntroTimer = setTimeout(() => {
+      heroReady = true;
+    }, 280);
 
-    // Scroll hijack on window capture phase (intercepts before any element)
-    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    window.addEventListener('keydown', onHeroKeydown);
+    let wheelBound = false;
+    const setWheelCapture = (enabled: boolean) => {
+      if (enabled && !wheelBound) {
+        window.addEventListener('wheel', onWheel, { passive: false, capture: true });
+        wheelBound = true;
+      } else if (!enabled && wheelBound) {
+        window.removeEventListener('wheel', onWheel, { capture: true });
+        wheelBound = false;
+      }
+    };
+    const syncMotionPreference = () => {
+      prefersReducedMotion = motionQuery.matches;
+      setWheelCapture(!prefersReducedMotion);
+    };
+    syncMotionPreference();
 
-    // Setup scroll & observer
-    if (!homeEl) return;
-    homeEl.addEventListener('scroll', onScroll, { passive: true });
+    const onMotionPreferenceChange = () => syncMotionPreference();
+    if (typeof motionQuery.addEventListener === 'function') {
+      motionQuery.addEventListener('change', onMotionPreferenceChange);
+    } else {
+      motionQuery.addListener(onMotionPreferenceChange);
+    }
 
-    const obs = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            (e.target as HTMLElement).classList.add('vis');
-            obs.unobserve(e.target);
+    let obs: IntersectionObserver | null = null;
+    if (homeEl) {
+      homeEl.addEventListener('scroll', onScroll, { passive: true });
+
+      obs = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting) {
+              (e.target as HTMLElement).classList.add('vis');
+              obs?.unobserve(e.target);
+            }
           }
-        }
-      },
-      { root: homeEl, threshold: 0.01 }
-    );
-    // Delay observer setup to let DOM settle
-    requestAnimationFrame(() => {
-      homeEl.querySelectorAll('.sr').forEach((el) => obs.observe(el));
-    });
+        },
+        { root: homeEl, threshold: 0.01 }
+      );
+
+      requestAnimationFrame(() => {
+        homeEl.querySelectorAll('.sr').forEach((el) => obs?.observe(el));
+      });
+    }
 
     return () => {
-      window.removeEventListener('wheel', onWheel, { capture: true });
-      homeEl.removeEventListener('scroll', onScroll);
-      obs.disconnect();
+      if (heroIntroTimer) clearTimeout(heroIntroTimer);
+      window.removeEventListener('keydown', onHeroKeydown);
+      setWheelCapture(false);
+      if (homeEl) homeEl.removeEventListener('scroll', onScroll);
+      obs?.disconnect();
+      if (typeof motionQuery.removeEventListener === 'function') {
+        motionQuery.removeEventListener('change', onMotionPreferenceChange);
+      } else {
+        motionQuery.removeListener(onMotionPreferenceChange);
+      }
     };
   });
 </script>
@@ -191,11 +240,11 @@
     <div class="hero-left" bind:this={heroLeftEl}>
       {#if selectedFeature !== null}
         <!-- Feature detail view -->
-        <div class="feat-detail">
-          <button class="feat-back" on:click={() => selectFeature(selectedFeature ?? 0)}>← BACK</button>
+        <div class="feat-detail" id="hero-feature-detail" tabindex="-1">
+          <button type="button" class="feat-back" on:click={() => selectFeature(selectedFeature ?? 0)}>← BACK</button>
           <span class="htag">//{FEATURES[selectedFeature].sub}</span>
           <div class="ht feat-detail-img" style="--ht-img:url({FEATURES[selectedFeature].img})">
-            <img src={FEATURES[selectedFeature].img} alt="" />
+            <img src={FEATURES[selectedFeature].img} alt={FEATURES[selectedFeature].label} />
           </div>
           <h2 class="feat-detail-title">{FEATURES[selectedFeature].label}</h2>
           <p class="feat-detail-desc">{FEATURES[selectedFeature].detail}</p>
@@ -207,7 +256,7 @@
               </div>
             {/each}
           </div>
-          <button class="feat-detail-cta" on:click={() => goto(FEATURES[selectedFeature ?? 0].path)}>
+          <button type="button" class="feat-detail-cta" on:click={() => goto(FEATURES[selectedFeature ?? 0].path)}>
             ENTER {FEATURES[selectedFeature].sub} →
           </button>
         </div>
@@ -229,12 +278,26 @@
           <div class="hp"><span class="hp-icon">🐋</span><span class="hp-txt">WHALE MOVES, OI SPIKES, LIQUIDATION CLUSTERS — AUTO-DETECTED</span></div>
           <div class="hp"><span class="hp-icon">📋</span><span class="hp-txt">DRAFT ORDERS WITH TP/SL/R:R WHEN SCORE HITS 70+</span></div>
         </div>
+        <div class="hero-status ha" style="--ha-d:0.56s" role="status" aria-live="polite">
+          <div class="hs-chip">
+            <span class="hs-k">WALLET</span>
+            <span class="hs-v" class:hs-v-live={connected}>{connected ? wallet.shortAddr : 'NOT CONNECTED'}</span>
+          </div>
+          <div class="hs-chip">
+            <span class="hs-k">OPEN TRADES</span>
+            <span class="hs-v">{openPos}</span>
+          </div>
+          <div class="hs-chip">
+            <span class="hs-k">TRACKED SIGNALS</span>
+            <span class="hs-v">{trackedSigs}</span>
+          </div>
+        </div>
         <div class="hero-ctas ha" style="--ha-d:0.6s">
-          <button class="hero-btn hero-btn-primary" on:click={enterTerminal}>ENTER WAR ROOM →</button>
+          <button type="button" class="hero-btn hero-btn-primary" on:click={enterTerminal}>ENTER WAR ROOM →</button>
           {#if !connected}
-            <button class="hero-btn hero-btn-secondary" on:click={openWalletModal}>CONNECT WALLET</button>
+            <button type="button" class="hero-btn hero-btn-secondary" on:click={openWalletModal}>CONNECT WALLET</button>
           {:else}
-            <button class="hero-btn hero-btn-secondary" on:click={enterArena}>ENTER ARENA →</button>
+            <button type="button" class="hero-btn hero-btn-secondary" on:click={enterArena}>ENTER ARENA →</button>
           {/if}
         </div>
         <div class="rbadges ha" style="--ha-d:0.7s">
@@ -250,15 +313,23 @@
       {/if}
     </div>
 
-    <div class="hero-right" bind:this={heroRightEl}>
+    <div
+      class="hero-right"
+      bind:this={heroRightEl}
+      aria-label="Feature explorer"
+    >
       {#each FEATURES as feat, i}
         <button
+          type="button"
           class="fc ha ha-r"
           class:fc-active={selectedFeature === i}
           style="--ha-d:{0.2 + i * 0.12}s"
+          aria-controls="hero-feature-detail"
+          aria-expanded={selectedFeature === i}
+          aria-pressed={selectedFeature === i}
           on:click={() => selectFeature(i)}
         >
-          <div class="fc-img"><div class="ht" style="--ht-img:url({feat.img})"><img src={feat.img} alt="" /></div></div>
+          <div class="fc-img"><div class="ht" style="--ht-img:url({feat.img})"><img src={feat.img} alt={feat.label} /></div></div>
           <div class="fc-txt">
             <span class="fc-sub">{feat.sub}</span>
             <h3 class="fc-lbl">{feat.label}</h3>
@@ -266,7 +337,7 @@
           </div>
         </button>
       {/each}
-      <button class="fc-all ha ha-r" style="--ha-d:0.7s" on:click={enterTerminal}>
+      <button type="button" class="fc-all ha ha-r" style="--ha-d:0.7s" on:click={enterTerminal}>
         VIEW ALL <span class="fc-arr">→</span>
       </button>
     </div>
@@ -318,7 +389,7 @@
 
       <div class="about-text sr sr-r" style="--d:0.15s">
         <p>
-          <strong class="ab abg">7 AI DOGS</strong>
+          <strong class="ab abg">8 AI DOGS</strong>
           <span class="ar">WATCHING</span>
           <strong class="ab abg">200+ PAIRS,</strong>
           <em class="ai">scanning</em>
@@ -350,7 +421,7 @@
       <span class="sq-w">THE</span>
       <span class="sq-pk">SQUAD</span>
     </h2>
-    <p class="sq-sub sr sr-r" style="--d:0.1s">7 AI DOGS THAT EAT THE MARKET ALIVE</p>
+    <p class="sq-sub sr sr-r" style="--d:0.1s">8 AI DOGS THAT EAT THE MARKET ALIVE</p>
 
     <div class="sq-frame">
       <div class="sq-grid">
@@ -462,7 +533,7 @@
           <div class="arena-mid">
             <span class="arena-tag">AI vs YOU</span>
             <h3 class="arena-name">ARENA</h3>
-            <p class="arena-sub">YOUR THESIS vs 7 AI AGENTS</p>
+            <p class="arena-sub">YOUR THESIS vs 8 AI AGENTS</p>
           </div>
           <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)"><img src="/blockparty/f5-doge-bull.png" alt="" class="arena-img" /></div>
         </div>
@@ -958,6 +1029,38 @@
     font-family: var(--fp); font-size: 9px;
     color: var(--sp-w); letter-spacing: 1px; opacity: 0.85; line-height: 1.8;
   }
+  .hero-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .hs-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(232,150,125,0.2);
+    background: rgba(232,150,125,0.04);
+    min-width: 132px;
+  }
+  .hs-k {
+    font-family: var(--fp);
+    font-size: 7px;
+    letter-spacing: 1.4px;
+    color: var(--sp-dim);
+  }
+  .hs-v {
+    font-family: var(--fp);
+    font-size: 8px;
+    color: var(--sp-w);
+    letter-spacing: 0.9px;
+  }
+  .hs-v-live {
+    color: #89f4be;
+    text-shadow: 0 0 10px rgba(137,244,190,0.3);
+  }
   .hero-ctas { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
   .hero-btn {
     font-family: var(--fp); font-size: 9px; letter-spacing: 2px;
@@ -974,6 +1077,19 @@
     border: 1px solid rgba(232,150,125,0.3);
   }
   .hero-btn-secondary:hover { background: rgba(232,150,125,0.08); border-color: var(--sp-pk); }
+
+  .hero-btn:focus-visible,
+  .fc:focus-visible,
+  .fc-all:focus-visible,
+  .feat-back:focus-visible,
+  .feat-detail-cta:focus-visible,
+  .arena:focus-visible,
+  .qn:focus-visible,
+  .cta-btn:focus-visible,
+  .foot-nav button:focus-visible {
+    outline: 2px solid var(--sp-pk);
+    outline-offset: 2px;
+  }
 
   /* Feature cards (right column) — sticky panel with internal scroll */
   .hero-right {
@@ -1664,6 +1780,38 @@
   .foot-copy { font-family: var(--fp); font-size: 6px; letter-spacing: 1px; color: rgba(240,237,228,0.2); }
   .foot-tag { font-family: var(--fv); font-size: 14px; color: rgba(232,150,125,0.3); }
 
+  @media (prefers-reduced-motion: reduce) {
+    .sr,
+    .ha {
+      opacity: 1 !important;
+      transform: none !important;
+      transition: none !important;
+    }
+    .stars2,
+    .sparkles .spk,
+    .grain,
+    .tv-band,
+    .orb,
+    .ht::before,
+    .badge-svg,
+    .hero-doge,
+    .feed-doge,
+    .sq-frame::before {
+      animation: none !important;
+    }
+    .fc::before {
+      transition: none !important;
+    }
+    .fc:hover .fc-img img,
+    .fstep:hover .fstep-img,
+    .hero-btn-primary:hover,
+    .feat-detail-cta:hover,
+    .arena:hover,
+    .cta-btn:hover {
+      transform: none !important;
+    }
+  }
+
   /* ═══ RESPONSIVE ═══ */
   @media (min-width: 901px) {
     .home {
@@ -1737,6 +1885,8 @@
     .hero { flex-direction: column; min-height: auto; }
     .hero-left { padding: 30px 24px 40px; position: relative; height: auto; overflow-y: visible; }
     .hero-right { width: 100%; max-width: 100%; position: static; height: auto; overflow-y: visible; }
+    .hero-status { width: 100%; }
+    .hs-chip { flex: 1 1 180px; }
     .feat-detail-stats { flex-wrap: wrap; gap: 10px; }
     .feat-detail-title { font-size: 28px; }
     .about-inner { flex-direction: column; align-items: center; }
@@ -1760,6 +1910,14 @@
     .hl-pk { font-size: 40px; }
     .hl-xl { font-size: 36px; }
     .hero-doge { width: 60px; }
+    .hero-status { gap: 6px; }
+    .hs-chip {
+      width: 100%;
+      min-width: 0;
+      justify-content: space-between;
+    }
+    .hs-k { font-size: 6px; }
+    .hs-v { font-size: 7px; }
     .about-text p { font-size: 22px; }
     .about-badge { width: 120px; height: 120px; }
     .badge-face-wrap { width: 45px; height: 45px; }

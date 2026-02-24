@@ -1,3 +1,4 @@
+<!-- @deprecated — 데드코드. 터미널 페이지에서 인라인 채팅으로 대체됨 (/api/chat/messages 호출). 삭제 예정. -->
 <script lang="ts">
   import { AGDEFS } from '$lib/data/agents';
   import { onMount } from 'svelte';

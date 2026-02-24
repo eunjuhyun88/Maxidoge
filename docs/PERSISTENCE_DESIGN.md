@@ -1,6 +1,7 @@
 # MAXI DOGE v3 Persistence Design
 
 작성일: 2026-02-22
+수정일: 2026-02-23 (Arena v3 PvP/Tournament 영속성 반영)
 목적: 모든 사용자 데이터를 Supabase primary로 전환하고, v3에서 각 플로우가 서버 기준으로 어떻게 동작하는지 고정한다.
 Doc index: `docs/README.md`
 
@@ -51,7 +52,7 @@ Doc index: `docs/README.md`
 
 ---
 
-## 3. 신규 Supabase 테이블 (migration 005)
+## 3. 신규 Supabase 테이블 (migration 005 + 006)
 
 ### 3.1 `terminal_scan_runs` — 스캔 세션
 
@@ -156,6 +157,125 @@ v3 변경: 현재 하드코딩 랜덤 응답 → v3에서는 **실제 스캔 데
 | `agent_accuracy_stats` | 글로벌 통계 | Oracle에서 사용 → 변경 없음 |
 | `user_ui_state` | 탭/레이아웃 | 이미 서버 primary ✅ |
 | `user_preferences` | 설정 | 이미 서버 primary ✅ |
+
+### 3.5 `pvp_matching_pool` — PvP 매칭 풀
+
+```sql
+CREATE TABLE IF NOT EXISTS pvp_matching_pool (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  creator_user_id   uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  matched_user_id   uuid REFERENCES app_users(id) ON DELETE SET NULL,
+
+  pair              text NOT NULL,              -- 'BTC/USDT'
+  timeframe         text NOT NULL,              -- '4h'
+  auto_accept       boolean NOT NULL DEFAULT false,
+
+  creator_tier      text NOT NULL,              -- 'BRONZE'...'MASTER'
+  creator_elo       integer NOT NULL DEFAULT 1200,
+  elo_min           integer NOT NULL,
+  elo_max           integer NOT NULL,
+  tier_min          text NOT NULL,
+  tier_max          text NOT NULL,
+
+  status            text NOT NULL CHECK (status IN ('WAITING', 'MATCHED', 'EXPIRED', 'CANCELLED')),
+  arena_match_id    uuid REFERENCES arena_matches(id) ON DELETE SET NULL,
+
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  expires_at        timestamptz NOT NULL,
+  updated_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pvp_pool_waiting
+  ON pvp_matching_pool (status, pair, timeframe, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_pvp_pool_creator
+  ON pvp_matching_pool (creator_user_id, status, created_at DESC);
+```
+
+### 3.6 Tournament 테이블
+
+```sql
+CREATE TABLE IF NOT EXISTS tournaments (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  type              text NOT NULL CHECK (type IN ('DAILY_SPRINT', 'WEEKLY_CUP', 'SEASON_CHAMPIONSHIP')),
+  pair              text NOT NULL,
+  timeframe         text NOT NULL DEFAULT '4h',
+  status            text NOT NULL CHECK (status IN ('REG_OPEN', 'REG_CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
+  max_players       integer NOT NULL CHECK (max_players IN (8, 16, 32)),
+  entry_fee_lp      integer NOT NULL DEFAULT 0,
+  start_at          timestamptz NOT NULL,
+  end_at            timestamptz,
+  created_by        uuid REFERENCES app_users(id) ON DELETE SET NULL,
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS tournament_registrations (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tournament_id     uuid NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  user_id           uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  seed              integer,
+  paid_lp           integer NOT NULL DEFAULT 0,
+  elo_snapshot      integer NOT NULL DEFAULT 1200,
+  tier_snapshot     text NOT NULL DEFAULT 'BRONZE',
+  registered_at     timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tournament_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS tournament_brackets (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tournament_id     uuid NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  round             integer NOT NULL,
+  match_index       integer NOT NULL,
+  user_a_id         uuid REFERENCES app_users(id) ON DELETE SET NULL,
+  user_b_id         uuid REFERENCES app_users(id) ON DELETE SET NULL,
+  winner_id         uuid REFERENCES app_users(id) ON DELETE SET NULL,
+  match_id          uuid REFERENCES arena_matches(id) ON DELETE SET NULL,
+  status            text NOT NULL CHECK (status IN ('WAITING', 'IN_PROGRESS', 'RESULT')),
+  scheduled_at      timestamptz,
+  resolved_at       timestamptz,
+  UNIQUE (tournament_id, round, match_index)
+);
+
+CREATE TABLE IF NOT EXISTS tournament_results (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tournament_id     uuid NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  user_id           uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  final_rank        integer NOT NULL,
+  lp_reward         integer NOT NULL DEFAULT 0,
+  elo_change        integer NOT NULL DEFAULT 0,
+  badges            jsonb NOT NULL DEFAULT '[]',
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tournament_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tournaments_active
+  ON tournaments (status, start_at);
+
+CREATE INDEX IF NOT EXISTS idx_tournament_reg_user
+  ON tournament_registrations (user_id, tournament_id);
+
+CREATE INDEX IF NOT EXISTS idx_tournament_bracket_round
+  ON tournament_brackets (tournament_id, round, match_index);
+```
+
+### 3.7 `arena_matches` 확장 필드 (모드 공통화)
+
+```sql
+ALTER TABLE arena_matches
+  ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT 'PVE'
+    CHECK (mode IN ('PVE', 'PVP', 'TOURNAMENT')),
+  ADD COLUMN IF NOT EXISTS pvp_pool_id uuid REFERENCES pvp_matching_pool(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS tournament_id uuid REFERENCES tournaments(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS tournament_round integer,
+  ADD COLUMN IF NOT EXISTS fbs_score numeric(6,2),
+  ADD COLUMN IF NOT EXISTS elo_delta integer NOT NULL DEFAULT 0;
+```
+
+운영 규칙:
+1. `mode=PVE`: `pvp_pool_id`, `tournament_id`는 `NULL`
+2. `mode=PVP`: `pvp_pool_id`는 필수, `tournament_id`는 `NULL`
+3. `mode=TOURNAMENT`: `tournament_id` 필수
+4. `ELO`는 PvP/토너먼트 모드에서만 변화, `LP`는 모든 모드에서 변화
 
 ---
 
@@ -439,9 +559,15 @@ v3에서 바뀌는 것:
 | 데이터 | 현재 소스 | v3 소스 | API |
 |--------|----------|---------|-----|
 | 매치 상태 | gameState localStorage | arena_matches (Supabase) | POST /api/arena/match/* |
+| 배틀 스트림 | 클라이언트 임의 타이머 | 서버 phase + SSE 이벤트 | GET /api/arena/match/:id/battle |
 | 에이전트 분석 | FE 내부 계산 | agent_analysis_results | POST /api/arena/match/:id/analyze |
-| LP 변동 | gameState.lp + walletStore | lp_transactions + user_passports | GET /api/arena/match/:id/result |
+| FBS/LP/ELO 결과 | gameState.lp + walletStore | arena_matches.fbs_score + lp_transactions + user_passports | GET /api/arena/match/:id/result |
 | 매치 히스토리 | matchHistoryStore localStorage | arena_matches 조회 | GET /api/matches |
+| PvP 매칭 대기열 | 메모리/임시 상태 | pvp_matching_pool | POST /api/pvp/pool/create, GET /api/pvp/pool/available, POST /api/pvp/pool/:id/accept |
+| 토너먼트 메타 | 미구현 | tournaments | GET /api/tournaments/active |
+| 토너먼트 참가 | 미구현 | tournament_registrations | POST /api/tournaments/:id/register |
+| 토너먼트 대진표 | 미구현 | tournament_brackets | GET /api/tournaments/:id/bracket |
+| 토너먼트 결과 | 미구현 | tournament_results | GET /api/tournaments/:id/bracket, GET /api/arena/match/:id/result |
 
 ### 5.3 Passport
 
@@ -463,6 +589,15 @@ v3에서 바뀌는 것:
 | Wilson/정확도 | agentStats localStorage | agent_accuracy_stats | GET /api/agents/stats |
 | 프로필 모달 Tier | walletStore.tier "CONNECTED" | user_passports.tier | GET /api/profile/passport |
 | 프로필 모달 Phase | resolveLifecyclePhase() | **삭제** (v3에 Phase 개념 없음) | — |
+
+### 5.5 Lobby / PvP / Tournament
+
+| 데이터 | 현재 소스 | v3 소스 | API |
+|--------|----------|---------|-----|
+| 로비 모드 해금 조건 | FE 하드코딩 | user_passports + user_agent_progress 집계 | GET /api/profile/passport |
+| 진행 중 매치 목록 | localStorage 분산 | arena_matches (status in progress) | GET /api/matches |
+| PvP 기록(ELO) | 미구현 | user_passports.elo_pvp (또는 전용 통계 테이블) | GET /api/profile/passport |
+| 토너먼트 위젯 | 미구현 | tournaments + tournament_registrations count | GET /api/tournaments/active |
 
 ---
 
@@ -497,6 +632,22 @@ GET    /api/market/news               ← RSS 수집 뉴스
 GET    /api/market/events             ← 온체인/매크로 이벤트
 GET    /api/market/flow               ← 스마트머니 플로우
 GET    /api/market/derivatives/:pair  ← OI/FR/LS 프록시
+GET    /api/market/dex/*              ← DexScreener 프록시 (boost/ads/takeover/search/pairs)
+```
+
+### 6.4 Arena Competitive API (PvP/Tournament)
+
+```
+GET    /api/arena/match/:id/battle     ← Battle phase SSE (decision window + pnl tick)
+POST   /api/pvp/pool/create            ← PvP 매칭 풀 생성
+GET    /api/pvp/pool/available         ← 매칭 가능 대기열 조회
+POST   /api/pvp/pool/:id/accept        ← 대기열 수락 + 매치 생성
+
+GET    /api/tournaments/active         ← 토너먼트 목록/상태
+POST   /api/tournaments/:id/register   ← 참가 등록 (LP 차감)
+GET    /api/tournaments/:id/bracket    ← 대진표/라운드 상태
+POST   /api/tournaments/:id/ban        ← Ban phase 제출
+POST   /api/tournaments/:id/draft      ← Tournament draft 제출
 ```
 
 ---
@@ -576,25 +727,37 @@ async function sendChat(text: string) {
 Phase 1: 테이블 생성 (005_terminal_persistence.sql)
   → terminal_scan_runs, terminal_scan_signals, agent_chat_messages 생성
 
-Phase 2: API 구현 (B-09 ~ B-11)
+Phase 2: Arena 경쟁모드 테이블 생성 (006_arena_competitive_modes.sql)
+  → pvp_matching_pool, tournaments, tournament_registrations 생성
+  → tournament_brackets, tournament_results 생성
+  → arena_matches mode/pvp_pool_id/tournament_id/fbs_score/elo_delta 확장
+
+Phase 3: Terminal API 구현 (B-09 ~ B-11)
   → POST /api/terminal/scan (warroomScan.ts 로직을 서버로 이동)
   → POST /api/chat/messages 확장 (meta.mentionedAgent → 에이전트 응답 생성)
   → GET /api/terminal/scan/history
 
-Phase 3: Store 전환 (F-09 ~ F-11)
+Phase 4: Arena 경쟁모드 API 구현 (B-12 ~ B-14)
+  → GET /api/arena/match/:id/battle (SSE)
+  → POST/GET /api/pvp/pool/*
+  → GET/POST /api/tournaments/*
+
+Phase 5: Store 전환 (F-09 ~ F-11)
   → quickTradeStore: localStorage primary → Supabase primary
   → trackedSignalStore: 동일 전환
   → scanTabs: 동일 전환
   → chatMessages: 세션변수 → Supabase + 로컬캐시
 
-Phase 4: 하드코딩 제거
+Phase 6: 하드코딩 제거 + 경쟁모드 FE 연결 (F-10, F-13 ~ F-15)
   → LIVE FEED: 프리셋 → 실시간 스캔 결과
   → HEADLINES/EVENTS/FLOW: 정적 → API fetch
   → 에이전트 챗 응답: 랜덤 문자열 → 스캔 컨텍스트 기반
+  → Lobby/PvP Pool/Tournament 화면을 API 기반으로 전환
 
-Phase 5: 정합성 검증
+Phase 7: 정합성 검증
   → 모든 화면에서 동일 tier/LP/매치수 표시 확인
   → 다른 기기에서 동일 데이터 확인
+  → PvP 매칭풀 만료(4h) 및 토너먼트 라운드 전이 확인
   → 새로고침 후 모든 데이터 복원 확인
 ```
 
@@ -607,9 +770,16 @@ Phase 5: 정합성 검증
 | ID | Track | 작업 | 의존 |
 |----|-------|------|------|
 | S-05 | Shared | migration 005_terminal_persistence.sql | — |
+| S-06 | Shared | migration 006_arena_competitive_modes.sql + Arena mode enum 계약 | S-04 |
 | B-09 | BE | Terminal Scan API (스캔 서버 이전) | B-02 (indicators), S-05 |
 | B-10 | BE | Terminal Chat API (기존 /api/chat/messages 확장, 컨텍스트 기반 응답) | B-09 |
 | B-11 | BE | Market Data API (뉴스/이벤트/플로우) | — |
+| B-12 | BE | PvP Matching Pool API + 만료 watchdog | B-01, S-06 |
+| B-13 | BE | Tournament API (active/register/bracket/ban/draft) | B-01, S-06 |
+| B-14 | BE | Arena 결과 정산 확장 (FBS/LP/ELO/모드별 보상) | B-03, B-12, B-13 |
 | F-09 | FE | Store 전환 (localStorage → Supabase primary) | B-09, B-10 |
 | F-10 | FE | 하드코딩 제거 (LIVE FEED, HEADLINES, chat 응답) | B-09, B-10, B-11 |
 | F-11 | FE | 영속성 검증 (새로고침/다른기기/오프라인) | F-09, F-10 |
+| F-13 | FE | Lobby Hub v3 (모드카드/진행중매치/토너위젯) | S-06, B-12, B-13 |
+| F-14 | FE | PvP 매칭풀 화면 (AUTO/BROWSE/CREATE) | F-13, B-12 |
+| F-15 | FE | Tournament 화면 (등록/대진표/Ban-Pick) | F-13, B-13 |

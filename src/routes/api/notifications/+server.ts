@@ -23,8 +23,8 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
-    const limit = toBoundedInt(url.searchParams.get('limit'), 50, 1, 200);
-    const offset = toBoundedInt(url.searchParams.get('offset'), 0, 0, 5000);
+    const limit = toBoundedInt(url.searchParams.get('limit'), 50, 1, 100);
+    const offset = toBoundedInt(url.searchParams.get('offset'), 0, 0, 1000);
     const unreadOnly = (url.searchParams.get('unreadOnly') || '').toLowerCase() === 'true';
 
     const where = unreadOnly ? 'AND is_read = false' : '';

@@ -6,12 +6,22 @@ import { writable, derived } from 'svelte/store';
 import type { CanonicalTimeframe } from '$lib/utils/timeframe';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
+import { getLivePriceSnapshot } from './priceStore';
 
 export type Phase = 'DRAFT' | 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE' | 'RESULT';
 export type ViewMode = 'arena' | 'terminal' | 'passport';
 export type Direction = 'LONG' | 'SHORT' | 'NEUTRAL';
 export type RiskLevel = 'low' | 'mid' | 'aggro';
 export type SquadTimeframe = CanonicalTimeframe;
+export type ArenaMode = 'PVE' | 'PVP' | 'TOURNAMENT';
+
+export interface TournamentContext {
+  tournamentId: string | null;
+  round: number | null;
+  type: string | null;
+  pair: string | null;
+  entryFeeLp: number | null;
+}
 
 export interface SquadConfig {
   riskLevel: RiskLevel;
@@ -50,6 +60,8 @@ export interface GameState {
   currentView: ViewMode;
 
   // Arena state
+  arenaMode: ArenaMode;
+  tournament: TournamentContext;
   phase: Phase;
   running: boolean;
   matchN: number;
@@ -92,6 +104,14 @@ export interface GameState {
 
 const defaultState: GameState = {
   currentView: 'arena',
+  arenaMode: 'PVE',
+  tournament: {
+    tournamentId: null,
+    round: null,
+    type: null,
+    pair: null,
+    entryFeeLp: null,
+  },
   phase: 'DRAFT',
   running: false,
   matchN: 0,
@@ -132,6 +152,11 @@ function loadState(): GameState {
       return {
         ...defaultState,
         ...parsed,
+        arenaMode: parsed?.arenaMode === 'PVP' || parsed?.arenaMode === 'TOURNAMENT' ? parsed.arenaMode : 'PVE',
+        tournament: {
+          ...defaultState.tournament,
+          ...(parsed?.tournament ?? {}),
+        },
         squadConfig,
         timeframe: normalizeTimeframe(parsed?.timeframe),
         running: false,
@@ -145,6 +170,9 @@ function loadState(): GameState {
 
 export const gameState = writable<GameState>(loadState());
 
+// S-03 이후 가격 동기화는 layout/chart 측 경로에서 수행한다.
+// gameState.prices는 레거시 호환 필드로 유지한다.
+
 // Auto-save persistent fields to localStorage (debounced — prices excluded intentionally)
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 let _lastPersist = '';
@@ -152,6 +180,8 @@ gameState.subscribe(s => {
   if (typeof window === 'undefined') return;
   // Build persist object (excludes prices, phase, running, pos — transient fields)
   const persist = {
+    arenaMode: s.arenaMode,
+    tournament: s.tournament,
     matchN: s.matchN,
     wins: s.wins,
     losses: s.losses,
@@ -184,15 +214,24 @@ export function setView(view: ViewMode) {
   gameState.update(s => ({ ...s, currentView: view }));
 }
 
+/**
+ * @deprecated S-03: 랜덤 지터를 제거하고 livePrice 스냅샷을 사용한다.
+ * 레거시 호출 호환을 위해 유지하되, 실제 가격 소스는 priceStore다.
+ */
 export function updatePrices() {
+  const snap = getLivePriceSnapshot(['BTC', 'ETH', 'SOL']);
   gameState.update(s => {
-    const jitter = () => 1 + (Math.random() - 0.5) * 0.0014;
+    const nextBtc = snap.BTC?.price ?? s.prices.BTC;
+    const nextEth = snap.ETH?.price ?? s.prices.ETH;
+    const nextSol = snap.SOL?.price ?? s.prices.SOL;
+    if (nextBtc === s.prices.BTC && nextEth === s.prices.ETH && nextSol === s.prices.SOL) return s;
+
     return {
       ...s,
       prices: {
-        BTC: +(s.prices.BTC * jitter()).toFixed(0),
-        ETH: +(s.prices.ETH * jitter()).toFixed(0),
-        SOL: +(s.prices.SOL * jitter()).toFixed(2)
+        BTC: nextBtc,
+        ETH: nextEth,
+        SOL: nextSol
       }
     };
   });

@@ -20,8 +20,8 @@ function mapRow(row: any) {
 
 export const GET: RequestHandler = async ({ url }) => {
   try {
-    const limit = toBoundedInt(url.searchParams.get('limit'), 50, 1, 200);
-    const offset = toBoundedInt(url.searchParams.get('offset'), 0, 0, 5000);
+    const limit = toBoundedInt(url.searchParams.get('limit'), 50, 1, 100);
+    const offset = toBoundedInt(url.searchParams.get('offset'), 0, 0, 1000);
     const signal = (url.searchParams.get('signal') || '').trim().toLowerCase();
 
     const where = signal === 'long' || signal === 'short' ? 'WHERE signal = $1' : '';

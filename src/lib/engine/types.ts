@@ -2,6 +2,30 @@
 // MAXI⚡DOGE — Agent Engine v3 Core Types
 // ═══════════════════════════════════════════════════════════════
 
+// ─── Market Data (shared between client & server) ────────────
+
+/** Binance OHLCV kline — canonical type used across engine, server, and client. */
+export interface BinanceKline {
+  time: number;       // Open time (seconds for LightweightCharts)
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+/** Binance 24hr ticker — canonical type shared between client & server. */
+export interface Binance24hr {
+  symbol: string;
+  priceChange: string;
+  priceChangePercent: string;
+  lastPrice: string;
+  highPrice: string;
+  lowPrice: string;
+  volume: string;
+  quoteVolume: string;
+}
+
 // ─── Agent Pool ──────────────────────────────────────────────
 
 export const AGENT_IDS = [
@@ -111,6 +135,11 @@ export interface DraftSelection {
   agentId: AgentId;
   specId: string;
   weight: number;                // 0-100, 3개 합산 = 100
+}
+
+export interface DraftValidationResult {
+  valid: boolean;
+  errors: string[];
 }
 
 // ─── Agent Output ────────────────────────────────────────────

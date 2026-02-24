@@ -22,6 +22,14 @@ export interface ApiProfilePayload {
   };
 }
 
+export interface ApiProfileBadgePayload {
+  id: string;
+  name?: string;
+  icon?: string;
+  category?: string;
+  earnedAt?: number | null;
+}
+
 export interface ApiPassportPayload {
   tier: string;
   totalMatches: number;
@@ -84,6 +92,7 @@ export async function updateProfileApi(payload: {
   nickname?: string;
   avatar?: string;
   displayTier?: string;
+  badges?: ApiProfileBadgePayload[];
 }): Promise<boolean> {
   if (!canUseBrowserFetch()) return false;
   try {
