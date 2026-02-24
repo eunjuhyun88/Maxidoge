@@ -14,3 +14,6 @@
 
 에이전트 실행 규칙 파일:
 - `/Users/ej/Downloads/maxidoge-clones/frontend-passport/AGENTS.md`
+
+Git 협업 상세 정책:
+- `/Users/ej/Downloads/maxidoge-clones/frontend-passport/docs/GIT_COLLABORATION_POLICY_SSOT.md`

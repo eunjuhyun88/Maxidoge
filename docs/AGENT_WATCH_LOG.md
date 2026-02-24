@@ -1203,3 +1203,22 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: SUCCESS (`origin/codex/passport-ml-pipeline-skeleton-v1`, `origin/main`)
 - Working tree check (before final push): `## main...origin/main [ahead 3]` (clean)
 - Status: DONE
+
+### W-20260225-0352-passport-codex
+
+- Start (KST): 2026-02-25 03:52
+- Agent: Codex (GPT-5)
+- Branch (initial): `codex/passport-ml-pipeline-log-final-status`
+- Branch (final): `codex/git-collab-policy-share` (rebased from `origin/main` for clean PR)
+- Main hash at start:
+  - local `main`: `fd6cb4a`
+  - `origin/main`: `c3b6a3e`
+- Scope (planned):
+  - 사용자 지정 Git 협업 정책을 프로젝트 공용 정책 문서로 추가
+  - README(SSOT)와 AGENTS.md에 정책 링크/강제 준수 문구 반영
+  - 팀 전체가 동일 규칙을 즉시 확인할 수 있는 경로 고정
+- Overlap check (before work):
+  - `## codex/passport-ml-pipeline-log-final-status...origin/codex/passport-ml-pipeline-log-final-status`
+  - pre-existing change: `docs/AGENT_WATCH_LOG.md` modified
+  - single worktree(`/Users/ej/Downloads/maxidoge-clones/frontend-passport`) 확인
+- Status: IN_PROGRESS

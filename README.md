@@ -30,6 +30,19 @@ SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signa
 - 에이전트 자동 실행 규칙 파일은 `AGENTS.md`다.
 - `docs/README.md`는 호환성 유지를 위한 리다이렉트 문서다.
 
+### 0-1) Git Collaboration Policy (SSOT Addendum)
+
+Git 협업 상세 규칙은 아래 문서를 프로젝트 공용 정책으로 고정한다.
+
+- `docs/GIT_COLLABORATION_POLICY_SSOT.md`
+
+강제 규칙:
+
+1. `main` 직접 push 금지(PR 전용)
+2. 개인 브랜치만 rebase 허용, 공유 브랜치 rebase 금지
+3. push/merge 전 `npm run check` + `npm run build` 필수
+4. START/FINISH 로그를 `docs/AGENT_WATCH_LOG.md`에 반드시 기록
+
 ## 1) Overview
 
 - 목적: 멀티 에이전트 시그널을 시각화하고, 배틀/카피트레이드 흐름으로 연결

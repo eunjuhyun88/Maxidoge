@@ -35,5 +35,6 @@ This file defines mandatory execution rules for all coding agents in this reposi
 
 ## Source of Truth
 - Canonical collaboration and project guide: `/Users/ej/Downloads/maxi-doge-unified/README.md`
+- Git collaboration policy addendum: `/Users/ej/Downloads/maxidoge-clones/frontend-passport/docs/GIT_COLLABORATION_POLICY_SSOT.md`
 - This repo execution rules: `/Users/ej/Downloads/maxidoge-clones/frontend-passport/AGENTS.md`
 - `docs/README.md` is a redirect-only compatibility file.
