@@ -14,7 +14,7 @@ import { evaluateIpReputation } from '$lib/server/ipReputation';
 import { isBodyTooLarge, readTurnstileToken } from '$lib/server/requestGuards';
 import { verifyTurnstile } from '$lib/server/turnstile';
 
-const EVM_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
+const EVM_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
 
 function normalizeChain(chainRaw: string | null): string {
   const normalized = chainRaw?.trim().toUpperCase() || '';
@@ -57,7 +57,16 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
       return json({ error: 'Bot verification failed' }, { status: 403 });
     }
 
-    const addressRaw = typeof body?.address === 'string' ? body.address.trim() : '';
+    const addressField = typeof body?.address === 'string' ? body.address.trim() : '';
+    const walletAddressField = typeof body?.walletAddress === 'string' ? body.walletAddress.trim() : '';
+    if (
+      addressField &&
+      walletAddressField &&
+      normalizeEthAddress(addressField) !== normalizeEthAddress(walletAddressField)
+    ) {
+      return json({ error: 'Conflicting wallet address fields' }, { status: 400 });
+    }
+    const addressRaw = addressField || walletAddressField;
     const message = typeof body?.message === 'string' ? body.message.trim() : '';
     const signature = typeof body?.signature === 'string' ? body.signature.trim() : '';
     const provider = typeof body?.provider === 'string' ? body.provider.trim() : null;

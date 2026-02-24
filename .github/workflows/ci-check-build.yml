@@ -22,6 +22,11 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      COINALYZE_API_KEY: ci_dummy_key
+      PUBLIC_EVM_CHAIN_ID: "42161"
+      PUBLIC_EVM_RPC_URL: https://arb1.arbitrum.io/rpc
+      PUBLIC_WALLETCONNECT_PROJECT_ID: ci_dummy_wc_project
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,6 +46,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      COINALYZE_API_KEY: ci_dummy_key
+      PUBLIC_EVM_CHAIN_ID: "42161"
+      PUBLIC_EVM_RPC_URL: https://arb1.arbitrum.io/rpc
+      PUBLIC_WALLETCONNECT_PROJECT_ID: ci_dummy_wc_project
     steps:
       - name: Checkout
         uses: actions/checkout@v4

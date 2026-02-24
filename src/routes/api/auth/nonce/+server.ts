@@ -41,7 +41,16 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
       return json({ error: 'Bot verification failed' }, { status: 403 });
     }
 
-    const addressRaw = typeof body?.address === 'string' ? body.address.trim() : '';
+    const addressField = typeof body?.address === 'string' ? body.address.trim() : '';
+    const walletAddressField = typeof body?.walletAddress === 'string' ? body.walletAddress.trim() : '';
+    if (
+      addressField &&
+      walletAddressField &&
+      normalizeEthAddress(addressField) !== normalizeEthAddress(walletAddressField)
+    ) {
+      return json({ error: 'Conflicting wallet address fields' }, { status: 400 });
+    }
+    const addressRaw = addressField || walletAddressField;
     const provider = typeof body?.provider === 'string' ? body.provider.trim() : null;
     const chainRaw = typeof body?.chain === 'string' ? body.chain.trim().toUpperCase() : '';
     const chain = chainRaw === 'SOLANA' ? 'SOL' : chainRaw || 'ARB';
