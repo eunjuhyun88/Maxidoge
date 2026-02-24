@@ -155,6 +155,49 @@ npm run preview
    - push 직전 `safe:sync`로 `origin/main` 기준 rebase 상태를 맞춥니다.
    - `gate` 실패 시 push/merge를 중단하고 먼저 수정합니다.
 
+#### `main` vs `origin/main` 빠른 구분
+
+- `origin`: 원격 저장소 별칭(대부분 GitHub 원본)
+- `main`: 내 로컬 저장소의 로컬 브랜치
+- `origin/main`: 원격 `origin`의 `main`을 추적하는 로컬 참조(원격 추적 브랜치)
+- 표기 주의: `origin/main`은 브랜치 이름이 아니라 `원격/브랜치` 경로입니다.
+
+상태 확인:
+
+```bash
+git status --short --branch
+git fetch origin
+git rev-list --left-right --count main...origin/main
+```
+
+해석(`main...origin/main` 결과):
+
+- `0 0`: 로컬 `main`과 `origin/main` 완전 동일
+- `1 0`: 로컬 `main`이 1커밋 앞섬(아직 push 안 됨)
+- `0 1`: 로컬 `main`이 1커밋 뒤처짐(먼저 pull/fetch+rebase 필요)
+- `N M` (`N>0` and `M>0`): 서로 갈라짐(diverged), 통합/충돌 해결 필요
+
+안전 기본 동작:
+
+```bash
+# main에서 작업하지 않는 기본 원칙
+git switch codex/<task-name>
+git fetch origin
+git rebase origin/main
+npm run gate
+git push -u origin codex/<task-name>
+```
+
+`main` 반영(Integrator만):
+
+```bash
+git switch main
+git pull --ff-only
+git merge --no-ff origin/codex/<task-name>
+npm run gate
+git push origin main
+```
+
 5. 통합은 Integrator 1인만 수행
    ```bash
    git switch main
