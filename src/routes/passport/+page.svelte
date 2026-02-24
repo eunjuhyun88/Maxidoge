@@ -121,11 +121,17 @@
   let activeTab: TabType = 'profile';
 
   const TABS: { id: TabType; label: string; icon: string }[] = [
-    { id: 'profile', label: 'PROFILE', icon: '📋' },
-    { id: 'wallet', label: 'WALLET', icon: '💰' },
-    { id: 'positions', label: 'POSITIONS', icon: '📊' },
-    { id: 'arena', label: 'ARENA', icon: '⚔️' },
+    { id: 'profile', label: 'PROFILE', icon: 'ID' },
+    { id: 'wallet', label: 'WALLET', icon: 'WL' },
+    { id: 'positions', label: 'POSITIONS', icon: 'TX' },
+    { id: 'arena', label: 'ARENA', icon: 'AR' },
   ];
+
+  const OPEN_PREVIEW_LIMIT = 4;
+  const MATCH_PREVIEW_LIMIT = 8;
+  $: openPreview = opens.slice(0, OPEN_PREVIEW_LIMIT);
+  $: openOverflow = opens.slice(OPEN_PREVIEW_LIMIT);
+  $: matchPreview = records.slice(0, MATCH_PREVIEW_LIMIT);
 
   // Avatar options
   const AVATAR_OPTIONS = [
@@ -267,7 +273,7 @@
             {#if wallet.connected}
               <div class="player-addr">{wallet.shortAddr} · {wallet.chain}</div>
             {:else}
-              <button class="connect-mini" on:click={openWalletModal}>🔗 CONNECT WALLET</button>
+              <button class="connect-mini" on:click={openWalletModal}>CONNECT WALLET</button>
             {/if}
           </div>
         </div>
@@ -302,7 +308,7 @@
 
         <div class="passport-stamp">
           <span class="stamp-text">{wallet.connected ? 'VERIFIED' : 'UNVERIFIED'}</span>
-          <span class="stamp-icon">🐕</span>
+          <span class="stamp-icon">●</span>
         </div>
       </div>
 
@@ -342,10 +348,10 @@
 
       <div class="quick-actions">
         <a class="qa-btn qa-terminal" href="/terminal" data-gtm-area="passport" data-gtm-action="open_terminal">
-          ⚡ QUICK TRADE
+          QUICK TRADE
         </a>
         <a class="qa-btn qa-arena" href="/arena" data-gtm-area="passport" data-gtm-action="open_arena">
-          ⚔️ START ARENA
+          START ARENA
         </a>
         {#if wallet.connected}
           <div class="qa-chip connected" data-gtm-area="passport" data-gtm-action="wallet_status">
@@ -353,7 +359,7 @@
           </div>
         {:else}
           <button class="qa-btn qa-wallet" on:click={openWalletModal} data-gtm-area="passport" data-gtm-action="connect_wallet">
-            🔗 CONNECT WALLET
+            CONNECT WALLET
           </button>
         {/if}
       </div>
@@ -450,7 +456,7 @@
                 <div class="vb-header"><span class="vb-icon">🏦</span><span class="vb-title">VIRTUAL BALANCE</span></div>
                 <div class="vb-amount">${profile.balance.virtual.toLocaleString()}</div>
                 {#if !wallet.connected}
-                  <button class="vb-connect" on:click={openWalletModal}>🔗 CONNECT WALLET FOR DEFI</button>
+                  <button class="vb-connect" on:click={openWalletModal}>CONNECT WALLET FOR DEFI</button>
                 {:else}
                   <div class="vb-connected"><span class="vbc-dot"></span>{wallet.shortAddr} · {wallet.chain} · {wallet.balance.toLocaleString()} USDT</div>
                 {/if}
@@ -531,7 +537,7 @@
             <section class="content-panel list-panel">
               {#if opens.length > 0}
                 <div class="pos-section-title">OPEN TRADES</div>
-                {#each opens as trade (trade.id)}
+                {#each openPreview as trade (trade.id)}
                   <div class="pos-row">
                     <div class="pr-left">
                       <span class="pr-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>{trade.dir === 'LONG' ? '▲' : '▼'}{trade.dir}</span>
@@ -545,6 +551,25 @@
                     </div>
                   </div>
                 {/each}
+                {#if openOverflow.length > 0}
+                  <details class="detail-block" style="margin-top: 12px;">
+                    <summary>MORE OPEN TRADES ({openOverflow.length})</summary>
+                    {#each openOverflow as trade (trade.id)}
+                      <div class="pos-row">
+                        <div class="pr-left">
+                          <span class="pr-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>{trade.dir === 'LONG' ? '▲' : '▼'}{trade.dir}</span>
+                          <span class="pr-pair">{trade.pair}</span>
+                          <span class="pr-src">{trade.source}</span>
+                        </div>
+                        <div class="pr-right">
+                          <span class="pr-entry">${Math.round(trade.entry).toLocaleString()}</span>
+                          <span class="pr-pnl" style="color:{pnlColor(trade.pnlPercent)}">{pnlPrefix(trade.pnlPercent)}{trade.pnlPercent.toFixed(2)}%</span>
+                          <span class="pr-time">{timeSince(trade.openedAt)}</span>
+                        </div>
+                      </div>
+                    {/each}
+                  </details>
+                {/if}
               {:else}
                 <EmptyState image={CHARACTER_ART.tradeActions} title="NO OPEN POSITIONS" subtitle="Use QUICK LONG/SHORT in the Terminal to start trading" ctaText="GO TO TERMINAL →" ctaHref="/terminal" icon="📊" variant="cyan" compact />
               {/if}
@@ -603,7 +628,7 @@
               {#if records.length > 0}
                 <details class="detail-block">
                   <summary>MATCH HISTORY ({Math.min(records.length, 20)})</summary>
-                  {#each records.slice(0, 20) as match (match.id)}
+                  {#each matchPreview as match (match.id)}
                     <div class="match-row" class:win={match.win} class:loss={!match.win}>
                       <div class="mr-left">
                         <span class="mr-result" class:win={match.win}>{match.win ? 'WIN' : 'LOSS'}</span>
@@ -623,6 +648,31 @@
                       </div>
                     </div>
                   {/each}
+                  {#if records.length > MATCH_PREVIEW_LIMIT}
+                    <details class="detail-block nested-detail">
+                      <summary>OLDER MATCHES ({Math.min(records.length - MATCH_PREVIEW_LIMIT, 12)})</summary>
+                      {#each records.slice(MATCH_PREVIEW_LIMIT, 20) as match (match.id)}
+                        <div class="match-row" class:win={match.win} class:loss={!match.win}>
+                          <div class="mr-left">
+                            <span class="mr-result" class:win={match.win}>{match.win ? 'WIN' : 'LOSS'}</span>
+                            <span class="mr-num">#{match.matchN}</span>
+                            <span class="mr-time">{timeSince(match.timestamp)}</span>
+                          </div>
+                          <div class="mr-right">
+                            <span class="mr-lp" class:plus={match.lp >= 0} class:minus={match.lp < 0}>{match.lp >= 0 ? '+' : ''}{match.lp} LP</span>
+                            {#if match.hypothesis}
+                              <span class="mr-hyp" class:long={match.hypothesis.dir === 'LONG'} class:short={match.hypothesis.dir === 'SHORT'}>{match.hypothesis.dir}</span>
+                            {/if}
+                            <span class="mr-agents">
+                              {#each (match.agentVotes || []).slice(0, 3) as vote}
+                                <span class="mr-agent-dot" style="background:{vote.color}" title="{vote.name}: {vote.dir}"></span>
+                              {/each}
+                            </span>
+                          </div>
+                        </div>
+                      {/each}
+                    </details>
+                  {/if}
                 </details>
               {:else}
                 <EmptyState image={CHARACTER_ART.actionVictory} title="NO ARENA MATCHES YET" subtitle="Challenge the AI agents!" ctaText="GO TO ARENA →" ctaHref="/arena" icon="⚔️" variant="pink" compact />
@@ -681,7 +731,7 @@
     background-size: 56px 34px;
     transform: perspective(420px) rotateX(56deg);
     transform-origin: center top;
-    opacity: 0.45;
+    opacity: 0.24;
   }
 
   .passport-page::after {
@@ -702,7 +752,7 @@
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    opacity: 0.42;
+    opacity: 0.22;
     background:
       radial-gradient(1px 1px at 11% 18%, rgba(255, 255, 255, 0.58) 50%, transparent 50%),
       radial-gradient(1px 1px at 29% 52%, rgba(255, 255, 255, 0.5) 50%, transparent 50%),
@@ -725,7 +775,7 @@
       rgba(0, 0, 0, 0.08) 3px,
       rgba(0, 0, 0, 0.08) 4px
     );
-    opacity: 0.5;
+    opacity: 0.28;
   }
 
   .passport-scroll {
@@ -1006,7 +1056,8 @@
   }
 
   .stamp-icon {
-    font-size: 10px;
+    font-size: 7px;
+    opacity: 0.8;
   }
 
   .avatar-picker {
@@ -1071,7 +1122,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
+    gap: 6px;
     font-family: var(--fp);
     font-size: 9px;
     letter-spacing: 1px;
@@ -1090,7 +1141,19 @@
   }
 
   .tab-icon {
-    font-size: 12px;
+    min-width: 20px;
+    height: 18px;
+    border-radius: 999px;
+    border: 1px solid var(--sp-soft);
+    background: rgba(0, 0, 0, 0.28);
+    color: var(--sp-pk-l);
+    font-family: var(--sp-font-label);
+    font-size: 8px;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
   }
 
   .tab-label {
@@ -1839,6 +1902,11 @@
     height: 7px;
     border-radius: 50%;
     display: inline-block;
+  }
+
+  .nested-detail {
+    margin: 8px 10px 10px;
+    border-style: dashed;
   }
 
   @media (max-width: 980px) {
