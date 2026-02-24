@@ -17,6 +17,10 @@
     toTradingViewInterval,
   } from '$lib/utils/timeframe';
   import { openQuickTrade } from '$lib/stores/quickTradeStore';
+  import {
+    detectChartPatterns,
+    type ChartPatternDetection,
+  } from '$lib/engine/patternDetector';
   import TokenDropdown from '../shared/TokenDropdown.svelte';
 
   const dispatch = createEventDispatcher<{
@@ -30,6 +34,7 @@
 
   let chartContainer: HTMLDivElement;
   let chart: any;
+  let lwcModule: any = null;
   let series: any;
   let volumeSeries: any;
   let cleanup: (() => void) | null = null;
@@ -137,10 +142,15 @@
   export let chatTradeReady = false;
   export let chatTradeDir: 'LONG' | 'SHORT' = 'LONG';
 
-  export let agentMarkers: Array<{
+  type ChartMarker = {
     time: number; position: 'aboveBar' | 'belowBar'; color: string;
     shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'; text: string;
-  }> = [];
+  };
+  export let agentMarkers: ChartMarker[] = [];
+  let patternMarkers: ChartMarker[] = [];
+  let detectedPatterns: ChartPatternDetection[] = [];
+  let patternLineSeries: any[] = [];
+  let _patternSignature = '';
 
   export let agentAnnotations: Array<{
     id: string; icon: string; name: string; color: string; label: string;
@@ -1129,6 +1139,88 @@
     renderDrawings();
   }
 
+  function clearPatternLineSeries() {
+    if (!chart || patternLineSeries.length === 0) {
+      patternLineSeries = [];
+      return;
+    }
+    for (const lineSeries of patternLineSeries) {
+      try { chart.removeSeries(lineSeries); } catch {}
+    }
+    patternLineSeries = [];
+  }
+
+  function applyPatternLineSeries() {
+    if (!chart || !lwcModule) return;
+    clearPatternLineSeries();
+    if (detectedPatterns.length === 0) return;
+
+    for (const pattern of detectedPatterns) {
+      for (const guide of pattern.guideLines) {
+        try {
+          const lineSeries = chart.addSeries(lwcModule.LineSeries, {
+            color: guide.color,
+            lineWidth: pattern.status === 'CONFIRMED' ? 2 : 1.5,
+            lineStyle: guide.style === 'dashed' ? 2 : 0,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          lineSeries.setData([
+            { time: guide.from.time, value: guide.from.price },
+            { time: guide.to.time, value: guide.to.price },
+          ]);
+          patternLineSeries.push(lineSeries);
+        } catch (err) {
+          console.error('[ChartPanel] pattern line render error', err);
+        }
+      }
+    }
+  }
+
+  function toPatternMarker(pattern: ChartPatternDetection): ChartMarker {
+    const isBear = pattern.direction === 'BEARISH';
+    const isConfirmed = pattern.status === 'CONFIRMED';
+    const confidencePct = Math.round(pattern.confidence * 100);
+    return {
+      time: pattern.markerTime,
+      position: isBear ? 'aboveBar' : 'belowBar',
+      color: isBear ? '#ff657a' : '#58d78d',
+      shape: isConfirmed ? (isBear ? 'arrowDown' : 'arrowUp') : 'circle',
+      text: `${pattern.shortName} ${isConfirmed ? 'OK' : 'PEND'} ${confidencePct}%`,
+    };
+  }
+
+  function applyCombinedMarkers() {
+    if (!series) return;
+    try {
+      series.setMarkers([...agentMarkers, ...patternMarkers]);
+    } catch {}
+  }
+
+  function runPatternDetection() {
+    if (!chart || !series || klineCache.length < 30) {
+      detectedPatterns = [];
+      patternMarkers = [];
+      _patternSignature = '';
+      applyCombinedMarkers();
+      clearPatternLineSeries();
+      return;
+    }
+
+    const next = detectChartPatterns(klineCache, { maxPatterns: 3, pivotLookaround: 2 });
+    const signature = next
+      .map((p) => `${p.id}:${p.status}:${Math.round(p.confidence * 100)}`)
+      .join('|');
+    if (signature === _patternSignature) return;
+
+    _patternSignature = signature;
+    detectedPatterns = next;
+    patternMarkers = next.map(toPatternMarker);
+    applyCombinedMarkers();
+    applyPatternLineSeries();
+  }
+
   // ═══════════════════════════════════════════
   //  PRICE & POSITION
   // ═══════════════════════════════════════════
@@ -1255,7 +1347,7 @@
 
   function priceFromY(y: number): number | null { if (!series) return null; try { return series.coordinateToPrice(y); } catch { return null; } }
 
-  $: if (series && agentMarkers.length > 0) { try { series.setMarkers(agentMarkers); } catch {} }
+  $: if (series) { applyCombinedMarkers(); }
 
   export function getCurrentPrice() { return livePrice; }
 
@@ -1265,7 +1357,8 @@
 
   onMount(async () => {
     try {
-      const lwc = await import('lightweight-charts');
+      lwcModule = await import('lightweight-charts');
+      const lwc = lwcModule;
       chartTheme = resolveChartTheme(chartContainer);
 
       if (advancedMode && indicatorStripState === 'expanded') {
@@ -1400,6 +1493,7 @@
         if (wsCleanup) wsCleanup();
         if (priceWsCleanup) priceWsCleanup();
         clearPositionLines();
+        clearPatternLineSeries();
         destroyTradingView();
         if (chart) chart.remove();
       };
@@ -1446,6 +1540,7 @@
         if (rsiData.length > 0) rsiVal = rsiData[rsiData.length - 1].value;
       }
       latestVolume = klineCache[klineCache.length - 1]?.volume || 0;
+      runPatternDetection();
       // Don't call fitContent — preserve user's scroll position
     } catch (e) {
       console.error('[ChartPanel] loadMoreHistory error:', e);
@@ -1461,6 +1556,11 @@
     _currentSymbol = sym;
     _currentInterval = intv;
     _noMoreHistory = false;
+    detectedPatterns = [];
+    patternMarkers = [];
+    _patternSignature = '';
+    applyCombinedMarkers();
+    clearPatternLineSeries();
     isLoading = true; error = '';
 
     try {
@@ -1496,6 +1596,7 @@
         rsiSeries.setData(rsiData);
         if (rsiData.length > 0) rsiVal = rsiData[rsiData.length - 1].value;
       }
+      runPatternDetection();
 
       // Cache MA display values
       const len = klines.length;
@@ -1553,6 +1654,7 @@
         if (isUpdate) klineCache[klineCache.length - 1] = kline;
         else klineCache.push(kline);
         const cLen = klineCache.length;
+        if (!isUpdate) runPatternDetection();
 
         // MA — simple running average from last N
         if (ma7Series && cLen >= 7) {
@@ -2110,6 +2212,18 @@
     {/if}
     {#if chartMode === 'agent' && indicatorEnabled.rsi && !isTvLikePreset}
       <span class="footer-ind rsi" title="RSI14 · 상대강도지수">RSI14(상대강도) {rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
+    {/if}
+    {#if chartMode === 'agent' && detectedPatterns.length > 0}
+      {#each detectedPatterns.slice(0, 2) as pat (pat.id)}
+        <span
+          class="pattern-pill"
+          class:bull={pat.direction === 'BULLISH'}
+          class:bear={pat.direction === 'BEARISH'}
+          class:forming={pat.status === 'FORMING'}
+        >
+          {pat.shortName} {pat.status === 'CONFIRMED' ? 'OK' : 'PEND'} {(pat.confidence * 100).toFixed(0)}%
+        </span>
+      {/each}
     {/if}
     {#if chartMode === 'agent' && drawings.length > 0 && !isTvLikePreset}
       <span class="draw-count">DRAW {drawings.length}</span>
@@ -3021,6 +3135,31 @@
   .footer-ind.rsi { color: #d6a8ff; }
   .pos-active { color: #ffba30; font-weight: 700; animation: pulse .8s infinite; }
   .draw-count { color: #ffe600; font-weight: 700; }
+  .pattern-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.18);
+    font-weight: 800;
+    letter-spacing: .3px;
+    background: rgba(255,255,255,.05);
+    color: #ddd;
+  }
+  .pattern-pill.bull {
+    color: #6ff2ab;
+    border-color: rgba(111,242,171,.35);
+    background: rgba(111,242,171,.1);
+  }
+  .pattern-pill.bear {
+    color: #ff8ca0;
+    border-color: rgba(255,140,160,.35);
+    background: rgba(255,140,160,.1);
+  }
+  .pattern-pill.forming {
+    opacity: .8;
+  }
   .agent-feed-text { flex: 1; color: rgba(255,255,255,.62); font-size: 8px; font-weight: 600; letter-spacing: .5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* Keep internal sections fixed-height friendly; pane resizing is handled at terminal layout level. */

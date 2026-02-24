@@ -122,6 +122,100 @@ npm run preview
 - post-merge는 pull/merge 직후 `npm run check`를 자동 실행합니다.
 - 긴급 상황에서만 `SKIP_PREPUSH=1 git push`로 일시 우회하세요.
 
+### Multi-Agent Parallel Routine (Conflict-Avoidance)
+
+동시에 여러 스레드/에이전트가 작업할 때는 아래 절차를 기본값으로 사용합니다.
+
+1. `main` 직접 개발 금지
+   - 모든 구현은 `codex/<task-name>` 브랜치에서만 진행합니다.
+   - `main`은 통합(merge) 전용 브랜치로 유지합니다.
+
+2. 에이전트별 분리 워크트리 생성
+   ```bash
+   npm run safe:worktree -- pattern-engine main
+   npm run safe:worktree -- chart-overlay main
+   npm run safe:worktree -- api-pattern-feed main
+   ```
+   - 각 스레드는 서로 다른 worktree 경로를 사용합니다.
+   - 같은 worktree에서 브랜치만 바꿔 병렬 작업하지 않습니다.
+
+3. 작업 시작 전 오너십(파일 범위) 고정
+   - `docs/AGENT_WATCH_LOG.md` 시작 기록에 담당 파일/디렉터리를 명시합니다.
+   - 대형 파일(예: `src/components/arena/ChartPanel.svelte`)은 한 시점에 한 에이전트만 수정합니다.
+   - 공통 타입/계약 변경이 필요하면 해당 변경을 먼저 작은 커밋으로 분리합니다.
+
+4. 각 브랜치 작업 루프
+   ```bash
+   npm run safe:status
+   npm run safe:sync
+   # code changes
+   npm run gate
+   git push -u origin codex/<task-name>
+   ```
+   - push 직전 `safe:sync`로 `origin/main` 기준 rebase 상태를 맞춥니다.
+   - `gate` 실패 시 push/merge를 중단하고 먼저 수정합니다.
+
+#### `main` vs `origin/main` 빠른 구분
+
+- `origin`: 원격 저장소 별칭(대부분 GitHub 원본)
+- `main`: 내 로컬 저장소의 로컬 브랜치
+- `origin/main`: 원격 `origin`의 `main`을 추적하는 로컬 참조(원격 추적 브랜치)
+- 표기 주의: `origin/main`은 브랜치 이름이 아니라 `원격/브랜치` 경로입니다.
+
+상태 확인:
+
+```bash
+git status --short --branch
+git fetch origin
+git rev-list --left-right --count main...origin/main
+```
+
+해석(`main...origin/main` 결과):
+
+- `0 0`: 로컬 `main`과 `origin/main` 완전 동일
+- `1 0`: 로컬 `main`이 1커밋 앞섬(아직 push 안 됨)
+- `0 1`: 로컬 `main`이 1커밋 뒤처짐(먼저 pull/fetch+rebase 필요)
+- `N M` (`N>0` and `M>0`): 서로 갈라짐(diverged), 통합/충돌 해결 필요
+
+안전 기본 동작:
+
+```bash
+# main에서 작업하지 않는 기본 원칙
+git switch codex/<task-name>
+git fetch origin
+git rebase origin/main
+npm run gate
+git push -u origin codex/<task-name>
+```
+
+`main` 반영(Integrator만):
+
+```bash
+git switch main
+git pull --ff-only
+git merge --no-ff origin/codex/<task-name>
+npm run gate
+git push origin main
+```
+
+5. 통합은 Integrator 1인만 수행
+   ```bash
+   git switch main
+   git pull --ff-only
+   git merge --no-ff origin/codex/<task-1>
+   npm run gate
+   git merge --no-ff origin/codex/<task-2>
+   npm run gate
+   git push origin main
+   ```
+   - 머지는 한 번에 하나씩 순차 진행합니다.
+   - 각 merge 직후 `gate`를 실행해 문제를 조기 차단합니다.
+
+6. 충돌 발생 시 기준
+   - 먼저 `git status --short --branch`와 충돌 파일 목록을 로그에 남깁니다.
+   - 충돌 파일 오너가 우선 해결하고, Integrator가 최종 검증합니다.
+   - 임의 덮어쓰기 대신 필요한 변경만 수동 병합합니다.
+
 ## 5) Project Structure
 
 ```txt
