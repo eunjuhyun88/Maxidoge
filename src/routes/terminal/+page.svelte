@@ -18,7 +18,7 @@
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { alertEngine } from '$lib/services/alertEngine';
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
 
   // ── Panel resize state ──
   let leftW = 280;       // War Room width
@@ -124,29 +124,6 @@
     center: { widthPct: 100, heightPct: 100 },
     right: { widthPct: 100, heightPct: 100 },
   };
-  type TabletPanelKey = 'left' | 'center' | 'bottom';
-  type TabletPanelSize = { widthPct: number; heightPct: number };
-  const TABLET_LEFT_MIN = 188;
-  const TABLET_LEFT_MAX = 360;
-  const TABLET_BOTTOM_MIN = 164;
-  const TABLET_BOTTOM_MAX = 320;
-  const TABLET_SPLIT_STEP = 12;
-  let tabletPanelSizes: Record<TabletPanelKey, TabletPanelSize> = {
-    left: { widthPct: 100, heightPct: 100 },
-    center: { widthPct: 100, heightPct: 100 },
-    bottom: { widthPct: 100, heightPct: 100 },
-  };
-  let tabletLeftWidth = 232;
-  let tabletBottomHeight = 208;
-  $: tabletLayoutStyle = `--tab-left-width: ${tabletLeftWidth}px; --tab-bottom-height: ${tabletBottomHeight}px;`;
-  type TabletSplitResizeAxis = 'x' | 'y';
-  type TabletSplitResizeState = {
-    axis: TabletSplitResizeAxis;
-    pointerId: number;
-    startClient: number;
-    startValue: number;
-  };
-  let tabletSplitResizeState: TabletSplitResizeState | null = null;
 
   function clampPercent(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value));
@@ -191,107 +168,6 @@
       ...desktopPanelSizes,
       [panel]: { widthPct: 100, heightPct: 100 },
     };
-  }
-
-  function getTabletPanelStyle(panel: TabletPanelKey) {
-    const size = tabletPanelSizes[panel];
-    return `--tab-panel-width: ${size.widthPct}%; --tab-panel-height: ${size.heightPct}%`;
-  }
-
-  function getDefaultTabletLeftWidth() {
-    if (typeof window === 'undefined') return 232;
-    return Math.round(Math.min(232, Math.max(196, window.innerWidth * 0.23)));
-  }
-
-  function getDefaultTabletBottomHeight() {
-    if (typeof window === 'undefined') return 208;
-    return Math.round(Math.min(230, Math.max(176, window.innerHeight * 0.24)));
-  }
-
-  function clampTabletLeftWidth(next: number) {
-    if (typeof window === 'undefined') return Math.round(Math.min(TABLET_LEFT_MAX, Math.max(TABLET_LEFT_MIN, next)));
-    const dynamicMax = Math.min(TABLET_LEFT_MAX, Math.max(220, Math.round(window.innerWidth * 0.36)));
-    return Math.round(Math.min(dynamicMax, Math.max(TABLET_LEFT_MIN, next)));
-  }
-
-  function clampTabletBottomHeight(next: number) {
-    if (typeof window === 'undefined') return Math.round(Math.min(TABLET_BOTTOM_MAX, Math.max(TABLET_BOTTOM_MIN, next)));
-    const dynamicMax = Math.min(TABLET_BOTTOM_MAX, Math.max(196, Math.round(window.innerHeight * 0.42)));
-    return Math.round(Math.min(dynamicMax, Math.max(TABLET_BOTTOM_MIN, next)));
-  }
-
-  function applyTabletSplitDelta(axis: TabletSplitResizeAxis, signedDelta: number) {
-    if (axis === 'x') {
-      tabletLeftWidth = clampTabletLeftWidth(tabletLeftWidth + signedDelta);
-      return;
-    }
-    tabletBottomHeight = clampTabletBottomHeight(tabletBottomHeight + signedDelta);
-  }
-
-  function startTabletSplitDrag(axis: TabletSplitResizeAxis, e: PointerEvent) {
-    if (!isTablet) return;
-    const source = e.currentTarget as HTMLElement | null;
-    source?.setPointerCapture?.(e.pointerId);
-    tabletSplitResizeState = {
-      axis,
-      pointerId: e.pointerId,
-      startClient: axis === 'x' ? e.clientX : e.clientY,
-      startValue: axis === 'x' ? tabletLeftWidth : tabletBottomHeight,
-    };
-    e.preventDefault();
-    document.body.style.cursor = axis === 'x' ? 'col-resize' : 'row-resize';
-    document.body.style.userSelect = 'none';
-  }
-
-  function onTabletSplitPointerMove(e: PointerEvent) {
-    const state = tabletSplitResizeState;
-    if (!state || e.pointerId !== state.pointerId) return;
-    const currentClient = state.axis === 'x' ? e.clientX : e.clientY;
-    const delta = currentClient - state.startClient;
-    if (state.axis === 'x') {
-      tabletLeftWidth = clampTabletLeftWidth(state.startValue + delta);
-    } else {
-      // Separator up => bottom panel grows, separator down => bottom panel shrinks.
-      tabletBottomHeight = clampTabletBottomHeight(state.startValue - delta);
-    }
-    e.preventDefault();
-  }
-
-  function finishTabletSplitDrag(e?: PointerEvent) {
-    if (!tabletSplitResizeState) return;
-    if (e && e.pointerId !== tabletSplitResizeState.pointerId) return;
-    tabletSplitResizeState = null;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  }
-
-  function resizeTabletPanelByWheel(panel: TabletPanelKey, axis: 'x' | 'y', e: WheelEvent) {
-    if (!isTablet) return;
-    const rawDelta = axis === 'x' ? (Math.abs(e.deltaX) > 0 ? e.deltaX : e.deltaY) : e.deltaY;
-    if (!Number.isFinite(rawDelta) || rawDelta === 0) return;
-
-    const step = e.shiftKey ? TABLET_SPLIT_STEP + 8 : TABLET_SPLIT_STEP;
-    const signed = rawDelta > 0 ? step : -step;
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (axis === 'x') {
-      // Tablet horizontal split: adjust WAR ROOM vs CHART width.
-      if (panel === 'bottom') return;
-      applyTabletSplitDelta('x', signed);
-      return;
-    }
-
-    // Tablet vertical split: adjust CHART block vs INTEL block height.
-    applyTabletSplitDelta('y', signed);
-  }
-
-  function resetTabletPanelSize(panel: TabletPanelKey) {
-    if (panel === 'bottom') {
-      tabletBottomHeight = getDefaultTabletBottomHeight();
-      return;
-    }
-    tabletLeftWidth = getDefaultTabletLeftWidth();
   }
 
   function getMobilePanelStyle(tab: MobileTab) {
@@ -639,17 +515,7 @@
   }
 
   function handleResize() {
-    const wasTablet = windowWidth >= BP_MOBILE && windowWidth < BP_TABLET;
     windowWidth = window.innerWidth;
-    const nowTablet = windowWidth >= BP_MOBILE && windowWidth < BP_TABLET;
-    if (!nowTablet) return;
-    if (!wasTablet) {
-      tabletLeftWidth = getDefaultTabletLeftWidth();
-      tabletBottomHeight = getDefaultTabletBottomHeight();
-      return;
-    }
-    tabletLeftWidth = clampTabletLeftWidth(tabletLeftWidth);
-    tabletBottomHeight = clampTabletBottomHeight(tabletBottomHeight);
   }
 
   async function fetchLiveTicker() {
@@ -689,10 +555,6 @@
 
   onMount(() => {
     windowWidth = window.innerWidth;
-    if (windowWidth >= BP_MOBILE && windowWidth < BP_TABLET) {
-      tabletLeftWidth = getDefaultTabletLeftWidth();
-      tabletBottomHeight = getDefaultTabletBottomHeight();
-    }
     window.addEventListener('resize', handleResize);
     window.addEventListener('pointermove', onMobilePanelPointerMove, { passive: false });
     window.addEventListener('pointerup', finishMobilePanelDrag);
@@ -700,9 +562,6 @@
     window.addEventListener('touchmove', onMobilePanelTouchMove, { passive: false });
     window.addEventListener('touchend', finishMobilePanelTouchDrag);
     window.addEventListener('touchcancel', finishMobilePanelTouchDrag);
-    window.addEventListener('pointermove', onTabletSplitPointerMove, { passive: false });
-    window.addEventListener('pointerup', finishTabletSplitDrag);
-    window.addEventListener('pointercancel', finishTabletSplitDrag);
 
     // ── Hydrate quick trades (터미널 페이지에서만 호출) ──
     void hydrateQuickTrades();
@@ -755,7 +614,6 @@
   onDestroy(() => {
     finishMobilePanelDrag();
     finishMobilePanelTouchDrag();
-    finishTabletSplitDrag();
     alertEngine.stop();
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', handleResize);
@@ -765,9 +623,6 @@
       window.removeEventListener('touchmove', onMobilePanelTouchMove);
       window.removeEventListener('touchend', finishMobilePanelTouchDrag);
       window.removeEventListener('touchcancel', finishMobilePanelTouchDrag);
-      window.removeEventListener('pointermove', onTabletSplitPointerMove);
-      window.removeEventListener('pointerup', finishTabletSplitDrag);
-      window.removeEventListener('pointercancel', finishTabletSplitDrag);
     }
   });
 
@@ -789,13 +644,7 @@
   type WarRoomHandle = {
     triggerScanFromChart?: () => void;
   };
-  type ChartPanelHandle = {
-    activateTradeDrawing?: (dir?: 'LONG' | 'SHORT') => Promise<void> | void;
-  };
   let warRoomRef: WarRoomHandle | null = null;
-  let mobileChartRef: ChartPanelHandle | null = null;
-  let tabletChartRef: ChartPanelHandle | null = null;
-  let desktopChartRef: ChartPanelHandle | null = null;
   let pendingChartScan = false;
 
   function tryTriggerWarRoomScan(): boolean {
@@ -826,6 +675,21 @@
       });
       setMobileTab('warroom');
     }
+  }
+
+  function triggerMobileQuickScan() {
+    gtmEvent('terminal_mobile_quick_scan_click', {
+      tab: mobileTab,
+      pair: $gameState.pair,
+      timeframe: $gameState.timeframe,
+    });
+    handleChartScanRequest(new CustomEvent('scanrequest', {
+      detail: {
+        source: 'mobile-quick-action',
+        pair: $gameState.pair,
+        timeframe: $gameState.timeframe,
+      },
+    }));
   }
 
   $: if (pendingChartScan && tryTriggerWarRoomScan()) {
@@ -870,105 +734,11 @@
   ];
   let isTyping = false;
   let latestScan: ScanIntelDetail | null = null;
-  type ChatTradeDirection = 'LONG' | 'SHORT';
-  let chatTradeReady = false;
-  let chatSuggestedDir: ChatTradeDirection = 'LONG';
-  let chatFocusKey = 0;
 
   // 에이전트 정보 맵 (아이콘/컬러 lookup)
   const AGENT_META: Record<string, { icon: string; color: string }> = {};
   for (const ag of AGDEFS) AGENT_META[ag.name] = { icon: ag.icon, color: ag.color };
   AGENT_META['ORCHESTRATOR'] = { icon: '🧠', color: '#ff2d9b' };
-
-  function inferSuggestedDirection(text: string): ChatTradeDirection | null {
-    const lower = text.toLowerCase();
-    let longScore = 0;
-    let shortScore = 0;
-    if (/\b(long|bull|bullish|breakout|uptrend|매수|롱|상승)\b/.test(lower)) longScore += 2;
-    if (/\b(short|bear|bearish|breakdown|downtrend|매도|숏|하락)\b/.test(lower)) shortScore += 2;
-    if (/\b(tp up|target up|higher high|support hold)\b/.test(lower)) longScore += 1;
-    if (/\b(tp down|target down|lower low|resistance reject)\b/.test(lower)) shortScore += 1;
-    if (longScore === shortScore) return null;
-    return longScore > shortScore ? 'LONG' : 'SHORT';
-  }
-
-  function getActiveChartPanel(): ChartPanelHandle | null {
-    if (isMobile) return mobileChartRef;
-    if (isTablet) return tabletChartRef;
-    return desktopChartRef;
-  }
-
-  function focusIntelChat(source: string) {
-    if (isDesktop && rightCollapsed) toggleRight();
-    if (isMobile && mobileTab !== 'intel') {
-      gtmEvent('terminal_mobile_tab_auto_switch', {
-        from_tab: mobileTab,
-        to_tab: 'intel',
-        reason: source,
-      });
-      setMobileTab('intel');
-    }
-    chatFocusKey += 1;
-  }
-
-  function handleChartChatRequest(e: CustomEvent<{ source?: string; pair?: string; timeframe?: string }>) {
-    const detail = e.detail ?? {};
-    gtmEvent('terminal_chat_request_shell', {
-      source: detail.source || 'chart-panel',
-      pair: detail.pair || $gameState.pair,
-      timeframe: detail.timeframe || $gameState.timeframe,
-      trade_ready: chatTradeReady,
-    });
-    focusIntelChat(detail.source || 'chart-panel');
-  }
-
-  async function triggerTradePlanFromChat(source: string) {
-    if (!chatTradeReady) {
-      gtmEvent('terminal_trade_plan_request_blocked', {
-        source,
-        reason: 'chat_answer_required',
-        pair: $gameState.pair,
-        timeframe: $gameState.timeframe,
-      });
-      focusIntelChat(`${source}-chat-first`);
-      return;
-    }
-
-    if (isDesktop && rightCollapsed) toggleRight();
-    if (isMobile && mobileTab !== 'chart') {
-      gtmEvent('terminal_mobile_tab_auto_switch', {
-        from_tab: mobileTab,
-        to_tab: 'chart',
-        reason: 'trade_plan_from_chat',
-      });
-      setMobileTab('chart');
-      await tick();
-    }
-
-    await tick();
-    const chartPanel = getActiveChartPanel();
-    if (!chartPanel || typeof chartPanel.activateTradeDrawing !== 'function') {
-      gtmEvent('terminal_trade_plan_request_failed', {
-        source,
-        reason: 'chart_panel_unavailable',
-        pair: $gameState.pair,
-        timeframe: $gameState.timeframe,
-      });
-      return;
-    }
-
-    gtmEvent('terminal_trade_plan_request', {
-      source,
-      pair: $gameState.pair,
-      timeframe: $gameState.timeframe,
-      suggested_dir: chatSuggestedDir,
-    });
-    await chartPanel.activateTradeDrawing(chatSuggestedDir);
-  }
-
-  function handleIntelGoTrade() {
-    void triggerTradePlanFromChat('intel-panel');
-  }
 
   async function handleSendChat(e: CustomEvent<{ text: string }>) {
     const text = e.detail.text;
@@ -983,14 +753,6 @@
     // 멘션된 에이전트 감지 (없으면 서버에서 ORCHESTRATOR로 기본 처리)
     const agent = AGDEFS.find(ag => text.toLowerCase().includes(`@${ag.name.toLowerCase()}`));
     const mentionedAgent = agent?.name || undefined;
-    chatTradeReady = false;
-    gtmEvent('terminal_chat_question_sent', {
-      source: 'intel-chat',
-      pair: $gameState.pair || 'BTC/USDT',
-      timeframe: $gameState.timeframe || '4h',
-      chars: text.length,
-      mentioned_agent: mentionedAgent || 'auto',
-    });
 
     try {
       const res = await fetch('/api/chat/messages', {
@@ -1026,26 +788,8 @@
             time,
             isUser: false,
           }];
-          const inferred = inferSuggestedDirection(String(r.message || ''));
-          if (inferred) chatSuggestedDir = inferred;
-          chatTradeReady = true;
-          gtmEvent('terminal_chat_answer_received', {
-            source: 'intel-chat',
-            pair: $gameState.pair || 'BTC/USDT',
-            timeframe: $gameState.timeframe || '4h',
-            responder: r.senderName || 'ORCHESTRATOR',
-            chars: String(r.message || '').length,
-            suggested_dir: inferred || chatSuggestedDir,
-          });
         }
       } else {
-        chatTradeReady = false;
-        gtmEvent('terminal_chat_answer_error', {
-          source: 'intel-chat',
-          pair: $gameState.pair || 'BTC/USDT',
-          timeframe: $gameState.timeframe || '4h',
-          status: res.status,
-        });
         chatMessages = [...chatMessages, {
           from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
           text: 'Connection error. Try again or check server status.',
@@ -1054,13 +798,6 @@
       }
     } catch (err) {
       isTyping = false;
-      chatTradeReady = false;
-      gtmEvent('terminal_chat_answer_error', {
-        source: 'intel-chat',
-        pair: $gameState.pair || 'BTC/USDT',
-        timeframe: $gameState.timeframe || '4h',
-        status: 'network',
-      });
       chatMessages = [...chatMessages, {
         from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
         text: 'Network error. Please check your connection.',
@@ -1084,24 +821,25 @@
   <!-- ═══ MOBILE LAYOUT ═══ -->
   {#if isMobile}
   <div class="terminal-mobile">
-    {#if mobileTab !== 'chart'}
-      <div class="mob-topbar">
-        <div class="mob-topline">
-          <div class="mob-title-wrap">
-            <span class="mob-eyebrow">TERMINAL MOBILE</span>
-            <span class="mob-title">{mobileMeta.label}</span>
-          </div>
-          <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
+    <div class="mob-topbar" class:chart-mode={mobileTab === 'chart'}>
+      <div class="mob-topline">
+        <div class="mob-title-wrap">
+          <span class="mob-eyebrow">TERMINAL MOBILE</span>
+          <span class="mob-title">{mobileMeta.label}</span>
         </div>
-        <div class="mob-meta">
-          <div class="mob-token">
-            <TokenDropdown value={pair} compact on:select={onTokenSelect} />
-          </div>
-          <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
-        </div>
-        <div class="mob-desc">{mobileMeta.desc}</div>
+        <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
       </div>
-    {/if}
+      <div class="mob-meta">
+        <div class="mob-token">
+          <TokenDropdown value={pair} compact on:select={onTokenSelect} />
+        </div>
+        <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
+        <span class="mob-meta-chip subtle">{pair}</span>
+      </div>
+      {#if mobileTab !== 'chart'}
+        <div class="mob-desc">{mobileMeta.desc}</div>
+      {/if}
+    </div>
 
     <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
       {#if mobileTab === 'warroom'}
@@ -1132,18 +870,7 @@
         <div class="mob-chart-stack">
           <div class="mob-chart-section mob-panel-resizable" style={getMobilePanelStyle('chart')}>
             <div class="mob-chart-area">
-              <ChartPanel
-                bind:this={mobileChartRef}
-                advancedMode
-                enableTradeLineEntry
-                uiPreset="tradingview"
-                requireTradeConfirm
-                chatFirstMode
-                {chatTradeReady}
-                chatTradeDir={chatSuggestedDir}
-                on:scanrequest={handleChartScanRequest}
-                on:chatrequest={handleChartChatRequest}
-              />
+              <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
             </div>
             <button
               type="button"
@@ -1163,22 +890,22 @@
               on:wheel={(e) => resizeMobilePanelByWheel('chart', 'y', e)}
               on:pointerdown={(e) => startMobilePanelDrag('chart', 'y', e)}
               on:touchstart={(e) => startMobilePanelTouchDrag('chart', 'y', e)}
-            on:dblclick={() => resetMobilePanelSize('chart')}
-          ></button>
+              on:dblclick={() => resetMobilePanelSize('chart')}
+            ></button>
+          </div>
+
+          <div class="mob-quick-actions">
+            <button class="mob-quick-btn primary" on:click={triggerMobileQuickScan}>
+              AI SCAN
+            </button>
+            <button class="mob-quick-btn" on:click={() => setMobileTab('warroom')}>
+              OPEN WAR ROOM
+            </button>
           </div>
         </div>
       {:else if mobileTab === 'intel'}
         <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('intel')}>
-          <IntelPanel
-            {chatMessages}
-            {isTyping}
-            {latestScan}
-            prioritizeChat
-            {chatTradeReady}
-            {chatFocusKey}
-            on:sendchat={handleSendChat}
-            on:gototrade={handleIntelGoTrade}
-          />
+          <IntelPanel {chatMessages} {isTyping} {latestScan} prioritizeChat on:sendchat={handleSendChat} />
           <button
             type="button"
             class="mob-resize-handle mob-resize-handle-x"
@@ -1214,7 +941,7 @@
         <span class="mob-nav-label">CHART</span>
       </button>
       <button class="mob-nav-btn" class:active={mobileTab === 'intel'} on:click={() => setMobileTab('intel')}>
-        <span class="mob-nav-label">CHAT</span>
+        <span class="mob-nav-label">INTEL</span>
         {#if mobileTrackedSignals > 0}
           <span class="mob-nav-badge">{mobileTrackedSignals > 9 ? '9+' : mobileTrackedSignals}</span>
         {/if}
@@ -1224,124 +951,19 @@
 
   <!-- ═══ TABLET LAYOUT (no side resizers, stacked) ═══ -->
   {:else if isTablet}
-  <div class="terminal-tablet" style={tabletLayoutStyle}>
+  <div class="terminal-tablet">
     <div class="tab-top">
       <div class="tab-left">
-        <div class="tab-panel-resizable" style={getTabletPanelStyle('left')}>
-          <div class="tab-panel-body">
-            <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
-          </div>
-          <button
-            type="button"
-            class="tab-resize-handle tab-resize-handle-x"
-            title="WAR ROOM 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
-            aria-label="Resize tablet war room width with scroll"
-            on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
-            on:pointerdown={(e) => startTabletSplitDrag('x', e)}
-            on:dblclick={() => resetTabletPanelSize('left')}
-          ></button>
-          <button
-            type="button"
-            class="tab-resize-handle tab-resize-handle-y"
-            title="WAR ROOM 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
-            aria-label="Resize tablet war room height with scroll"
-            on:wheel={(e) => resizeTabletPanelByWheel('left', 'y', e)}
-            on:pointerdown={(e) => startTabletSplitDrag('y', e)}
-            on:dblclick={() => resetTabletPanelSize('left')}
-          ></button>
-        </div>
+        <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
       </div>
-      <button
-        type="button"
-        class="tab-layout-split tab-layout-split-v"
-        title="WAR ROOM / CHART 분할 조절: 스크롤/드래그/더블클릭 리셋"
-        aria-label="Resize tablet left and chart split"
-        on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
-        on:pointerdown={(e) => startTabletSplitDrag('x', e)}
-        on:dblclick={() => resetTabletPanelSize('left')}
-      >
-        <span></span>
-      </button>
       <div class="tab-center">
-        <div class="tab-panel-resizable" style={getTabletPanelStyle('center')}>
-          <div class="tab-panel-body tab-chart-area">
-            <ChartPanel
-              bind:this={tabletChartRef}
-              advancedMode
-              enableTradeLineEntry
-              uiPreset="tradingview"
-              requireTradeConfirm
-              chatFirstMode
-              {chatTradeReady}
-              chatTradeDir={chatSuggestedDir}
-              on:scanrequest={handleChartScanRequest}
-              on:chatrequest={handleChartChatRequest}
-            />
-          </div>
-          <button
-            type="button"
-            class="tab-resize-handle tab-resize-handle-x"
-            title="CHART 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
-            aria-label="Resize tablet chart width with scroll"
-            on:wheel={(e) => resizeTabletPanelByWheel('center', 'x', e)}
-            on:pointerdown={(e) => startTabletSplitDrag('x', e)}
-            on:dblclick={() => resetTabletPanelSize('center')}
-          ></button>
-          <button
-            type="button"
-            class="tab-resize-handle tab-resize-handle-y"
-            title="CHART 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
-            aria-label="Resize tablet chart height with scroll"
-            on:wheel={(e) => resizeTabletPanelByWheel('center', 'y', e)}
-            on:pointerdown={(e) => startTabletSplitDrag('y', e)}
-            on:dblclick={() => resetTabletPanelSize('center')}
-          ></button>
+        <div class="tab-chart-area">
+          <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
         </div>
       </div>
     </div>
-    <button
-      type="button"
-      class="tab-layout-split tab-layout-split-h"
-      title="CHART / INTEL 높이 조절: 스크롤/드래그/더블클릭 리셋"
-      aria-label="Resize tablet chart and intel split"
-      on:wheel={(e) => resizeTabletPanelByWheel('bottom', 'y', e)}
-      on:pointerdown={(e) => startTabletSplitDrag('y', e)}
-      on:dblclick={() => resetTabletPanelSize('bottom')}
-    >
-      <span></span>
-    </button>
     <div class="tab-bottom">
-      <div class="tab-panel-resizable" style={getTabletPanelStyle('bottom')}>
-        <div class="tab-panel-body">
-          <IntelPanel
-            {chatMessages}
-            {isTyping}
-            {latestScan}
-            {chatTradeReady}
-            {chatFocusKey}
-            on:sendchat={handleSendChat}
-            on:gototrade={handleIntelGoTrade}
-          />
-        </div>
-        <button
-          type="button"
-          class="tab-resize-handle tab-resize-handle-x"
-          title="좌우 패널 비율 조절: 스크롤 / 더블클릭 초기화"
-          aria-label="Resize tablet left and chart split with scroll"
-          on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
-          on:pointerdown={(e) => startTabletSplitDrag('x', e)}
-          on:dblclick={() => resetTabletPanelSize('left')}
-        ></button>
-        <button
-          type="button"
-            class="tab-resize-handle tab-resize-handle-y"
-            title="INTEL 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
-            aria-label="Resize tablet intel height with scroll"
-            on:wheel={(e) => resizeTabletPanelByWheel('bottom', 'y', e)}
-            on:pointerdown={(e) => startTabletSplitDrag('y', e)}
-            on:dblclick={() => resetTabletPanelSize('bottom')}
-          ></button>
-      </div>
+      <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} />
     </div>
 
     <div class="ticker-bar">
@@ -1354,7 +976,7 @@
   <!-- ═══ DESKTOP LAYOUT (full 3-panel with resizers) ═══ -->
   {:else}
   <div class="terminal-page" bind:this={containerEl}
-    style="grid-template-columns: {leftCollapsed ? 30 : leftW}px 4px 1fr 4px {rightCollapsed ? 30 : rightW}px">
+    style="grid-template-columns: {leftCollapsed ? 32 : leftW}px 6px 1fr 6px {rightCollapsed ? 32 : rightW}px">
 
     <!-- Left: WAR ROOM or collapsed strip -->
     {#if !leftCollapsed}
@@ -1411,18 +1033,7 @@
       <div class="desk-panel-resizable" style={getDesktopPanelStyle('center')}>
         <div class="desk-panel-body">
           <div class="chart-area chart-area-full">
-            <ChartPanel
-              bind:this={desktopChartRef}
-              advancedMode
-              enableTradeLineEntry
-              uiPreset="tradingview"
-              requireTradeConfirm
-              chatFirstMode
-              {chatTradeReady}
-              chatTradeDir={chatSuggestedDir}
-              on:scanrequest={handleChartScanRequest}
-              on:chatrequest={handleChartChatRequest}
-            />
+            <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
           </div>
         </div>
         <button
@@ -1459,16 +1070,7 @@
       <div class="tr" on:wheel={(e) => resizePanelByWheel('right', e)}>
         <div class="desk-panel-resizable" style={getDesktopPanelStyle('right')}>
           <div class="desk-panel-body">
-            <IntelPanel
-              {chatMessages}
-              {isTyping}
-              {latestScan}
-              {chatTradeReady}
-              {chatFocusKey}
-              on:sendchat={handleSendChat}
-              on:gototrade={handleIntelGoTrade}
-              on:collapse={toggleRight}
-            />
+            <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} on:collapse={toggleRight} />
           </div>
           <button
             type="button"
@@ -1555,8 +1157,6 @@
     overflow-x: clip;
     overscroll-behavior: none;
     isolation: isolate;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
     background:
       radial-gradient(110% 72% at 15% 0%, rgba(232, 150, 125, 0.1) 0%, rgba(232, 150, 125, 0) 58%),
       radial-gradient(96% 68% at 88% 6%, rgba(135, 220, 190, 0.14) 0%, rgba(135, 220, 190, 0) 62%),
@@ -1638,7 +1238,7 @@
      ═══════════════════════════════════════════ */
   .terminal-page {
     display: grid;
-    grid-template-columns: 280px 4px 1fr 4px 300px; /* overridden by inline style */
+    grid-template-columns: 280px 6px 1fr 6px 300px; /* overridden by inline style */
     grid-template-rows: 1fr auto;
     height: 100%;
     overflow: hidden;
@@ -1679,7 +1279,7 @@
   .tab-left::-webkit-scrollbar-track { background: transparent; }
   .tab-left::-webkit-scrollbar-thumb {
     background: rgba(232, 150, 125, 0.45);
-    border-radius: 2px;
+    border-radius: 3px;
   }
 
   .tc {
@@ -1701,12 +1301,12 @@
     flex-direction: column;
     transition: width .16s ease, height .16s ease, box-shadow .16s ease, border-color .16s ease;
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: 10px;
   }
   .desk-panel-resizable:hover,
   .desk-panel-resizable:focus-within {
     border-color: rgba(232, 150, 125, 0.24);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
   }
   .desk-panel-body {
     flex: 1 1 auto;
@@ -1796,10 +1396,10 @@
   .resizer-left { grid-column: 2; }
   .resizer-right { grid-column: 4; }
   .resizer-h {
-    width: 4px;
-    background: rgba(10, 24, 16, 0.82);
-    border-left: 1px solid rgba(232, 150, 125, 0.1);
-    border-right: 1px solid rgba(232, 150, 125, 0.1);
+    width: 6px;
+    background: rgba(10, 24, 16, 0.9);
+    border-left: 1px solid var(--term-border-soft);
+    border-right: 1px solid var(--term-border-soft);
     transition: background .15s, border-color .15s;
   }
   .resizer-h:hover {
@@ -1808,7 +1408,7 @@
     border-right-color: var(--term-border);
   }
   .resizer-spacer {
-    width: 1px;
+    width: 2px;
     grid-row: 1;
   }
   .resizer-spacer:nth-of-type(1) { grid-column: 2; }
@@ -1817,8 +1417,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 5px;
-    padding: 7px 0;
+    gap: 6px;
+    padding: 8px 0;
     background: rgba(12, 29, 19, 0.95);
     border: none;
     cursor: pointer;
@@ -1868,7 +1468,7 @@
      TICKER BAR — shared across all layouts
      ═══════════════════════════════════════════ */
   .ticker-bar {
-    height: 22px;
+    height: 24px;
     background: linear-gradient(180deg, rgba(15, 40, 24, 0.95) 0%, rgba(10, 27, 17, 0.98) 100%);
     border-top: 1px solid var(--term-border);
     overflow: hidden;
@@ -1887,8 +1487,8 @@
     font-family: var(--fm);
     color: var(--term-live);
     font-weight: 600;
-    letter-spacing: 0.35px;
-    line-height: 22px;
+    letter-spacing: 0.5px;
+    line-height: 24px;
     padding: 0 20px;
   }
   @keyframes tickerScroll {
@@ -1914,18 +1514,21 @@
   }
   .mob-topbar {
     flex-shrink: 0;
-    padding: 8px 10px 6px;
+    padding: 10px 12px 8px;
     border-bottom: 1px solid var(--term-border);
     background:
       linear-gradient(135deg, rgba(232, 150, 125, 0.14), rgba(232, 150, 125, 0.04)),
       linear-gradient(180deg, rgba(14, 36, 23, 0.92), rgba(10, 27, 17, 0.94));
     backdrop-filter: blur(8px);
   }
+  .mob-topbar.chart-mode {
+    padding-bottom: 6px;
+  }
   .mob-topline {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
-    margin-bottom: 6px;
+    gap: 8px;
+    margin-bottom: 8px;
   }
   .mob-title-wrap {
     display: flex;
@@ -1944,7 +1547,7 @@
     font-family: var(--fd);
     font-size: 14px;
     font-weight: 900;
-    letter-spacing: 0.35px;
+    letter-spacing: 0.6px;
     color: var(--term-text);
     line-height: 1.2;
   }
@@ -1967,7 +1570,7 @@
   .mob-meta {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     min-width: 0;
   }
   .mob-token {
@@ -1983,17 +1586,22 @@
     font-family: var(--fm);
     font-size: 9px;
     font-weight: 700;
-    letter-spacing: 0.2px;
+    letter-spacing: 0.35px;
     color: rgba(240, 237, 228, 0.84);
     max-width: 44vw;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .mob-meta-chip.subtle {
+    color: rgba(240, 237, 228, 0.65);
+    border-color: rgba(240, 237, 228, 0.13);
+    background: rgba(240, 237, 228, 0.04);
+  }
   .mob-desc {
-    margin-top: 6px;
+    margin-top: 8px;
     font-family: var(--fm);
-    font-size: 9px;
+    font-size: 10px;
     color: rgba(240, 237, 228, 0.56);
     letter-spacing: 0.15px;
     line-height: 1.35;
@@ -2006,7 +1614,7 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     touch-action: pan-y;
-    padding: 8px 8px calc(10px + var(--mob-nav-slot));
+    padding: 10px 10px calc(12px + var(--mob-nav-slot));
     scroll-padding-bottom: calc(8px + var(--mob-nav-slot));
     display: flex;
     flex-direction: column;
@@ -2019,7 +1627,7 @@
     flex-direction: column;
     min-height: 0;
     flex: 1 1 auto;
-    gap: 0;
+    gap: 8px;
   }
   .mob-panel-wrap,
   .mob-chart-section {
@@ -2101,13 +1709,40 @@
     display: flex;
     flex-direction: column;
   }
+  .mob-quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0 2px 2px;
+  }
+  .mob-quick-btn {
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid rgba(232, 150, 125, 0.22);
+    background: rgba(240, 237, 228, 0.05);
+    color: rgba(240, 237, 228, 0.82);
+    font-family: var(--fm);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    cursor: pointer;
+    transition: all .14s ease;
+  }
+  .mob-quick-btn.primary {
+    background: linear-gradient(135deg, rgba(232, 150, 125, 0.36), rgba(232, 150, 125, 0.2));
+    border-color: rgba(232, 150, 125, 0.45);
+    color: #fff2e6;
+  }
+  .mob-quick-btn:active {
+    transform: translateY(1px);
+  }
   .mob-bottom-nav {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-auto-rows: minmax(44px, 44px);
     align-items: center;
-    gap: 6px;
-    padding: 7px 8px calc(5px + env(safe-area-inset-bottom));
+    gap: 8px;
+    padding: 8px 10px calc(6px + env(safe-area-inset-bottom));
     min-height: calc(60px + env(safe-area-inset-bottom));
     max-height: calc(72px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--term-border);
@@ -2148,7 +1783,7 @@
   .mob-nav-label {
     font-size: 10px;
     font-weight: 800;
-    letter-spacing: 0.8px;
+    letter-spacing: 1.1px;
     line-height: 1;
   }
   .mob-nav-badge {
@@ -2173,173 +1808,48 @@
      TABLET — 2-col top + Intel bottom
      ═══════════════════════════════════════════ */
   .terminal-tablet {
-    --tab-left-width: clamp(196px, 23vw, 232px);
-    --tab-bottom-height: clamp(176px, 24vh, 230px);
-    display: grid;
-    grid-template-rows: minmax(0, 1fr) 6px var(--tab-bottom-height) auto;
+    display: flex;
+    flex-direction: column;
     height: 100%;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
     overflow: hidden;
   }
   .tab-top {
-    grid-row: 1;
-    display: grid;
-    grid-template-columns: var(--tab-left-width) 6px minmax(0, 1fr);
+    flex: 1;
+    display: flex;
     min-height: 0;
     overflow: hidden;
   }
   .tab-left {
-    grid-column: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 4px 3px 4px 4px;
-    overflow: hidden;
+    width: 240px;
+    flex-shrink: 0;
   }
   .tab-center {
-    grid-column: 3;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 4px 4px 4px 3px;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-  }
-  .tab-panel-resizable {
-    --tab-panel-width: 100%;
-    --tab-panel-height: 100%;
-    position: relative;
-    width: min(100%, var(--tab-panel-width));
-    height: min(100%, var(--tab-panel-height));
-    margin: auto;
-    border-radius: 8px;
-    border: 1px solid transparent;
-    transition: width .16s ease, height .16s ease, box-shadow .16s ease, border-color .16s ease;
-    min-width: 0;
-    min-height: 0;
-  }
-  .tab-panel-resizable:hover,
-  .tab-panel-resizable:focus-within {
-    border-color: rgba(232, 150, 125, 0.24);
-    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.26);
-  }
-  .tab-panel-body {
-    width: 100%;
-    height: 100%;
-    min-width: 0;
-    min-height: 0;
+    flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    min-height: 0;
     overflow: hidden;
-  }
-  .tab-resize-handle {
-    position: absolute;
-    z-index: 16;
-    border: 0;
-    background: transparent;
-    padding: 0;
-    margin: 0;
-    opacity: 0.42;
-    transition: opacity .12s ease;
-  }
-  .tab-resize-handle::before {
-    content: '';
-    position: absolute;
-    inset: 50% auto auto 50%;
-    transform: translate(-50%, -50%);
-    border-radius: 999px;
-    background: rgba(245, 196, 184, 0.45);
-  }
-  .tab-resize-handle:hover,
-  .tab-resize-handle:focus-visible {
-    opacity: 0.92;
-    outline: none;
-  }
-  .tab-resize-handle-x {
-    top: 10px;
-    right: 0;
-    width: 12px;
-    height: calc(100% - 20px);
-    cursor: ew-resize;
-  }
-  .tab-resize-handle-x::before {
-    width: 2px;
-    height: 44%;
-  }
-  .tab-resize-handle-y {
-    left: 10px;
-    bottom: 0;
-    width: calc(100% - 20px);
-    height: 12px;
-    cursor: ns-resize;
-  }
-  .tab-resize-handle-y::before {
-    width: 44%;
-    height: 2px;
   }
   .tab-chart-area {
     flex: 1;
     min-height: 200px;
     overflow: hidden;
   }
-  .tab-layout-split {
-    border: 0;
-    background: rgba(8, 18, 13, 0.86);
-    padding: 0;
-    margin: 0;
-    position: relative;
-    z-index: 16;
-    cursor: col-resize;
-    transition: background .14s ease;
-  }
-  .tab-layout-split span {
-    position: absolute;
-    inset: 50% auto auto 50%;
-    transform: translate(-50%, -50%);
-    display: block;
-    border-radius: 999px;
-    background: rgba(245, 196, 184, 0.45);
-  }
-  .tab-layout-split:hover,
-  .tab-layout-split:focus-visible {
-    background: rgba(232, 150, 125, 0.14);
-    outline: none;
-  }
-  .tab-layout-split-v {
-    grid-column: 2;
-  }
-  .tab-layout-split-v span {
-    width: 2px;
-    height: 42px;
-  }
-  .tab-layout-split-h {
-    grid-row: 2;
-    width: 100%;
-    cursor: row-resize;
-  }
-  .tab-layout-split-h span {
-    width: 44px;
-    height: 2px;
-  }
   .tab-bottom {
-    grid-row: 3;
-    height: 100%;
+    height: 200px;
+    flex-shrink: 0;
     border-top: 1px solid var(--term-border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 4px;
     overflow: hidden;
-  }
-  .terminal-tablet .ticker-bar {
-    grid-row: 4;
   }
 
   /* Route-scoped tone overrides for terminal child components */
   .terminal-shell :global(.war-room),
-  .terminal-shell :global(.intel-panel) {
+  .terminal-shell :global(.intel-panel),
+  .terminal-shell :global(.chart-wrapper),
+  .terminal-shell :global(.tv-container) {
     background: var(--term-panel-2);
   }
 
@@ -2491,22 +2001,6 @@
   .terminal-shell :global(.intel-panel .ac-name) {
     color: rgba(240, 237, 228, 0.68);
   }
-  .terminal-shell :global(.war-room .wr-msg-text),
-  .terminal-shell :global(.war-room .wr-msg-name),
-  .terminal-shell :global(.intel-panel .hl-txt),
-  .terminal-shell :global(.intel-panel .comm-txt),
-  .terminal-shell :global(.intel-panel .ev-body),
-  .terminal-shell :global(.intel-panel .ac-txt) {
-    line-height: 1.4;
-    letter-spacing: 0.08px;
-  }
-  .terminal-shell :global(.war-room .deriv-val),
-  .terminal-shell :global(.war-room .wr-msg-price),
-  .terminal-shell :global(.intel-panel .flow-amt),
-  .terminal-shell :global(.intel-panel .hl-time),
-  .terminal-shell :global(.intel-panel .ev-etime) {
-    font-variant-numeric: tabular-nums;
-  }
   .terminal-shell :global(.intel-panel .hl-row:hover),
   .terminal-shell :global(.intel-panel .comm-react:hover) {
     background: rgba(232, 150, 125, 0.08);
@@ -2523,104 +2017,91 @@
     border-color: rgba(232, 150, 125, 0.42);
   }
 
-  /* Text density tuning (desktop/tablet): denser headers, clearer body hierarchy */
-  .terminal-shell {
-    --term-font-2xs: clamp(7px, 0.42vw, 8px);
-    --term-font-xs: clamp(8px, 0.5vw, 9px);
-    --term-font-sm: clamp(9px, 0.62vw, 10px);
-    --term-font-md: clamp(10px, 0.78vw, 11.5px);
-    --term-font-lg: clamp(11px, 0.9vw, 13px);
+  .terminal-shell :global(.chart-wrapper),
+  .terminal-shell :global(.tv-container) {
+    background: #0f2316;
   }
-  .terminal-shell :global(.war-room .wr-title) {
-    font-size: var(--term-font-md);
-    letter-spacing: 1.05px;
+  .terminal-shell :global(.chart-bar) {
+    background: linear-gradient(90deg, rgba(17, 42, 27, 0.98), rgba(15, 34, 24, 0.95));
+    border-bottom-color: rgba(232, 150, 125, 0.28);
   }
-  .terminal-shell :global(.war-room .wr-chip),
-  .terminal-shell :global(.war-room .ticker-chip),
-  .terminal-shell :global(.war-room .scan-tab),
-  .terminal-shell :global(.war-room .token-tab),
-  .terminal-shell :global(.intel-panel .rp-inner-tab),
-  .terminal-shell :global(.intel-panel .ac-trade-btn) {
-    font-size: var(--term-font-xs);
-    letter-spacing: 0.42px;
+  .terminal-shell :global(.tfbtn),
+  .terminal-shell :global(.mode-btn),
+  .terminal-shell :global(.scan-btn),
+  .terminal-shell :global(.draw-btn),
+  .terminal-shell :global(.ind-chip),
+  .terminal-shell :global(.legend-chip) {
+    color: rgba(240, 237, 228, 0.8);
   }
-  .terminal-shell :global(.war-room .scan-tab-history),
-  .terminal-shell :global(.war-room .token-tab-count),
-  .terminal-shell :global(.war-room .wr-msg-time),
-  .terminal-shell :global(.war-room .wr-msg-src),
-  .terminal-shell :global(.intel-panel .hl-time),
-  .terminal-shell :global(.intel-panel .ev-etime),
-  .terminal-shell :global(.intel-panel .flow-addr),
-  .terminal-shell :global(.intel-panel .ac-name) {
-    font-size: var(--term-font-2xs);
-    letter-spacing: 0.28px;
+  .terminal-shell :global(.tfbtn.active) {
+    background: rgba(232, 150, 125, 0.18);
+    color: var(--term-accent-soft);
+    border-color: rgba(232, 150, 125, 0.35);
   }
-  .terminal-shell :global(.war-room .deriv-lbl),
-  .terminal-shell :global(.war-room .scan-status-text),
-  .terminal-shell :global(.war-room .select-all-btn),
-  .terminal-shell :global(.war-room .wr-act-btn),
-  .terminal-shell :global(.war-room .src-count),
-  .terminal-shell :global(.war-room .src-tracked),
-  .terminal-shell :global(.intel-panel .hl-net),
-  .terminal-shell :global(.intel-panel .hl-engage),
-  .terminal-shell :global(.intel-panel .hl-creator),
-  .terminal-shell :global(.intel-panel .trend-name),
-  .terminal-shell :global(.intel-panel .trend-vol),
-  .terminal-shell :global(.intel-panel .trend-soc),
-  .terminal-shell :global(.intel-panel .trend-galaxy) {
-    font-size: var(--term-font-xs);
-    letter-spacing: 0.18px;
+  .terminal-shell :global(.mode-toggle) {
+    border-color: rgba(232, 150, 125, 0.3);
   }
-  .terminal-shell :global(.war-room .wr-msg-name),
-  .terminal-shell :global(.war-room .wr-msg-vote),
-  .terminal-shell :global(.war-room .wr-msg-conf),
-  .terminal-shell :global(.war-room .wr-msg-signal-row),
-  .terminal-shell :global(.war-room .wr-msg-text),
-  .terminal-shell :global(.war-room .src-text),
-  .terminal-shell :global(.war-room .ctc-text),
-  .terminal-shell :global(.intel-panel .rp-tab),
-  .terminal-shell :global(.intel-panel .hl-txt),
-  .terminal-shell :global(.intel-panel .flow-lbl),
-  .terminal-shell :global(.intel-panel .flow-amt),
-  .terminal-shell :global(.intel-panel .comm-name),
-  .terminal-shell :global(.intel-panel .comm-txt),
-  .terminal-shell :global(.intel-panel .ev-body),
-  .terminal-shell :global(.intel-panel .ac-title),
-  .terminal-shell :global(.intel-panel .ac-txt),
-  .terminal-shell :global(.intel-panel .ac-input input),
-  .terminal-shell :global(.intel-panel .trend-sym),
-  .terminal-shell :global(.intel-panel .trend-price),
-  .terminal-shell :global(.intel-panel .trend-chg) {
-    font-size: var(--term-font-sm);
-    letter-spacing: 0.12px;
+  .terminal-shell :global(.mode-btn:first-child) {
+    border-right-color: rgba(232, 150, 125, 0.2);
   }
-  .terminal-shell :global(.war-room .deriv-val),
-  .terminal-shell :global(.war-room .stat-val),
-  .terminal-shell :global(.war-room .wr-msg-entry),
-  .terminal-shell :global(.war-room .wr-msg-tp),
-  .terminal-shell :global(.war-room .wr-msg-sl),
-  .terminal-shell :global(.intel-panel .pos-pnl),
-  .terminal-shell :global(.intel-panel .pick-score) {
-    font-size: var(--term-font-md);
-    letter-spacing: 0.08px;
+  .terminal-shell :global(.mode-btn:hover) {
+    background: rgba(232, 150, 125, 0.1);
+    color: var(--term-text);
   }
-  .terminal-shell :global(.war-room .wr-msg-text),
-  .terminal-shell :global(.intel-panel .hl-txt),
-  .terminal-shell :global(.intel-panel .comm-txt),
-  .terminal-shell :global(.intel-panel .ev-body),
-  .terminal-shell :global(.intel-panel .ac-txt) {
-    line-height: 1.38;
+  .terminal-shell :global(.mode-btn.active) {
+    background: linear-gradient(135deg, rgba(232, 150, 125, 0.28), rgba(232, 150, 125, 0.14));
+    color: var(--term-accent-soft);
+    text-shadow: 0 0 8px rgba(232, 150, 125, 0.35);
   }
-  .terminal-shell :global(.war-room .deriv-val),
-  .terminal-shell :global(.war-room .wr-msg-conf),
-  .terminal-shell :global(.war-room .wr-msg-time),
-  .terminal-shell :global(.war-room .stat-val),
-  .terminal-shell :global(.intel-panel .flow-amt),
-  .terminal-shell :global(.intel-panel .trend-price),
-  .terminal-shell :global(.intel-panel .trend-chg),
-  .terminal-shell :global(.intel-panel .pick-score),
-  .terminal-shell :global(.intel-panel .pos-pnl) {
-    font-variant-numeric: tabular-nums lining-nums;
+  .terminal-shell :global(.scan-btn) {
+    border-color: rgba(232, 150, 125, 0.45);
+    background: linear-gradient(135deg, rgba(232, 150, 125, 0.3), rgba(232, 150, 125, 0.15));
+    color: var(--term-accent-soft);
+  }
+  .terminal-shell :global(.scan-btn:hover) {
+    border-color: rgba(232, 150, 125, 0.62);
+    background: linear-gradient(135deg, rgba(232, 150, 125, 0.42), rgba(232, 150, 125, 0.24));
+    color: var(--term-text);
+    box-shadow: 0 0 10px rgba(232, 150, 125, 0.28);
+  }
+  .terminal-shell :global(.draw-btn:hover) {
+    background: rgba(232, 150, 125, 0.11);
+    color: var(--term-accent-soft);
+    border-color: rgba(232, 150, 125, 0.35);
+  }
+  .terminal-shell :global(.draw-btn.active) {
+    background: rgba(232, 150, 125, 0.22);
+    color: var(--term-accent-soft);
+    border-color: rgba(232, 150, 125, 0.42);
+    box-shadow: 0 0 6px rgba(232, 150, 125, 0.24);
+  }
+  .terminal-shell :global(.drawing-indicator) {
+    background: rgba(232, 150, 125, 0.14);
+    border-color: rgba(232, 150, 125, 0.34);
+    color: var(--term-accent-soft);
+  }
+  .terminal-shell :global(.loading-overlay) {
+    background: rgba(10, 26, 13, 0.86);
+    color: rgba(240, 237, 228, 0.8);
+  }
+  .terminal-shell :global(.loader) {
+    border-color: rgba(232, 150, 125, 0.25);
+    border-top-color: var(--term-accent);
+  }
+  .terminal-shell :global(.chart-footer) {
+    border-top-color: rgba(232, 150, 125, 0.14);
+    background: rgba(8, 20, 13, 0.55);
+    color: rgba(240, 237, 228, 0.68);
+  }
+  .terminal-shell :global(.src-badge),
+  .terminal-shell :global(.draw-count) {
+    color: var(--term-accent);
+  }
+  .terminal-shell :global(.src-ws) {
+    color: var(--term-live);
+  }
+  .terminal-shell :global(.pos-rr) {
+    color: var(--term-accent-soft);
   }
 
   /* Mobile-only readability and touch ergonomics */
@@ -2849,12 +2330,12 @@
     border-radius: 7px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-sym) {
-    font-size: 10px;
-    letter-spacing: .55px;
+    font-size: 9px;
+    letter-spacing: .7px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-pair),
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-arrow) {
-    font-size: 8px;
+    font-size: 7px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-panel:not(.mobile)) {
     width: min(92vw, 320px);
@@ -2870,8 +2351,8 @@
     min-height: 20px;
     height: 20px;
     padding: 0 6px;
-    font-size: 9px;
-    letter-spacing: .25px;
+    font-size: 8px;
+    letter-spacing: .4px;
     border-radius: 5px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats) {
@@ -2889,12 +2370,12 @@
     gap: 4px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-k) {
-    font-size: 8px;
-    letter-spacing: .25px;
+    font-size: 7px;
+    letter-spacing: .45px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-v) {
-    font-size: 9px;
-    letter-spacing: .1px;
+    font-size: 8px;
+    letter-spacing: .25px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .bar-right) {
     width: auto;
@@ -2917,8 +2398,8 @@
   .terminal-mobile :global(.chart-wrapper .chart-bar .mode-toggle .mode-btn) {
     min-height: 20px;
     padding: 0 6px;
-    font-size: 9px;
-    letter-spacing: .25px;
+    font-size: 8px;
+    letter-spacing: .45px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .draw-tools .draw-btn) {
     width: 20px;
@@ -2929,8 +2410,8 @@
     min-height: 20px;
     height: 20px;
     padding: 0 6px;
-    font-size: 9px;
-    letter-spacing: .2px;
+    font-size: 8px;
+    letter-spacing: .4px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info) {
     margin-left: auto;
@@ -2943,10 +2424,10 @@
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .cprc) {
     font-size: 11px;
-    letter-spacing: .08px;
+    letter-spacing: .2px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .pchg) {
-    font-size: 9px;
+    font-size: 8px;
   }
   .terminal-mobile :global(.chart-wrapper .indicator-strip) {
     padding: 3px 5px;
@@ -2964,7 +2445,7 @@
     min-height: 18px;
     height: 18px;
     padding: 0 5px;
-    font-size: 8px;
+    font-size: 7px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-footer) {
     gap: 6px;
@@ -3029,6 +2510,13 @@
     .mob-content.chart-only {
       padding: 4px 6px calc(6px + var(--mob-nav-slot));
     }
+    .mob-quick-actions {
+      gap: 6px;
+    }
+    .mob-quick-btn {
+      height: 32px;
+      font-size: 8px;
+    }
     .mob-bottom-nav {
       padding: 6px 8px calc(4px + env(safe-area-inset-bottom));
       min-height: calc(54px + env(safe-area-inset-bottom));
@@ -3053,6 +2541,9 @@
       max-width: 36vw;
       padding: 4px 7px;
       font-size: 8px;
+    }
+    .mob-meta-chip.subtle {
+      display: none;
     }
     .mob-nav-label {
       font-size: 9px;

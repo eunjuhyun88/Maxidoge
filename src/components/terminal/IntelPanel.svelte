@@ -17,8 +17,6 @@
   export let chatMessages: { from: string; icon: string; color: string; text: string; time: string; isUser: boolean; isSystem?: boolean }[] = [];
   export let isTyping = false;
   export let prioritizeChat = false;
-  export let chatFocusKey = 0;
-  export let chatTradeReady = false;
   type ScanHighlight = {
     agent: string;
     vote: 'long' | 'short' | 'neutral';
@@ -95,7 +93,6 @@
   // Chat input (local)
   let chatInput = '';
   let chatEl: HTMLDivElement;
-  let _lastChatFocusKey = 0;
 
   function setTab(tab: string) {
     if (activeTab === tab) {
@@ -151,13 +148,6 @@
   // Auto-scroll chat when messages change
   $: if (chatMessages.length && chatEl) {
     setTimeout(() => { if (chatEl) chatEl.scrollTop = chatEl.scrollHeight; }, 50);
-  }
-
-  $: if (chatFocusKey !== _lastChatFocusKey) {
-    _lastChatFocusKey = chatFocusKey;
-    activeTab = 'intel';
-    innerTab = 'chat';
-    tabCollapsed = false;
   }
 
   $: opens = $openTrades;
@@ -494,15 +484,6 @@
             <div class="ac-section ac-embedded">
               <div class="ac-header">
                 <span class="ac-title">🤖 AGENT CHAT</span>
-                <button
-                  class="ac-trade-btn"
-                  class:ready={chatTradeReady}
-                  on:click={() => dispatch('gototrade')}
-                  disabled={!chatTradeReady}
-                  title={chatTradeReady ? 'Move to chart and start drag trade planner' : 'Ask in chat first to unlock trade action'}
-                >
-                  TRADE ON CHART
-                </button>
               </div>
               <!-- scan-brief 제거: 스캔 데이터는 채팅 패널에 표시하지 않음 -->
               <div class="ac-msgs" bind:this={chatEl}>
@@ -1346,7 +1327,6 @@
   .ac-section.ac-embedded { border-top: 0; }
   .ac-header {
     display: flex; align-items: center; gap: 6px;
-    justify-content: space-between;
     padding: 5px 8px 3px;
     flex-shrink: 0;
   }
@@ -1403,34 +1383,6 @@
   .ac-title {
     font-family: var(--fm); font-size: 10px; font-weight: 900;
     letter-spacing: 2px; color: var(--yel);
-  }
-  .ac-trade-btn {
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.58);
-    border-radius: 999px;
-    padding: 3px 8px;
-    font-family: var(--fm);
-    font-size: 8px;
-    font-weight: 800;
-    letter-spacing: .65px;
-    white-space: nowrap;
-    cursor: not-allowed;
-    transition: all .12s ease;
-  }
-  .ac-trade-btn.ready {
-    border-color: rgba(0, 255, 136, 0.46);
-    background: rgba(0, 255, 136, 0.18);
-    color: #d9ffe9;
-    cursor: pointer;
-  }
-  .ac-trade-btn.ready:hover {
-    border-color: rgba(0, 255, 136, 0.7);
-    background: rgba(0, 255, 136, 0.28);
-    color: #f4fff8;
-  }
-  .ac-trade-btn:disabled {
-    opacity: 0.66;
   }
   .ac-msgs {
     flex: 1;
