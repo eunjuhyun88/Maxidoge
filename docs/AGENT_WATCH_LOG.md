@@ -1064,3 +1064,17 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - merge commit: `f8318b2`
   - push target: `origin/main` (pending in this task)
 - Status: DONE
+
+### W-20260225-0055-passport-codex
+
+- Start (KST): 2026-02-25 00:55
+- Agent: Codex (GPT-5)
+- Branch: `main`
+- Scope (planned):
+  - Passport 백엔드 설계안 작성(터미널 데이터 저장/조회 연계 포함)
+  - 트레이딩 기록/성능 분석/강점·약점 분석/AI 학습 확장 경로 정의
+  - 설계 문서를 repo docs에 추가
+- Overlap check (before work):
+  - `## main...origin/main` (clean)
+  - single worktree(`/Users/ej/Downloads/maxidoge-clones/frontend-passport`) 확인
+- Status: IN_PROGRESS
