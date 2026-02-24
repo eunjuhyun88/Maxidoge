@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { normalizePair, normalizeTradeDir, PAIR_RE, toPositiveNumber } from '$lib/server/apiValidation';
+import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
 
 interface QuickTradeRow {
   id: string;
@@ -75,7 +76,30 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       [user.id, pair, dir, entry, tp, sl, currentPrice, source, note]
     );
 
-    return json({ success: true, trade: mapTrade(result.rows[0]) });
+    const trade = mapTrade(result.rows[0]);
+
+    await enqueuePassportEventBestEffort({
+      userId: user.id,
+      eventType: 'quick_trade_opened',
+      sourceTable: 'quick_trades',
+      sourceId: trade.id,
+      traceId: `quick-trade:${trade.id}`,
+      idempotencyKey: `quick_trade_opened:${trade.id}`,
+      payload: {
+        context: {
+          pair: trade.pair,
+          source: trade.source,
+        },
+        decision: {
+          dir: trade.dir,
+          entry: trade.entry,
+          tp: trade.tp,
+          sl: trade.sl,
+        },
+      },
+    });
+
+    return json({ success: true, trade });
   } catch (error: any) {
     if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
