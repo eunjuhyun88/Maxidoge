@@ -4,7 +4,16 @@
   import { openTrades, closeQuickTrade } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
   import { predictMarkets, loadPolymarkets } from '$lib/stores/predictStore';
-  import { unifiedPositions, polymarketPositions, gmxPositions, hydratePositions, positionsLoading } from '$lib/stores/positionStore';
+  import {
+    polymarketPositions,
+    gmxPositions,
+    pendingPositions,
+    hydratePositions,
+    pollPendingPositions,
+    positionsLoading,
+    positionsError,
+    positionsLastSyncedAt,
+  } from '$lib/stores/positionStore';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import { parseOutcomePrices } from '$lib/api/polymarket';
   import PolymarketBetPanel from './PolymarketBetPanel.svelte';
@@ -45,6 +54,14 @@
   let showGmxPanel = false;  // GmxTradePanel visibility
   let tabCollapsed = false;
   let _uiStateSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  let _positionsPollTimer: ReturnType<typeof setInterval> | null = null;
+  let _positionsRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  let _positionsLastRefreshAt = 0;
+  let _positionVisibilityListener: (() => void) | null = null;
+
+  const POSITIONS_MIN_REFRESH_MS = 8_000;
+  const POSITIONS_PENDING_POLL_MS = 6_000;
+  const POSITIONS_FULL_REFRESH_MS = 30_000;
 
   // ═══ Live data from API (replaces hardcoded) ═══
   interface HeadlineEx extends Headline {
@@ -123,6 +140,39 @@
     }, 260);
   }
 
+  async function syncPositions(force = false) {
+    const now = Date.now();
+    if (!force && now - _positionsLastRefreshAt < POSITIONS_MIN_REFRESH_MS) return;
+    _positionsLastRefreshAt = now;
+    await hydratePositions();
+    await pollPendingPositions();
+  }
+
+  function syncPendingIfVisible() {
+    if (activeTab !== 'positions') return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    void pollPendingPositions();
+  }
+
+  function refreshPositionsNow() {
+    void syncPositions(true);
+  }
+
+  function startPositionSyncLoop() {
+    if (_positionsPollTimer) clearInterval(_positionsPollTimer);
+    if (_positionsRefreshTimer) clearInterval(_positionsRefreshTimer);
+
+    _positionsPollTimer = setInterval(() => {
+      syncPendingIfVisible();
+    }, POSITIONS_PENDING_POLL_MS);
+
+    _positionsRefreshTimer = setInterval(() => {
+      if (activeTab !== 'positions') return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void syncPositions(true);
+    }, POSITIONS_FULL_REFRESH_MS);
+  }
+
   function handleClosePos(id: string) {
     const trade = opens.find(t => t.id === id);
     if (!trade) return;
@@ -163,6 +213,23 @@
   $: opens = $openTrades;
   $: openCount = opens.length;
   $: latestScanTime = latestScan ? new Date(latestScan.createdAt).toTimeString().slice(0, 5) : '';
+  $: positionCount = openCount + $gmxPositions.length + $polymarketPositions.length;
+  $: pendingCount = $pendingPositions.length;
+  $: positionsSyncStatus = $positionsLoading
+    ? 'SYNCING...'
+    : $positionsError
+      ? 'SYNC ERROR'
+      : $positionsLastSyncedAt
+        ? `SYNCED ${formatRelativeTime($positionsLastSyncedAt)} AGO`
+        : 'NOT SYNCED';
+
+  let _prevActiveTab = activeTab;
+  $: {
+    if (activeTab === 'positions' && _prevActiveTab !== 'positions') {
+      void syncPositions(true);
+    }
+    _prevActiveTab = activeTab;
+  }
 
   // ═══ Filter headlines by current chart ticker ═══
   $: currentToken = $gameState.pair.split('/')[0] || 'BTC';
@@ -428,6 +495,19 @@
   onMount(() => {
     loadPolymarkets();
     hydrateCommunityPosts();
+    void syncPositions(true);
+    startPositionSyncLoop();
+
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden && activeTab === 'positions') {
+        void syncPositions(true);
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+      _positionVisibilityListener = handleVisibility;
+    }
+
     void (async () => {
       const ui = await fetchUiStateApi();
       // 채팅이 항상 최우선 — 저장된 상태보다 우선
@@ -457,6 +537,11 @@
   onDestroy(() => {
     if (_pairRefetchTimer) clearTimeout(_pairRefetchTimer);
     if (_uiStateSaveTimer) clearTimeout(_uiStateSaveTimer);
+    if (_positionsPollTimer) clearInterval(_positionsPollTimer);
+    if (_positionsRefreshTimer) clearInterval(_positionsRefreshTimer);
+    if (_positionVisibilityListener && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', _positionVisibilityListener);
+    }
   });
 </script>
 
@@ -841,6 +926,33 @@
             <button class="pos-sub" class:active={posSubTab === 'markets'} on:click={() => posSubTab = 'markets'}>MARKETS</button>
           </div>
 
+          <div class="pos-sync-row">
+            <span
+              class="pos-sync-badge"
+              class:loading={$positionsLoading}
+              class:error={!!$positionsError}
+              class:ok={!$positionsLoading && !$positionsError}
+            >
+              {positionsSyncStatus}
+            </span>
+            {#if pendingCount > 0}
+              <span class="pos-sync-pending">{pendingCount} pending</span>
+            {/if}
+            <span class="pos-sync-total">{positionCount} total</span>
+            <button class="pos-sync-btn" on:click={refreshPositionsNow} disabled={$positionsLoading}>
+              REFRESH
+            </button>
+          </div>
+
+          {#if $positionsError}
+            <div class="pos-sync-error-msg">
+              {$positionsError}
+              {#if !$positionsLoading}
+                <button class="pos-sync-inline-btn" on:click={refreshPositionsNow}>retry</button>
+              {/if}
+            </div>
+          {/if}
+
           <!-- ALL / TRADES: Quick Trade Positions -->
           {#if posSubTab === 'all' || posSubTab === 'trades'}
             {#if openCount > 0}
@@ -1213,6 +1325,95 @@
   }
   .pos-sub:hover { background: rgba(255,230,0,.05); color: rgba(255,255,255,.6); }
   .pos-sub.active { background: rgba(255,230,0,.08); color: var(--yel); border-color: rgba(255,230,0,.25); }
+
+  .pos-sync-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    min-height: 20px;
+  }
+  .pos-sync-badge {
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .7px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.16);
+    color: rgba(255,255,255,.65);
+    background: rgba(255,255,255,.04);
+    white-space: nowrap;
+  }
+  .pos-sync-badge.loading {
+    color: rgba(255,230,0,.88);
+    border-color: rgba(255,230,0,.28);
+    background: rgba(255,230,0,.1);
+  }
+  .pos-sync-badge.error {
+    color: rgba(255,95,130,.9);
+    border-color: rgba(255,95,130,.34);
+    background: rgba(255,95,130,.12);
+  }
+  .pos-sync-badge.ok {
+    color: rgba(0,230,138,.86);
+    border-color: rgba(0,230,138,.26);
+    background: rgba(0,230,138,.1);
+  }
+  .pos-sync-pending,
+  .pos-sync-total {
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .7px;
+    color: rgba(255,255,255,.56);
+    white-space: nowrap;
+  }
+  .pos-sync-total {
+    margin-right: auto;
+  }
+  .pos-sync-btn {
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .8px;
+    padding: 4px 7px;
+    color: rgba(255,230,0,.84);
+    background: rgba(255,230,0,.08);
+    border: 1px solid rgba(255,230,0,.24);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .pos-sync-btn:hover:not(:disabled) {
+    background: rgba(255,230,0,.16);
+    border-color: rgba(255,230,0,.38);
+  }
+  .pos-sync-btn:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+  }
+  .pos-sync-error-msg {
+    margin-top: -2px;
+    margin-bottom: 6px;
+    font: 400 9px/1.35 var(--fm);
+    color: rgba(255,120,120,.9);
+    border-left: 2px solid rgba(255,120,120,.45);
+    background: rgba(255,120,120,.08);
+    padding: 5px 7px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    word-break: break-word;
+  }
+  .pos-sync-inline-btn {
+    margin-left: auto;
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .6px;
+    border: 1px solid rgba(255,120,120,.34);
+    border-radius: 3px;
+    background: rgba(255,120,120,.14);
+    color: rgba(255,160,160,.95);
+    padding: 2px 6px;
+    cursor: pointer;
+  }
+  .pos-sync-inline-btn:hover {
+    background: rgba(255,120,120,.2);
+  }
 
   /* ── Polymarket position row ── */
   .poly-row .pos-entry { font-size: 9px; color: rgba(255,255,255,.35); }
