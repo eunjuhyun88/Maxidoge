@@ -135,6 +135,7 @@ export interface MatchDBRecord extends DBRecord {
   lp: number;
   score: number;
   agents: string[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   hypothesis: any;
   battleResult: string | null;
   consensusType: string | null;

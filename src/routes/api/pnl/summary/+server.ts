@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { errorContains } from '$lib/utils/errorUtils';
 
 interface AggregateRow {
   source: string | null;
@@ -37,8 +38,8 @@ export const GET: RequestHandler = async ({ cookies }) => {
         count: Number(r.count),
       })),
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[pnl/summary] unexpected error:', error);

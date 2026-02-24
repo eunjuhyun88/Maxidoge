@@ -186,8 +186,9 @@ function fromScanResult(scanId: string, scan: WarRoomScanResult): RunTerminalSca
   };
 }
 
-export function isPersistenceUnavailableError(error: any): boolean {
-  const code = typeof error?.code === 'string' ? error.code : '';
+export function isPersistenceUnavailableError(error: unknown): boolean {
+  const errObj = error as Record<string, unknown> | null | undefined;
+  const code = typeof errObj?.code === 'string' ? errObj.code : '';
   return code === '42P01' || code === '42703' || code === '23503';
 }
 
@@ -267,7 +268,7 @@ export async function runTerminalScan(
       persisted: true,
       data: fromScanResult(scanId, scan),
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (isPersistenceUnavailableError(error)) {
       const scanId = randomUUID();
       return {
@@ -333,7 +334,7 @@ export async function listTerminalScans(
         total: Number(totalRes.rows[0]?.total ?? '0'),
       },
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (isPersistenceUnavailableError(error)) {
       return {
         records: [],
@@ -384,7 +385,7 @@ export async function getTerminalScan(
         signals: signals.rows.map(mapSignalRow),
       },
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (isPersistenceUnavailableError(error)) {
       return { record: null, warning: 'terminal scan tables are unavailable' };
     }
@@ -411,7 +412,7 @@ export async function getTerminalScanSignals(
       [scanId, userId]
     );
     return { records: rows.rows.map(mapSignalRow) };
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (isPersistenceUnavailableError(error)) {
       return { records: [], warning: 'terminal scan tables are unavailable' };
     }

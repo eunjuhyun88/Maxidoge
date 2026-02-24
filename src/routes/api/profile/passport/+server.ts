@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { errorContains } from '$lib/utils/errorUtils';
 
 export const GET: RequestHandler = async ({ cookies }) => {
   try {
@@ -25,7 +26,8 @@ export const GET: RequestHandler = async ({ cookies }) => {
       ),
     ]);
 
-    const p: any = profile.rows[0] || {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p: Record<string, any> = profile.rows[0] || {};
     const totalMatches = Number(matchSummary.rows[0]?.count ?? p.total_matches ?? 0);
     const totalWins = Number(matchSummary.rows[0]?.wins ?? p.wins ?? 0);
     const winRate = totalMatches > 0 ? (totalWins / totalMatches) * 100 : 0;
@@ -51,8 +53,8 @@ export const GET: RequestHandler = async ({ cookies }) => {
         },
       },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[profile/passport] unexpected error:', error);

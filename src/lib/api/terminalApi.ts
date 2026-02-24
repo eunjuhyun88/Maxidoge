@@ -116,6 +116,7 @@ async function apiCall<T extends JsonRecord>(url: string, options?: RequestInit)
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
+    signal: options?.signal ?? AbortSignal.timeout(10_000),
   });
   const payload: unknown = await res.json().catch(() => null);
   if (!res.ok || !isSuccessEnvelope(payload)) {

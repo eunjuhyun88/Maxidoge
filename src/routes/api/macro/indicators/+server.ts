@@ -45,7 +45,7 @@ export const GET: RequestHandler = async () => {
       },
       { headers: { 'Cache-Control': 'public, max-age=300' } }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[macro/indicators] error:', error);
     return json({ error: 'Failed to fetch macro indicators' }, { status: 500 });
   }

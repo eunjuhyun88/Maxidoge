@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { UUID_RE } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
 async function recalcLikes(postId: string) {
   const likes = await query<{ cnt: string }>(
@@ -58,8 +59,8 @@ export const POST: RequestHandler = async ({ cookies, request, params }) => {
     ).catch(() => undefined);
 
     return json({ success: true, inserted: inserted.rowCount > 0, likes });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[community/posts/react/post] unexpected error:', error);
@@ -101,8 +102,8 @@ export const DELETE: RequestHandler = async ({ cookies, request, params, url }) 
 
     const likes = await recalcLikes(id);
     return json({ success: true, removed: result.rowCount, likes });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[community/posts/react/delete] unexpected error:', error);

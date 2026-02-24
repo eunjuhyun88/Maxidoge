@@ -31,14 +31,14 @@ export async function fetchKlinesServer(
   const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
   if (!res.ok) throw new Error(`Binance klines ${res.status}`);
 
-  const data: any[][] = await res.json();
+  const data: unknown[][] = await res.json();
   const klines: BinanceKline[] = data.map((k) => ({
-    time: Math.floor(k[0] / 1000),
-    open: parseFloat(k[1]),
-    high: parseFloat(k[2]),
-    low: parseFloat(k[3]),
-    close: parseFloat(k[4]),
-    volume: parseFloat(k[5]),
+    time: Math.floor(Number(k[0]) / 1000),
+    open: parseFloat(String(k[1])),
+    high: parseFloat(String(k[2])),
+    low: parseFloat(String(k[3])),
+    close: parseFloat(String(k[4])),
+    volume: parseFloat(String(k[5])),
   }));
 
   setCache(cacheKey, klines, KLINE_CACHE_TTL);

@@ -153,6 +153,7 @@ export async function fetchTopProtocols(limit = 20): Promise<DeFiProtocol[]> {
 
     return json
       .filter((p: any) => p.tvl > 0)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .sort((a: any, b: any) => (b.tvl ?? 0) - (a.tvl ?? 0))
       .slice(0, limit)
       .map((p: any) => ({

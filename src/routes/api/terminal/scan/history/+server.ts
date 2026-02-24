@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { listTerminalScans } from '$lib/services/scanService';
+import { errorContains } from '$lib/utils/errorUtils';
 
 export const GET: RequestHandler = async ({ cookies, url }) => {
   try {
@@ -26,8 +27,8 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
         pagination: result.pagination,
       },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[terminal/scan/history/get] unexpected error:', error);

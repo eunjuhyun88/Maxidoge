@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { parseSessionCookie, SESSION_COOKIE_NAME } from '$lib/server/session';
+import { errorContains } from '$lib/utils/errorUtils';
 
 export const POST: RequestHandler = async ({ cookies }) => {
   try {
@@ -22,8 +23,8 @@ export const POST: RequestHandler = async ({ cookies }) => {
           `,
           [parsed.token, parsed.userId]
         );
-      } catch (error: any) {
-        if (error?.code === '42703') {
+      } catch (error: unknown) {
+        if ((error as Record<string, unknown>)?.code === '42703') {
           await query(
             `
               UPDATE sessions
@@ -41,8 +42,8 @@ export const POST: RequestHandler = async ({ cookies }) => {
 
     cookies.delete(SESSION_COOKIE_NAME, { path: '/' });
     return json({ success: true });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[auth/logout] unexpected error:', error);

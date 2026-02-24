@@ -90,6 +90,7 @@ async function cmcFetch<T>(path: string, params: Record<string, string> = {}): P
 
 // ─── Helper: Parse coin from CMC response ─────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseCMCCoin(raw: any, rank?: number): CMCTrendingCoin | null {
   if (!raw) return null;
   const usd = raw?.quote?.USD;
@@ -191,10 +192,14 @@ export async function fetchCMCGainersLosers(limit = 10): Promise<{
 
     return {
       gainers: gainersRaw
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((r: any, i: number) => ({ ...parseCMCCoin(r, i + 1), direction: 'gainer' as const }))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .filter((c: any): c is CMCGainerLoser => c !== null && c.symbol),
       losers: losersRaw
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((r: any, i: number) => ({ ...parseCMCCoin(r, i + 1), direction: 'loser' as const }))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .filter((c: any): c is CMCGainerLoser => c !== null && c.symbol),
     };
   }

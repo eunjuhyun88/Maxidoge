@@ -63,6 +63,7 @@ async function postJson<TResponse>(url: string, body: unknown): Promise<TRespons
     headers: {
       'content-type': 'application/json',
     },
+    signal: AbortSignal.timeout(10_000),
     body: JSON.stringify(body),
   });
 

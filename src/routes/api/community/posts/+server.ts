@@ -3,8 +3,10 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
-function mapRow(row: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRow(row: Record<string, any>) {
   return {
     id: row.id,
     userId: row.user_id,
@@ -52,8 +54,8 @@ export const GET: RequestHandler = async ({ url }) => {
       records: rows.rows.map(mapRow),
       pagination: { limit, offset },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[community/posts/get] unexpected error:', error);
@@ -101,8 +103,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     ).catch(() => undefined);
 
     return json({ success: true, post: mapRow(insert.rows[0]) });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

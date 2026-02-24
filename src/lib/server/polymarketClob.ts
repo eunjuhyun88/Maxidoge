@@ -208,6 +208,7 @@ export async function getMarketBySlug(slug: string): Promise<MarketDetails | nul
   return parseMarketResponse(markets[0], cacheKey);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseMarketResponse(raw: any, cacheKey: string): MarketDetails | null {
   if (!raw) return null;
   try {

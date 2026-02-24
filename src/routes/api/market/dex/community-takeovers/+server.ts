@@ -17,7 +17,7 @@ export const GET: RequestHandler = async ({ url }) => {
         },
       }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[market/dex/community-takeovers/get] unexpected error:', error);
     return json({ error: 'Failed to load community takeovers' }, { status: 500 });
   }

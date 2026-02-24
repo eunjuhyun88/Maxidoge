@@ -23,7 +23,7 @@ export const GET: RequestHandler = async ({ url }) => {
       { ok: true, data },
       { headers: { 'Cache-Control': 'public, max-age=120' } }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[api/onchain/cryptoquant] error:', error);
     return json({ error: 'Failed to fetch CryptoQuant data' }, { status: 500 });
   }

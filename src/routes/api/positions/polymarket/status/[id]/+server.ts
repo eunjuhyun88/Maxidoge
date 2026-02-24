@@ -133,7 +133,7 @@ export const GET: RequestHandler = async ({ cookies, params, getClientAddress })
         updatedAt: new Date(pos.updated_at).getTime(),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[positions/polymarket/status] error:', error);
     return json({ error: 'Failed to check status' }, { status: 500 });
   }

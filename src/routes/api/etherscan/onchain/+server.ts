@@ -63,7 +63,7 @@ export const GET: RequestHandler = async () => {
       },
       { headers: { 'Cache-Control': 'public, max-age=60' } }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[etherscan/onchain] error:', error);
     return json({ error: 'Failed to fetch on-chain data' }, { status: 500 });
   }

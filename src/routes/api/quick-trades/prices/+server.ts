@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toPositiveNumber, UUID_RE } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
 interface PriceUpdateItem {
   id: string;
@@ -108,7 +109,7 @@ async function applyTickerMap(userId: string, prices: Record<string, number>) {
   return Number(result.rows[0]?.updated ?? '0');
 }
 
-async function handle(cookies: any, request: Request) {
+async function handle(cookies: import('@sveltejs/kit').Cookies, request: Request) {
   const user = await getAuthUserFromCookies(cookies);
   if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
@@ -149,8 +150,8 @@ async function handle(cookies: any, request: Request) {
 export const PATCH: RequestHandler = async ({ cookies, request }) => {
   try {
     return await handle(cookies, request);
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

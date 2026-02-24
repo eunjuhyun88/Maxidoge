@@ -1,7 +1,7 @@
 # MAXI⚡DOGE v3 Refactoring Backlog
 
 Created: 2026-02-22
-Updated: 2026-02-23 (Arena v3 PvP/Tournament split 반영)
+Updated: 2026-02-23 (Agent 4 코드 감사 기반 상태 동기화)
 Doc index: `docs/README.md`
 Rule: **Contract → BE → FE**, never mixed in one PR
 
@@ -18,7 +18,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **S-03** | Price 계약 단일화 | `livePrice` 단일 스토어/이벤트 규약 정의 (심볼, 타임스탬프, source) | ✅ |
 | **S-04** | Arena DraftSelection 계약 고정 | `{ agentId, specId, weight }[]` + 합계 100 검증 규칙 확정 | ✅ |
 | **S-05** | Terminal Persistence Migration | `005_terminal_persistence.sql` (scan_runs/scan_signals/agent_chat_messages) | ✅ |
-| **S-06** | Arena Competitive Contract | Arena `mode(PVE/PVP/TOURNAMENT)`, PvP pool 상태, Tournament Ban/Pick payload 계약 확정 | ⬜ |
+| **S-06** | Arena Competitive Contract | Arena `mode(PVE/PVP/TOURNAMENT)`, PvP pool 상태, Tournament Ban/Pick payload 계약 확정 | 🟡 (mode enum+tournament status 구현, Ban/Pick/PvP pool 미구현) |
 
 ### S-01 상세: Agent 브릿지 단일화
 - **변경 파일**: `src/lib/data/agents.ts`
@@ -86,7 +86,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **B-10** | Terminal Chat API | 기존 `/api/chat/messages` 확장 (meta.mentionedAgent → 에이전트 응답 생성) | B-09 | ✅ |
 | **B-11** | Market Data API | 뉴스(RSS)/이벤트(온체인)/플로우(스마트머니) + DexScreener(boost/ads/takeover/search) 프록시 | — | ✅ |
 | **B-12** | PvP Matching Pool API | `/api/pvp/pool/create`, `/available`, `/:id/accept` + 4h 만료 watchdog | B-01, S-06 | ⬜ |
-| **B-13** | Tournament API | `/api/tournaments/active`, `/register`, `/bracket`, `/ban`, `/draft` | B-01, S-06 | ⬜ |
+| **B-13** | Tournament API | `/api/tournaments/active`, `/register`, `/bracket`, `/ban`, `/draft` | B-01, S-06 | 🟡 (active/register/bracket 완료, ban/draft 미구현) |
 | **B-14** | Competitive Settlement Engine | mode별 LP/ELO/FBS 정산 + `arena_matches`/`lp_transactions` 반영 | B-03, B-12, B-13 | ⬜ |
 
 ---
@@ -101,18 +101,18 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **F-01** | AGDEFS 소비부 치환 | 현재 AGDEFS 참조 16개 파일을 브릿지/신규 모델 기준으로 정리 | S-01 | ✅ |
 | **F-02** | progressionStore 소비 통일 | wallet/userProfile/agentData의 중복 계산 제거, 표시값 단일화 (Oracle 프로필 모달 Tier/Phase 표시 교체 포함) | S-02 | ⬜ |
 | **F-03** | priceService 적용 | Header/Chart/Terminal의 WS/interval 중복 제거, 단일 구독으로 통일 | S-03, B-05 | ⬜ |
-| **F-04** | Lobby v3 | 8에이전트 표시, 3개 선택, 가중치 합 100, Spec 선택 UI | S-04, F-01 | ⬜ |
-| **F-05** | SquadConfig v3 | 기존 risk/timeframe 중심 UI를 DraftSelection 중심으로 교체 | S-04, F-01 | ⬜ |
-| **F-06** | Arena 5-Phase 화면 정리 | ANALYSIS/HYPOTHESIS/BATTLE/RESULT를 agentPipeline 출력 기반으로 재구성 | F-04, B-03 | ⬜ |
-| **F-07** | WarRoom UI 분해 | WarRoom.svelte 렌더링 전용 축소 (현재 1142줄 → 목표 800 이하) | B-02 | ⬜ |
-| **F-08** | 가시성/UI 정리 | 인텔/채팅/지표바 접기·라벨·모바일 동선 최종 튜닝 | F-06, F-07 | ⬜ |
+| **F-04** | Lobby v3 | 8에이전트 표시, 3개 선택, 가중치 합 100, Spec 선택 UI | S-04, F-01 | ✅ |
+| **F-05** | SquadConfig v3 | 기존 risk/timeframe 중심 UI를 DraftSelection 중심으로 교체 | S-04, F-01 | ✅ |
+| **F-06** | Arena 5-Phase 화면 정리 | ANALYSIS/HYPOTHESIS/BATTLE/RESULT를 agentPipeline 출력 기반으로 재구성 | F-04, B-03 | ✅ |
+| **F-07** | WarRoom UI 분해 | WarRoom.svelte 렌더링 전용 축소 (현재 1142줄 → 목표 800 이하) | B-02 | ✅ |
+| **F-08** | 가시성/UI 정리 | 인텔/채팅/지표바 접기·라벨·모바일 동선 최종 튜닝 | F-06, F-07 | 🟡 (ChartPanel/Terminal 1차 완료, 모바일 미세 조정 잔여) |
 | **F-09** | Store 전환 | localStorage primary → Supabase primary (quickTrade/tracked/scanTabs/chat) | B-09, B-10 | ⬜ |
 | **F-10** | 하드코딩 제거 | LIVE FEED/HEADLINES/EVENTS/FLOW → API fetch, chat 응답 → 스캔 컨텍스트 | B-09, B-10, B-11 | ✅ |
 | **F-11** | 영속성 검증 | 새로고침/다른기기/오프라인 시 데이터 복원 확인 | F-09, F-10 | ⬜ |
 | **F-12** | Oracle 모달 정합성 | Oracle 프로필 모달의 `TIER: CONNECTED`, `PHASE P1` 구형 표기를 v3 계약 값으로 교체 | F-02 | ⬜ |
-| **F-13** | Lobby Hub v3 | 모드 카드(PvE/PvP/Tournament) + 진행중 매치 + 주간 토너 위젯 구성 | S-06, B-12, B-13 | ⬜ |
+| **F-13** | Lobby Hub v3 | 모드 카드(PvE/PvP/Tournament) + 진행중 매치 + 주간 토너 위젯 구성 | S-06, B-12, B-13 | ✅ |
 | **F-14** | PvP Pool UI | AUTO/BROWSE/CREATE 플로우 + 대기열/수락 + 만료 처리 | F-13, B-12 | ⬜ |
-| **F-15** | Tournament UI | 등록/대진표/Ban-Pick/라운드 전환 UI + 배지/보상 노출 | F-13, B-13, B-14 | ⬜ |
+| **F-15** | Tournament UI | 등록/대진표/Ban-Pick/라운드 전환 UI + 배지/보상 노출 | F-13, B-13, B-14 | 🟡 (등록/대진표 완료, Ban-Pick UI 미구현) |
 
 ---
 
@@ -172,3 +172,12 @@ Phase 5: 경쟁모드 확장 (Arena v3)
 | 진행 규칙 공통 함수 | stores/progressionRules.ts | ✅ |
 | Arena guardian→macro | arena/+page.svelte | ✅ |
 | warroom.ts guardian→macro | data/warroom.ts | ✅ |
+| Arena API 풀 라이프사이클 | routes/api/arena/* + arenaService.ts | ✅ |
+| exitOptimizer 3전략+Kelly | engine/exitOptimizer.ts (588 LOC) | ✅ |
+| 데이터 수집 40+ 프록시 | server/providers/* + market routes | ✅ |
+| scanEngine 서버 분리 | server/scanEngine.ts + server/binance.ts | ✅ |
+| Lobby Hub 모드 카드 | components/arena/Lobby.svelte | ✅ |
+| SquadConfig DraftSelection | components/arena/SquadConfig.svelte | ✅ |
+| Arena 5-Phase UI | arena/+page.svelte (ANALYSIS~RESULT) | ✅ |
+| Tournament 기초 API | tournaments/active, register, bracket | ✅ |
+| livePrice 스토어 계약 | stores/priceStore.ts + livePriceSyncService.ts | ✅ |

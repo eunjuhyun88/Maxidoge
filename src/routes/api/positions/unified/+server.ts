@@ -168,7 +168,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
       positions: positions.slice(0, limit),
       total: positions.length,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[positions/unified] error:', error);
     return json({ error: 'Failed to fetch positions' }, { status: 500 });
   }

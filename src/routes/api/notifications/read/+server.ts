@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { UUID_RE } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
 export const POST: RequestHandler = async ({ cookies, request }) => {
   try {
@@ -38,8 +39,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     );
 
     return json({ success: true, updated: result.rowCount });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[notifications/read] unexpected error:', error);

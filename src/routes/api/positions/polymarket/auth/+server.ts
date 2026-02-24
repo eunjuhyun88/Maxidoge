@@ -46,7 +46,7 @@ export const GET: RequestHandler = async ({ cookies, url, getClientAddress }) =>
       timestamp,
       nonce,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[polymarket/auth GET] error:', error);
     return json({ error: 'Failed to build auth data' }, { status: 500 });
   }
@@ -123,7 +123,7 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
       ok: true,
       authenticated: true,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[polymarket/auth POST] error:', error);
     return json({ error: 'Failed to authenticate with Polymarket' }, { status: 500 });
   }

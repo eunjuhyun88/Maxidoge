@@ -3,10 +3,12 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { normalizePair, PAIR_RE, toBoundedInt } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
 const TIMEFRAMES = new Set(['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w']);
 
-function mapRow(row: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRow(row: Record<string, any>) {
   return {
     userId: row.user_id,
     defaultPair: row.default_pair,
@@ -46,8 +48,8 @@ export const GET: RequestHandler = async ({ cookies }) => {
 
     const row = await ensurePreferences(user.id);
     return json({ success: true, preferences: mapRow(row) });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[preferences/get] unexpected error:', error);
@@ -142,8 +144,8 @@ export const PUT: RequestHandler = async ({ cookies, request }) => {
     ).catch(() => undefined);
 
     return json({ success: true, preferences: mapRow(result.rows[0]) });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

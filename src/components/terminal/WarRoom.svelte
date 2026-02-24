@@ -51,50 +51,52 @@
   const MAX_SCAN_TABS = 6;
   const MAX_SIGNALS_PER_TAB = 60;
 
-  let activeToken: TokenFilter = 'ALL';
-  let selectedIds: Set<string> = new Set();
-  let scanTabs: ScanTab[] = [];
+  let activeToken: TokenFilter = $state('ALL');
+  let selectedIds: Set<string> = $state(new Set());
+  let scanTabs: ScanTab[] = $state([]);
   // 기본값: 스캔 없으면 preset(빈 상태), 스캔 있으면 최신 스캔
-  let activeScanId = 'preset';
-  let scanRunning = false;
-  let scanQueued = false;
-  let scanStep = '';
-  let scanError = '';
-  let scanStateHydrated = false;
-  let serverScanSynced = false;
+  let activeScanId = $state('preset');
+  let scanRunning = $state(false);
+  let scanQueued = $state(false);
+  let scanStep = $state('');
+  let scanError = $state('');
+  let scanStateHydrated = $state(false);
+  let serverScanSynced = $state(false);
 
   // ── Scan Diff: 이전 스캔과 비교 ──
   let _prevSignalMap = new Map<string, { vote: AgentSignal['vote']; conf: number }>();
-  let signalDiffs = new Map<string, SignalDiff>();
-  let diffFreshUntil = 0;     // diff 하이라이트 유지 시간 (ms)
+  let signalDiffs: Map<string, SignalDiff> = $state(new Map());
+  let diffFreshUntil = $state(0);     // diff 하이라이트 유지 시간 (ms)
 
   // ── Derivatives Data (real-time from Coinalyze) ──
-  let derivOI: number | null = null;
-  let derivFunding: number | null = null;
-  let derivPredFunding: number | null = null;
-  let derivLSRatio: number | null = null;
-  let derivLiqLong = 0;
-  let derivLiqShort = 0;
-  let derivLoading = false;
-  let derivLastPair = '';
+  let derivOI: number | null = $state(null);
+  let derivFunding: number | null = $state(null);
+  let derivPredFunding: number | null = $state(null);
+  let derivLSRatio: number | null = $state(null);
+  let derivLiqLong = $state(0);
+  let derivLiqShort = $state(0);
+  let derivLoading = $state(false);
+  let derivLastPair = $state('');
   let derivRefreshTimer: ReturnType<typeof setInterval> | null = null;
   let _visibilityHandler: (() => void) | null = null;
 
   // ── Cache: avoid redundant API calls (60s TTL per pair) ──
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const _derivCache = new Map<string, { ts: number; data: any }>();
   const DERIV_CACHE_TTL = 60_000;
   let _derivDebounce: ReturnType<typeof setTimeout> | null = null;
 
-  $: currentPair = $gameState.pair;
-  $: currentTF = $gameState.timeframe;
+  let currentPair = $derived($gameState.pair);
+  let currentTF = $derived($gameState.timeframe);
 
   // 프리셋(하드코딩) 데이터 제거 — 실제 스캔 데이터만 표시
-  $: signalPool =
+  let signalPool = $derived(
     activeScanId === 'preset'
       ? (scanTabs.length > 0 ? scanTabs.flatMap(t => t.signals).slice(0, MAX_SIGNALS_PER_TAB) : [])
-      : scanTabs.find((tab) => tab.id === activeScanId)?.signals ?? scanTabs[0]?.signals ?? [];
+      : scanTabs.find((tab) => tab.id === activeScanId)?.signals ?? scanTabs[0]?.signals ?? []
+  );
 
-  $: {
+  $effect.pre(() => {
     if (activeScanId === 'preset') {
       // noop
     } else {
@@ -119,33 +121,35 @@
         }
       }
     }
-  }
+  });
 
-  $: if (scanStateHydrated && typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(
-        SCAN_STATE_STORAGE_KEY,
-        JSON.stringify({
-          activeScanId,
-          activeToken,
-          scanTabs: scanTabs.slice(0, MAX_SCAN_TABS)
-        })
-      );
-    } catch (err) {
-      console.warn('[WarRoom] Failed to persist scan state', err);
+  $effect(() => {
+    if (scanStateHydrated && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(
+          SCAN_STATE_STORAGE_KEY,
+          JSON.stringify({
+            activeScanId,
+            activeToken,
+            scanTabs: scanTabs.slice(0, MAX_SCAN_TABS)
+          })
+        );
+      } catch (err) {
+        console.warn('[WarRoom] Failed to persist scan state', err);
+      }
     }
-  }
+  });
 
-  $: tokenTabs = ['ALL', ...Array.from(new Set(signalPool.map((s) => s.token)))];
-  $: tokenCounts = tokenTabs.reduce<Record<string, number>>((acc, tok) => {
+  let tokenTabs = $derived(['ALL', ...Array.from(new Set(signalPool.map((s) => s.token)))]);
+  let tokenCounts = $derived.by(() => tokenTabs.reduce<Record<string, number>>((acc, tok) => {
     acc[tok] = tok === 'ALL' ? signalPool.length : signalPool.filter((s) => s.token === tok).length;
     return acc;
-  }, {});
-  $: activeScanTab = activeScanId === 'preset'
+  }, {}));
+  let activeScanTab = $derived(activeScanId === 'preset'
     ? null
-    : scanTabs.find((tab) => tab.id === activeScanId) ?? null;
-  $: if (!tokenTabs.includes(activeToken)) activeToken = 'ALL';
-  $: filteredSignals = (() => {
+    : scanTabs.find((tab) => tab.id === activeScanId) ?? null);
+  $effect.pre(() => { if (!tokenTabs.includes(activeToken)) activeToken = 'ALL'; });
+  let filteredSignals = $derived.by(() => {
     const base = activeToken === 'ALL' ? signalPool : signalPool.filter((s) => s.token === activeToken);
     // diff 활성중이면 변화 큰 순서로 정렬
     if (diffFreshUntil > Date.now() && signalDiffs.size > 0) {
@@ -158,25 +162,25 @@
       });
     }
     return base;
-  })();
-  $: selectedCount = selectedIds.size;
-  $: avgConfidence = signalPool.length > 0
+  });
+  let selectedCount = $derived(selectedIds.size);
+  let avgConfidence = $derived.by(() => signalPool.length > 0
     ? Math.round(signalPool.reduce((sum, sig) => sum + sig.conf, 0) / signalPool.length)
-    : 0;
-  $: avgRR = signalPool.length > 0
+    : 0);
+  let avgRR = $derived.by(() => signalPool.length > 0
     ? signalPool.reduce((sum, sig) => {
       const risk = Math.max(Math.abs(sig.entry - sig.sl), 0.0001);
       return sum + Math.abs(sig.tp - sig.entry) / risk;
     }, 0) / signalPool.length
-    : 0;
-  $: consensusDir = (() => {
+    : 0);
+  let consensusDir = $derived.by(() => {
     const counts = { long: 0, short: 0, neutral: 0 };
     signalPool.forEach((sig) => counts[sig.vote]++);
     if (counts.long > counts.short && counts.long > counts.neutral) return 'LONG';
     if (counts.short > counts.long && counts.short > counts.neutral) return 'SHORT';
     return 'NEUTRAL';
-  })();
-  $: trackedCount = $activeSignalCount;
+  });
+  let trackedCount = $derived($activeSignalCount);
 
   function roundPrice(value: number): number {
     if (!Number.isFinite(value)) return 0;
@@ -471,13 +475,15 @@
   }
 
   // Debounced refetch when pair changes (prevents rapid switching spam)
-  $: if (currentPair && currentPair !== derivLastPair) {
-    if (_derivDebounce) clearTimeout(_derivDebounce);
-    _derivDebounce = setTimeout(fetchDerivativesData, 200);
-  }
+  $effect(() => {
+    if (currentPair && currentPair !== derivLastPair) {
+      if (_derivDebounce) clearTimeout(_derivDebounce);
+      _derivDebounce = setTimeout(fetchDerivativesData, 200);
+    }
+  });
 
   // ── Volatility alert ──
-  let volatilityAlert = false;
+  let volatilityAlert = $state(false);
   let volatilityInterval: ReturnType<typeof setInterval> | null = null;
 
   function handleTrack(sig: AgentSignal) {

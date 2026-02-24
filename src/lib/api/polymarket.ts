@@ -31,7 +31,7 @@ export interface PolyOrderBook {
  */
 export async function fetchPolymarkets(limit = 20): Promise<PolyMarket[]> {
   try {
-    const res = await fetch(`/api/polymarket/markets?limit=${limit}`);
+    const res = await fetch(`/api/polymarket/markets?limit=${limit}`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     return data.markets || [];
@@ -46,7 +46,7 @@ export async function fetchPolymarkets(limit = 20): Promise<PolyMarket[]> {
  */
 export async function fetchOrderbook(tokenId: string): Promise<PolyOrderBook | null> {
   try {
-    const res = await fetch(`/api/polymarket/orderbook?token_id=${tokenId}`);
+    const res = await fetch(`/api/polymarket/orderbook?token_id=${tokenId}`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {

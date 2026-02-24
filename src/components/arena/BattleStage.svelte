@@ -2,11 +2,10 @@
   import { gameState } from '$lib/stores/gameState';
   import { AGDEFS, SOURCES } from '$lib/data/agents';
 
-  let state = $gameState;
-  $: state = $gameState;
+  let state = $derived($gameState);
 
   // Active agents for this match
-  $: activeAgents = AGDEFS.filter(a => state.selectedAgents.includes(a.id));
+  let activeAgents = $derived(AGDEFS.filter(a => state.selectedAgents.includes(a.id)));
 </script>
 
 <div class="battle-stage">

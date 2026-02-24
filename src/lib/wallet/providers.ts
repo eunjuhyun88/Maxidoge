@@ -141,6 +141,7 @@ export function getPreferredEvmChainCode(): string {
 async function getWalletConnectProvider(): Promise<Eip1193Provider> {
   if (_walletConnectProvider) return _walletConnectProvider;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mod: any;
   try {
     const moduleName = '@walletconnect/ethereum-provider';
@@ -171,6 +172,7 @@ async function getWalletConnectProvider(): Promise<Eip1193Provider> {
 async function getCoinbaseProvider(): Promise<Eip1193Provider> {
   if (_coinbaseProvider) return _coinbaseProvider;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mod: any;
   try {
     const moduleName = '@coinbase/wallet-sdk';

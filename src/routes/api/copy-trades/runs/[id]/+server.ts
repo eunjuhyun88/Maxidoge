@@ -3,8 +3,10 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { UUID_RE } from '$lib/server/apiValidation';
+import { errorContains } from '$lib/utils/errorUtils';
 
-function mapRow(row: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRow(row: Record<string, any>) {
   return {
     id: row.id,
     userId: row.user_id,
@@ -40,8 +42,8 @@ export const GET: RequestHandler = async ({ cookies, params }) => {
 
     if (!result.rowCount) return json({ error: 'Copy-trade run not found' }, { status: 404 });
     return json({ success: true, run: mapRow(result.rows[0]) });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[copy-trades/runs/id/get] unexpected error:', error);

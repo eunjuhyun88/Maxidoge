@@ -120,7 +120,7 @@ export const GET: RequestHandler = async ({ url, getClientAddress }) => {
       },
       { headers: { 'Cache-Control': 'public, max-age=60' } }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[opportunity-scan] error:', error);
     return json({ error: 'Opportunity scan failed' }, { status: 500 });
   }

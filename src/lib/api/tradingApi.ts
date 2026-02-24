@@ -49,6 +49,7 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
       ...(init.headers || {}),
     },
     ...init,
+    signal: init?.signal ?? AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
