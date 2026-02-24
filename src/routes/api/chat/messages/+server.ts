@@ -1,91 +1,21 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { AGENT_POOL } from '$lib/engine/agents';
-import { detectMentionedAgent, inferAgentFromIntent, normalizeAgentName } from '$lib/chat/agentRouting';
-import { query } from '$lib/server/db';
-import { getAuthUserFromCookies } from '$lib/server/authGuard';
-import { toBoundedInt, UUID_RE } from '$lib/server/apiValidation';
-import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
-import { isPersistenceUnavailableError } from '$lib/services/scanService';
+import { detectMentionedAgent, inferAgentFromIntent } from '$lib/chat/agentRouting';
+import { buildAgentReply } from '$lib/server/chat/chatReplyService';
 import {
-  callLLM, isLLMAvailable,
-  buildAgentSystemPrompt, buildOrchestratorSystemPrompt,
-  type LLMMessage,
-} from '$lib/server/llmService';
-import { getErrorMessage, errorContains } from '$lib/utils/errorUtils';
+  countChatMessages,
+  getChatMessages,
+  insertChatActivity,
+  insertChatMessage,
+  loadScanContext,
+} from '$lib/server/chat/chatRepository';
+import type { ChatMessageRecord } from '$lib/server/chat/chatTypes';
+import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { toBoundedInt } from '$lib/server/apiValidation';
+import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
+import { errorContains } from '$lib/utils/errorUtils';
 
 const SENDER_KINDS = new Set(['user', 'agent', 'system']);
-
-type AgentChatRow = {
-  id: string;
-  user_id: string;
-  channel: string;
-  sender_kind: string;
-  sender_id: string | null;
-  sender_name: string;
-  message: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  meta: any;
-  created_at: string;
-};
-
-type ScanRunContextRow = {
-  id: string;
-  pair: string;
-  timeframe: string;
-  consensus: 'long' | 'short' | 'neutral';
-  avg_confidence: number | string;
-  summary: string;
-  created_at: string;
-};
-
-type ScanSignalContextRow = {
-  agent_id: string;
-  agent_name: string;
-  vote: 'long' | 'short' | 'neutral';
-  confidence: number | string;
-  analysis_text: string;
-  data_source: string;
-  entry_price: number | string;
-  tp_price: number | string;
-  sl_price: number | string;
-};
-
-type ScanContext = {
-  scanId: string | null;
-  pair: string;
-  timeframe: string;
-  consensus: 'long' | 'short' | 'neutral' | null;
-  avgConfidence: number | null;
-  summary: string | null;
-  signals: ScanSignalContextRow[];
-};
-
-type AgentReply = {
-  agentId: string;
-  text: string;
-  source: 'scan_context' | 'fallback';
-  scanId: string | null;
-};
-
-function toNum(value: unknown, fallback = 0): number {
-  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
-  return Number.isFinite(n) ? Number(n) : fallback;
-}
-
-function mapRow(row: AgentChatRow) {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    channel: row.channel,
-    senderKind: row.sender_kind,
-    senderId: row.sender_id,
-    senderName: row.sender_name,
-    message: row.message,
-    meta: row.meta ?? {},
-    createdAt: new Date(row.created_at).getTime(),
-  };
-}
 
 function buildEphemeralRow(input: {
   userId: string;
@@ -95,7 +25,7 @@ function buildEphemeralRow(input: {
   senderName: string;
   message: string;
   meta: Record<string, unknown>;
-}) {
+}): ChatMessageRecord {
   return {
     id: `ephemeral-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     userId: input.userId,
@@ -113,250 +43,6 @@ function normalizeMeta(input: unknown): Record<string, unknown> {
   return input && typeof input === 'object' ? { ...(input as Record<string, unknown>) } : {};
 }
 
-function formatPrice(value: number): string {
-  if (!Number.isFinite(value)) return '0';
-  if (Math.abs(value) >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  if (Math.abs(value) >= 100) return value.toFixed(2);
-  return value.toFixed(4);
-}
-
-async function loadScanContext(
-  userId: string,
-  meta: Record<string, unknown>
-): Promise<ScanContext | null> {
-  const requestedScanId = typeof meta.scanId === 'string' && UUID_RE.test(meta.scanId) ? meta.scanId : null;
-  const requestedPair = typeof meta.pair === 'string' ? meta.pair.trim().toUpperCase() : '';
-  const requestedTimeframe = typeof meta.timeframe === 'string' ? meta.timeframe.trim().toLowerCase() : '';
-
-  try {
-    let runRow: ScanRunContextRow | undefined;
-
-    if (requestedScanId) {
-      const run = await query<ScanRunContextRow>(
-        `
-          SELECT id, pair, timeframe, consensus, avg_confidence, summary, created_at
-          FROM terminal_scan_runs
-          WHERE id = $1 AND user_id = $2
-          LIMIT 1
-        `,
-        [requestedScanId, userId]
-      );
-      runRow = run.rows[0];
-    } else {
-      const filters = ['user_id = $1'];
-      const params: unknown[] = [userId];
-
-      if (requestedPair) {
-        params.push(requestedPair);
-        filters.push(`pair = $${params.length}`);
-      }
-      if (requestedTimeframe) {
-        params.push(requestedTimeframe);
-        filters.push(`timeframe = $${params.length}`);
-      }
-
-      const run = await query<ScanRunContextRow>(
-        `
-          SELECT id, pair, timeframe, consensus, avg_confidence, summary, created_at
-          FROM terminal_scan_runs
-          WHERE ${filters.join(' AND ')}
-          ORDER BY created_at DESC
-          LIMIT 1
-        `,
-        params
-      );
-      runRow = run.rows[0];
-    }
-
-    if (!runRow) {
-      return {
-        scanId: null,
-        pair: requestedPair || 'BTC/USDT',
-        timeframe: requestedTimeframe || '4h',
-        consensus: null,
-        avgConfidence: null,
-        summary: null,
-        signals: [],
-      };
-    }
-
-    const signals = await query<ScanSignalContextRow>(
-      `
-        SELECT
-          agent_id, agent_name, vote, confidence, analysis_text,
-          data_source, entry_price, tp_price, sl_price
-        FROM terminal_scan_signals
-        WHERE scan_id = $1 AND user_id = $2
-        ORDER BY confidence DESC, created_at DESC
-      `,
-      [runRow.id, userId]
-    );
-
-    return {
-      scanId: runRow.id,
-      pair: runRow.pair,
-      timeframe: runRow.timeframe,
-      consensus: runRow.consensus,
-      avgConfidence: Math.round(toNum(runRow.avg_confidence, 0)),
-      summary: runRow.summary,
-      signals: signals.rows,
-    };
-  } catch (error: unknown) {
-    if (isPersistenceUnavailableError(error)) return null;
-    console.warn('[chat/messages] failed to load scan context:', error);
-    return null;
-  }
-}
-
-/** Template fallback (LLM 불가 시 사용) */
-function buildAgentReplyFallback(
-  agentId: string,
-  _message: string,
-  context: ScanContext | null,
-  meta: Record<string, unknown>
-): AgentReply {
-  const fallbackPair = typeof meta.pair === 'string' && meta.pair ? meta.pair : 'BTC/USDT';
-  const fallbackTf = typeof meta.timeframe === 'string' && meta.timeframe ? meta.timeframe : '4h';
-
-  if (!context || context.signals.length === 0) {
-    return {
-      agentId,
-      scanId: context?.scanId ?? null,
-      source: 'fallback',
-      text:
-        `${agentId} response ready. Latest scan context is unavailable right now. ` +
-        `Re-run scan on ${fallbackPair} ${String(fallbackTf).toUpperCase()} and ask again.`,
-    };
-  }
-
-  if (agentId === 'ORCHESTRATOR') {
-    const top = context.signals
-      .slice(0, 3)
-      .map((s) => `${s.agent_name} ${s.vote.toUpperCase()} ${Math.round(toNum(s.confidence, 0))}%`)
-      .join(' · ');
-    return {
-      agentId,
-      scanId: context.scanId,
-      source: 'scan_context',
-      text:
-        `${context.pair} ${context.timeframe.toUpperCase()} consensus ${String(context.consensus || 'neutral').toUpperCase()} ` +
-        `(${context.avgConfidence ?? 0}%). ${context.summary || ''}${top ? ` Top: ${top}` : ''}`,
-    };
-  }
-
-  const target = context.signals.find((sig) => {
-    const byId = normalizeAgentName(sig.agent_id);
-    const byName = normalizeAgentName(sig.agent_name);
-    return byId === agentId || byName === agentId;
-  });
-
-  if (!target) {
-    return {
-      agentId,
-      scanId: context.scanId,
-      source: 'scan_context',
-      text:
-        `${agentId} has no direct factor row in this scan. ` +
-        `Current consensus is ${String(context.consensus || 'neutral').toUpperCase()} (${context.avgConfidence ?? 0}%).`,
-    };
-  }
-
-  const conf = Math.round(toNum(target.confidence, 0));
-  return {
-    agentId,
-    scanId: context.scanId,
-    source: 'scan_context',
-    text:
-      `${target.agent_name} ${target.vote.toUpperCase()} ${conf}% · ${context.pair} ${context.timeframe.toUpperCase()} ` +
-      `ENTRY ${formatPrice(toNum(target.entry_price, 0))} / TP ${formatPrice(toNum(target.tp_price, 0))} / ` +
-      `SL ${formatPrice(toNum(target.sl_price, 0))}. ${target.analysis_text}`,
-  };
-}
-
-/** LLM 기반 에이전트 응답 생성 (실패 시 template fallback) */
-async function buildAgentReply(
-  agentId: string,
-  message: string,
-  context: ScanContext | null,
-  meta: Record<string, unknown>
-): Promise<AgentReply> {
-  // LLM 사용 불가 → 기존 template fallback
-  if (!isLLMAvailable()) {
-    return buildAgentReplyFallback(agentId, message, context, meta);
-  }
-
-  const fallbackPair = typeof meta.pair === 'string' && meta.pair ? meta.pair : 'BTC/USDT';
-  const fallbackTf = typeof meta.timeframe === 'string' && meta.timeframe ? meta.timeframe : '4h';
-
-  // 실시간 가격 (meta에서 전달받음)
-  const livePrices = (meta.livePrices && typeof meta.livePrices === 'object')
-    ? meta.livePrices as Record<string, number>
-    : {};
-
-  // Scan context → LLM signal data 변환
-  const scanSignals = context?.signals?.map(s => ({
-    agentName: s.agent_name,
-    vote: s.vote,
-    confidence: Math.round(toNum(s.confidence, 0)),
-    analysisText: s.analysis_text || '',
-    entryPrice: toNum(s.entry_price, 0),
-    tpPrice: toNum(s.tp_price, 0),
-    slPrice: toNum(s.sl_price, 0),
-  })) ?? [];
-
-  const scanSummary = context
-    ? `${context.pair} ${context.timeframe.toUpperCase()} ${String(context.consensus || 'neutral').toUpperCase()} (${context.avgConfidence ?? 0}%). ${context.summary || ''}`
-    : null;
-
-  // 시스템 프롬프트 빌드
-  const agentDef = AGENT_POOL[agentId as keyof typeof AGENT_POOL];
-  let systemPrompt: string;
-
-  if (agentId === 'ORCHESTRATOR' || !agentDef) {
-    systemPrompt = buildOrchestratorSystemPrompt({
-      pair: fallbackPair,
-      timeframe: fallbackTf,
-      scanSummary,
-      scanSignals,
-      livePrices,
-    });
-  } else {
-    systemPrompt = buildAgentSystemPrompt({
-      agentId,
-      agentDescription: agentDef.description,
-      pair: fallbackPair,
-      timeframe: fallbackTf,
-      scanSummary,
-      scanSignals,
-      livePrices,
-    });
-  }
-
-  const messages: LLMMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: message },
-  ];
-
-  try {
-    const result = await callLLM({
-      messages,
-      maxTokens: 300,
-      temperature: 0.7,
-      timeoutMs: 12000,
-    });
-
-    return {
-      agentId,
-      scanId: context?.scanId ?? null,
-      source: context?.signals?.length ? 'scan_context' : 'fallback',
-      text: result.text,
-    };
-  } catch (err: unknown) {
-    console.warn(`[chat/messages] LLM call failed for ${agentId}, using template fallback:`, getErrorMessage(err));
-    return buildAgentReplyFallback(agentId, message, context, meta);
-  }
-}
-
 export const GET: RequestHandler = async ({ cookies, url }) => {
   try {
     const user = await getAuthUserFromCookies(cookies);
@@ -366,32 +52,15 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
     const offset = toBoundedInt(url.searchParams.get('offset'), 0, 0, 5000);
     const channel = typeof url.searchParams.get('channel') === 'string' ? url.searchParams.get('channel')!.trim() : '';
 
-    const where = channel ? 'AND channel = $2' : '';
-    const params = channel ? [user.id, channel] : [user.id];
-
-    const count = await query<{ total: string }>(
-      `SELECT count(*)::text AS total FROM agent_chat_messages WHERE user_id = $1 ${where}`,
-      params
-    );
-
-    const rows = await query<AgentChatRow>(
-      `
-        SELECT
-          id, user_id, channel, sender_kind, sender_id,
-          sender_name, message, meta, created_at
-        FROM agent_chat_messages
-        WHERE user_id = $1
-        ${where}
-        ORDER BY created_at DESC
-        LIMIT $${channel ? 3 : 2} OFFSET $${channel ? 4 : 3}
-      `,
-      channel ? [user.id, channel, limit, offset] : [user.id, limit, offset]
-    );
+    const [total, records] = await Promise.all([
+      countChatMessages(user.id, channel),
+      getChatMessages(user.id, channel, limit, offset),
+    ]);
 
     return json({
       success: true,
-      total: Number(count.rows[0]?.total ?? '0'),
-      records: rows.rows.map(mapRow).reverse(),
+      total,
+      records,
       pagination: { limit, offset },
     });
   } catch (error: unknown) {
@@ -434,28 +103,22 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const userId = user?.id ?? 'guest';
     const requestMeta = user ? meta : { ...meta, guestMode: true };
 
-    let persistedMessage: ReturnType<typeof mapRow>;
+    let persistedMessage: ChatMessageRecord;
     if (user) {
-      const insert = await query<AgentChatRow>(
-        `
-          INSERT INTO agent_chat_messages (
-            user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, now())
-          RETURNING
-            id, user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
-        `,
-        [user.id, channel, senderKind, senderId, senderName, message, JSON.stringify(requestMeta)]
-      );
-
-      persistedMessage = mapRow(insert.rows[0]);
-      await query(
-        `
-          INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
-          VALUES ($1, 'chat_sent', 'terminal', $2, 'info', $3::jsonb)
-        `,
-        [user.id, insert.rows[0].id, JSON.stringify({ channel, senderKind })]
-      ).catch(() => undefined);
+      persistedMessage = await insertChatMessage({
+        userId: user.id,
+        channel,
+        senderKind,
+        senderId,
+        senderName,
+        message,
+        meta: requestMeta,
+      });
+      await insertChatActivity({
+        userId: user.id,
+        sourceId: persistedMessage.id,
+        payload: { channel, senderKind },
+      });
     } else {
       persistedMessage = buildEphemeralRow({
         userId,
@@ -468,60 +131,27 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       });
     }
 
-    let agentResponse: ReturnType<typeof mapRow> | null = null;
+    let agentResponse: ChatMessageRecord | null = null;
 
     if (channel === 'terminal' && senderKind === 'user') {
       // 1. @멘션 감지 → 2. 인텐트 기반 추론 → 3. ORCHESTRATOR 기본
       const mentionedAgent = detectMentionedAgent(message, { mentionedAgent: meta.mentionedAgent })
         || inferAgentFromIntent(message)
         || 'ORCHESTRATOR';
-      {
-        const context = user ? await loadScanContext(user.id, meta) : null;
-        const reply = await buildAgentReply(mentionedAgent, message, context, meta);
-        const replyMeta = {
-          ...requestMeta,
-          mentionedAgent,
-          responseSource: reply.source,
-          scanId: reply.scanId,
-        };
 
-        if (user) {
-          try {
-            const replyInsert = await query<AgentChatRow>(
-              `
-                INSERT INTO agent_chat_messages (
-                  user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
-                )
-                VALUES ($1, $2, 'agent', $3, $4, $5, $6::jsonb, now())
-                RETURNING
-                  id, user_id, channel, sender_kind, sender_id, sender_name, message, meta, created_at
-              `,
-              [user.id, channel, reply.agentId, reply.agentId, reply.text, JSON.stringify(replyMeta)]
-            );
-            agentResponse = mapRow(replyInsert.rows[0]);
+      const context = user ? await loadScanContext(user.id, meta) : null;
+      const reply = await buildAgentReply(mentionedAgent, message, context, meta);
+      const replyMeta = {
+        ...requestMeta,
+        mentionedAgent,
+        responseSource: reply.source,
+        scanId: reply.scanId,
+      };
 
-            await query(
-              `
-                INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
-                VALUES ($1, 'chat_sent', 'terminal', $2, 'info', $3::jsonb)
-              `,
-              [
-                user.id,
-                replyInsert.rows[0].id,
-                JSON.stringify({
-                  channel,
-                  senderKind: 'agent',
-                  senderId: reply.agentId,
-                  source: reply.source,
-                }),
-              ]
-            ).catch(() => undefined);
-          } catch (error) {
-            console.warn('[chat/messages/post] failed to persist agent response:', error);
-          }
-        } else {
-          agentResponse = buildEphemeralRow({
-            userId,
+      if (user) {
+        try {
+          agentResponse = await insertChatMessage({
+            userId: user.id,
             channel,
             senderKind: 'agent',
             senderId: reply.agentId,
@@ -529,7 +159,29 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
             message: reply.text,
             meta: replyMeta,
           });
+          await insertChatActivity({
+            userId: user.id,
+            sourceId: agentResponse.id,
+            payload: {
+              channel,
+              senderKind: 'agent',
+              senderId: reply.agentId,
+              source: reply.source,
+            },
+          });
+        } catch (error) {
+          console.warn('[chat/messages/post] failed to persist agent response:', error);
         }
+      } else {
+        agentResponse = buildEphemeralRow({
+          userId,
+          channel,
+          senderKind: 'agent',
+          senderId: reply.agentId,
+          senderName: reply.agentId,
+          message: reply.text,
+          meta: replyMeta,
+        });
       }
     }
 
