@@ -16,7 +16,7 @@ import { query } from '$lib/server/db';
 import { prepareOrder, getOrderbook } from '$lib/server/polymarketClob';
 import { polymarketOrderLimiter } from '$lib/server/rateLimit';
 
-const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const ETH_ADDRESS_RE = /^0x[0-9a-f]{40}$/i;
 
 export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
   // Rate limit

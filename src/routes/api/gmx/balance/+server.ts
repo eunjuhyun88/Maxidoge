@@ -9,7 +9,7 @@ import type { RequestHandler } from './$types';
 import { getBalanceInfo } from '$lib/server/gmxV2';
 import { gmxReadLimiter } from '$lib/server/rateLimit';
 
-const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const ETH_ADDRESS_RE = /^0x[0-9a-f]{40}$/i;
 
 export const GET: RequestHandler = async ({ url, getClientAddress }) => {
   const ip = getClientAddress();

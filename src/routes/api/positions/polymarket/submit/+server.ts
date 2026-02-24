@@ -17,7 +17,7 @@ import { submitSignedOrder, type L2Credentials } from '$lib/server/polymarketClo
 import { polymarketOrderLimiter } from '$lib/server/rateLimit';
 import { decryptSecret } from '$lib/server/secretCrypto';
 
-const EIP712_SIG_RE = /^0x[0-9a-fA-F]{130,}$/;
+const EIP712_SIG_RE = /^0x[0-9a-f]{130,}$/i;
 
 export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
   const ip = getClientAddress();

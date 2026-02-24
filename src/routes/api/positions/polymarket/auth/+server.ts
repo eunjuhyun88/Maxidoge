@@ -15,7 +15,7 @@ import { buildAuthTypedData, deriveApiCredentials } from '$lib/server/polymarket
 import { polymarketOrderLimiter } from '$lib/server/rateLimit';
 import { encryptSecret, isSecretsEncryptionConfigured } from '$lib/server/secretCrypto';
 
-const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const ETH_ADDRESS_RE = /^0x[0-9a-f]{40}$/i;
 
 /**
  * GET — Build ClobAuth EIP-712 typed data for the user to sign.

@@ -31,7 +31,7 @@
   let signedWalletSignature = '';
   let preferredAuthStep: 'signup' | 'login' = 'signup';
 
-  const WALLET_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
+  const WALLET_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
   const preferredEvmChain = getPreferredEvmChainCode();
 
   function isWalletProviderKey(value: string): value is WalletProviderKey {

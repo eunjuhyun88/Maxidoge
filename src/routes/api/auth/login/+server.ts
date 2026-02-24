@@ -18,7 +18,7 @@ import { evaluateIpReputation } from '$lib/server/ipReputation';
 import { isBodyTooLarge, readTurnstileToken } from '$lib/server/requestGuards';
 import { verifyTurnstile } from '$lib/server/turnstile';
 
-const EVM_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
+const EVM_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
 
 export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
   const fallbackIp = getClientAddress();
