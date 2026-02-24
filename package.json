@@ -18,6 +18,7 @@
 		"safe:sync:gate": "bash scripts/dev/sync-branch.sh --gate",
 		"uiux:promote": "bash scripts/dev/uiux-promote.sh",
 		"uiux:promote:gate": "bash scripts/dev/uiux-promote.sh --gate",
+		"audit:separation": "node scripts/dev/audit-front-back-separation.mjs",
 		"perf:k6:auth-snapshot": "k6 run scripts/perf/k6-auth-snapshot.js"
 	},
 	"devDependencies": {

@@ -7,6 +7,13 @@
   import { unifiedPositions, polymarketPositions, gmxPositions, hydratePositions, positionsLoading } from '$lib/stores/positionStore';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import { parseOutcomePrices } from '$lib/api/polymarket';
+  import {
+    fetchMarketNewsFeed,
+    fetchMarketEventsFeed,
+    fetchMarketFlowFeed,
+    fetchMarketTrendingFeed,
+    fetchOpportunityScanFeed,
+  } from '$lib/api/terminalUiApi';
   import PolymarketBetPanel from './PolymarketBetPanel.svelte';
   import GmxTradePanel from './GmxTradePanel.svelte';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
@@ -183,15 +190,19 @@
     try {
       const token = ($gameState.pair || 'BTC/USDT').split('/')[0];
       const offset = append ? headlineOffset : 0;
-      const res = await fetch(
-        `/api/market/news?limit=20&offset=${offset}&token=${encodeURIComponent(token)}&sort=${headlineSortBy}&interval=1m`
-      );
-      const json = await res.json();
-      if (json.ok && json.data?.records?.length > 0) {
-        const newItems: HeadlineEx[] = json.data.records.map((r: any) => ({
+      const json = await fetchMarketNewsFeed({
+        limit: 20,
+        offset,
+        token,
+        sort: headlineSortBy,
+        interval: '1m',
+      });
+      const records = json.data?.records ?? [];
+      if (json.ok && records.length > 0) {
+        const newItems: HeadlineEx[] = records.map((r) => ({
           icon: r.sentiment === 'bullish' ? '📈' : r.sentiment === 'bearish' ? '📉' : '📊',
-          time: formatRelativeTime(r.publishedAt),
-          text: r.title || r.summary,
+          time: formatRelativeTime(r.publishedAt ?? Date.now()),
+          text: r.title || r.summary || '',
           bull: r.sentiment === 'bullish',
           link: r.link || '',
           interactions: r.interactions || 0,
@@ -204,8 +215,8 @@
         } else {
           liveHeadlines = newItems;
         }
-        headlineOffset = (json.data.offset ?? 0) + newItems.length;
-        headlineHasMore = json.data.hasMore ?? false;
+        headlineOffset = (json.data?.offset ?? 0) + newItems.length;
+        headlineHasMore = json.data?.hasMore ?? false;
         dataLoaded.headlines = true;
         dataLoaded = dataLoaded;
       }
@@ -239,10 +250,17 @@
   async function fetchLiveEvents() {
     try {
       const pair = $gameState.pair || 'BTC/USDT';
-      const res = await fetch(`/api/market/events?pair=${encodeURIComponent(pair)}`);
-      const json = await res.json();
-      if (json.ok && json.data?.records?.length > 0) {
-        liveEvents = json.data.records;
+      const json = await fetchMarketEventsFeed(pair);
+      const records = json.data?.records ?? [];
+      if (json.ok && records.length > 0) {
+        liveEvents = records.map((row) => ({
+          id: row.id ?? `${row.tag ?? 'evt'}-${row.createdAt ?? Date.now()}`,
+          tag: row.tag ?? 'INFO',
+          level: row.level ?? 'info',
+          text: row.text ?? '',
+          source: row.source ?? 'unknown',
+          createdAt: row.createdAt ?? Date.now(),
+        }));
         dataLoaded.events = true;
         dataLoaded = dataLoaded;
       }
@@ -254,8 +272,7 @@
   async function fetchLiveFlow() {
     try {
       const pair = $gameState.pair || 'BTC/USDT';
-      const res = await fetch(`/api/market/flow?pair=${encodeURIComponent(pair)}`);
-      const json = await res.json();
+      const json = await fetchMarketFlowFeed(pair);
       if (json.ok && json.data) {
         const snap = json.data.snapshot || {};
         const flows: typeof liveFlows = [];
@@ -263,7 +280,7 @@
           flows.push({
             id: 'funding',
             label: `Funding Rate ${snap.funding > 0 ? '↑' : '↓'}`,
-            addr: json.data.pair,
+            addr: json.data.pair ?? pair,
             amt: `${(snap.funding * 100).toFixed(4)}%`,
             isBuy: snap.funding < 0
           });
@@ -272,14 +289,14 @@
           flows.push({
             id: 'liq-long',
             label: '↙ Liquidations LONG 24h',
-            addr: json.data.pair,
+            addr: json.data.pair ?? pair,
             amt: `$${Math.round(snap.liqLong24h || 0).toLocaleString()}`,
             isBuy: false
           });
           flows.push({
             id: 'liq-short',
             label: '↗ Liquidations SHORT 24h',
-            addr: json.data.pair,
+            addr: json.data.pair ?? pair,
             amt: `$${Math.round(snap.liqShort24h || 0).toLocaleString()}`,
             isBuy: true
           });
@@ -288,7 +305,7 @@
           flows.push({
             id: 'volume',
             label: '↔ 24h Quote Volume',
-            addr: json.data.pair,
+            addr: json.data.pair ?? pair,
             amt: `$${(snap.quoteVolume24h / 1e9).toFixed(2)}B`,
             isBuy: (snap.priceChangePct || 0) >= 0
           });
@@ -308,13 +325,12 @@
     if (dataLoaded.trending || trendLoading) return;
     trendLoading = true;
     try {
-      const res = await fetch('/api/market/trending?section=all&limit=15', { signal: AbortSignal.timeout(10000) });
-      const json = await res.json();
+      const json = await fetchMarketTrendingFeed(15);
       if (json.ok && json.data) {
-        trendingCoins = json.data.trending ?? [];
-        trendGainers = json.data.gainers ?? [];
-        trendLosers = json.data.losers ?? [];
-        trendDexHot = json.data.dexHot ?? [];
+        trendingCoins = (json.data.trending ?? []) as unknown as TrendingCoin[];
+        trendGainers = (json.data.gainers ?? []) as unknown as GainerLoser[];
+        trendLosers = (json.data.losers ?? []) as unknown as GainerLoser[];
+        trendDexHot = (json.data.dexHot ?? []) as unknown as DexHot[];
         dataLoaded.trending = true;
         dataLoaded = dataLoaded;
       }
@@ -329,11 +345,10 @@
     if (picksLoaded || picksLoading) return;
     picksLoading = true;
     try {
-      const res = await fetch('/api/terminal/opportunity-scan?limit=15', { signal: AbortSignal.timeout(15000) });
-      const json = await res.json();
+      const json = await fetchOpportunityScanFeed(15);
       if (json.ok && json.data) {
-        topPicks = json.data.coins ?? [];
-        opAlerts = json.data.alerts ?? [];
+        topPicks = (json.data.coins ?? []) as unknown as OpScore[];
+        opAlerts = (json.data.alerts ?? []) as unknown as OpAlert[];
         macroRegime = json.data.macroBackdrop?.regime ?? '';
         picksScanTime = json.data.scanDurationMs ?? 0;
         picksLoaded = true;

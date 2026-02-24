@@ -18,6 +18,7 @@
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { alertEngine } from '$lib/services/alertEngine';
+  import { fetchLiveTickerSources, postTerminalChatMessage } from '$lib/api/terminalUiApi';
   import { onMount, onDestroy, tick } from 'svelte';
 
   // ── Panel resize state ──
@@ -654,27 +655,26 @@
 
   async function fetchLiveTicker() {
     try {
-      const [fgRes, cgRes] = await Promise.all([
-        fetch('/api/feargreed?limit=1', { signal: AbortSignal.timeout(5000) }).then(r => r.json()).catch(() => null),
-        fetch('/api/coingecko/global', { signal: AbortSignal.timeout(5000) }).then(r => r.json()).catch(() => null),
-      ]);
+      const { fearGreed, coinGecko } = await fetchLiveTickerSources();
+      const fgCurrent = fearGreed?.data?.current;
+      const global = coinGecko?.data?.global;
+      const stable = coinGecko?.data?.stablecoin;
 
       const parts: string[] = [];
-      if (cgRes?.ok && cgRes.data?.global) {
-        const g = cgRes.data.global;
-        if (g.btcDominance) parts.push(`BTC_DOM: ${g.btcDominance.toFixed(1)}%`);
-        if (g.totalVolumeUsd) parts.push(`VOL_24H: $${(g.totalVolumeUsd / 1e9).toFixed(1)}B`);
-        if (g.totalMarketCapUsd) parts.push(`MCAP: $${(g.totalMarketCapUsd / 1e12).toFixed(2)}T`);
-        if (g.ethDominance) parts.push(`ETH_DOM: ${g.ethDominance.toFixed(1)}%`);
-        if (g.marketCapChange24hPct != null) parts.push(`MCAP_24H: ${g.marketCapChange24hPct >= 0 ? '+' : ''}${g.marketCapChange24hPct.toFixed(2)}%`);
+      if (global) {
+        if (typeof global.btcDominance === 'number') parts.push(`BTC_DOM: ${global.btcDominance.toFixed(1)}%`);
+        if (typeof global.totalVolumeUsd === 'number') parts.push(`VOL_24H: $${(global.totalVolumeUsd / 1e9).toFixed(1)}B`);
+        if (typeof global.totalMarketCapUsd === 'number') parts.push(`MCAP: $${(global.totalMarketCapUsd / 1e12).toFixed(2)}T`);
+        if (typeof global.ethDominance === 'number') parts.push(`ETH_DOM: ${global.ethDominance.toFixed(1)}%`);
+        if (typeof global.marketCapChange24hPct === 'number') {
+          parts.push(`MCAP_24H: ${global.marketCapChange24hPct >= 0 ? '+' : ''}${global.marketCapChange24hPct.toFixed(2)}%`);
+        }
       }
-      if (fgRes?.ok && fgRes.data?.current) {
-        const fg = fgRes.data.current;
-        parts.push(`FEAR_GREED: ${fg.value} (${fg.classification})`);
+      if (fgCurrent && typeof fgCurrent.value === 'number') {
+        parts.push(`FEAR_GREED: ${fgCurrent.value} (${fgCurrent.classification ?? 'Unknown'})`);
       }
-      if (cgRes?.ok && cgRes.data?.stablecoin) {
-        const s = cgRes.data.stablecoin;
-        if (s.totalMcapUsd) parts.push(`STABLE_MCAP: $${(s.totalMcapUsd / 1e9).toFixed(1)}B`);
+      if (stable && typeof stable.totalMcapUsd === 'number') {
+        parts.push(`STABLE_MCAP: $${(stable.totalMcapUsd / 1e9).toFixed(1)}B`);
       }
 
       if (parts.length > 0) {
@@ -1176,60 +1176,45 @@
     isTyping = true;
 
     try {
-      const res = await fetch('/api/chat/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channel: 'terminal',
-          senderKind: 'user',
-          senderName: 'YOU',
-          message: text,
-          meta: {
-            pair: $gameState.pair || 'BTC/USDT',
-            timeframe: $gameState.timeframe || '4h',
-            mentionedAgent,
-            livePrices: { ...$livePrices },
-          },
-        }),
-        signal: AbortSignal.timeout(15000), // 15s timeout for LLM responses
+      const data = await postTerminalChatMessage({
+        channel: 'terminal',
+        senderKind: 'user',
+        senderName: 'YOU',
+        message: text,
+        meta: {
+          pair: $gameState.pair || 'BTC/USDT',
+          timeframe: $gameState.timeframe || '4h',
+          mentionedAgent,
+          livePrices: { ...$livePrices },
+        },
       });
 
       isTyping = false;
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.agentResponse) {
-          const r = data.agentResponse;
-          const agMeta = AGENT_META[r.senderName] || AGENT_META['ORCHESTRATOR'];
-          chatMessages = [...chatMessages, {
-            from: r.senderName,
-            icon: agMeta.icon,
-            color: agMeta.color,
-            text: r.message,
-            time,
-            isUser: false,
-          }];
-          const inferred = inferSuggestedDirection(String(r.message || ''));
-          if (inferred) chatSuggestedDir = inferred;
-          chatTradeReady = true;
-          gtmEvent('terminal_chat_answer_received', {
-            source: 'intel-chat',
-            pair: $gameState.pair || 'BTC/USDT',
-            timeframe: $gameState.timeframe || '4h',
-            responder: r.senderName || 'ORCHESTRATOR',
-            chars: String(r.message || '').length,
-            suggested_dir: inferred || chatSuggestedDir,
-          });
-        }
+      if (data.agentResponse) {
+        const r = data.agentResponse;
+        const agMeta = AGENT_META[r.senderName] || AGENT_META['ORCHESTRATOR'];
+        chatMessages = [...chatMessages, {
+          from: r.senderName,
+          icon: agMeta.icon,
+          color: agMeta.color,
+          text: r.message,
+          time,
+          isUser: false,
+        }];
+        const inferred = inferSuggestedDirection(String(r.message || ''));
+        if (inferred) chatSuggestedDir = inferred;
+        chatTradeReady = true;
+        gtmEvent('terminal_chat_answer_received', {
+          source: 'intel-chat',
+          pair: $gameState.pair || 'BTC/USDT',
+          timeframe: $gameState.timeframe || '4h',
+          responder: r.senderName || 'ORCHESTRATOR',
+          chars: String(r.message || '').length,
+          suggested_dir: inferred || chatSuggestedDir,
+        });
       } else {
-        let statusLabel = String(res.status);
-        try {
-          const errBody = await res.json();
-          const errMsg = typeof errBody?.error === 'string' ? errBody.error : '';
-          if (errMsg) statusLabel = `${res.status} ${errMsg}`;
-        } catch {
-          // noop
-        }
+        const statusLabel = 'empty_response';
         const offline = buildOfflineAgentReply(text, statusLabel);
         const fallbackMeta = AGENT_META[offline.sender] || AGENT_META.ORCHESTRATOR;
         if (offline.tradeDir) {
@@ -1242,7 +1227,7 @@
           source: 'intel-chat',
           pair: $gameState.pair || 'BTC/USDT',
           timeframe: $gameState.timeframe || '4h',
-          status: res.status,
+          status: 'empty_response',
           mode: 'offline_fallback',
         });
         chatMessages = [...chatMessages, {

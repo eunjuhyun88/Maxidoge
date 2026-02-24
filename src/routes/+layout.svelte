@@ -162,12 +162,14 @@
   });
 </script>
 
+<a class="skip-link" href="#main-content">Skip to content</a>
+
 <div id="app">
   <Header />
   <P0Banner />
-  <div id="main-content" class:terminal-route={$isTerminal}>
+  <main id="main-content" class:terminal-route={$isTerminal} tabindex="-1">
     {@render children()}
-  </div>
+  </main>
   {#if $isArena}
     <BottomBar />
   {/if}
@@ -188,7 +190,7 @@
     flex-direction: column;
     height: 100dvh;
     min-height: 100vh;
-    padding-top: 42px;
+    padding-top: var(--app-header-h, 42px);
     overflow: hidden;
     position: relative;
   }

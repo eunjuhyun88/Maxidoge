@@ -1228,4 +1228,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `npm run build`: PASS
 - Commit hash: PENDING
 - Push status: not executed
+
+### W-20260225-0514-maxi-doge-frontend-agent2 (finish addendum)
+
+- End (KST): 2026-02-25 05:30
+- Agent: Codex (GPT-5) / frontend-check-agent-2
+- Branch / target:
+  - source: `codex/frontend-agent2-uiux-separation-refactor`
+  - target: `main`
+- Changes (actual):
+  - 전역 UI/UX 리팩토링
+    - `src/components/layout/Header.svelte` 모바일 메뉴/가독성/접근성 중심으로 전면 재구성
+    - `src/routes/+layout.svelte` skip-link 및 main landmark 적용
+    - `src/app.css` 전역 토큰(`--app-header-h`, nav token) 및 focus/reduced-motion/skip-link 유틸 추가
+  - UI와 네트워크 관심사 분리
+    - 신규 API 레이어 `src/lib/api/terminalUiApi.ts` 추가
+    - `src/routes/terminal/+page.svelte` 및 `src/components/terminal/IntelPanel.svelte`의 직접 fetch 제거
+  - 프론트/백엔드 분리 감사 자동화
+    - `scripts/dev/audit-front-back-separation.mjs` 추가
+    - `package.json`에 `audit:separation` 스크립트 추가
+    - 생성 리포트 `docs/FRONT_BACK_SEPARATION_AUDIT.md` 추가
+- Validation:
+  - `npm run audit:separation`: PASS (`uiDirectFetch=0`, `apiExternalVendorCalls=14`, `clientServerImports=0`)
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: rebase-pending
+- Push status: not executed
+- Final working tree status: pending rebase/push
 - Status: DONE
