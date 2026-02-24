@@ -1027,3 +1027,40 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Merge hash: N/A
 - Push status: PENDING
 - Status: DONE
+
+### W-20260225-0045-passport-codex
+
+- Start (KST): 2026-02-25 00:45
+- Agent: Codex (GPT-5)
+- Branch: `codex/passport-uiux-v2`
+- Scope (planned):
+  - `codex/passport-uiux-v2`를 `main`에 머지
+  - feature/main 양쪽에서 `npm run check` + `npm run build` 재검증
+  - `origin/main` 푸시 및 통합 로그 요약 반영
+- Overlap check (before work):
+  - `## codex/passport-uiux-v2...origin/codex/passport-uiux-v2` (clean)
+  - single worktree(`/Users/ej/Downloads/maxidoge-clones/frontend-passport`) 확인
+- Status: IN_PROGRESS
+
+### W-20260225-0045-passport-codex (finish addendum)
+
+- End (KST): 2026-02-25 00:48
+- Agent: Codex (GPT-5)
+- Branch / merge target:
+  - source: `codex/passport-uiux-v2` (`4e4973a`)
+  - target: `main`
+- Changes (actual):
+  - `main` 로컬 브랜치 생성(`origin/main` 추적)
+  - `main`에서 `codex/passport-uiux-v2` 머지 실행(`--no-ff`)
+  - 머지 커밋 생성: `f8318b2`
+- Diff vs plan:
+  - 없음
+- Validation:
+  - feature(`codex/passport-uiux-v2`) `npm run check`: PASS
+  - feature(`codex/passport-uiux-v2`) `npm run build`: PASS
+  - main(`merge result`) `npm run check`: PASS
+  - main(`merge result`) `npm run build`: PASS
+- Commit / Push:
+  - merge commit: `f8318b2`
+  - push target: `origin/main` (pending in this task)
+- Status: DONE
