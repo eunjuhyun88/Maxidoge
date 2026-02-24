@@ -126,16 +126,27 @@
   };
   type TabletPanelKey = 'left' | 'center' | 'bottom';
   type TabletPanelSize = { widthPct: number; heightPct: number };
-  const TABLET_PANEL_MIN_W = 72;
-  const TABLET_PANEL_MAX_W = 100;
-  const TABLET_PANEL_MIN_H = 58;
-  const TABLET_PANEL_MAX_H = 100;
-  const TABLET_PANEL_STEP = 3;
+  const TABLET_LEFT_MIN = 188;
+  const TABLET_LEFT_MAX = 360;
+  const TABLET_BOTTOM_MIN = 164;
+  const TABLET_BOTTOM_MAX = 320;
+  const TABLET_SPLIT_STEP = 12;
   let tabletPanelSizes: Record<TabletPanelKey, TabletPanelSize> = {
     left: { widthPct: 100, heightPct: 100 },
     center: { widthPct: 100, heightPct: 100 },
     bottom: { widthPct: 100, heightPct: 100 },
   };
+  let tabletLeftWidth = 232;
+  let tabletBottomHeight = 208;
+  $: tabletLayoutStyle = `--tab-left-width: ${tabletLeftWidth}px; --tab-bottom-height: ${tabletBottomHeight}px;`;
+  type TabletSplitResizeAxis = 'x' | 'y';
+  type TabletSplitResizeState = {
+    axis: TabletSplitResizeAxis;
+    pointerId: number;
+    startClient: number;
+    startValue: number;
+  };
+  let tabletSplitResizeState: TabletSplitResizeState | null = null;
 
   function clampPercent(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value));
@@ -187,40 +198,100 @@
     return `--tab-panel-width: ${size.widthPct}%; --tab-panel-height: ${size.heightPct}%`;
   }
 
+  function getDefaultTabletLeftWidth() {
+    if (typeof window === 'undefined') return 232;
+    return Math.round(Math.min(232, Math.max(196, window.innerWidth * 0.23)));
+  }
+
+  function getDefaultTabletBottomHeight() {
+    if (typeof window === 'undefined') return 208;
+    return Math.round(Math.min(230, Math.max(176, window.innerHeight * 0.24)));
+  }
+
+  function clampTabletLeftWidth(next: number) {
+    if (typeof window === 'undefined') return Math.round(Math.min(TABLET_LEFT_MAX, Math.max(TABLET_LEFT_MIN, next)));
+    const dynamicMax = Math.min(TABLET_LEFT_MAX, Math.max(220, Math.round(window.innerWidth * 0.36)));
+    return Math.round(Math.min(dynamicMax, Math.max(TABLET_LEFT_MIN, next)));
+  }
+
+  function clampTabletBottomHeight(next: number) {
+    if (typeof window === 'undefined') return Math.round(Math.min(TABLET_BOTTOM_MAX, Math.max(TABLET_BOTTOM_MIN, next)));
+    const dynamicMax = Math.min(TABLET_BOTTOM_MAX, Math.max(196, Math.round(window.innerHeight * 0.42)));
+    return Math.round(Math.min(dynamicMax, Math.max(TABLET_BOTTOM_MIN, next)));
+  }
+
+  function applyTabletSplitDelta(axis: TabletSplitResizeAxis, signedDelta: number) {
+    if (axis === 'x') {
+      tabletLeftWidth = clampTabletLeftWidth(tabletLeftWidth + signedDelta);
+      return;
+    }
+    tabletBottomHeight = clampTabletBottomHeight(tabletBottomHeight + signedDelta);
+  }
+
+  function startTabletSplitDrag(axis: TabletSplitResizeAxis, e: PointerEvent) {
+    if (!isTablet) return;
+    const source = e.currentTarget as HTMLElement | null;
+    source?.setPointerCapture?.(e.pointerId);
+    tabletSplitResizeState = {
+      axis,
+      pointerId: e.pointerId,
+      startClient: axis === 'x' ? e.clientX : e.clientY,
+      startValue: axis === 'x' ? tabletLeftWidth : tabletBottomHeight,
+    };
+    e.preventDefault();
+    document.body.style.cursor = axis === 'x' ? 'col-resize' : 'row-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  function onTabletSplitPointerMove(e: PointerEvent) {
+    const state = tabletSplitResizeState;
+    if (!state || e.pointerId !== state.pointerId) return;
+    const currentClient = state.axis === 'x' ? e.clientX : e.clientY;
+    const delta = currentClient - state.startClient;
+    if (state.axis === 'x') {
+      tabletLeftWidth = clampTabletLeftWidth(state.startValue + delta);
+    } else {
+      // Separator up => bottom panel grows, separator down => bottom panel shrinks.
+      tabletBottomHeight = clampTabletBottomHeight(state.startValue - delta);
+    }
+    e.preventDefault();
+  }
+
+  function finishTabletSplitDrag(e?: PointerEvent) {
+    if (!tabletSplitResizeState) return;
+    if (e && e.pointerId !== tabletSplitResizeState.pointerId) return;
+    tabletSplitResizeState = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+
   function resizeTabletPanelByWheel(panel: TabletPanelKey, axis: 'x' | 'y', e: WheelEvent) {
     if (!isTablet) return;
     const rawDelta = axis === 'x' ? (Math.abs(e.deltaX) > 0 ? e.deltaX : e.deltaY) : e.deltaY;
     if (!Number.isFinite(rawDelta) || rawDelta === 0) return;
 
-    const step = e.shiftKey ? TABLET_PANEL_STEP * 2 : TABLET_PANEL_STEP;
+    const step = e.shiftKey ? TABLET_SPLIT_STEP + 8 : TABLET_SPLIT_STEP;
     const signed = rawDelta > 0 ? step : -step;
-    const current = tabletPanelSizes[panel];
     e.preventDefault();
     e.stopPropagation();
 
     if (axis === 'x') {
-      const nextWidth = clampPercent(current.widthPct + signed, TABLET_PANEL_MIN_W, TABLET_PANEL_MAX_W);
-      if (nextWidth === current.widthPct) return;
-      tabletPanelSizes = {
-        ...tabletPanelSizes,
-        [panel]: { ...current, widthPct: nextWidth },
-      };
+      // Tablet horizontal split: adjust WAR ROOM vs CHART width.
+      if (panel === 'bottom') return;
+      applyTabletSplitDelta('x', signed);
       return;
     }
 
-    const nextHeight = clampPercent(current.heightPct + signed, TABLET_PANEL_MIN_H, TABLET_PANEL_MAX_H);
-    if (nextHeight === current.heightPct) return;
-    tabletPanelSizes = {
-      ...tabletPanelSizes,
-      [panel]: { ...current, heightPct: nextHeight },
-    };
+    // Tablet vertical split: adjust CHART block vs INTEL block height.
+    applyTabletSplitDelta('y', signed);
   }
 
   function resetTabletPanelSize(panel: TabletPanelKey) {
-    tabletPanelSizes = {
-      ...tabletPanelSizes,
-      [panel]: { widthPct: 100, heightPct: 100 },
-    };
+    if (panel === 'bottom') {
+      tabletBottomHeight = getDefaultTabletBottomHeight();
+      return;
+    }
+    tabletLeftWidth = getDefaultTabletLeftWidth();
   }
 
   function getMobilePanelStyle(tab: MobileTab) {
@@ -568,7 +639,17 @@
   }
 
   function handleResize() {
+    const wasTablet = windowWidth >= BP_MOBILE && windowWidth < BP_TABLET;
     windowWidth = window.innerWidth;
+    const nowTablet = windowWidth >= BP_MOBILE && windowWidth < BP_TABLET;
+    if (!nowTablet) return;
+    if (!wasTablet) {
+      tabletLeftWidth = getDefaultTabletLeftWidth();
+      tabletBottomHeight = getDefaultTabletBottomHeight();
+      return;
+    }
+    tabletLeftWidth = clampTabletLeftWidth(tabletLeftWidth);
+    tabletBottomHeight = clampTabletBottomHeight(tabletBottomHeight);
   }
 
   async function fetchLiveTicker() {
@@ -608,6 +689,10 @@
 
   onMount(() => {
     windowWidth = window.innerWidth;
+    if (windowWidth >= BP_MOBILE && windowWidth < BP_TABLET) {
+      tabletLeftWidth = getDefaultTabletLeftWidth();
+      tabletBottomHeight = getDefaultTabletBottomHeight();
+    }
     window.addEventListener('resize', handleResize);
     window.addEventListener('pointermove', onMobilePanelPointerMove, { passive: false });
     window.addEventListener('pointerup', finishMobilePanelDrag);
@@ -615,6 +700,9 @@
     window.addEventListener('touchmove', onMobilePanelTouchMove, { passive: false });
     window.addEventListener('touchend', finishMobilePanelTouchDrag);
     window.addEventListener('touchcancel', finishMobilePanelTouchDrag);
+    window.addEventListener('pointermove', onTabletSplitPointerMove, { passive: false });
+    window.addEventListener('pointerup', finishTabletSplitDrag);
+    window.addEventListener('pointercancel', finishTabletSplitDrag);
 
     // ── Hydrate quick trades (터미널 페이지에서만 호출) ──
     void hydrateQuickTrades();
@@ -667,6 +755,7 @@
   onDestroy(() => {
     finishMobilePanelDrag();
     finishMobilePanelTouchDrag();
+    finishTabletSplitDrag();
     alertEngine.stop();
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', handleResize);
@@ -676,6 +765,9 @@
       window.removeEventListener('touchmove', onMobilePanelTouchMove);
       window.removeEventListener('touchend', finishMobilePanelTouchDrag);
       window.removeEventListener('touchcancel', finishMobilePanelTouchDrag);
+      window.removeEventListener('pointermove', onTabletSplitPointerMove);
+      window.removeEventListener('pointerup', finishTabletSplitDrag);
+      window.removeEventListener('pointercancel', finishTabletSplitDrag);
     }
   });
 
@@ -1133,7 +1225,7 @@
 
   <!-- ═══ TABLET LAYOUT (no side resizers, stacked) ═══ -->
   {:else if isTablet}
-  <div class="terminal-tablet">
+  <div class="terminal-tablet" style={tabletLayoutStyle}>
     <div class="tab-top">
       <div class="tab-left">
         <div class="tab-panel-resizable" style={getTabletPanelStyle('left')}>
@@ -1146,6 +1238,7 @@
             title="WAR ROOM 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize tablet war room width with scroll"
             on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
+            on:pointerdown={(e) => startTabletSplitDrag('x', e)}
             on:dblclick={() => resetTabletPanelSize('left')}
           ></button>
           <button
@@ -1154,10 +1247,22 @@
             title="WAR ROOM 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize tablet war room height with scroll"
             on:wheel={(e) => resizeTabletPanelByWheel('left', 'y', e)}
+            on:pointerdown={(e) => startTabletSplitDrag('y', e)}
             on:dblclick={() => resetTabletPanelSize('left')}
           ></button>
         </div>
       </div>
+      <button
+        type="button"
+        class="tab-layout-split tab-layout-split-v"
+        title="WAR ROOM / CHART 분할 조절: 스크롤/드래그/더블클릭 리셋"
+        aria-label="Resize tablet left and chart split"
+        on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
+        on:pointerdown={(e) => startTabletSplitDrag('x', e)}
+        on:dblclick={() => resetTabletPanelSize('left')}
+      >
+        <span></span>
+      </button>
       <div class="tab-center">
         <div class="tab-panel-resizable" style={getTabletPanelStyle('center')}>
           <div class="tab-panel-body tab-chart-area">
@@ -1180,6 +1285,7 @@
             title="CHART 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize tablet chart width with scroll"
             on:wheel={(e) => resizeTabletPanelByWheel('center', 'x', e)}
+            on:pointerdown={(e) => startTabletSplitDrag('x', e)}
             on:dblclick={() => resetTabletPanelSize('center')}
           ></button>
           <button
@@ -1188,11 +1294,23 @@
             title="CHART 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize tablet chart height with scroll"
             on:wheel={(e) => resizeTabletPanelByWheel('center', 'y', e)}
+            on:pointerdown={(e) => startTabletSplitDrag('y', e)}
             on:dblclick={() => resetTabletPanelSize('center')}
           ></button>
         </div>
       </div>
     </div>
+    <button
+      type="button"
+      class="tab-layout-split tab-layout-split-h"
+      title="CHART / INTEL 높이 조절: 스크롤/드래그/더블클릭 리셋"
+      aria-label="Resize tablet chart and intel split"
+      on:wheel={(e) => resizeTabletPanelByWheel('bottom', 'y', e)}
+      on:pointerdown={(e) => startTabletSplitDrag('y', e)}
+      on:dblclick={() => resetTabletPanelSize('bottom')}
+    >
+      <span></span>
+    </button>
     <div class="tab-bottom">
       <div class="tab-panel-resizable" style={getTabletPanelStyle('bottom')}>
         <div class="tab-panel-body">
@@ -1209,19 +1327,21 @@
         <button
           type="button"
           class="tab-resize-handle tab-resize-handle-x"
-          title="INTEL 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
-          aria-label="Resize tablet intel width with scroll"
-          on:wheel={(e) => resizeTabletPanelByWheel('bottom', 'x', e)}
-          on:dblclick={() => resetTabletPanelSize('bottom')}
+          title="좌우 패널 비율 조절: 스크롤 / 더블클릭 초기화"
+          aria-label="Resize tablet left and chart split with scroll"
+          on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
+          on:pointerdown={(e) => startTabletSplitDrag('x', e)}
+          on:dblclick={() => resetTabletPanelSize('left')}
         ></button>
         <button
           type="button"
-          class="tab-resize-handle tab-resize-handle-y"
-          title="INTEL 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
-          aria-label="Resize tablet intel height with scroll"
-          on:wheel={(e) => resizeTabletPanelByWheel('bottom', 'y', e)}
-          on:dblclick={() => resetTabletPanelSize('bottom')}
-        ></button>
+            class="tab-resize-handle tab-resize-handle-y"
+            title="INTEL 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize tablet intel height with scroll"
+            on:wheel={(e) => resizeTabletPanelByWheel('bottom', 'y', e)}
+            on:pointerdown={(e) => startTabletSplitDrag('y', e)}
+            on:dblclick={() => resetTabletPanelSize('bottom')}
+          ></button>
       </div>
     </div>
 
@@ -2057,22 +2177,24 @@
      TABLET — 2-col top + Intel bottom
      ═══════════════════════════════════════════ */
   .terminal-tablet {
-    display: flex;
-    flex-direction: column;
+    --tab-left-width: clamp(196px, 23vw, 232px);
+    --tab-bottom-height: clamp(176px, 24vh, 230px);
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) 8px var(--tab-bottom-height) auto;
     height: 100%;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
     overflow: hidden;
   }
   .tab-top {
-    flex: 1;
-    display: flex;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: var(--tab-left-width) 8px minmax(0, 1fr);
     min-height: 0;
     overflow: hidden;
   }
   .tab-left {
-    width: 240px;
-    flex-shrink: 0;
+    grid-column: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2080,7 +2202,7 @@
     overflow: hidden;
   }
   .tab-center {
-    flex: 1;
+    grid-column: 3;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2166,15 +2288,57 @@
     min-height: 200px;
     overflow: hidden;
   }
+  .tab-layout-split {
+    border: 0;
+    background: rgba(8, 18, 13, 0.86);
+    padding: 0;
+    margin: 0;
+    position: relative;
+    z-index: 16;
+    cursor: col-resize;
+    transition: background .14s ease;
+  }
+  .tab-layout-split span {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    display: block;
+    border-radius: 999px;
+    background: rgba(245, 196, 184, 0.45);
+  }
+  .tab-layout-split:hover,
+  .tab-layout-split:focus-visible {
+    background: rgba(232, 150, 125, 0.14);
+    outline: none;
+  }
+  .tab-layout-split-v {
+    grid-column: 2;
+  }
+  .tab-layout-split-v span {
+    width: 2px;
+    height: 52px;
+  }
+  .tab-layout-split-h {
+    grid-row: 2;
+    width: 100%;
+    cursor: row-resize;
+  }
+  .tab-layout-split-h span {
+    width: 54px;
+    height: 2px;
+  }
   .tab-bottom {
-    height: 200px;
-    flex-shrink: 0;
+    grid-row: 3;
+    height: 100%;
     border-top: 1px solid var(--term-border);
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 6px;
     overflow: hidden;
+  }
+  .terminal-tablet .ticker-bar {
+    grid-row: 4;
   }
 
   /* Route-scoped tone overrides for terminal child components */
