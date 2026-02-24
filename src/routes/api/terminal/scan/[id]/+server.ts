@@ -16,7 +16,9 @@ export const GET: RequestHandler = async ({ cookies, params }) => {
     if (!result.record) return json({ error: 'Scan not found' }, { status: 404 });
 
     return json({
+      success: true,
       ok: true,
+      record: result.record,
       warning: result.warning,
       data: result.record,
     });
@@ -28,4 +30,3 @@ export const GET: RequestHandler = async ({ cookies, params }) => {
     return json({ error: 'Failed to load scan detail' }, { status: 500 });
   }
 };
-
