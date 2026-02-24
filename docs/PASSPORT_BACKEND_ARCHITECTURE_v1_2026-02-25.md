@@ -1,5 +1,7 @@
 # Passport Backend Architecture v1 (2026-02-25)
 
+> 학습 파이프라인 상세(Pretraining/SFT/ORPO/Retraining)는 `PASSPORT_ML_ORPO_LEARNING_ARCHITECTURE_v2_2026-02-25.md`를 기준으로 한다.
+
 ## 1) 목적
 
 이 문서는 MAXI⚡DOGE 기준으로 `Terminal -> 저장 -> 집계/분석 -> Passport 표시 -> AI 학습 확장`을 하나의 백엔드 흐름으로 고정하기 위한 설계안이다.
