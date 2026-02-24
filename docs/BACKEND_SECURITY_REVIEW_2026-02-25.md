@@ -14,7 +14,7 @@
 - [x] Nonce + signature verification exists for EVM auth flow.
 - [x] Session token is random UUID and validated server-side.
 - [x] Session revocation path exists (`revoked_at` + expiry).
-- [ ] CSRF origin verification for cookie-authenticated state-changing endpoints.
+- [x] CSRF origin verification for cookie-authenticated state-changing endpoints.
 - [ ] Session binding policy (IP/UA drift threshold + forced re-auth).
 
 ### 2) Rate Limit / Abuse
@@ -81,8 +81,8 @@
 1. CSRF origin/referrer strict check 부재
    - Scope: cookie 기반 쓰기 API 전반
    - Risk: 브라우저 컨텍스트에서 예외 케이스 CSRF 가능성.
-   - Action: same-origin origin check + CSRF token 전략 추가 필요.
-   - Status: Open.
+   - Action: same-origin origin check + fetch-site guard 공통 훅 적용.
+   - Status: Fixed in this patch.
 
 2. Legacy plaintext secrets may remain
    - Scope: 기존 `users.poly_*` 데이터
@@ -95,3 +95,4 @@
 2. `db/migrations/0005_request_rate_limits.sql` 및 `supabase/migrations/012_request_rate_limits.sql` 적용.
 3. Turnstile/CF 정책 값을 staging에서 튜닝 후 production 반영.
 4. CSRF strict mode 설계/적용.
+   - Status: 완료 (hooks 기반 origin/fetch-site guard 적용)
