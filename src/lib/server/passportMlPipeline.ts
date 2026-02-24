@@ -340,6 +340,80 @@ export async function listPassportEvalReports(
   }));
 }
 
+export async function listPassportReports(
+  userId: string,
+  input: { status?: unknown; limit?: unknown },
+): Promise<
+  Array<{
+    reportId: string;
+    reportType: string;
+    modelName: string;
+    modelVersion: string;
+    periodStart: number;
+    periodEnd: number;
+    summary: string;
+    status: string;
+    createdAt: number;
+  }>
+> {
+  const limit = normalizeLimit(input.limit, 20, 100);
+  const status =
+    typeof input.status === 'string' && ['draft', 'final', 'archived'].includes(input.status.trim().toLowerCase())
+      ? input.status.trim().toLowerCase()
+      : null;
+
+  const where = ['user_id = $1'];
+  const params: unknown[] = [userId];
+  if (status) {
+    params.push(status);
+    where.push(`status = $${params.length}`);
+  }
+
+  params.push(limit);
+
+  const result = await query<{
+    report_id: string;
+    report_type: string;
+    model_name: string;
+    model_version: string;
+    period_start: string;
+    period_end: string;
+    summary_md: string;
+    status: string;
+    created_at: string;
+  }>(
+    `
+      SELECT
+        report_id,
+        report_type,
+        model_name,
+        model_version,
+        period_start,
+        period_end,
+        summary_md,
+        status,
+        created_at
+      FROM passport_reports
+      WHERE ${where.join(' AND ')}
+      ORDER BY created_at DESC
+      LIMIT $${params.length}
+    `,
+    params,
+  );
+
+  return result.rows.map((row: (typeof result.rows)[number]) => ({
+    reportId: row.report_id,
+    reportType: row.report_type,
+    modelName: row.model_name,
+    modelVersion: row.model_version,
+    periodStart: new Date(row.period_start).getTime(),
+    periodEnd: new Date(row.period_end).getTime(),
+    summary: row.summary_md,
+    status: row.status,
+    createdAt: new Date(row.created_at).getTime(),
+  }));
+}
+
 export async function listPassportTrainJobs(
   userId: string,
   input: { limit?: unknown },
