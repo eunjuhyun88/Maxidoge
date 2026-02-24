@@ -381,6 +381,233 @@ function detectFallingWedge(klines: BinanceKline[], lookaround: number): ChartPa
   return best;
 }
 
+function findExtremaIndex(
+  klines: BinanceKline[],
+  start: number,
+  end: number,
+  kind: 'high' | 'low'
+): number {
+  const from = Math.max(0, start);
+  const to = Math.min(klines.length - 1, end);
+  if (to < from) return -1;
+
+  let bestIndex = from;
+  let bestValue = kind === 'high' ? -Infinity : Infinity;
+  for (let i = from; i <= to; i += 1) {
+    const value = kind === 'high' ? klines[i].high : klines[i].low;
+    if (!isFiniteNum(value)) continue;
+    if (kind === 'high') {
+      if (value > bestValue) {
+        bestValue = value;
+        bestIndex = i;
+      }
+    } else if (value < bestValue) {
+      bestValue = value;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
+}
+
+function detectHeadAndShouldersFallback(klines: BinanceKline[]): ChartPatternDetection | null {
+  if (klines.length < 48) return null;
+
+  const markerIndex = klines.length - 1;
+  const marker = klines[markerIndex];
+  const windowSize = Math.min(72, Math.max(48, Math.floor(klines.length * 0.52)));
+  const start = Math.max(0, markerIndex - windowSize + 1);
+  const span = markerIndex - start + 1;
+  if (span < 36) return null;
+
+  const seg = Math.max(8, Math.floor(span / 3));
+  const leftStart = start;
+  const leftEnd = Math.min(markerIndex, leftStart + seg - 1);
+  const headStart = Math.min(markerIndex, leftEnd + 1);
+  const headEnd = Math.min(markerIndex, headStart + seg - 1);
+  const rightStart = Math.min(markerIndex, headEnd + 1);
+  const rightEnd = markerIndex;
+
+  const leftIdx = findExtremaIndex(klines, leftStart, leftEnd, 'high');
+  const headIdx = findExtremaIndex(klines, headStart, headEnd, 'high');
+  const rightIdx = findExtremaIndex(klines, rightStart, rightEnd, 'high');
+  if (leftIdx < 0 || headIdx < 0 || rightIdx < 0) return null;
+  if (!(leftIdx < headIdx && headIdx < rightIdx)) return null;
+
+  const left = klines[leftIdx];
+  const head = klines[headIdx];
+  const right = klines[rightIdx];
+
+  const shoulderBase = Math.max(left.high, right.high);
+  if (!isFiniteNum(shoulderBase) || shoulderBase <= 0) return null;
+  const shoulderDiff = Math.abs(left.high - right.high) / shoulderBase;
+  if (shoulderDiff > 0.08) return null;
+
+  const headLift = (head.high - shoulderBase) / shoulderBase;
+  if (headLift < 0.005) return null;
+
+  const low1Idx = findExtremaIndex(klines, leftIdx + 1, headIdx - 1, 'low');
+  const low2Idx = findExtremaIndex(klines, headIdx + 1, rightIdx - 1, 'low');
+  if (low1Idx < 0 || low2Idx < 0 || low1Idx >= low2Idx) return null;
+
+  const low1: Pivot = {
+    index: low1Idx,
+    time: klines[low1Idx].time,
+    price: klines[low1Idx].low,
+    kind: 'low',
+  };
+  const low2: Pivot = {
+    index: low2Idx,
+    time: klines[low2Idx].time,
+    price: klines[low2Idx].low,
+    kind: 'low',
+  };
+
+  const necklineAtMarker = lineValueAtIndex(low1, low2, markerIndex);
+  if (!isFiniteNum(necklineAtMarker) || necklineAtMarker <= 0) return null;
+
+  const breakoutDepth = (necklineAtMarker - marker.close) / necklineAtMarker;
+  const isConfirmed = marker.close < necklineAtMarker * (1 - HS_BREAK_BUFFER * 0.8);
+  const confidence = clamp(
+    0.32
+      + clamp(headLift / 0.02, 0, 1) * 0.34
+      + (1 - clamp(shoulderDiff / 0.08, 0, 1)) * 0.2
+      + clamp(Math.max(0, breakoutDepth) / 0.01, 0, 1) * 0.14,
+    0.32,
+    0.84
+  );
+
+  return {
+    id: `hs-fb-${klines[leftIdx].time}-${marker.time}`,
+    kind: 'head_and_shoulders',
+    name: 'Head and Shoulders',
+    shortName: 'H&S',
+    direction: 'BEARISH',
+    status: isConfirmed ? 'CONFIRMED' : 'FORMING',
+    confidence,
+    startTime: klines[leftIdx].time,
+    endTime: marker.time,
+    markerTime: marker.time,
+    markerPrice: marker.high,
+    guideLines: [
+      {
+        id: `hs-fb-neck-${marker.time}`,
+        label: 'neckline',
+        color: '#ff657a',
+        style: 'dashed',
+        from: { time: low1.time, price: low1.price },
+        to: { time: marker.time, price: necklineAtMarker },
+      },
+      {
+        id: `hs-fb-crest-left-${marker.time}`,
+        label: 'crest',
+        color: '#ff9cab',
+        style: 'solid',
+        from: { time: klines[leftIdx].time, price: klines[leftIdx].high },
+        to: { time: klines[headIdx].time, price: klines[headIdx].high },
+      },
+      {
+        id: `hs-fb-crest-right-${marker.time}`,
+        label: 'crest',
+        color: '#ff9cab',
+        style: 'solid',
+        from: { time: klines[headIdx].time, price: klines[headIdx].high },
+        to: { time: klines[rightIdx].time, price: klines[rightIdx].high },
+      },
+    ],
+  };
+}
+
+function detectFallingWedgeFallback(klines: BinanceKline[]): ChartPatternDetection | null {
+  if (klines.length < 52) return null;
+
+  const end = klines.length - 1;
+  const marker = klines[end];
+  const windowSize = Math.min(76, Math.max(52, Math.floor(klines.length * 0.55)));
+  const start = Math.max(0, end - windowSize + 1);
+  const span = end - start + 1;
+  if (span < 44) return null;
+
+  const slices = 4;
+  const chunk = Math.max(8, Math.floor(span / slices));
+  const highs: Array<{ x: number; y: number }> = [];
+  const lows: Array<{ x: number; y: number }> = [];
+
+  for (let s = 0; s < slices; s += 1) {
+    const segStart = start + s * chunk;
+    const segEnd = s === slices - 1 ? end : Math.min(end, segStart + chunk - 1);
+    if (segEnd <= segStart) continue;
+    const hiIdx = findExtremaIndex(klines, segStart, segEnd, 'high');
+    const loIdx = findExtremaIndex(klines, segStart, segEnd, 'low');
+    if (hiIdx >= 0) highs.push({ x: hiIdx, y: klines[hiIdx].high });
+    if (loIdx >= 0) lows.push({ x: loIdx, y: klines[loIdx].low });
+  }
+
+  if (highs.length < 3 || lows.length < 3) return null;
+
+  const upReg = linearRegression(highs);
+  const lowReg = linearRegression(lows);
+  if (!(upReg.slope < 0 && lowReg.slope < 0)) return null;
+  if (!(Math.abs(upReg.slope) > Math.abs(lowReg.slope) * 1.02)) return null;
+
+  const upperAt = (idx: number) => upReg.slope * idx + upReg.intercept;
+  const lowerAt = (idx: number) => lowReg.slope * idx + lowReg.intercept;
+
+  const widthStart = upperAt(start) - lowerAt(start);
+  const widthEnd = upperAt(end) - lowerAt(end);
+  if (!isFiniteNum(widthStart) || !isFiniteNum(widthEnd)) return null;
+  if (widthStart <= 0 || widthEnd <= 0) return null;
+
+  const contraction = 1 - widthEnd / widthStart;
+  if (contraction < 0.1) return null;
+
+  const upperNow = upperAt(end);
+  if (!isFiniteNum(upperNow) || upperNow <= 0) return null;
+  const isConfirmed = marker.close > upperNow * (1 + WEDGE_BREAK_BUFFER * 0.7);
+
+  const lineFit = clamp((upReg.r2 + lowReg.r2) / 2, 0, 1);
+  const slopeGap = clamp((Math.abs(upReg.slope) / Math.max(Math.abs(lowReg.slope), 1e-9) - 1) / 0.55, 0, 1);
+  const confidence = clamp(
+    0.3
+      + lineFit * 0.3
+      + clamp(contraction / 0.4, 0, 1) * 0.24
+      + slopeGap * 0.16,
+    0.3,
+    0.86
+  );
+
+  return {
+    id: `fw-fb-${klines[start].time}-${marker.time}`,
+    kind: 'falling_wedge',
+    name: 'Falling Wedge',
+    shortName: 'FW',
+    direction: 'BULLISH',
+    status: isConfirmed ? 'CONFIRMED' : 'FORMING',
+    confidence,
+    startTime: klines[start].time,
+    endTime: marker.time,
+    markerTime: marker.time,
+    markerPrice: marker.low,
+    guideLines: [
+      {
+        id: `fw-fb-upper-${marker.time}`,
+        label: 'upper',
+        color: '#ffba30',
+        style: 'dashed',
+        from: { time: klines[start].time, price: upperAt(start) },
+        to: { time: marker.time, price: upperAt(end) },
+      },
+      {
+        id: `fw-fb-lower-${marker.time}`,
+        label: 'lower',
+        color: '#ffd96b',
+        style: 'dashed',
+        from: { time: klines[start].time, price: lowerAt(start) },
+        to: { time: marker.time, price: lowerAt(end) },
+      },
+    ],
+  };
+}
+
 export function detectChartPatterns(
   klines: BinanceKline[],
   options: ChartPatternOptions = {}
@@ -390,8 +617,8 @@ export function detectChartPatterns(
   const maxPatterns = Math.max(1, options.maxPatterns ?? 3);
 
   const detections: ChartPatternDetection[] = [];
-  const hs = detectHeadAndShoulders(klines, lookaround);
-  const fw = detectFallingWedge(klines, lookaround);
+  const hs = detectHeadAndShoulders(klines, lookaround) ?? detectHeadAndShouldersFallback(klines);
+  const fw = detectFallingWedge(klines, lookaround) ?? detectFallingWedgeFallback(klines);
   if (hs) detections.push(hs);
   if (fw) detections.push(fw);
 

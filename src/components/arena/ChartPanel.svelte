@@ -52,6 +52,7 @@
   let volumePaneIndex: number | null = null;
   let rsiPaneIndex: number | null = null;
   let klineCache: BinanceKline[] = [];
+  let _klineIndexByTime = new Map<number, number>();
   let _isLoadingMore = false;
   let _noMoreHistory = false; // true when Binance returns 0 older candles
   let _currentSymbol = '';
@@ -396,6 +397,90 @@
   function toChartY(price: number): number | null {
     if (!series) return null;
     try { return series.priceToCoordinate(price); } catch { return null; }
+  }
+
+  function rebuildKlineIndexMap() {
+    const next = new Map<number, number>();
+    for (let i = 0; i < klineCache.length; i += 1) {
+      next.set(klineCache[i].time, i);
+    }
+    _klineIndexByTime = next;
+  }
+
+  function toOverlayX(time: number): number | null {
+    if (!chart) return null;
+    try {
+      const direct = chart.timeScale().timeToCoordinate(time);
+      if (Number.isFinite(direct)) return direct;
+    } catch {}
+
+    const idx = _klineIndexByTime.get(time);
+    if (idx === undefined) return null;
+    try {
+      const logical = chart.timeScale().logicalToCoordinate(idx);
+      if (Number.isFinite(logical)) return logical;
+    } catch {}
+    return null;
+  }
+
+  function toOverlayPoint(point: { time: number; price: number }): { x: number; y: number } | null {
+    const x = toOverlayX(point.time);
+    const y = toChartY(point.price);
+    if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  }
+
+  function drawPatternTag(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string) {
+    const label = text.length > 20 ? `${text.slice(0, 20)}…` : text;
+    ctx.save();
+    ctx.font = "11px 'JetBrains Mono', monospace";
+    const padX = 7;
+    const boxH = 18;
+    const boxW = Math.max(50, Math.ceil(ctx.measureText(label).width) + padX * 2);
+    const boxX = Math.max(4, Math.min(x + 8, drawingCanvas.width - boxW - 4));
+    const boxY = Math.max(4, Math.min(y - boxH - 4, drawingCanvas.height - boxH - 4));
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.strokeStyle = withAlpha(color, 0.92);
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1);
+    ctx.fillStyle = withAlpha(color, 0.96);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, boxX + padX, boxY + boxH / 2);
+    ctx.restore();
+  }
+
+  function drawPatternOverlays(ctx: CanvasRenderingContext2D) {
+    if (!drawingCanvas || detectedPatterns.length === 0) return;
+    ctx.save();
+    for (const pattern of detectedPatterns) {
+      for (const guide of pattern.guideLines) {
+        const from = toOverlayPoint(guide.from);
+        const to = toOverlayPoint(guide.to);
+        if (!from || !to) continue;
+        ctx.beginPath();
+        ctx.strokeStyle = withAlpha(guide.color, pattern.status === 'CONFIRMED' ? 0.95 : 0.78);
+        ctx.lineWidth = pattern.status === 'CONFIRMED' ? 2.6 : 2.1;
+        if (guide.style === 'dashed') ctx.setLineDash([6, 4]);
+        else ctx.setLineDash([]);
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+      }
+
+      const marker = toOverlayPoint({ time: pattern.markerTime, price: pattern.markerPrice });
+      if (!marker) continue;
+      const tagColor = pattern.direction === 'BEARISH' ? '#ff657a' : '#58d78d';
+      drawPatternTag(
+        ctx,
+        marker.x,
+        marker.y,
+        `${pattern.shortName} ${pattern.status === 'CONFIRMED' ? 'OK' : 'PEND'} ${Math.round(pattern.confidence * 100)}%`,
+        tagColor
+      );
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   function clampRoundPrice(v: number) {
@@ -1159,6 +1244,7 @@
       const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
       if (preview) drawTradePreview(ctx, preview);
     }
+    drawPatternOverlays(ctx);
   }
 
   function toOverlayPoint(time: number, price: number): { x: number; y: number } | null {
@@ -1298,7 +1384,7 @@
         try {
           const lineSeries = chart.addSeries(lwcModule.LineSeries, {
             color: guide.color,
-            lineWidth: pattern.status === 'CONFIRMED' ? 2 : 1.5,
+            lineWidth: pattern.status === 'CONFIRMED' ? 2.5 : 2,
             lineStyle: guide.style === 'dashed' ? 2 : 0,
             priceLineVisible: false,
             lastValueVisible: false,
@@ -1351,7 +1437,10 @@
     const signature = next
       .map((p) => `${p.id}:${p.status}:${Math.round(p.confidence * 100)}`)
       .join('|');
-    if (signature === _patternSignature) return;
+    if (signature === _patternSignature) {
+      renderDrawings();
+      return;
+    }
 
     _patternSignature = signature;
     detectedPatterns = next;
@@ -1362,6 +1451,11 @@
   }
 
   function forcePatternScan() {
+    if (!chart || !series || klineCache.length < 30) {
+      pushChartNotice('패턴 스캔용 데이터가 부족합니다');
+      return;
+    }
+    _patternSignature = '';
     runPatternDetection();
     if (detectedPatterns.length === 0) {
       pushChartNotice('패턴 미감지 · 조건 미충족');
@@ -1631,6 +1725,7 @@
       chart.panes()[rsiIdx].setStretchFactor(0.12);
       applyTimeScale();
       applyIndicatorVisibility();
+      resizeDrawingCanvas();
 
       await loadKlines();
 
@@ -1660,6 +1755,7 @@
         else if (k === 'f') fitChartRange();
         else if (k === 'h') setDrawingMode('hline');
         else if (k === 't') setDrawingMode('trendline');
+        else if (k === 'p') forcePatternScan();
         else if (enableTradeLineEntry && k === 'l') setDrawingMode('longentry');
         else if (enableTradeLineEntry && k === 's') setDrawingMode('shortentry');
       };
@@ -1696,6 +1792,7 @@
 
       // Prepend to cache
       klineCache = [...unique, ...klineCache];
+      rebuildKlineIndexMap();
 
       // Re-set all series data
       series.setData(klineCache.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close })));
@@ -1737,6 +1834,7 @@
     detectedPatterns = [];
     patternMarkers = [];
     _patternSignature = '';
+    _klineIndexByTime = new Map<number, number>();
     applyCombinedMarkers();
     clearPatternLineSeries();
     isLoading = true; error = '';
@@ -1761,6 +1859,7 @@
 
       // ═══ Indicators ═══
       klineCache = klines;
+      rebuildKlineIndexMap();
       const closes = klines.map(k => ({ time: k.time, close: k.close }));
 
       if (ma7Series) ma7Series.setData(computeSMA(closes, 7));
@@ -1832,6 +1931,7 @@
         if (isUpdate) klineCache[klineCache.length - 1] = kline;
         else klineCache.push(kline);
         const cLen = klineCache.length;
+        _klineIndexByTime.set(kline.time, cLen - 1);
         runPatternDetection();
 
         // MA — simple running average from last N
@@ -3635,6 +3735,17 @@
     border-color: rgba(38, 166, 154, 0.8);
     background: rgba(38, 166, 154, 0.33);
     color: #f2ffff;
+  }
+  .chart-wrapper.tv-like .scan-btn.pattern-btn {
+    border-color: rgba(38, 166, 154, 0.58);
+    background: rgba(38, 166, 154, 0.24);
+    color: #d8fffb;
+  }
+  .chart-wrapper.tv-like .scan-btn.pattern-btn:hover {
+    border-color: rgba(38, 166, 154, 0.8);
+    background: rgba(38, 166, 154, 0.34);
+    color: #f1ffff;
+    box-shadow: none;
   }
   .chart-wrapper.tv-like .draw-btn.active {
     border-color: rgba(79, 140, 255, 0.8);
