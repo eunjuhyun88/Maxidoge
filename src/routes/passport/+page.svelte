@@ -118,20 +118,262 @@
 
   // Tab state
   type TabType = 'profile' | 'wallet' | 'positions' | 'arena';
-  let activeTab: TabType = 'profile';
+  let activeTab: TabType = 'wallet';
 
   const TABS: { id: TabType; label: string; icon: string }[] = [
-    { id: 'profile', label: 'PROFILE', icon: 'ID' },
-    { id: 'wallet', label: 'WALLET', icon: 'WL' },
-    { id: 'positions', label: 'POSITIONS', icon: 'TX' },
-    { id: 'arena', label: 'ARENA', icon: 'AR' },
+    { id: 'wallet', label: 'WALLET', icon: '💼' },
+    { id: 'positions', label: 'POSITIONS', icon: '📈' },
+    { id: 'profile', label: 'PROFILE', icon: '👤' },
+    { id: 'arena', label: 'ARENA', icon: '🏟️' },
   ];
 
   const OPEN_PREVIEW_LIMIT = 4;
-  const MATCH_PREVIEW_LIMIT = 8;
+  const MATCH_PREVIEW_LIMIT = 5;
+  const HOLDINGS_PREVIEW_LIMIT = 6;
   $: openPreview = opens.slice(0, OPEN_PREVIEW_LIMIT);
   $: openOverflow = opens.slice(OPEN_PREVIEW_LIMIT);
+  $: holdingsPreview = effectiveHoldings.slice(0, HOLDINGS_PREVIEW_LIMIT);
+  $: holdingsOverflow = effectiveHoldings.slice(HOLDINGS_PREVIEW_LIMIT);
   $: matchPreview = records.slice(0, MATCH_PREVIEW_LIMIT);
+
+  type FocusTone = 'good' | 'warn' | 'bad' | 'neutral';
+  interface FocusInsight {
+    key: string;
+    value: string;
+    sub: string;
+    tone: FocusTone;
+  }
+
+  interface HeaderStat {
+    label: string;
+    value: string | number;
+    color?: string;
+  }
+
+  interface FocusCard extends FocusInsight {
+    primary?: boolean;
+  }
+
+  interface ClosedTradeLike {
+    closePnl?: number | null;
+  }
+
+  interface DirectionalTradeLike {
+    dir?: string | null;
+  }
+
+  function summarizeClosedTrades(trades: ClosedTradeLike[]) {
+    let wins = 0;
+    let losses = 0;
+    let winPnlSum = 0;
+    let lossPnlAbsSum = 0;
+
+    for (const trade of trades) {
+      const pnl = trade.closePnl ?? 0;
+      if (pnl > 0) {
+        wins += 1;
+        winPnlSum += pnl;
+      } else if (pnl < 0) {
+        losses += 1;
+        lossPnlAbsSum += Math.abs(pnl);
+      }
+    }
+
+    return {
+      wins,
+      losses,
+      avgWinPnl: wins > 0 ? winPnlSum / wins : 0,
+      avgLossPnl: losses > 0 ? lossPnlAbsSum / losses : 0
+    };
+  }
+
+  function countLongTrades(trades: DirectionalTradeLike[]): number {
+    return trades.reduce((count, trade) => count + (trade.dir === 'LONG' ? 1 : 0), 0);
+  }
+
+  function focusToneClass(tone: FocusTone): string {
+    if (tone === 'good') return 'focus-good';
+    if (tone === 'warn') return 'focus-warn';
+    if (tone === 'bad') return 'focus-bad';
+    return 'focus-neutral';
+  }
+
+  let headerStats: HeaderStat[] = [];
+  let focusCards: FocusCard[] = [];
+
+  $: closedStats = summarizeClosedTrades(closed);
+  $: closedWins = closedStats.wins;
+  $: closedLosses = closedStats.losses;
+  $: closedWinRate = closed.length > 0 ? Math.round((closedWins / closed.length) * 100) : 0;
+  $: totalLongTrades = countLongTrades([...opens, ...closed]);
+  $: totalTradeDecisions = opens.length + closed.length;
+  $: longBiasPct = totalTradeDecisions > 0 ? Math.round((totalLongTrades / totalTradeDecisions) * 100) : 50;
+  $: avgWinPnl = closedStats.avgWinPnl;
+  $: avgLossPnl = closedStats.avgLossPnl;
+  $: resolvedSamples = closed.length + records.length;
+  $: learningSamples = closed.length + records.length + tracked.length + expired.length;
+  $: learningReadinessPct = Math.min(100, Math.round((learningSamples / 40) * 100));
+  $: showFocusInsights = resolvedSamples >= 8 || learningSamples >= 20;
+
+  $: headerStats = [
+    { label: 'OPEN', value: openPos },
+    { label: 'ASSETS', value: wallet.connected ? effectiveHoldings.length : 0, color: '#8bd8ff' },
+    { label: 'WIN RATE', value: `${wr}%`, color: wr >= 50 ? '#9dffcf' : '#ff8f7e' },
+    { label: 'TRACKED', value: trackedCount, color: '#ff8c3b' }
+  ];
+
+  $: performanceInsight = (() => {
+    const sampleCount = closed.length + records.length;
+    if (sampleCount < 8) {
+      return {
+        key: 'PERFORMANCE STATUS',
+        value: 'BOOTSTRAP',
+        sub: 'Need 8+ resolved samples for reliable fit',
+        tone: 'neutral'
+      } satisfies FocusInsight;
+    }
+
+    const riskBalance = avgLossPnl <= 0 ? 1.2 : avgWinPnl / avgLossPnl;
+    if (closedWinRate >= 55 && riskBalance >= 1 && wr >= 50) {
+      return {
+        key: 'PERFORMANCE STATUS',
+        value: 'ON TRACK',
+        sub: 'Win quality and risk control are aligned',
+        tone: 'good'
+      } satisfies FocusInsight;
+    }
+
+    if (riskBalance < 0.9 || closedWinRate < 45) {
+      return {
+        key: 'PERFORMANCE STATUS',
+        value: 'TUNE RISK',
+        sub: 'Loss size is dominating your wins',
+        tone: 'bad'
+      } satisfies FocusInsight;
+    }
+
+    return {
+      key: 'PERFORMANCE STATUS',
+      value: 'MIXED',
+      sub: 'Edge exists but consistency is not stable',
+      tone: 'warn'
+    } satisfies FocusInsight;
+  })();
+
+  $: winRateInsight = (() => {
+    if (records.length < 5) {
+      return {
+        key: 'WHY WIN RATE',
+        value: `${wr}%`,
+        sub: 'Arena sample is still small',
+        tone: 'neutral'
+      } satisfies FocusInsight;
+    }
+
+    if (avgLossPnl > avgWinPnl && closedLosses >= 3) {
+      return {
+        key: 'WHY WIN RATE',
+        value: `${wr}%`,
+        sub: 'Average loss is larger than average win',
+        tone: 'bad'
+      } satisfies FocusInsight;
+    }
+
+    if (longBiasPct >= 70 || longBiasPct <= 30) {
+      return {
+        key: 'WHY WIN RATE',
+        value: `${wr}%`,
+        sub: `Directional bias is high (${longBiasPct}% LONG)`,
+        tone: 'warn'
+      } satisfies FocusInsight;
+    }
+
+    return {
+      key: 'WHY WIN RATE',
+      value: `${wr}%`,
+      sub: 'Direction and execution are mostly balanced',
+      tone: 'good'
+    } satisfies FocusInsight;
+  })();
+
+  $: actionInsight = (() => {
+    if (closed.length < 6) {
+      return {
+        key: 'NEXT IMPROVEMENT',
+        value: 'BUILD SAMPLE',
+        sub: 'Close at least 6 trades before tuning rules',
+        tone: 'neutral'
+      } satisfies FocusInsight;
+    }
+
+    if (avgLossPnl > avgWinPnl && closedLosses > 0) {
+      return {
+        key: 'NEXT IMPROVEMENT',
+        value: 'CUT LOSS FASTER',
+        sub: `Target avg loss below ${avgWinPnl.toFixed(2)}%`,
+        tone: 'bad'
+      } satisfies FocusInsight;
+    }
+
+    if (longBiasPct >= 70 || longBiasPct <= 30) {
+      return {
+        key: 'NEXT IMPROVEMENT',
+        value: 'REBALANCE BIAS',
+        sub: 'Keep LONG/SHORT split near 50:50',
+        tone: 'warn'
+      } satisfies FocusInsight;
+    }
+
+    if (openPos > 4) {
+      return {
+        key: 'NEXT IMPROVEMENT',
+        value: 'REDUCE OPEN RISK',
+        sub: 'Keep concurrent positions at 3 or less',
+        tone: 'warn'
+      } satisfies FocusInsight;
+    }
+
+    return {
+      key: 'NEXT IMPROVEMENT',
+      value: 'SCALE GRADUALLY',
+      sub: 'Increase size only if current rules stay consistent',
+      tone: 'good'
+    } satisfies FocusInsight;
+  })();
+
+  $: learningInsight = (() => {
+    if (learningSamples >= 40) {
+      return {
+        key: 'AI LEARNING READINESS',
+        value: `READY ${learningReadinessPct}%`,
+        sub: `Trades ${closed.length} · Arena ${records.length} · Signals ${tracked.length + expired.length}`,
+        tone: 'good'
+      } satisfies FocusInsight;
+    }
+
+    if (learningSamples >= 20) {
+      return {
+        key: 'AI LEARNING READINESS',
+        value: `WARMING ${learningReadinessPct}%`,
+        sub: `Need ${Math.max(0, 40 - learningSamples)} more samples for stable training`,
+        tone: 'warn'
+      } satisfies FocusInsight;
+    }
+
+    return {
+      key: 'AI LEARNING READINESS',
+      value: `COLLECTING ${learningReadinessPct}%`,
+      sub: `Need ${Math.max(0, 40 - learningSamples)} more samples to start model tuning`,
+      tone: 'neutral'
+    } satisfies FocusInsight;
+  })();
+
+  $: focusCards = [
+    { ...performanceInsight, primary: true },
+    winRateInsight,
+    actionInsight,
+    learningInsight
+  ];
 
   // Avatar options
   const AVATAR_OPTIONS = [
@@ -188,6 +430,17 @@
     void updateUiStateApi({ passportActiveTab: tab });
   }
 
+  let holdingsSyncing = false;
+  async function syncHoldingsNow() {
+    if (holdingsSyncing) return;
+    holdingsSyncing = true;
+    try {
+      await hydrateHoldings();
+    } finally {
+      holdingsSyncing = false;
+    }
+  }
+
   // Color map for known assets (donut chart)
   const ASSET_COLORS: Record<string, string> = {
     BTC: '#f7931a', ETH: '#627eea', SOL: '#14f195', AVAX: '#e84142',
@@ -229,6 +482,11 @@
       if (ui?.passportActiveTab && isPassportTab(ui.passportActiveTab)) {
         activeTab = ui.passportActiveTab;
       }
+
+      // First-time / low-data users should land on wallet view first.
+      if (activeTab === 'profile' && !wallet.connected && openPos === 0 && records.length === 0) {
+        activeTab = 'wallet';
+      }
     })();
 
     if (!wallet.connected || !wallet.address) {
@@ -238,8 +496,8 @@
 </script>
 
 <div class="passport-page">
-  <div class="sunburst"></div>
-  <div class="halftone"></div>
+  <div class="passport-sunburst"></div>
+  <div class="passport-halftone"></div>
 
   <div class="passport-scroll">
     <div class="passport-card">
@@ -287,22 +545,12 @@
             </div>
           </div>
           <div class="uh-stats">
-            <div class="uhs">
-              <span class="uhs-val" style="color:{pnlColor(pnl)}">{pnlPrefix(pnl)}{pnl.toFixed(1)}%</span>
-              <span class="uhs-lbl">PnL</span>
-            </div>
-            <div class="uhs">
-              <span class="uhs-val">{openPos}</span>
-              <span class="uhs-lbl">OPEN</span>
-            </div>
-            <div class="uhs">
-              <span class="uhs-val" style="color:#ff8c3b">{trackedCount}</span>
-              <span class="uhs-lbl">TRACKED</span>
-            </div>
-            <div class="uhs">
-              <span class="uhs-val">{wr}%</span>
-              <span class="uhs-lbl">WIN RATE</span>
-            </div>
+            {#each headerStats as stat (stat.label)}
+              <div class="uhs">
+                <span class="uhs-val" style:color={stat.color}>{stat.value}</span>
+                <span class="uhs-lbl">{stat.label}</span>
+              </div>
+            {/each}
           </div>
         </div>
 
@@ -346,23 +594,40 @@
         {/each}
       </div>
 
-      <div class="quick-actions">
-        <a class="qa-btn qa-terminal" href="/terminal" data-gtm-area="passport" data-gtm-action="open_terminal">
-          QUICK TRADE
-        </a>
-        <a class="qa-btn qa-arena" href="/arena" data-gtm-area="passport" data-gtm-action="open_arena">
-          START ARENA
-        </a>
-        {#if wallet.connected}
-          <div class="qa-chip connected" data-gtm-area="passport" data-gtm-action="wallet_status">
-            <span class="qa-dot"></span>{wallet.shortAddr} CONNECTED
-          </div>
-        {:else}
-          <button class="qa-btn qa-wallet" on:click={openWalletModal} data-gtm-area="passport" data-gtm-action="connect_wallet">
-            CONNECT WALLET
-          </button>
-        {/if}
+      <div class="control-rail">
+        <div class="quick-actions">
+          <a class="qa-btn qa-terminal" href="/terminal" data-gtm-area="passport" data-gtm-action="open_terminal">
+            QUICK TRADE
+          </a>
+          {#if activeTab !== 'arena'}
+            <a class="qa-btn qa-arena" href="/arena" data-gtm-area="passport" data-gtm-action="open_arena">
+              START ARENA
+            </a>
+          {/if}
+          {#if activeTab === 'wallet' && wallet.connected}
+            <button class="qa-btn qa-sync" on:click={syncHoldingsNow} disabled={holdingsSyncing} data-gtm-area="passport" data-gtm-action="sync_holdings">
+              {holdingsSyncing ? 'SYNCING...' : 'SYNC HOLDINGS'}
+            </button>
+          {/if}
+          {#if !wallet.connected}
+            <button class="qa-btn qa-wallet" on:click={openWalletModal} data-gtm-area="passport" data-gtm-action="connect_wallet">
+              CONNECT WALLET
+            </button>
+          {/if}
+        </div>
       </div>
+
+      {#if showFocusInsights}
+        <div class="focus-strip">
+          {#each focusCards as card, index (card.key)}
+            <div class={`focus-item ${card.primary || index === 0 ? 'focus-item-primary' : ''} ${focusToneClass(card.tone)}`}>
+              <span class="focus-k">{card.key}</span>
+              <span class="focus-v">{card.value}</span>
+              <span class="focus-sub">{card.sub}</span>
+            </div>
+          {/each}
+        </div>
+      {/if}
 
       <!-- ═══ TAB CONTENT ═══ -->
       <div class="tab-content">
@@ -458,7 +723,7 @@
                 {#if !wallet.connected}
                   <button class="vb-connect" on:click={openWalletModal}>CONNECT WALLET FOR DEFI</button>
                 {:else}
-                  <div class="vb-connected"><span class="vbc-dot"></span>{wallet.shortAddr} · {wallet.chain} · {wallet.balance.toLocaleString()} USDT</div>
+                  <div class="vb-connected"><span class="vbc-dot"></span>Wallet Connected · {wallet.chain} · {wallet.balance.toLocaleString()} USDT</div>
                 {/if}
               </div>
             </section>
@@ -495,9 +760,19 @@
                       </svg>
                     </div>
                     <div class="legend">
-                      {#each effectiveHoldings as asset}
+                      {#each holdingsPreview as asset}
                         <div class="legend-item"><span class="li-dot" style="background:{asset.color}"></span><span class="li-name">{asset.symbol}</span><span class="li-pct">{(asset.allocation * 100).toFixed(0)}%</span></div>
                       {/each}
+                      {#if holdingsOverflow.length > 0}
+                        <details class="detail-block nested-detail compact-detail">
+                          <summary>MORE ASSETS ({holdingsOverflow.length})</summary>
+                          <div class="legend overflow-legend">
+                            {#each holdingsOverflow as asset}
+                              <div class="legend-item"><span class="li-dot" style="background:{asset.color}"></span><span class="li-name">{asset.symbol}</span><span class="li-pct">{(asset.allocation * 100).toFixed(0)}%</span></div>
+                            {/each}
+                          </div>
+                        </details>
+                      {/if}
                     </div>
                   </div>
 
@@ -505,7 +780,7 @@
                     <div class="st">HOLDINGS</div>
                     <div class="htable">
                       <div class="hrow header-row"><span class="hc asset-col">ASSET</span><span class="hc">AMOUNT</span><span class="hc">VALUE</span><span class="hc">PnL</span></div>
-                      {#each effectiveHoldings as asset}
+                      {#each holdingsPreview as asset}
                         {@const assetPnl = calcPnL(asset)}
                         {@const value = asset.amount * asset.currentPrice}
                         <div class="hrow">
@@ -516,6 +791,23 @@
                         </div>
                       {/each}
                     </div>
+                    {#if holdingsOverflow.length > 0}
+                      <details class="detail-block nested-detail compact-detail">
+                        <summary>MORE HOLDINGS ({holdingsOverflow.length})</summary>
+                        <div class="htable">
+                          {#each holdingsOverflow as asset}
+                            {@const assetPnl = calcPnL(asset)}
+                            {@const value = asset.amount * asset.currentPrice}
+                            <div class="hrow">
+                              <div class="hc asset-col"><span class="ai" style="background:{asset.color}">{asset.icon}</span><div><div class="an">{asset.symbol}</div><div class="af">{asset.name}</div></div></div>
+                              <span class="hc num">{asset.amount.toLocaleString()}</span>
+                              <span class="hc num">${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                              <span class="hc num" style="color:{pnlColor(assetPnl.amount)}">{pnlPrefix(assetPnl.percent)}{assetPnl.percent.toFixed(1)}%</span>
+                            </div>
+                          {/each}
+                        </div>
+                      </details>
+                    {/if}
                   </div>
                 </div>
               </details>
@@ -552,7 +844,7 @@
                   </div>
                 {/each}
                 {#if openOverflow.length > 0}
-                  <details class="detail-block" style="margin-top: 12px;">
+                  <details class="detail-block detail-spaced">
                     <summary>MORE OPEN TRADES ({openOverflow.length})</summary>
                     {#each openOverflow as trade (trade.id)}
                       <div class="pos-row">
@@ -575,7 +867,7 @@
               {/if}
 
               {#if tracked.length > 0}
-                <details class="detail-block" style="margin-top: 12px;">
+                <details class="detail-block detail-spaced">
                   <summary>TRACKED SIGNALS ({tracked.length})</summary>
                   {#each tracked as sig (sig.id)}
                     <div class="pos-row tracked">
@@ -594,7 +886,7 @@
               {/if}
 
               {#if closed.length > 0}
-                <details class="detail-block" style="margin-top: 12px;">
+                <details class="detail-block detail-spaced">
                   <summary>RECENTLY CLOSED ({closed.length})</summary>
                   {#each closed.slice(0, 10) as trade (trade.id)}
                     <div class="pos-row closed">
@@ -687,8 +979,8 @@
 
 <style>
   .passport-page {
-    --sp-bg: #00120a;
-    --sp-bg2: #003122;
+    --sp-bg: #031611;
+    --sp-bg2: #0a2b20;
     --sp-pk: #ff8c79;
     --sp-pk-l: #ffc8c1;
     --sp-w: #f7dcd6;
@@ -699,11 +991,17 @@
     --sp-green: #9dcdb9;
     --sp-red: #ff725d;
     --sp-gold: #f7dcd6;
-    --sp-font-display: 'Sixtyfour', 'Racing Sans One', 'Press Start 2P', monospace;
-    --sp-font-label: 'Racing Sans One', 'Press Start 2P', monospace;
-    --sp-font-body: 'JetBrains Mono', monospace;
+    --sp-space-1: 4px;
+    --sp-space-2: 6px;
+    --sp-space-3: 8px;
+    --sp-space-4: 10px;
+    --sp-space-5: 12px;
+    --sp-space-6: 14px;
+    --sp-font-display: 'Orbitron', 'Space Grotesk', sans-serif;
+    --sp-font-label: 'Space Grotesk', sans-serif;
+    --sp-font-body: 'Space Grotesk', sans-serif;
     --fp: var(--sp-font-label);
-    --fd: var(--sp-font-label);
+    --fd: var(--sp-font-display);
     --fm: var(--sp-font-body);
     height: 100%;
     overflow: hidden;
@@ -711,8 +1009,8 @@
     display: flex;
     justify-content: center;
     background:
-      radial-gradient(circle at 10% 14%, rgba(255, 140, 121, 0.2) 0%, rgba(255, 140, 121, 0) 34%),
-      radial-gradient(circle at 86% 6%, rgba(157, 205, 185, 0.16) 0%, rgba(157, 205, 185, 0) 28%),
+      radial-gradient(circle at 8% 12%, rgba(255, 140, 121, 0.2) 0%, rgba(255, 140, 121, 0) 38%),
+      radial-gradient(circle at 84% 8%, rgba(157, 205, 185, 0.12) 0%, rgba(157, 205, 185, 0) 32%),
       linear-gradient(180deg, var(--sp-bg2), var(--sp-bg));
   }
 
@@ -731,7 +1029,7 @@
     background-size: 56px 34px;
     transform: perspective(420px) rotateX(56deg);
     transform-origin: center top;
-    opacity: 0.24;
+    opacity: 0.14;
   }
 
   .passport-page::after {
@@ -743,16 +1041,16 @@
     height: 2px;
     pointer-events: none;
     z-index: 1;
-    background: rgba(255, 140, 121, 0.72);
-    box-shadow: 0 0 14px rgba(255, 140, 121, 0.4), 0 0 28px rgba(255, 140, 121, 0.18);
+    background: rgba(255, 140, 121, 0.42);
+    box-shadow: 0 0 10px rgba(255, 140, 121, 0.28), 0 0 20px rgba(255, 140, 121, 0.14);
   }
 
-  .sunburst {
+  .passport-sunburst {
     position: absolute;
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    opacity: 0.22;
+    opacity: 0.14;
     background:
       radial-gradient(1px 1px at 11% 18%, rgba(255, 255, 255, 0.58) 50%, transparent 50%),
       radial-gradient(1px 1px at 29% 52%, rgba(255, 255, 255, 0.5) 50%, transparent 50%),
@@ -763,7 +1061,7 @@
     background-size: 350px 350px;
   }
 
-  .halftone {
+  .passport-halftone {
     position: absolute;
     inset: 0;
     z-index: 1;
@@ -771,21 +1069,21 @@
     background: repeating-linear-gradient(
       0deg,
       transparent 0px,
-      transparent 3px,
-      rgba(0, 0, 0, 0.08) 3px,
-      rgba(0, 0, 0, 0.08) 4px
+      transparent 4px,
+      rgba(0, 0, 0, 0.06) 4px,
+      rgba(0, 0, 0, 0.06) 5px
     );
-    opacity: 0.28;
+    opacity: 0.14;
   }
 
   .passport-scroll {
     position: relative;
     z-index: 3;
     width: 100%;
-    max-width: 1040px;
+    max-width: 1080px;
     height: 100%;
     overflow-y: auto;
-    padding: 14px;
+    padding: var(--sp-space-5) var(--sp-space-4) var(--sp-space-5);
     box-sizing: border-box;
   }
 
@@ -802,26 +1100,26 @@
     position: relative;
     overflow: hidden;
     border: 1px solid var(--sp-line);
-    border-radius: 14px;
+    border-radius: 16px;
     background:
-      radial-gradient(circle at 100% 0%, rgba(255, 140, 121, 0.18) 0%, rgba(255, 140, 121, 0) 35%),
-      linear-gradient(180deg, rgba(3, 33, 24, 0.92) 0%, rgba(1, 18, 10, 0.96) 100%);
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 140, 121, 0.14);
+      radial-gradient(circle at 100% 0%, rgba(255, 140, 121, 0.16) 0%, rgba(255, 140, 121, 0) 35%),
+      linear-gradient(180deg, rgba(9, 34, 25, 0.96) 0%, rgba(5, 20, 14, 0.98) 100%);
+    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.36), inset 0 0 0 1px rgba(255, 140, 121, 0.2);
   }
 
   .card-ribbon {
     position: relative;
     z-index: 2;
-    padding: 10px 14px;
+    padding: var(--sp-space-2) var(--sp-space-4);
     background: rgba(0, 0, 0, 0.22);
     border-bottom: 1px solid var(--sp-line);
   }
 
   .ribbon-text {
     font-family: var(--fp);
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 1.3px;
+    letter-spacing: 0.32px;
     color: var(--sp-pk-l);
   }
 
@@ -830,15 +1128,15 @@
     z-index: 2;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    padding: 14px;
+    gap: var(--sp-space-3);
+    padding: var(--sp-space-5);
     border-bottom: 1px solid var(--sp-line);
-    background: rgba(8, 20, 12, 0.54);
+    background: rgba(8, 22, 14, 0.72);
   }
 
   .uh-left {
     display: flex;
-    gap: 12px;
+    gap: var(--sp-space-2);
     min-width: 0;
     align-items: center;
   }
@@ -846,9 +1144,10 @@
   .uh-right {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    min-width: 245px;
-    align-items: flex-end;
+    gap: var(--sp-space-2);
+    width: min(430px, 100%);
+    min-width: min(320px, 100%);
+    align-items: stretch;
   }
 
   .doge-avatar {
@@ -901,10 +1200,10 @@
     text-align: left;
     cursor: pointer;
     color: var(--sp-w);
-    font-family: var(--sp-font-display);
-    font-size: clamp(13px, 1.6vw, 17px);
-    font-weight: 400;
-    letter-spacing: 0.4px;
+    font-family: var(--fm);
+    font-size: clamp(17px, 2vw, 22px);
+    font-weight: 700;
+    letter-spacing: 0.06px;
   }
 
   .name-pen {
@@ -925,7 +1224,7 @@
     background: rgba(0, 0, 0, 0.35);
     color: var(--sp-w);
     font-family: var(--fm);
-    font-size: 12px;
+    font-size: 11px;
     padding: 6px 8px;
     outline: none;
   }
@@ -944,15 +1243,15 @@
   .player-tier {
     margin-top: 2px;
     font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 1px;
+    font-size: 10px;
+    letter-spacing: 0.12px;
   }
 
   .player-addr {
     margin-top: 5px;
     color: var(--sp-dim);
     font-family: var(--fm);
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .connect-mini {
@@ -964,35 +1263,40 @@
     padding: 5px 10px;
     font-family: var(--fp);
     font-size: 9px;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.12px;
     cursor: pointer;
   }
 
   .port-val {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
     text-align: right;
   }
 
   .pv-label {
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 8px;
-    letter-spacing: 1.2px;
+    font-size: 9px;
+    letter-spacing: 0.12px;
   }
 
   .pv-amount {
-    margin-top: 4px;
+    margin-top: 2px;
     color: var(--sp-w);
-    font-family: var(--sp-font-display);
-    font-size: clamp(18px, 2vw, 24px);
-    font-weight: 400;
-    line-height: 1.08;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(22px, 2.8vw, 32px);
+    font-weight: 700;
+    line-height: 1.02;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
   }
 
   .pv-pnl {
-    margin-top: 4px;
+    margin-top: 2px;
     font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 0.8px;
+    font-size: 10px;
+    letter-spacing: 0.08px;
   }
 
   .pv-pnl.up {
@@ -1004,13 +1308,23 @@
   }
 
   .uh-stats {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(48px, 1fr));
-    gap: 6px;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: var(--sp-space-2);
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .uh-stats::-webkit-scrollbar {
+    display: none;
   }
 
   .uhs {
-    padding: 7px 6px;
+    flex: 1 0 0;
+    min-width: 72px;
+    padding: var(--sp-space-2) 7px;
     border-radius: 8px;
     border: 1px solid var(--sp-soft);
     background: rgba(0, 0, 0, 0.25);
@@ -1020,9 +1334,10 @@
   .uhs-val {
     display: block;
     color: var(--sp-w);
-    font-family: var(--fd);
-    font-size: 12px;
-    line-height: 1;
+    font-family: var(--fm);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.05;
   }
 
   .uhs-lbl {
@@ -1030,8 +1345,8 @@
     margin-top: 4px;
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 7px;
-    letter-spacing: 1px;
+    font-size: 8px;
+    letter-spacing: 0.18px;
   }
 
   .passport-stamp {
@@ -1051,18 +1366,18 @@
   }
 
   .stamp-text {
-    font-size: 7px;
+    font-size: 6px;
     letter-spacing: 1px;
   }
 
   .stamp-icon {
-    font-size: 7px;
+    font-size: 6px;
     opacity: 0.8;
   }
 
   .avatar-picker {
-    margin: 10px 14px 12px;
-    padding: 10px;
+    margin: var(--sp-space-2) var(--sp-space-4) var(--sp-space-3);
+    padding: var(--sp-space-2);
     border-radius: 10px;
     border: 1px solid var(--sp-line);
     background: rgba(0, 0, 0, 0.22);
@@ -1072,7 +1387,7 @@
     margin-bottom: 8px;
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 7px;
     letter-spacing: 1px;
   }
 
@@ -1106,7 +1421,11 @@
 
   .tab-bar {
     display: flex;
-    background: rgba(0, 0, 0, 0.22);
+    position: sticky;
+    top: 0;
+    z-index: 9;
+    background: rgba(0, 0, 0, 0.26);
+    backdrop-filter: blur(8px);
     border-top: 1px solid var(--sp-line);
     border-bottom: 1px solid var(--sp-line);
   }
@@ -1114,7 +1433,7 @@
   .tab-btn {
     position: relative;
     flex: 1;
-    min-height: 42px;
+    min-height: 48px;
     border: none;
     border-bottom: 2px solid transparent;
     background: transparent;
@@ -1122,10 +1441,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: var(--sp-space-2);
     font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 1px;
+    font-size: 10px;
+    letter-spacing: 0.12px;
     cursor: pointer;
   }
 
@@ -1138,58 +1457,57 @@
     color: var(--sp-pk-l);
     border-bottom-color: var(--sp-pk);
     background: rgba(255, 140, 121, 0.08);
+    box-shadow: inset 0 -2px 0 rgba(255, 140, 121, 0.6);
   }
 
   .tab-icon {
-    min-width: 20px;
-    height: 18px;
-    border-radius: 999px;
-    border: 1px solid var(--sp-soft);
-    background: rgba(0, 0, 0, 0.28);
-    color: var(--sp-pk-l);
-    font-family: var(--sp-font-label);
-    font-size: 8px;
-    letter-spacing: 0.5px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 6px;
+    font-size: 16px;
+    line-height: 1;
   }
 
   .tab-label {
-    letter-spacing: 1px;
+    font-size: 10px;
+    letter-spacing: 0.1px;
   }
 
   .tab-badge {
     position: absolute;
     top: 5px;
     right: 8px;
-    min-width: 14px;
-    height: 14px;
-    padding: 0 4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
     border-radius: 999px;
     background: var(--sp-pk);
     color: #111;
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .quick-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
+  .control-rail {
+    position: sticky;
+    top: 48px;
+    z-index: 8;
+    padding: var(--sp-space-2) var(--sp-space-3);
     border-bottom: 1px solid var(--sp-soft);
-    background: rgba(0, 0, 0, 0.16);
+    background: rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(8px);
   }
 
-  .qa-btn,
-  .qa-chip {
-    min-height: 30px;
+  .quick-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--sp-space-2);
+    overflow-x: auto;
+    padding-bottom: var(--sp-space-1);
+  }
+
+  .qa-btn {
+    min-height: 32px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1198,8 +1516,8 @@
     text-decoration: none;
     white-space: nowrap;
     font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 0.8px;
+    font-size: 10px;
+    letter-spacing: 0.08px;
   }
 
   .qa-btn {
@@ -1222,28 +1540,100 @@
     color: var(--sp-green);
   }
 
+  .qa-sync {
+    color: #8bd8ff;
+  }
+
+  .qa-sync:disabled {
+    opacity: 0.65;
+    cursor: default;
+  }
+
   .qa-wallet {
     color: #cbefff;
   }
 
-  .qa-chip {
-    margin-left: auto;
-    color: var(--sp-green);
-    border: 1px solid rgba(157, 205, 185, 0.3);
-    background: rgba(157, 205, 185, 0.06);
+  .focus-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-space-2);
+    padding: var(--sp-space-3) var(--sp-space-3) var(--sp-space-4);
+    border-bottom: 1px solid var(--sp-soft);
+    background: linear-gradient(180deg, rgba(8, 23, 16, 0.72), rgba(6, 18, 13, 0.62));
   }
 
-  .qa-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--sp-green);
-    box-shadow: 0 0 6px rgba(157, 205, 185, 0.8);
+  .focus-item {
+    border: 1px solid var(--sp-soft);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.24);
+    padding: var(--sp-space-2) var(--sp-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-space-2);
+    min-height: 78px;
+  }
+
+  .focus-item-primary {
+    border-color: rgba(255, 140, 121, 0.42);
+    background: rgba(255, 140, 121, 0.1);
+  }
+
+  .focus-k {
+    color: var(--sp-dim);
+    font-family: var(--fp);
+    font-size: 9px;
+    letter-spacing: 0.08px;
+  }
+
+  .focus-v {
+    color: var(--sp-w);
+    font-family: var(--fd);
+    font-size: clamp(14px, 1.8vw, 18px);
+    line-height: 1.05;
+  }
+
+  .focus-sub {
+    color: var(--sp-dim);
+    font-family: var(--fm);
+    font-size: 11px;
+    line-height: 1.32;
+  }
+
+  .focus-good {
+    border-color: rgba(157, 205, 185, 0.34);
+    background: rgba(157, 205, 185, 0.08);
+  }
+
+  .focus-good .focus-v {
+    color: var(--sp-green);
+  }
+
+  .focus-warn {
+    border-color: rgba(255, 208, 96, 0.34);
+    background: rgba(255, 208, 96, 0.08);
+  }
+
+  .focus-warn .focus-v {
+    color: #ffd060;
+  }
+
+  .focus-bad {
+    border-color: rgba(255, 114, 93, 0.42);
+    background: rgba(255, 114, 93, 0.1);
+  }
+
+  .focus-bad .focus-v {
+    color: var(--sp-red);
+  }
+
+  .focus-neutral {
+    border-color: var(--sp-soft);
+    background: rgba(255, 255, 255, 0.02);
   }
 
   .tab-content {
-    padding: 12px;
-    background: linear-gradient(180deg, rgba(14, 37, 21, 0.56), rgba(8, 20, 12, 0.82));
+    padding: var(--sp-space-5);
+    background: linear-gradient(180deg, rgba(11, 32, 21, 0.66), rgba(7, 18, 13, 0.88));
   }
 
   .profile-tab,
@@ -1252,26 +1642,28 @@
   .arena-tab {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--sp-space-2);
   }
 
   .content-panel {
     border: 1px solid var(--sp-soft);
     border-radius: 12px;
-    padding: 12px;
-    background: rgba(0, 0, 0, 0.24);
+    padding: var(--sp-space-5);
+    background: rgba(0, 0, 0, 0.44);
   }
 
   .list-panel {
-    padding-top: 10px;
+    padding-top: 8px;
   }
 
   .section-header {
-    margin-bottom: 10px;
+    margin-bottom: var(--sp-space-3);
     color: var(--sp-pk-l);
     font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 1.2px;
+    font-size: 12px;
+    letter-spacing: 0.12px;
+    border-left: 3px solid var(--sp-pk);
+    padding-left: 8px;
   }
 
   .metrics-grid,
@@ -1279,7 +1671,7 @@
   .arena-stats {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--sp-space-3);
   }
 
   .metric-card,
@@ -1289,7 +1681,7 @@
     border: 1px solid var(--sp-soft);
     border-radius: 9px;
     background: rgba(255, 255, 255, 0.02);
-    padding: 10px 8px;
+    padding: var(--sp-space-3) var(--sp-space-2);
     text-align: center;
   }
 
@@ -1298,8 +1690,8 @@
   }
 
   .mc-icon {
-    font-size: 14px;
-    margin-bottom: 3px;
+    font-size: 16px;
+    margin-bottom: 6px;
   }
 
   .mc-value,
@@ -1308,7 +1700,7 @@
   .wk-v {
     color: var(--sp-w);
     font-family: var(--fd);
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 800;
     line-height: 1.1;
   }
@@ -1328,23 +1720,23 @@
     margin-top: 4px;
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 7px;
-    letter-spacing: 0.9px;
+    font-size: 9px;
+    letter-spacing: 0.08px;
   }
 
   .summary-line {
-    margin-top: 10px;
-    padding: 9px 10px;
+    margin-top: var(--sp-space-3);
+    padding: var(--sp-space-2) var(--sp-space-3);
     border-radius: 8px;
     border: 1px dashed var(--sp-soft);
-    color: var(--sp-dim);
+    color: var(--sp-w);
     text-align: center;
     font-family: var(--fm);
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .detail-block {
-    margin-top: 10px;
+    margin-top: var(--sp-space-2);
     border: 1px solid var(--sp-soft);
     border-radius: 9px;
     background: rgba(255, 255, 255, 0.02);
@@ -1355,11 +1747,11 @@
     list-style: none;
     cursor: pointer;
     user-select: none;
-    padding: 10px 12px;
+    padding: var(--sp-space-2) var(--sp-space-3);
     color: var(--sp-pk-l);
     font-family: var(--fp);
-    font-size: 8px;
-    letter-spacing: 1px;
+    font-size: 11px;
+    letter-spacing: 0.08px;
     border-bottom: 1px solid transparent;
   }
 
@@ -1383,11 +1775,15 @@
     transform: rotate(90deg);
   }
 
+  .detail-spaced {
+    margin-top: var(--sp-space-3);
+  }
+
   .agent-perf-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    padding: 10px;
+    padding: 8px;
   }
 
   .agent-perf-card {
@@ -1413,12 +1809,12 @@
   }
 
   .apc-icon {
-    font-size: 18px;
+    font-size: 16px;
   }
 
   .apc-name {
     font-family: var(--fm);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
   }
 
@@ -1461,7 +1857,7 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
-    padding: 10px;
+    padding: 8px;
   }
 
   .badge-card {
@@ -1483,7 +1879,7 @@
 
   .badge-icon {
     display: block;
-    font-size: 18px;
+    font-size: 16px;
     margin-bottom: 3px;
   }
 
@@ -1500,14 +1896,14 @@
     margin-top: 3px;
     color: var(--sp-dim);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
   }
 
   .vb-card {
     border: 1px solid var(--sp-line);
     border-radius: 10px;
     background: rgba(255, 140, 121, 0.08);
-    padding: 12px;
+    padding: var(--sp-space-4);
   }
 
   .vb-header {
@@ -1517,42 +1913,42 @@
   }
 
   .vb-icon {
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .vb-title {
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 8px;
-    letter-spacing: 1px;
+    font-size: 9px;
+    letter-spacing: 0.2px;
   }
 
   .vb-amount {
     margin-top: 5px;
     color: var(--sp-pk-l);
     font-family: var(--sp-font-display);
-    font-size: clamp(18px, 2.1vw, 24px);
+    font-size: clamp(20px, 2.5vw, 26px);
     line-height: 1.1;
   }
 
   .vb-connect {
-    margin-top: 10px;
+    margin-top: var(--sp-space-3);
     border: 1px solid var(--sp-pk);
     background: rgba(255, 140, 121, 0.16);
     color: var(--sp-pk-l);
     border-radius: 8px;
-    padding: 7px 10px;
+    padding: var(--sp-space-2) var(--sp-space-3);
     font-family: var(--fp);
-    font-size: 8px;
-    letter-spacing: 0.8px;
+    font-size: 9px;
+    letter-spacing: 0.2px;
     cursor: pointer;
   }
 
   .vb-connected {
-    margin-top: 8px;
+    margin-top: var(--sp-space-2);
     color: var(--sp-w);
     font-family: var(--fm);
-    font-size: 10px;
+    font-size: 11px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -1570,13 +1966,13 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 5px 10px;
-    margin-bottom: 10px;
+    padding: 6px 12px;
+    margin-bottom: var(--sp-space-2);
     border: 1px solid var(--sp-soft);
     border-radius: 999px;
     color: var(--sp-dim);
     font-family: var(--fm);
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .holdings-status.live {
@@ -1598,7 +1994,7 @@
   .wallet-kpis {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--sp-space-2);
   }
 
   .holdings-body {
@@ -1607,12 +2003,12 @@
   }
 
   .st {
-    padding: 9px 10px;
+    padding: var(--sp-space-2) var(--sp-space-3);
     border-bottom: 1px solid var(--sp-soft);
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 8px;
-    letter-spacing: 1px;
+    font-size: 9px;
+    letter-spacing: 0.2px;
   }
 
   .donut-section {
@@ -1620,7 +2016,7 @@
   }
 
   .donut-wrap {
-    padding: 8px 12px;
+    padding: var(--sp-space-2) var(--sp-space-3);
   }
 
   .donut-wrap svg {
@@ -1631,10 +2027,14 @@
   }
 
   .legend {
-    padding: 0 10px 10px;
+    padding: 0 var(--sp-space-2) var(--sp-space-2);
     display: flex;
     flex-direction: column;
     gap: 4px;
+  }
+
+  .overflow-legend {
+    padding-top: 8px;
   }
 
   .legend-item {
@@ -1668,15 +2068,15 @@
 
   .htable {
     min-width: 450px;
-    padding: 0 8px 8px;
+    padding: 0 var(--sp-space-2) var(--sp-space-2);
   }
 
   .hrow {
     display: grid;
-    grid-template-columns: 1.6fr 1fr 1fr 1fr;
-    gap: 7px;
+    grid-template-columns: 1.8fr 1fr 1fr 1fr;
+    gap: var(--sp-space-2);
     align-items: center;
-    padding: 8px 6px;
+    padding: var(--sp-space-2) var(--sp-space-2);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
@@ -1687,14 +2087,14 @@
   .header-row {
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 7px;
-    letter-spacing: 1px;
+    font-size: 9px;
+    letter-spacing: 0.08px;
   }
 
   .hc {
     color: var(--sp-w);
     font-family: var(--fm);
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .hc.num {
@@ -1709,8 +2109,8 @@
   }
 
   .ai {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -1723,13 +2123,13 @@
   .an {
     color: var(--sp-w);
     font-family: var(--fd);
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .af {
     color: var(--sp-dim);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 10px;
     margin-top: 2px;
   }
 
@@ -1737,8 +2137,8 @@
     margin-bottom: 6px;
     color: var(--sp-pk-l);
     font-family: var(--fp);
-    font-size: 8px;
-    letter-spacing: 1px;
+    font-size: 10px;
+    letter-spacing: 0.2px;
   }
 
   .pos-row,
@@ -1746,8 +2146,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 8px 6px;
+    gap: var(--sp-space-2);
+    padding: var(--sp-space-2) var(--sp-space-2);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 7px;
   }
@@ -1769,17 +2169,17 @@
   .mr-left {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--sp-space-2);
     min-width: 0;
   }
 
   .pr-dir,
   .mr-result {
     font-family: var(--fp);
-    font-size: 8px;
-    letter-spacing: 0.8px;
+    font-size: 9px;
+    letter-spacing: 0.08px;
     border-radius: 6px;
-    padding: 3px 6px;
+    padding: 4px 8px;
     border: 1px solid;
     flex-shrink: 0;
   }
@@ -1799,15 +2199,15 @@
   .pr-pair {
     color: var(--sp-w);
     font-family: var(--fm);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
   }
 
   .pr-src {
     color: var(--sp-dim);
     font-family: var(--fm);
-    font-size: 9px;
-    padding: 2px 6px;
+    font-size: 10px;
+    padding: 3px 8px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.05);
     white-space: nowrap;
@@ -1817,7 +2217,7 @@
   .mr-right {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--sp-space-2);
     flex-shrink: 0;
   }
 
@@ -1826,7 +2226,7 @@
   .mr-time {
     color: var(--sp-dim);
     font-family: var(--fm);
-    font-size: 9px;
+    font-size: 11px;
   }
 
   .pr-pnl,
@@ -1875,9 +2275,9 @@
 
   .mr-hyp {
     font-family: var(--fp);
-    font-size: 8px;
-    letter-spacing: 0.8px;
-    padding: 2px 6px;
+    font-size: 9px;
+    letter-spacing: 0.08px;
+    padding: 3px 8px;
     border-radius: 6px;
     border: 1px solid;
   }
@@ -1898,20 +2298,24 @@
   }
 
   .mr-agent-dot {
-    width: 7px;
-    height: 7px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     display: inline-block;
   }
 
   .nested-detail {
-    margin: 8px 10px 10px;
+    margin: var(--sp-space-1) var(--sp-space-2) var(--sp-space-2);
     border-style: dashed;
+  }
+
+  .compact-detail {
+    margin: var(--sp-space-1) 0 0;
   }
 
   @media (max-width: 980px) {
     .passport-scroll {
-      padding: 10px;
+      padding: var(--sp-space-2);
     }
 
     .unified-header {
@@ -1920,14 +2324,16 @@
 
     .uh-right {
       min-width: 0;
-      align-items: flex-start;
+      width: 100%;
+      gap: var(--sp-space-2);
+      align-items: stretch;
     }
 
     .port-val {
       text-align: left;
     }
 
-    .uh-stats,
+    .focus-strip,
     .metrics-grid,
     .pos-summary,
     .arena-stats,
@@ -1935,8 +2341,12 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .qa-chip {
-      margin-left: 0;
+    .control-rail {
+      position: relative;
+      top: auto;
+      z-index: 1;
+      padding: var(--sp-space-2) var(--sp-space-3);
+      backdrop-filter: none;
     }
 
     .ap-grid {
@@ -1947,6 +2357,45 @@
   @media (max-width: 720px) {
     .agent-perf-grid,
     .badges-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .uh-right {
+      gap: var(--sp-space-2);
+      min-width: 0;
+      width: 100%;
+    }
+
+    .uh-stats {
+      width: 100%;
+      gap: 5px;
+      justify-content: flex-start;
+    }
+
+    .pv-amount {
+      font-size: clamp(20px, 7.8vw, 28px);
+    }
+
+    .uhs {
+      min-width: 66px;
+      padding: 6px 4px;
+      border-radius: 7px;
+    }
+
+    .uhs-val {
+      font-size: 13px;
+    }
+
+    .uhs-lbl {
+      font-size: 8px;
+      margin-top: 3px;
+    }
+
+    .quick-actions {
+      justify-content: flex-start;
+    }
+
+    .focus-strip {
       grid-template-columns: 1fr;
     }
 
@@ -1976,10 +2425,11 @@
     }
 
     .passport-stamp {
-      position: static;
+      position: absolute;
+      top: 8px;
+      right: 10px;
       transform: rotate(0deg);
-      align-self: flex-start;
-      margin-top: 6px;
+      margin-top: 0;
     }
   }
 </style>
