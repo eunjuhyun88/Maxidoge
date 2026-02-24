@@ -2,6 +2,7 @@ export interface RegisterAuthPayload {
   email: string;
   nickname: string;
   walletAddress?: string;
+  walletMessage?: string;
   walletSignature?: string;
 }
 
@@ -9,6 +10,8 @@ export interface LoginAuthPayload {
   email: string;
   nickname: string;
   walletAddress: string;
+  walletMessage: string;
+  walletSignature: string;
 }
 
 export interface AuthUserPayload {

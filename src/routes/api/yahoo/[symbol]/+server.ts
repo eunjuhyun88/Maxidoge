@@ -33,24 +33,29 @@ export const GET: RequestHandler = async ({ params, url }) => {
     const trend = analyzeTrend(closes);
     const last = series.points[series.points.length - 1];
 
+    const payload = {
+      symbol: series.symbol,
+      range,
+      interval,
+      latest: {
+        close: last.close,
+        timestampMs: last.timestampMs,
+        previousClose: series.previousClose,
+        regularMarketPrice: series.regularMarketPrice,
+        regularMarketChangePercent: series.regularMarketChangePercent,
+        updatedAt: series.updatedAt,
+      },
+      trend,
+      points: series.points,
+    };
+
     return json(
       {
+        success: true,
         ok: true,
-        data: {
-          symbol: series.symbol,
-          range,
-          interval,
-          latest: {
-            close: last.close,
-            timestampMs: last.timestampMs,
-            previousClose: series.previousClose,
-            regularMarketPrice: series.regularMarketPrice,
-            regularMarketChangePercent: series.regularMarketChangePercent,
-            updatedAt: series.updatedAt,
-          },
-          trend,
-          points: series.points,
-        },
+        symbol: payload.symbol,
+        points: payload.points,
+        data: payload,
       },
       {
         headers: {
