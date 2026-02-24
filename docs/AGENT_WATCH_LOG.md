@@ -1078,3 +1078,29 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `## main...origin/main` (clean)
   - single worktree(`/Users/ej/Downloads/maxidoge-clones/frontend-passport`) 확인
 - Status: IN_PROGRESS
+
+### W-20260225-0055-passport-codex (finish addendum)
+
+- End (KST): 2026-02-25 01:03
+- Agent: Codex (GPT-5)
+- Branch / merge target:
+  - source: `codex/passport-backend-architecture-v1` (`0167f4d`)
+  - target: `main`
+- Changes (actual):
+  - `/Users/ej/Downloads/maxidoge-clones/frontend-passport/docs/PASSPORT_BACKEND_ARCHITECTURE_v1_2026-02-25.md` 신규 추가
+    - Terminal 이벤트 저장 -> Passport projection -> 분석 리포트 저장 -> ML 학습 샘플 확장 설계 정의
+    - outbox/worker/API/스키마/단계별 rollout 기준 명시
+  - `/Users/ej/Downloads/maxidoge-clones/frontend-passport/docs/AGENT_WATCH_LOG.md`
+    - 본 작업 start/finish 기록 추가
+  - `main` 최신(`50d68c0`) 동기화 후 `--no-ff` 머지 수행
+- Diff vs plan:
+  - 없음
+- Validation:
+  - feature(`codex/passport-backend-architecture-v1`) `npm run check`: PASS
+  - feature(`codex/passport-backend-architecture-v1`) `npm run build`: PASS
+  - main(`merge result`) `npm run check`: PASS
+  - main(`merge result`) `npm run build`: PASS
+- Commit hash: `0167f4d`
+- Merge hash: `98734d6`
+- Push status: SUCCESS (`origin/codex/passport-backend-architecture-v1`, `origin/main`)
+- Status: DONE
