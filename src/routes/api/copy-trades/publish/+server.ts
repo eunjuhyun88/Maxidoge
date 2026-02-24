@@ -10,6 +10,7 @@ import { errorContains } from '$lib/utils/errorUtils';
   toBoundedInt,
   toPositiveNumber,
 } from '$lib/server/apiValidation';
+import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
 
 interface CopyTradeDraftPayload {
   pair?: string;
@@ -124,6 +125,36 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
           VALUES ($1, 'copytrade_published', 'signals', $2, 'success', $3::jsonb)
         `,
         [user.id, run.rows[0].id, JSON.stringify({ pair, dir, confidence })]
+      );
+
+      await enqueuePassportEventBestEffort(
+        {
+          userId: user.id,
+          eventType: 'copy_trade_published',
+          sourceTable: 'copy_trade_runs',
+          sourceId: run.rows[0].id,
+          traceId: `copy-trade:${run.rows[0].id}`,
+          idempotencyKey: `copy_trade_published:${run.rows[0].id}`,
+          payload: {
+            context: {
+              pair,
+              source,
+              selectedSignalCount: selectedSignalIds.length,
+            },
+            decision: {
+              dir,
+              confidence,
+              entry,
+              tp,
+              sl,
+            },
+            outcome: {
+              publishedTradeId: trade.rows[0].id,
+              publishedSignalId: signal.rows[0].id,
+            },
+          },
+        },
+        client,
       );
 
       return {

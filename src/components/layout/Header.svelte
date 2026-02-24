@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { gameState } from '$lib/stores/gameState';
-  import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
+  import { walletStore, isWalletConnected, openWalletModal, hydrateAuthSession } from '$lib/stores/walletStore';
   import { hydrateDomainStores } from '$lib/stores/hydration';
   import { livePrices } from '$lib/stores/priceStore';
   import { updatePrice } from '$lib/stores/priceStore';
@@ -44,6 +44,7 @@
   });
 
   onMount(() => {
+    void hydrateAuthSession();
     void hydrateDomainStores();
     // NOTE: WS 가격 구독은 +layout.svelte에서 전역으로 관리 (S-03)
     // Header는 priceStore를 읽기만 함
@@ -90,35 +91,37 @@
 </script>
 
 <nav id="nav">
-  {#if activePath !== '/'}
-    <button class="nav-back" on:click={handleBack}>BACK</button>
-  {/if}
+  <div class="nav-main">
+    {#if activePath !== '/'}
+      <button class="nav-back" on:click={handleBack}>BACK</button>
+    {/if}
 
-  <button class="nav-logo" on:click={() => nav('/')}>
-    MAXIDOGE
-  </button>
-
-  <div class="nav-sep"></div>
-
-  <div class="selected-ticker">
-    <span class="st-pair">{state.pair}</span>
-    <span class="st-price">${selectedPriceText}</span>
-  </div>
-
-  <div class="nav-sep"></div>
-
-  {#each NAV_ITEMS as item}
-    <button
-      class="nav-tab"
-      class:active={isActive(item.path)}
-      class:arena-accent={item.accent}
-      title={`${item.label} · ${item.desc}`}
-      aria-label={`${item.label}: ${item.desc}`}
-      on:click={() => nav(item.path)}
-    >
-      {item.label}
+    <button class="nav-logo" on:click={() => nav('/')}>
+      MAXIDOGE
     </button>
-  {/each}
+
+    <div class="nav-sep"></div>
+
+    <div class="selected-ticker">
+      <span class="st-pair">{state.pair}</span>
+      <span class="st-price">${selectedPriceText}</span>
+    </div>
+
+    <div class="nav-sep"></div>
+
+    {#each NAV_ITEMS as item}
+      <button
+        class="nav-tab"
+        class:active={isActive(item.path)}
+        class:arena-accent={item.accent}
+        title={`${item.label} · ${item.desc}`}
+        aria-label={`${item.label}: ${item.desc}`}
+        on:click={() => nav(item.path)}
+      >
+        {item.label}
+      </button>
+    {/each}
+  </div>
 
   <div class="nav-right">
     <div class="score-badge">
@@ -159,6 +162,13 @@
     height: 42px;
     font-family: var(--fp, 'Press Start 2P', monospace);
     color: #F0EDE4;
+  }
+  .nav-main {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
 
   .nav-back {
@@ -262,7 +272,7 @@
 
   /* ── Right Section ── */
   .nav-right {
-    margin-left: auto;
+    margin-left: 8px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -345,6 +355,8 @@
   @media (max-width: 900px) {
     #nav {
       padding: 0 8px;
+    }
+    .nav-main {
       overflow-x: auto;
       overflow-y: hidden;
       -webkit-overflow-scrolling: touch;
@@ -352,7 +364,7 @@
       overscroll-behavior-x: contain;
       scrollbar-width: none;
     }
-    #nav::-webkit-scrollbar { display: none; }
+    .nav-main::-webkit-scrollbar { display: none; }
 
     .nav-back {
       font-size: 11px;
@@ -363,13 +375,8 @@
       font-size: 10px;
       letter-spacing: 0.8px;
     }
-    .nav-sep {
-      margin: 0 5px;
-      height: 14px;
-    }
-    .selected-ticker { gap: 4px; }
-    .st-pair { display: none; }
-    .st-price { font-size: 10px; }
+    .nav-sep { display: none; }
+    .selected-ticker { display: none; }
 
     .nav-tab {
       font-size: 7px;
@@ -406,10 +413,6 @@
       justify-content: center;
       border-right-color: rgba(232, 150, 125, 0.03);
     }
-
-    .selected-ticker { gap: 3px; }
-    .st-price { font-size: 9px; }
-    .nav-sep { margin: 0 4px; }
 
     .wallet-btn {
       max-width: 76px;

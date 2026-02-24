@@ -10,6 +10,37 @@ import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { query } from '$lib/server/db';
 import { gmxReadLimiter } from '$lib/server/rateLimit';
 
+type GmxPositionRow = {
+  id: string;
+  market_address: string;
+  market_label: string;
+  direction: string;
+  collateral_token: string;
+  collateral_usd: string | number;
+  size_usd: string | number;
+  leverage: string | number;
+  entry_price: string | number | null;
+  mark_price: string | number | null;
+  liquidation_price: string | number | null;
+  pnl_usd: string | number | null;
+  pnl_percent: string | number | null;
+  order_key: string | null;
+  order_type: string | null;
+  order_status: string | null;
+  tx_hash: string | null;
+  position_key: string | null;
+  wallet_address: string | null;
+  sl_order_key: string | null;
+  tp_order_key: string | null;
+  sl_price: string | number | null;
+  tp_price: string | number | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+  executed_at: string | Date | null;
+  closed_at: string | Date | null;
+  status: string;
+};
+
 export const GET: RequestHandler = async ({ cookies, url, getClientAddress }) => {
   const ip = getClientAddress();
   if (!gmxReadLimiter.check(ip)) {
@@ -25,7 +56,7 @@ export const GET: RequestHandler = async ({ cookies, url, getClientAddress }) =>
     const status = url.searchParams.get('status') || 'open';
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 50, 1), 100);
 
-    const result = await query(
+    const result = await query<GmxPositionRow>(
       `SELECT
         id, market_address, market_label, direction,
         collateral_token, collateral_usd, size_usd, leverage,
@@ -43,7 +74,7 @@ export const GET: RequestHandler = async ({ cookies, url, getClientAddress }) =>
       [user.id, status, limit]
     );
 
-    const positions = result.rows.map(row => ({
+    const positions = result.rows.map((row: GmxPositionRow) => ({
       id: row.id,
       marketAddress: row.market_address,
       marketLabel: row.market_label,

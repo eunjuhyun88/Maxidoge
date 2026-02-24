@@ -28,12 +28,14 @@
   } = $props();
 
   // ── State ──────────────────────────────────────────
-  let direction: 'YES' | 'NO' = $state('YES');
-  let amount = $state('');
-  let customPrice = $state('');
-  let step: 'input' | 'signing' | 'submitting' | 'done' | 'error' = $state('input');
-  let errorMsg = $state('');
-  let resultOrderId = $state('');
+  let direction: 'YES' | 'NO' = 'YES';
+  let amount = '';
+  let customPrice = '';
+  let step: 'input' | 'signing' | 'submitting' | 'done' | 'error' = 'input';
+  let errorMsg = '';
+  let resultOrderId = '';
+  const amountInputId = 'poly-amount-input';
+  const priceInputId = 'poly-price-input';
 
   // ── Derived ────────────────────────────────────────
   let yesPrice = $derived(market?.outcomePrices?.[0] ? parseFloat(market.outcomePrices[0]) : 0.5);
@@ -226,8 +228,8 @@
 
       <!-- Amount Input -->
       <div class="bet-field">
-        <label>Amount (USDC)</label>
-        <input type="number" bind:value={amount} min="1" max="10000" step="1" placeholder="10" />
+        <label for={amountInputId}>Amount (USDC)</label>
+        <input id={amountInputId} type="number" bind:value={amount} min="1" max="10000" step="1" placeholder="10" />
         <div class="quick-amounts">
           {#each [5, 10, 25, 50, 100] as v}
             <button class="qa-btn" on:click={() => setQuickAmount(v)}>${v}</button>
@@ -237,8 +239,8 @@
 
       <!-- Price Override -->
       <div class="bet-field">
-        <label>Price (optional override)</label>
-        <input type="number" bind:value={customPrice} min="0.01" max="0.99" step="0.01"
+        <label for={priceInputId}>Price (optional override)</label>
+        <input id={priceInputId} type="number" bind:value={customPrice} min="0.01" max="0.99" step="0.01"
           placeholder={selectedPrice.toFixed(2)} />
       </div>
 

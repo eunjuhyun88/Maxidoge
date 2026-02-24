@@ -12,14 +12,18 @@ export const GET: RequestHandler = async ({ url }) => {
       return json({ error: 'Fear & Greed source unavailable' }, { status: 502 });
     }
 
+    const payload = {
+      current: snapshot.current,
+      history: snapshot.points,
+      count: snapshot.points.length,
+    };
+
     return json(
       {
+        success: true,
         ok: true,
-        data: {
-          current: snapshot.current,
-          history: snapshot.points,
-          count: snapshot.points.length,
-        },
+        ...payload,
+        data: payload,
       },
       {
         headers: {

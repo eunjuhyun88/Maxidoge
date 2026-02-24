@@ -1,7 +1,8 @@
 import { query } from './db';
 import { isIP } from 'node:net';
+import { recoverMessageAddress, type Hex } from 'viem';
 
-const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const ETH_ADDRESS_RE = /^0x[0-9a-f]{40}$/i;
 const SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 let _nonceInfraReady = false;
 
@@ -42,6 +43,48 @@ export function extractNonceFromMessage(message: string): string | null {
   return match?.[1] || null;
 }
 
+export async function verifyEvmMessageSignature(args: {
+  address: string;
+  message: string;
+  signature: string;
+}): Promise<boolean> {
+  if (!isValidEthAddress(args.address)) return false;
+  try {
+    const recovered = await recoverMessageAddress({
+      message: args.message,
+      signature: args.signature as Hex,
+    });
+    return normalizeEthAddress(recovered) === normalizeEthAddress(args.address);
+  } catch {
+    return false;
+  }
+}
+
+export async function verifyAndConsumeEvmNonce(args: {
+  address: string;
+  message: string;
+  signature: string;
+}): Promise<'ok' | 'missing_nonce' | 'invalid_signature' | 'invalid_nonce'> {
+  const address = normalizeEthAddress(args.address);
+  const nonce = extractNonceFromMessage(args.message);
+  if (!nonce) return 'missing_nonce';
+
+  const verified = await verifyEvmMessageSignature({
+    address,
+    message: args.message,
+    signature: args.signature,
+  });
+  if (!verified) return 'invalid_signature';
+
+  const consumed = await consumeWalletNonce({
+    address,
+    nonce,
+    message: args.message,
+  });
+
+  return consumed ? 'ok' : 'invalid_nonce';
+}
+
 function sanitizeIssuedIp(raw?: string | null): string | null {
   if (!raw) return null;
   const first = raw.split(',')[0]?.trim() || '';
@@ -66,39 +109,14 @@ function sanitizeIssuedIp(raw?: string | null): string | null {
 async function ensureNonceInfrastructure(): Promise<void> {
   if (_nonceInfraReady) return;
 
-  await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
-  await query(
-    `
-      CREATE TABLE IF NOT EXISTS auth_nonces (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        address text NOT NULL,
-        nonce text NOT NULL,
-        message text NOT NULL,
-        provider text,
-        issued_ip inet,
-        user_agent text,
-        expires_at timestamptz NOT NULL,
-        consumed_at timestamptz,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        CHECK (address ~ '^0x[0-9a-fA-F]{40}$'),
-        CHECK (char_length(nonce) BETWEEN 16 AND 128),
-        CHECK (expires_at > created_at)
-      )
-    `
+  const result = await query<{ exists: boolean }>(
+    `SELECT to_regclass('public.auth_nonces') IS NOT NULL AS exists`
   );
-  await query(
-    `
-      CREATE INDEX IF NOT EXISTS idx_auth_nonces_address_created_at
-      ON auth_nonces (lower(address), created_at DESC)
-    `
-  );
-  await query(
-    `
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_auth_nonces_active_address_nonce
-      ON auth_nonces (lower(address), nonce)
-      WHERE consumed_at IS NULL
-    `
-  );
+  if (!result.rows[0]?.exists) {
+    const error: any = new Error('auth_nonces table is missing. Run migration 0003 first.');
+    error.code = '42P01';
+    throw error;
+  }
 
   _nonceInfraReady = true;
 }

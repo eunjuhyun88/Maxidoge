@@ -35,6 +35,7 @@ export type PriceMap = Record<string, PriceEntry>;
 // ─── Default symbols ─────────────────────────────────────────
 
 const DEFAULT_SYMBOLS = ['BTC', 'ETH', 'SOL'] as const;
+const WS_FRESH_GUARD_MS = 10_000;
 
 function createDefaults(): PriceMap {
   const now = Date.now();
@@ -95,6 +96,13 @@ function normalizePrice(value: number): number | null {
   return value;
 }
 
+function shouldSkipRestFallback(prev: PriceEntry | undefined, incomingSource: LivePriceSource): boolean {
+  if (!prev) return false;
+  if (incomingSource !== 'rest') return false;
+  if (prev.source !== 'ws') return false;
+  return Date.now() - prev.ts < WS_FRESH_GUARD_MS;
+}
+
 /** 단일 심볼 가격 업데이트 */
 export function updatePrice(symbol: string, price: number, source: LivePriceSource = 'ws') {
   const sym = normalizeSymbol(symbol);
@@ -103,7 +111,8 @@ export function updatePrice(symbol: string, price: number, source: LivePriceSour
 
   priceStore.update(($p) => {
     const prev = $p[sym];
-    if (prev && prev.price === normalized && prev.source === source) return $p;
+    if (shouldSkipRestFallback(prev, source)) return $p;
+    if (prev && prev.price === normalized) return $p;  // 가격 동일하면 소스 무관 스킵 (리렌더 방지)
 
     return {
       ...$p,
@@ -130,7 +139,8 @@ export function updatePrices(updates: Record<string, number>, source: LivePriceS
       if (!sym || normalized === null) continue;
 
       const prev = $p[sym];
-      if (prev && prev.price === normalized && prev.source === source) continue;
+      if (shouldSkipRestFallback(prev, source)) continue;
+      if (prev && prev.price === normalized) continue;  // 가격 동일하면 소스 무관 스킵
 
       next[sym] = { ...prev, price: normalized, ts, source };
       changed = true;
@@ -155,6 +165,7 @@ export function updatePriceFull(symbol: string, entry: PriceEntry) {
 
   priceStore.update(($p) => {
     const prev = $p[sym];
+    if (shouldSkipRestFallback(prev, nextEntry.source)) return $p;
     if (
       prev &&
       prev.price === nextEntry.price &&

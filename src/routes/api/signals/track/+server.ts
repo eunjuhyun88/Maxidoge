@@ -10,6 +10,7 @@ import { errorContains } from '$lib/utils/errorUtils';
   toBoundedInt,
   toPositiveNumber,
 } from '$lib/server/apiValidation';
+import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
 
 interface TrackedSignalRow {
   id: string;
@@ -88,9 +89,32 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       [user.id, result.rows[0].id, pair, dir, source, confidence, JSON.stringify({ note })]
     ).catch(() => undefined);
 
-    return json({ success: true, signal: mapSignal(result.rows[0]) });
-  } catch (error: unknown) {
-    if (errorContains(error, 'DATABASE_URL is not set')) {
+    const signal = mapSignal(result.rows[0]);
+
+    await enqueuePassportEventBestEffort({
+      userId: user.id,
+      eventType: 'signal_tracked',
+      sourceTable: 'tracked_signals',
+      sourceId: signal.id,
+      traceId: `signal:${signal.id}`,
+      idempotencyKey: `signal_tracked:${signal.id}`,
+      payload: {
+        context: {
+          pair: signal.pair,
+          source: signal.source,
+          ttlHours,
+        },
+        decision: {
+          dir: signal.dir,
+          confidence: signal.confidence,
+          entryPrice: signal.entryPrice,
+        },
+      },
+    });
+
+    return json({ success: true, signal });
+  } catch (error: any) {
+    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

@@ -16,15 +16,16 @@
   let { onClose = () => {} }: { onClose?: () => void } = $props();
 
   // ── State ──────────────────────────────────────────
-  let markets: GmxMarket[] = $state([]);
-  let selectedMarket: GmxMarket | null = $state(null);
-  let direction: 'LONG' | 'SHORT' = $state('LONG');
-  let collateral = $state('');
-  let leverage = $state(10);
-  let step: 'input' | 'loading' | 'approving' | 'signing' | 'confirming' | 'done' | 'error' = $state('input');
-  let errorMsg = $state('');
-  let balance: GmxBalanceInfo | null = $state(null);
-  let resultTxHash = $state('');
+  let markets: GmxMarket[] = [];
+  let selectedMarket: GmxMarket | null = null;
+  let direction: 'LONG' | 'SHORT' = 'LONG';
+  let collateral = '';
+  let leverage = 10;
+  let step: 'input' | 'loading' | 'approving' | 'signing' | 'confirming' | 'done' | 'error' = 'input';
+  let errorMsg = '';
+  let balance: GmxBalanceInfo | null = null;
+  let resultTxHash = '';
+  const collateralInputId = 'gmx-collateral-input';
 
   // ── Derived ────────────────────────────────────────
   let collateralNum = $derived(parseFloat(collateral) || 0);
@@ -219,8 +220,8 @@
 
       <!-- Collateral Input -->
       <div class="gmx-field">
-        <label>Collateral (USDC)</label>
-        <input type="number" bind:value={collateral} min="1" max="100000" step="1" placeholder="100" />
+        <label for={collateralInputId}>Collateral (USDC)</label>
+        <input id={collateralInputId} type="number" bind:value={collateral} min="1" max="100000" step="1" placeholder="100" />
         <div class="quick-amounts">
           {#each [10, 25, 50, 100, 500] as v}
             <button class="qa-btn" on:click={() => setQuickCollateral(v)}>${v}</button>
@@ -233,7 +234,7 @@
 
       <!-- Leverage Selector -->
       <div class="gmx-field">
-        <label>Leverage: {leverage}x</label>
+        <div class="field-label">Leverage: {leverage}x</div>
         <div class="leverage-btns">
           {#each [1, 2, 5, 10, 25, 50] as lev}
             <button class="lev-btn" class:active={leverage === lev} on:click={() => setLeverage(lev)}>
@@ -374,7 +375,12 @@
   .dir-btn.short.active { background: rgba(255,94,122,.15); color: #FF5E7A; border-color: rgba(255,94,122,.5); }
 
   .gmx-field { display: flex; flex-direction: column; gap: 4px; }
-  .gmx-field label { font: 400 10px/1 var(--fm); color: rgba(255,255,255,.4); text-transform: uppercase; letter-spacing: 1px; }
+  .gmx-field label, .gmx-field .field-label {
+    font: 400 10px/1 var(--fm);
+    color: rgba(255,255,255,.4);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
   .gmx-field input {
     background: rgba(255,255,255,.06); border: 1px solid rgba(255,230,0,.15); border-radius: 6px;
     padding: 10px 12px; color: #fff; font: 400 14px/1 var(--fm); outline: none;

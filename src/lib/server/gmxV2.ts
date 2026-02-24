@@ -333,9 +333,9 @@ export async function buildIncreaseOrderCalldata(params: {
     ? toUsd30(params.acceptablePriceUsd ?? 999_999) // max price for long
     : toUsd30(params.acceptablePriceUsd ?? 0.01);  // min price for short
 
-  // Build CreateOrderParams struct
-  const orderParams = {
-    addresses: {
+  // Build CreateOrderParams tuple expected by ExchangeRouter ABI.
+  const orderParams = [
+    {
       receiver: walletAddress as Hex,
       cancellationReceiver: ZERO_ADDRESS,
       callbackContract: ZERO_ADDRESS,
@@ -344,7 +344,7 @@ export async function buildIncreaseOrderCalldata(params: {
       initialCollateralToken: TOKENS.USDC as Hex,
       swapPath: [] as readonly Hex[],
     },
-    numbers: {
+    {
       sizeDeltaUsd,
       initialCollateralDeltaAmount: collateralAmount,
       triggerPrice: 0n,
@@ -354,14 +354,14 @@ export async function buildIncreaseOrderCalldata(params: {
       minOutputAmount: 0n,
       validFromTime: 0n,
     },
-    orderType: OrderType.MarketIncrease,
-    decreasePositionSwapType: DecreasePositionSwapType.NoSwap,
+    OrderType.MarketIncrease,
+    DecreasePositionSwapType.NoSwap,
     isLong,
-    shouldUnwrapNativeToken: false,
-    autoCancel: false,
-    referralCode: ZERO_BYTES32 as Hex,
-    dataList: [] as readonly Hex[],
-  };
+    false,
+    false,
+    ZERO_BYTES32 as Hex,
+    [] as readonly Hex[],
+  ] as const;
 
   // Encode individual function calls for multicall
   const sendWntData = encodeFunctionData({
@@ -432,8 +432,8 @@ export async function buildDecreaseOrderCalldata(params: {
     ? toUsd30(params.acceptablePriceUsd ?? 0.01)
     : toUsd30(params.acceptablePriceUsd ?? 999_999);
 
-  const orderParams = {
-    addresses: {
+  const orderParams = [
+    {
       receiver: walletAddress as Hex,
       cancellationReceiver: ZERO_ADDRESS,
       callbackContract: ZERO_ADDRESS,
@@ -442,7 +442,7 @@ export async function buildDecreaseOrderCalldata(params: {
       initialCollateralToken: TOKENS.USDC as Hex,
       swapPath: [] as readonly Hex[],
     },
-    numbers: {
+    {
       sizeDeltaUsd,
       initialCollateralDeltaAmount: collateralDelta,
       triggerPrice: 0n,
@@ -452,14 +452,14 @@ export async function buildDecreaseOrderCalldata(params: {
       minOutputAmount: 0n,
       validFromTime: 0n,
     },
-    orderType: OrderType.MarketDecrease,
-    decreasePositionSwapType: DecreasePositionSwapType.SwapPnlTokenToCollateralToken,
+    OrderType.MarketDecrease,
+    DecreasePositionSwapType.SwapPnlTokenToCollateralToken,
     isLong,
-    shouldUnwrapNativeToken: false,
-    autoCancel: false,
-    referralCode: ZERO_BYTES32 as Hex,
-    dataList: [] as readonly Hex[],
-  };
+    false,
+    false,
+    ZERO_BYTES32 as Hex,
+    [] as readonly Hex[],
+  ] as const;
 
   const sendWntData = encodeFunctionData({
     abi: EXCHANGE_ROUTER_ABI,

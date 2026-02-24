@@ -1,5 +1,10 @@
 import adapter from '@sveltejs/adapter-auto';
 
+const trustedOrigins = (process.env.CSRF_TRUSTED_ORIGINS ?? '')
+	.split(',')
+	.map((origin) => origin.trim())
+	.filter(Boolean);
+
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	kit: {
@@ -8,7 +13,7 @@ const config = {
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter(),
 		csrf: {
-			checkOrigin: process.env.NODE_ENV === 'production'
+			trustedOrigins
 		}
 	}
 };

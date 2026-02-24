@@ -19,7 +19,7 @@ import type {
   TrendAnalysis,
   DivergenceSignal,
 } from './types';
-import { AGENT_POOL, getFactorIds } from './agents';
+import { AGENT_POOL, getFactorIds, normalizeAgentId } from './agents';
 import { getSpec } from './specs';
 import { computeAgentFactors, type MarketContext } from './factorEngine';
 import { ANALYSIS_TIMEOUT_MS } from './constants';
@@ -83,7 +83,7 @@ function scoreAgent(
   ctx: MarketContext
 ): AgentOutput {
   const startMs = performance.now();
-  const agentId = selection.agentId;
+  const agentId = normalizeAgentId(selection.agentId);
   const factorIds = getFactorIds(agentId);
   const spec = getSpec(agentId, selection.specId);
 

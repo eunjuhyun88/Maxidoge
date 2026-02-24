@@ -14,7 +14,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | ID | 제목 | 설명 | 상태 |
 |----|------|------|------|
 | **S-01** | Agent 브릿지 단일화 | `data/agents.ts`를 `AGENT_POOL` 기반 브릿지로 교체, `AGDEFS` export만 호환 유지 | ✅ |
-| **S-02** | Progression 단일 규칙 확정 | `progressionStore` 신설 기준 계약 정의 (LP, matches, tier, unlockedSpecs) | 🟡 (progressionRules.ts 완성, store 미통합) |
+| **S-02** | Progression 단일 규칙 확정 | `progressionStore` 신설 기준 계약 정의 (LP, matches, tier, unlockedSpecs) | ✅ |
 | **S-03** | Price 계약 단일화 | `livePrice` 단일 스토어/이벤트 규약 정의 (심볼, 타임스탬프, source) | ✅ |
 | **S-04** | Arena DraftSelection 계약 고정 | `{ agentId, specId, weight }[]` + 합계 100 검증 규칙 확정 | ✅ |
 | **S-05** | Terminal Persistence Migration | `005_terminal_persistence.sql` (scan_runs/scan_signals/agent_chat_messages) | ✅ |
@@ -79,9 +79,9 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **B-03** | agentPipeline 구현 | `agentPipeline.ts` + 8개 에이전트 scoring 모듈 + `computeFinalPrediction` | B-02 | ✅ |
 | **B-04** | exitOptimizer 구현 | SL/TP 3전략 + EV/R:R 계산 | B-02 | ✅ |
 | **B-05** | 데이터 수집 API | snapshot/proxy 라우트 및 외부 API 클라이언트 추가 | — | ✅ |
-| **B-06** | progression 서버 반영 | 매치 결과 기준 LP/티어/해금 업데이트 일원화 | B-01, B-03 | ⬜ |
+| **B-06** | progression 서버 반영 | 매치 결과 기준 LP/티어/해금 업데이트 일원화 | B-01, B-03 | ✅ |
 | **B-07** | RAG memory | `memory.ts` + pgvector 검색/저장 연동 | B-03 | ⬜ |
-| **B-08** | 하위호환 어댑터 | 기존 `/api/matches`를 신규 arena API 내부 호출로 연결 | B-01 | 🟡 (/api/matches 존재, arenaService 위임 미완) |
+| **B-08** | 하위호환 어댑터 | 기존 `/api/matches`를 신규 arena API 내부 호출로 연결 | B-01 | ✅ |
 | **B-09** | Terminal Scan API | `POST /api/terminal/scan` (warroomScan.ts 로직 서버 이전) | B-02, S-05 | ✅ |
 | **B-10** | Terminal Chat API | 기존 `/api/chat/messages` 확장 (meta.mentionedAgent → 에이전트 응답 생성) | B-09 | ✅ |
 | **B-11** | Market Data API | 뉴스(RSS)/이벤트(온체인)/플로우(스마트머니) + DexScreener(boost/ads/takeover/search) 프록시 | — | ✅ |
@@ -98,7 +98,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 
 | ID | 제목 | 설명 | depends | 상태 |
 |----|------|------|---------|------|
-| **F-01** | AGDEFS 소비부 치환 | 현재 AGDEFS 참조 16개 파일을 브릿지/신규 모델 기준으로 정리 | S-01 | ⬜ |
+| **F-01** | AGDEFS 소비부 치환 | 현재 AGDEFS 참조 16개 파일을 브릿지/신규 모델 기준으로 정리 | S-01 | ✅ |
 | **F-02** | progressionStore 소비 통일 | wallet/userProfile/agentData의 중복 계산 제거, 표시값 단일화 (Oracle 프로필 모달 Tier/Phase 표시 교체 포함) | S-02 | ⬜ |
 | **F-03** | priceService 적용 | Header/Chart/Terminal의 WS/interval 중복 제거, 단일 구독으로 통일 | S-03, B-05 | ⬜ |
 | **F-04** | Lobby v3 | 8에이전트 표시, 3개 선택, 가중치 합 100, Spec 선택 UI | S-04, F-01 | ✅ |
@@ -107,7 +107,7 @@ Rule: **Contract → BE → FE**, never mixed in one PR
 | **F-07** | WarRoom UI 분해 | WarRoom.svelte 렌더링 전용 축소 (현재 1142줄 → 목표 800 이하) | B-02 | ✅ |
 | **F-08** | 가시성/UI 정리 | 인텔/채팅/지표바 접기·라벨·모바일 동선 최종 튜닝 | F-06, F-07 | 🟡 (ChartPanel/Terminal 1차 완료, 모바일 미세 조정 잔여) |
 | **F-09** | Store 전환 | localStorage primary → Supabase primary (quickTrade/tracked/scanTabs/chat) | B-09, B-10 | ⬜ |
-| **F-10** | 하드코딩 제거 | LIVE FEED/HEADLINES/EVENTS/FLOW → API fetch, chat 응답 → 스캔 컨텍스트 | B-09, B-10, B-11 | 🟡 (API fetch 연결 완료, Lobby 데모데이터 잔존) |
+| **F-10** | 하드코딩 제거 | LIVE FEED/HEADLINES/EVENTS/FLOW → API fetch, chat 응답 → 스캔 컨텍스트 | B-09, B-10, B-11 | ✅ |
 | **F-11** | 영속성 검증 | 새로고침/다른기기/오프라인 시 데이터 복원 확인 | F-09, F-10 | ⬜ |
 | **F-12** | Oracle 모달 정합성 | Oracle 프로필 모달의 `TIER: CONNECTED`, `PHASE P1` 구형 표기를 v3 계약 값으로 교체 | F-02 | ⬜ |
 | **F-13** | Lobby Hub v3 | 모드 카드(PvE/PvP/Tournament) + 진행중 매치 + 주간 토너 위젯 구성 | S-06, B-12, B-13 | ✅ |

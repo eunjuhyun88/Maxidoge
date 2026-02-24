@@ -108,6 +108,7 @@ export const GET: RequestHandler = async ({ url, getClientAddress }) => {
 
     return json(
       {
+        success: true,
         ok: true,
         data: {
           coins: result.coins.slice(0, limit),

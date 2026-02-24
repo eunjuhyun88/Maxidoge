@@ -15,29 +15,38 @@ export const GET: RequestHandler = async () => {
       return json({ error: 'CoinGecko global source unavailable' }, { status: 502 });
     }
 
+    const payload = {
+      global,
+      stablecoin: llamaStable
+        ? {
+            source: 'defillama',
+            totalMcapUsd: llamaStable.totalMcapUsd,
+            change24hPct: llamaStable.change24hPct,
+            change7dPct: llamaStable.change7dPct,
+            updatedAt: llamaStable.updatedAt,
+          }
+        : cgStable
+          ? {
+              source: 'coingecko',
+              totalMcapUsd: cgStable.totalMcapUsd,
+              change24hPct: cgStable.change24hPct,
+              updatedAt: cgStable.updatedAt,
+              top: cgStable.top,
+            }
+          : null,
+      btcDominance: global.btcDominance,
+      totalMarketCap: global.totalMarketCapUsd,
+      marketCapChange24hPct: global.marketCapChange24hPct,
+    };
+
     return json(
       {
+        success: true,
         ok: true,
-        data: {
-          global,
-          stablecoin: llamaStable
-            ? {
-                source: 'defillama',
-                totalMcapUsd: llamaStable.totalMcapUsd,
-                change24hPct: llamaStable.change24hPct,
-                change7dPct: llamaStable.change7dPct,
-                updatedAt: llamaStable.updatedAt,
-              }
-            : cgStable
-              ? {
-                  source: 'coingecko',
-                  totalMcapUsd: cgStable.totalMcapUsd,
-                  change24hPct: cgStable.change24hPct,
-                  updatedAt: cgStable.updatedAt,
-                  top: cgStable.top,
-                }
-              : null,
-        },
+        btcDominance: payload.btcDominance,
+        totalMarketCap: payload.totalMarketCap,
+        marketCapChange24hPct: payload.marketCapChange24hPct,
+        data: payload,
       },
       {
         headers: {

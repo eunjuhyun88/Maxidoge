@@ -11,6 +11,7 @@ import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { query } from '$lib/server/db';
 import { getOrderStatus, getTokenPrice, type L2Credentials } from '$lib/server/polymarketClob';
 import { polymarketStatusLimiter } from '$lib/server/rateLimit';
+import { decryptSecret } from '$lib/server/secretCrypto';
 
 export const GET: RequestHandler = async ({ cookies, params, getClientAddress }) => {
   const ip = getClientAddress();
@@ -41,12 +42,22 @@ export const GET: RequestHandler = async ({ cookies, params, getClientAddress })
         [user.id],
       );
       const creds = credResult.rows[0];
+      let apiKey: string | null = null;
+      let secret: string | null = null;
+      let passphrase: string | null = null;
+      try {
+        apiKey = decryptSecret(creds?.poly_api_key ?? null);
+        secret = decryptSecret(creds?.poly_secret ?? null);
+        passphrase = decryptSecret(creds?.poly_passphrase ?? null);
+      } catch {
+        return json({ error: 'Server secret encryption key mismatch' }, { status: 503 });
+      }
 
-      if (creds?.poly_api_key) {
+      if (apiKey && secret && passphrase) {
         const l2: L2Credentials = {
-          apiKey: creds.poly_api_key,
-          secret: creds.poly_secret,
-          passphrase: creds.poly_passphrase,
+          apiKey,
+          secret,
+          passphrase,
         };
 
         const status = await getOrderStatus(pos.clob_order_id, l2, pos.wallet_address);

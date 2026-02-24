@@ -49,6 +49,7 @@ export interface P0State {
 function createNotificationStore() {
   const { subscribe, update, set } = writable<Notification[]>([]);
   let hydrated = false;
+  let hydratePromise: Promise<void> | null = null;
 
   function mapApiNotification(n: ApiNotification): Notification {
     return {
@@ -67,11 +68,20 @@ function createNotificationStore() {
     async hydrate(force = false) {
       if (typeof window === 'undefined') return;
       if (hydrated && !force) return;
+      if (hydratePromise) return hydratePromise;
 
-      const rows = await fetchNotificationsApi({ limit: 100, offset: 0 });
-      if (!rows) return;
-      hydrated = true;
-      set(rows.map(mapApiNotification));
+      hydratePromise = (async () => {
+        const rows = await fetchNotificationsApi({ limit: 100, offset: 0 });
+        if (!rows) return;
+        hydrated = true;
+        set(rows.map(mapApiNotification));
+      })();
+
+      try {
+        await hydratePromise;
+      } finally {
+        hydratePromise = null;
+      }
     },
     addNotification(n: Omit<Notification, 'id' | 'time' | 'read'>) {
       const tempId = crypto.randomUUID ? crypto.randomUUID() : `n-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

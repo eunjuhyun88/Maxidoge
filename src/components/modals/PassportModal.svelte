@@ -164,7 +164,6 @@
   .st-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .stamp { font-size: 9px; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,.05); color: #ccc; font-family: var(--fm); }
 
-  .recent {}
   .rc-title { font-size: 7px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
   .rc-empty { font-size: 8px; color: #555; font-family: var(--fm); }
   .rc-row {

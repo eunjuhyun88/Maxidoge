@@ -17,7 +17,10 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
     });
 
     return json({
+      success: true,
       ok: true,
+      records: result.records,
+      pagination: result.pagination,
       warning: result.warning,
       data: {
         records: result.records,
@@ -32,4 +35,3 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
     return json({ error: 'Failed to load scan history' }, { status: 500 });
   }
 };
-

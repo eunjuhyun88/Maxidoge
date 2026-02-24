@@ -523,19 +523,22 @@ export const ALL_SPECS: SpecDefinition[] = Object.values(SPEC_REGISTRY).flat();
 
 // ─── Helpers ────────────────────────────────────────────────
 
-/** 특정 에이전트의 Spec 목록 */
-export function getSpecsForAgent(agentId: AgentId): SpecDefinition[] {
-  return SPEC_REGISTRY[agentId] ?? [];
+/** 특정 에이전트의 Spec 목록 (대소문자 무관) */
+export function getSpecsForAgent(agentId: string): SpecDefinition[] {
+  const key = agentId.toUpperCase() as AgentId;
+  return SPEC_REGISTRY[key] ?? [];
 }
 
-/** 특정 Spec 조회 (agentId + specId) */
-export function getSpec(agentId: AgentId, specId: string): SpecDefinition | undefined {
-  return SPEC_REGISTRY[agentId]?.find(s => s.id === specId);
+/** 특정 Spec 조회 (agentId + specId, 대소문자 무관) */
+export function getSpec(agentId: string, specId: string): SpecDefinition | undefined {
+  const key = agentId.toUpperCase() as AgentId;
+  return SPEC_REGISTRY[key]?.find(s => s.id === specId);
 }
 
-/** 해금 가능한 Spec 목록 (매치 수 기준) */
-export function getUnlockedSpecs(agentId: AgentId, totalMatches: number): SpecDefinition[] {
-  return SPEC_REGISTRY[agentId]?.filter(s => totalMatches >= s.unlockMatches) ?? [];
+/** 해금 가능한 Spec 목록 (매치 수 기준, 대소문자 무관) */
+export function getUnlockedSpecs(agentId: string, totalMatches: number): SpecDefinition[] {
+  const key = agentId.toUpperCase() as AgentId;
+  return SPEC_REGISTRY[key]?.filter(s => totalMatches >= s.unlockMatches) ?? [];
 }
 
 /** 다음 해금까지 남은 매치 수 */

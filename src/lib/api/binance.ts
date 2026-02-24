@@ -5,6 +5,7 @@
 // Base: https://api.binance.com or https://data-api.binance.vision
 
 import { toBinanceInterval } from '$lib/utils/timeframe';
+import type { BinanceKline, Binance24hr } from '$lib/engine/types';
 
 const BASE = 'https://api.binance.com';
 const DATA_BASE = 'https://data-api.binance.vision';

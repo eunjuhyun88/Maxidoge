@@ -13,12 +13,12 @@
     : 'Loading market data...');
   import { gameState } from '$lib/stores/gameState';
   import { livePrices } from '$lib/stores/priceStore';
-  import { updateAllPrices, hydrateQuickTrades } from '$lib/stores/quickTradeStore';
-  import { updateTrackedPrices } from '$lib/stores/trackedSignalStore';
+  import { hydrateQuickTrades, openTradeCount } from '$lib/stores/quickTradeStore';
+  import { activeSignalCount } from '$lib/stores/trackedSignalStore';
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { alertEngine } from '$lib/services/alertEngine';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
 
   // ── Panel resize state ──
   let leftW = $state(280);       // War Room width
@@ -79,8 +79,424 @@
     chart: { label: 'Chart', icon: '📊', desc: 'Execution chart with drawing and indicators' },
     intel: { label: 'Intel', icon: '🧠', desc: 'News, community and agent chat' },
   };
-  let mobileTab: MobileTab = $state<MobileTab>('chart');
-  let mobileViewTracked = $state(false);
+  let mobileTab: MobileTab = 'chart';
+  let mobileViewTracked = false;
+  let mobileNavTracked = false;
+  type MobilePanelSize = { widthPct: number; heightPct: number };
+  const MOBILE_PANEL_MIN_W = 72;
+  const MOBILE_PANEL_MAX_W = 100;
+  const MOBILE_PANEL_MIN_H = 58;
+  const MOBILE_PANEL_MAX_H = 100;
+  const MOBILE_PANEL_STEP = 3;
+  type MobileResizeAxis = 'x' | 'y';
+  type MobileResizeState = {
+    tab: MobileTab;
+    axis: MobileResizeAxis;
+    pointerId: number;
+    startClient: number;
+    startPct: number;
+    basisPx: number;
+  };
+  type MobileTouchResizeState = {
+    tab: MobileTab;
+    axis: MobileResizeAxis;
+    touchId: number;
+    startClient: number;
+    startPct: number;
+    basisPx: number;
+  };
+  let mobileResizeState: MobileResizeState | null = null;
+  let mobileTouchResizeState: MobileTouchResizeState | null = null;
+  let mobilePanelSizes: Record<MobileTab, MobilePanelSize> = {
+    warroom: { widthPct: 100, heightPct: 100 },
+    chart: { widthPct: 100, heightPct: 100 },
+    intel: { widthPct: 100, heightPct: 100 },
+  };
+  type DesktopPanelKey = 'left' | 'center' | 'right';
+  type DesktopPanelSize = { widthPct: number; heightPct: number };
+  const DESKTOP_PANEL_MIN_W = 72;
+  const DESKTOP_PANEL_MAX_W = 100;
+  const DESKTOP_PANEL_MIN_H = 64;
+  const DESKTOP_PANEL_MAX_H = 100;
+  const DESKTOP_PANEL_STEP = 3;
+  let desktopPanelSizes: Record<DesktopPanelKey, DesktopPanelSize> = {
+    left: { widthPct: 100, heightPct: 100 },
+    center: { widthPct: 100, heightPct: 100 },
+    right: { widthPct: 100, heightPct: 100 },
+  };
+  type TabletPanelKey = 'left' | 'center' | 'bottom';
+  type TabletPanelSize = { widthPct: number; heightPct: number };
+  const TABLET_LEFT_MIN = 188;
+  const TABLET_LEFT_MAX = 360;
+  const TABLET_BOTTOM_MIN = 164;
+  const TABLET_BOTTOM_MAX = 320;
+  const TABLET_SPLIT_STEP = 12;
+  let tabletPanelSizes: Record<TabletPanelKey, TabletPanelSize> = {
+    left: { widthPct: 100, heightPct: 100 },
+    center: { widthPct: 100, heightPct: 100 },
+    bottom: { widthPct: 100, heightPct: 100 },
+  };
+  let tabletLeftWidth = 232;
+  let tabletBottomHeight = 208;
+  $: tabletLayoutStyle = `--tab-left-width: ${tabletLeftWidth}px; --tab-bottom-height: ${tabletBottomHeight}px;`;
+  type TabletSplitResizeAxis = 'x' | 'y';
+  type TabletSplitResizeState = {
+    axis: TabletSplitResizeAxis;
+    pointerId: number;
+    startClient: number;
+    startValue: number;
+  };
+  let tabletSplitResizeState: TabletSplitResizeState | null = null;
+
+  function clampPercent(value: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function getDesktopPanelStyle(panel: DesktopPanelKey) {
+    const size = desktopPanelSizes[panel];
+    return `--desk-panel-width: ${size.widthPct}%; --desk-panel-height: ${size.heightPct}%`;
+  }
+
+  function resizeDesktopPanelByWheel(panel: DesktopPanelKey, axis: 'x' | 'y', e: WheelEvent) {
+    if (!isDesktop) return;
+    const rawDelta = axis === 'x' ? (Math.abs(e.deltaX) > 0 ? e.deltaX : e.deltaY) : e.deltaY;
+    if (!Number.isFinite(rawDelta) || rawDelta === 0) return;
+
+    const step = e.shiftKey ? DESKTOP_PANEL_STEP * 2 : DESKTOP_PANEL_STEP;
+    const signed = rawDelta > 0 ? step : -step;
+    const current = desktopPanelSizes[panel];
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (axis === 'x') {
+      const nextWidth = clampPercent(current.widthPct + signed, DESKTOP_PANEL_MIN_W, DESKTOP_PANEL_MAX_W);
+      if (nextWidth === current.widthPct) return;
+      desktopPanelSizes = {
+        ...desktopPanelSizes,
+        [panel]: { ...current, widthPct: nextWidth },
+      };
+      return;
+    }
+
+    const nextHeight = clampPercent(current.heightPct + signed, DESKTOP_PANEL_MIN_H, DESKTOP_PANEL_MAX_H);
+    if (nextHeight === current.heightPct) return;
+    desktopPanelSizes = {
+      ...desktopPanelSizes,
+      [panel]: { ...current, heightPct: nextHeight },
+    };
+  }
+
+  function resetDesktopPanelSize(panel: DesktopPanelKey) {
+    desktopPanelSizes = {
+      ...desktopPanelSizes,
+      [panel]: { widthPct: 100, heightPct: 100 },
+    };
+  }
+
+  function getTabletPanelStyle(panel: TabletPanelKey) {
+    const size = tabletPanelSizes[panel];
+    return `--tab-panel-width: ${size.widthPct}%; --tab-panel-height: ${size.heightPct}%`;
+  }
+
+  function getDefaultTabletLeftWidth() {
+    if (typeof window === 'undefined') return 232;
+    return Math.round(Math.min(232, Math.max(196, window.innerWidth * 0.23)));
+  }
+
+  function getDefaultTabletBottomHeight() {
+    if (typeof window === 'undefined') return 208;
+    return Math.round(Math.min(230, Math.max(176, window.innerHeight * 0.24)));
+  }
+
+  function clampTabletLeftWidth(next: number) {
+    if (typeof window === 'undefined') return Math.round(Math.min(TABLET_LEFT_MAX, Math.max(TABLET_LEFT_MIN, next)));
+    const dynamicMax = Math.min(TABLET_LEFT_MAX, Math.max(220, Math.round(window.innerWidth * 0.36)));
+    return Math.round(Math.min(dynamicMax, Math.max(TABLET_LEFT_MIN, next)));
+  }
+
+  function clampTabletBottomHeight(next: number) {
+    if (typeof window === 'undefined') return Math.round(Math.min(TABLET_BOTTOM_MAX, Math.max(TABLET_BOTTOM_MIN, next)));
+    const dynamicMax = Math.min(TABLET_BOTTOM_MAX, Math.max(196, Math.round(window.innerHeight * 0.42)));
+    return Math.round(Math.min(dynamicMax, Math.max(TABLET_BOTTOM_MIN, next)));
+  }
+
+  function applyTabletSplitDelta(axis: TabletSplitResizeAxis, signedDelta: number) {
+    if (axis === 'x') {
+      tabletLeftWidth = clampTabletLeftWidth(tabletLeftWidth + signedDelta);
+      return;
+    }
+    tabletBottomHeight = clampTabletBottomHeight(tabletBottomHeight + signedDelta);
+  }
+
+  function startTabletSplitDrag(axis: TabletSplitResizeAxis, e: PointerEvent) {
+    if (!isTablet) return;
+    const source = e.currentTarget as HTMLElement | null;
+    source?.setPointerCapture?.(e.pointerId);
+    tabletSplitResizeState = {
+      axis,
+      pointerId: e.pointerId,
+      startClient: axis === 'x' ? e.clientX : e.clientY,
+      startValue: axis === 'x' ? tabletLeftWidth : tabletBottomHeight,
+    };
+    e.preventDefault();
+    document.body.style.cursor = axis === 'x' ? 'col-resize' : 'row-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  function onTabletSplitPointerMove(e: PointerEvent) {
+    const state = tabletSplitResizeState;
+    if (!state || e.pointerId !== state.pointerId) return;
+    const currentClient = state.axis === 'x' ? e.clientX : e.clientY;
+    const delta = currentClient - state.startClient;
+    if (state.axis === 'x') {
+      tabletLeftWidth = clampTabletLeftWidth(state.startValue + delta);
+    } else {
+      // Separator up => bottom panel grows, separator down => bottom panel shrinks.
+      tabletBottomHeight = clampTabletBottomHeight(state.startValue - delta);
+    }
+    e.preventDefault();
+  }
+
+  function finishTabletSplitDrag(e?: PointerEvent) {
+    if (!tabletSplitResizeState) return;
+    if (e && e.pointerId !== tabletSplitResizeState.pointerId) return;
+    tabletSplitResizeState = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+
+  function resizeTabletPanelByWheel(panel: TabletPanelKey, axis: 'x' | 'y', e: WheelEvent) {
+    if (!isTablet) return;
+    const rawDelta = axis === 'x' ? (Math.abs(e.deltaX) > 0 ? e.deltaX : e.deltaY) : e.deltaY;
+    if (!Number.isFinite(rawDelta) || rawDelta === 0) return;
+
+    const step = e.shiftKey ? TABLET_SPLIT_STEP + 8 : TABLET_SPLIT_STEP;
+    const signed = rawDelta > 0 ? step : -step;
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (axis === 'x') {
+      // Tablet horizontal split: adjust WAR ROOM vs CHART width.
+      if (panel === 'bottom') return;
+      applyTabletSplitDelta('x', signed);
+      return;
+    }
+
+    // Tablet vertical split: adjust CHART block vs INTEL block height.
+    applyTabletSplitDelta('y', signed);
+  }
+
+  function resetTabletPanelSize(panel: TabletPanelKey) {
+    if (panel === 'bottom') {
+      tabletBottomHeight = getDefaultTabletBottomHeight();
+      return;
+    }
+    tabletLeftWidth = getDefaultTabletLeftWidth();
+  }
+
+  function getMobilePanelStyle(tab: MobileTab) {
+    const panel = mobilePanelSizes[tab];
+    return `--mob-panel-width: ${panel.widthPct}%; --mob-panel-height: ${panel.heightPct}%`;
+  }
+
+  function resizeMobilePanelByWheel(tab: MobileTab, axis: 'x' | 'y', e: WheelEvent) {
+    if (!isMobile) return;
+    const rawDelta = axis === 'x' ? (Math.abs(e.deltaX) > 0 ? e.deltaX : e.deltaY) : e.deltaY;
+    if (!Number.isFinite(rawDelta) || rawDelta === 0) return;
+
+    const step = e.shiftKey ? MOBILE_PANEL_STEP * 2 : MOBILE_PANEL_STEP;
+    const signed = rawDelta > 0 ? step : -step;
+    const current = mobilePanelSizes[tab];
+
+    if (axis === 'x') {
+      const nextWidth = clampPercent(current.widthPct + signed, MOBILE_PANEL_MIN_W, MOBILE_PANEL_MAX_W);
+      if (nextWidth === current.widthPct) return;
+      e.preventDefault();
+      mobilePanelSizes = {
+        ...mobilePanelSizes,
+        [tab]: { ...current, widthPct: nextWidth },
+      };
+      return;
+    }
+
+    const nextHeight = clampPercent(current.heightPct + signed, MOBILE_PANEL_MIN_H, MOBILE_PANEL_MAX_H);
+    if (nextHeight === current.heightPct) return;
+    e.preventDefault();
+    mobilePanelSizes = {
+      ...mobilePanelSizes,
+      [tab]: { ...current, heightPct: nextHeight },
+    };
+  }
+
+  function resetMobilePanelSize(tab: MobileTab) {
+    mobilePanelSizes = {
+      ...mobilePanelSizes,
+      [tab]: { widthPct: 100, heightPct: 100 },
+    };
+  }
+
+  function supportsPointerDrag() {
+    return typeof window !== 'undefined' && 'PointerEvent' in window;
+  }
+
+  function clearBodySelectionIfIdle() {
+    if (!mobileResizeState && !mobileTouchResizeState) {
+      document.body.style.userSelect = '';
+    }
+  }
+
+  function applyMobilePanelDrag(tab: MobileTab, axis: MobileResizeAxis, startPct: number, deltaPct: number) {
+    const current = mobilePanelSizes[tab];
+
+    if (axis === 'x') {
+      const nextWidth = clampPercent(startPct + deltaPct, MOBILE_PANEL_MIN_W, MOBILE_PANEL_MAX_W);
+      if (nextWidth === current.widthPct) return false;
+      mobilePanelSizes = {
+        ...mobilePanelSizes,
+        [tab]: { ...current, widthPct: nextWidth },
+      };
+      return true;
+    }
+
+    const nextHeight = clampPercent(startPct + deltaPct, MOBILE_PANEL_MIN_H, MOBILE_PANEL_MAX_H);
+    if (nextHeight === current.heightPct) return false;
+    mobilePanelSizes = {
+      ...mobilePanelSizes,
+      [tab]: { ...current, heightPct: nextHeight },
+    };
+    return true;
+  }
+
+  function startMobilePanelDrag(tab: MobileTab, axis: MobileResizeAxis, e: PointerEvent) {
+    if (!isMobile) return;
+
+    const handle = e.currentTarget as HTMLElement | null;
+    const panel = handle?.closest('.mob-panel-resizable') as HTMLElement | null;
+    if (!panel) return;
+
+    const rect = panel.getBoundingClientRect();
+    const basisPx = axis === 'x' ? rect.width : rect.height;
+    if (!Number.isFinite(basisPx) || basisPx <= 1) return;
+
+    const current = mobilePanelSizes[tab];
+    mobileResizeState = {
+      tab,
+      axis,
+      pointerId: e.pointerId,
+      startClient: axis === 'x' ? e.clientX : e.clientY,
+      startPct: axis === 'x' ? current.widthPct : current.heightPct,
+      basisPx,
+    };
+
+    handle?.setPointerCapture?.(e.pointerId);
+    if (!mobileTouchResizeState) document.body.style.userSelect = 'none';
+    e.preventDefault();
+
+    gtmEvent('terminal_mobile_panel_resize_start', {
+      tab,
+      axis,
+      width_pct: current.widthPct,
+      height_pct: current.heightPct,
+    });
+  }
+
+  function onMobilePanelPointerMove(e: PointerEvent) {
+    if (!mobileResizeState || e.pointerId !== mobileResizeState.pointerId) return;
+
+    const { tab, axis, startClient, startPct, basisPx } = mobileResizeState;
+    const currentClient = axis === 'x' ? e.clientX : e.clientY;
+    const deltaPct = ((currentClient - startClient) / basisPx) * 100;
+    const changed = applyMobilePanelDrag(tab, axis, startPct, deltaPct);
+    if (!changed) return;
+    e.preventDefault();
+  }
+
+  function finishMobilePanelDrag(e?: PointerEvent) {
+    if (!mobileResizeState) return;
+    if (e && e.pointerId !== mobileResizeState.pointerId) return;
+
+    const { tab, axis } = mobileResizeState;
+    const current = mobilePanelSizes[tab];
+    mobileResizeState = null;
+    clearBodySelectionIfIdle();
+
+    gtmEvent('terminal_mobile_panel_resize_end', {
+      tab,
+      axis,
+      width_pct: current.widthPct,
+      height_pct: current.heightPct,
+      input: 'pointer',
+    });
+  }
+
+  function startMobilePanelTouchDrag(tab: MobileTab, axis: MobileResizeAxis, e: TouchEvent) {
+    if (!isMobile || supportsPointerDrag()) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    const handle = e.currentTarget as HTMLElement | null;
+    const panel = handle?.closest('.mob-panel-resizable') as HTMLElement | null;
+    if (!panel) return;
+
+    const rect = panel.getBoundingClientRect();
+    const basisPx = axis === 'x' ? rect.width : rect.height;
+    if (!Number.isFinite(basisPx) || basisPx <= 1) return;
+
+    const current = mobilePanelSizes[tab];
+    mobileTouchResizeState = {
+      tab,
+      axis,
+      touchId: touch.identifier,
+      startClient: axis === 'x' ? touch.clientX : touch.clientY,
+      startPct: axis === 'x' ? current.widthPct : current.heightPct,
+      basisPx,
+    };
+
+    if (!mobileResizeState) document.body.style.userSelect = 'none';
+    e.preventDefault();
+
+    gtmEvent('terminal_mobile_panel_resize_start', {
+      tab,
+      axis,
+      width_pct: current.widthPct,
+      height_pct: current.heightPct,
+      input: 'touch',
+    });
+  }
+
+  function onMobilePanelTouchMove(e: TouchEvent) {
+    if (!mobileTouchResizeState) return;
+    const touch = Array.from(e.touches).find(t => t.identifier === mobileTouchResizeState?.touchId);
+    if (!touch) return;
+
+    const { tab, axis, startClient, startPct, basisPx } = mobileTouchResizeState;
+    const currentClient = axis === 'x' ? touch.clientX : touch.clientY;
+    const deltaPct = ((currentClient - startClient) / basisPx) * 100;
+    const changed = applyMobilePanelDrag(tab, axis, startPct, deltaPct);
+    if (!changed) return;
+    e.preventDefault();
+  }
+
+  function finishMobilePanelTouchDrag(e?: TouchEvent) {
+    if (!mobileTouchResizeState) return;
+    if (e) {
+      const ended = Array.from(e.changedTouches).some(t => t.identifier === mobileTouchResizeState?.touchId);
+      if (!ended) return;
+    }
+
+    const { tab, axis } = mobileTouchResizeState;
+    const current = mobilePanelSizes[tab];
+    mobileTouchResizeState = null;
+    clearBodySelectionIfIdle();
+
+    gtmEvent('terminal_mobile_panel_resize_end', {
+      tab,
+      axis,
+      width_pct: current.widthPct,
+      height_pct: current.heightPct,
+      input: 'touch',
+    });
+  }
 
   function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
     if (typeof window === 'undefined') return;
@@ -97,25 +513,35 @@
 
   function setMobileTab(tab: MobileTab) {
     if (mobileTab === tab) return;
+    const fromTab = mobileTab;
     mobileTab = tab;
     gtmEvent('terminal_mobile_tab_change', {
       tab,
+      from_tab: fromTab,
+      source: 'bottom-nav',
       pair: $gameState.pair,
       timeframe: $gameState.timeframe,
     });
   }
 
-  $effect.pre(() => {
-    if (isMobile && !mobileViewTracked) {
-      mobileViewTracked = true;
-      gtmEvent('terminal_mobile_view', {
-        tab: mobileTab,
-        pair: $gameState.pair,
-        timeframe: $gameState.timeframe,
-      });
-    }
-    if (!isMobile && mobileViewTracked) mobileViewTracked = false;
-  });
+  $: if (isMobile && !mobileViewTracked) {
+    mobileViewTracked = true;
+    gtmEvent('terminal_mobile_view', {
+      tab: mobileTab,
+      pair: $gameState.pair,
+      timeframe: $gameState.timeframe,
+    });
+  }
+  $: if (!isMobile && mobileViewTracked) mobileViewTracked = false;
+  $: if (isMobile && !mobileNavTracked) {
+    mobileNavTracked = true;
+    gtmEvent('terminal_mobile_nav_impression', {
+      tab: mobileTab,
+      pair: $gameState.pair,
+      timeframe: $gameState.timeframe,
+    });
+  }
+  $: if (!isMobile && mobileNavTracked) mobileNavTracked = false;
 
   function startDrag(target: DragTarget, e: MouseEvent) {
     if (isMobile || isTablet) return;
@@ -150,8 +576,80 @@
     window.removeEventListener('mouseup', onMouseUp);
   }
 
+  function clampLeftWidth(next: number) {
+    return Math.min(MAX_LEFT, Math.max(MIN_LEFT, next));
+  }
+
+  function clampRightWidth(next: number) {
+    return Math.min(MAX_RIGHT, Math.max(MIN_RIGHT, next));
+  }
+
+  function isHorizontalResizeGesture(e: WheelEvent) {
+    const absX = Math.abs(e.deltaX);
+    const absY = Math.abs(e.deltaY);
+    return absX >= 10 && absX > absY * 1.2;
+  }
+
+  function resizePanelByWheel(target: 'left' | 'right' | 'center', e: WheelEvent, options?: { force?: boolean }) {
+    if (!isDesktop) return;
+
+    const force = options?.force === true;
+    const horizontalGesture = isHorizontalResizeGesture(e);
+    const wantsResize = force || horizontalGesture || e.altKey || e.ctrlKey || e.metaKey;
+    if (!wantsResize) return;
+
+    const delta = horizontalGesture ? e.deltaX : (e.deltaY === 0 ? e.deltaX : e.deltaY);
+    if (!Number.isFinite(delta) || delta === 0) return;
+    e.preventDefault();
+
+    const step = e.shiftKey ? 26 : 14;
+    const signed = delta > 0 ? step : -step;
+
+    if (target === 'left') {
+      if (leftCollapsed) {
+        leftCollapsed = false;
+        leftW = savedLeftW;
+      }
+      leftW = clampLeftWidth(leftW + signed);
+      savedLeftW = leftW;
+      return;
+    }
+
+    if (target === 'right') {
+      if (rightCollapsed) {
+        rightCollapsed = false;
+        rightW = savedRightW;
+      }
+      rightW = clampRightWidth(rightW + signed);
+      savedRightW = rightW;
+      return;
+    }
+
+    if (target === 'center') {
+      if (leftCollapsed || rightCollapsed) return;
+      const half = Math.round(signed / 2);
+      // Wheel down: widen side panels (center narrower). Wheel up: opposite.
+      const nextLeft = clampLeftWidth(leftW + half);
+      const nextRight = clampRightWidth(rightW + half);
+      leftW = nextLeft;
+      rightW = nextRight;
+      savedLeftW = leftW;
+      savedRightW = rightW;
+    }
+  }
+
   function handleResize() {
+    const wasTablet = windowWidth >= BP_MOBILE && windowWidth < BP_TABLET;
     windowWidth = window.innerWidth;
+    const nowTablet = windowWidth >= BP_MOBILE && windowWidth < BP_TABLET;
+    if (!nowTablet) return;
+    if (!wasTablet) {
+      tabletLeftWidth = getDefaultTabletLeftWidth();
+      tabletBottomHeight = getDefaultTabletBottomHeight();
+      return;
+    }
+    tabletLeftWidth = clampTabletLeftWidth(tabletLeftWidth);
+    tabletBottomHeight = clampTabletBottomHeight(tabletBottomHeight);
   }
 
   async function fetchLiveTicker() {
@@ -189,13 +687,22 @@
     }
   }
 
-  // Fast local updates + slower server persistence (keeps UI snappy without hammering DB)
-  let priceUiSync: ReturnType<typeof setInterval> | null = null;
-  let pricePersistSync: ReturnType<typeof setInterval> | null = null;
-
   onMount(() => {
     windowWidth = window.innerWidth;
+    if (windowWidth >= BP_MOBILE && windowWidth < BP_TABLET) {
+      tabletLeftWidth = getDefaultTabletLeftWidth();
+      tabletBottomHeight = getDefaultTabletBottomHeight();
+    }
     window.addEventListener('resize', handleResize);
+    window.addEventListener('pointermove', onMobilePanelPointerMove, { passive: false });
+    window.addEventListener('pointerup', finishMobilePanelDrag);
+    window.addEventListener('pointercancel', finishMobilePanelDrag);
+    window.addEventListener('touchmove', onMobilePanelTouchMove, { passive: false });
+    window.addEventListener('touchend', finishMobilePanelTouchDrag);
+    window.addEventListener('touchcancel', finishMobilePanelTouchDrag);
+    window.addEventListener('pointermove', onTabletSplitPointerMove, { passive: false });
+    window.addEventListener('pointerup', finishTabletSplitDrag);
+    window.addEventListener('pointercancel', finishTabletSplitDrag);
 
     // ── Hydrate quick trades (터미널 페이지에서만 호출) ──
     void hydrateQuickTrades();
@@ -203,26 +710,7 @@
     // ── Load live ticker data ──
     fetchLiveTicker();
 
-    // 1) Local UI refresh — priceStore 변경 시에만 (3초 맹목 폴링 제거)
-    let _lastPriceHash = '';
-    priceUiSync = setInterval(() => {
-      const s = $gameState;
-      const hash = `${s.prices.BTC}|${s.prices.ETH}|${s.prices.SOL}`;
-      if (hash === _lastPriceHash) return; // 가격 변동 없으면 스킵
-      _lastPriceHash = hash;
-      const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
-      updateAllPrices(prices, { syncServer: false });
-      updateTrackedPrices(prices);
-    }, 3000);
-
-    // 2) Periodic server persistence (batched in store debounce)
-    pricePersistSync = setInterval(() => {
-      const s = $gameState;
-      const prices = { BTC: s.prices.BTC, ETH: s.prices.ETH, SOL: s.prices.SOL };
-      updateAllPrices(prices, { syncServer: true });
-    }, 30000);
-
-    // 3) Background alert engine — scans every 5min, fires notifications
+    // Background alert engine — scans every 5min, fires notifications
     alertEngine.start();
 
     const params = new URLSearchParams(window.location.search);
@@ -265,17 +753,29 @@
   });
 
   onDestroy(() => {
-    if (priceUiSync) clearInterval(priceUiSync);
-    if (pricePersistSync) clearInterval(pricePersistSync);
+    finishMobilePanelDrag();
+    finishMobilePanelTouchDrag();
+    finishTabletSplitDrag();
     alertEngine.stop();
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('pointermove', onMobilePanelPointerMove);
+      window.removeEventListener('pointerup', finishMobilePanelDrag);
+      window.removeEventListener('pointercancel', finishMobilePanelDrag);
+      window.removeEventListener('touchmove', onMobilePanelTouchMove);
+      window.removeEventListener('touchend', finishMobilePanelTouchDrag);
+      window.removeEventListener('touchcancel', finishMobilePanelTouchDrag);
+      window.removeEventListener('pointermove', onTabletSplitPointerMove);
+      window.removeEventListener('pointerup', finishTabletSplitDrag);
+      window.removeEventListener('pointercancel', finishTabletSplitDrag);
     }
   });
 
   // Selected pair display
-  let pair = $derived($gameState.pair || 'BTC/USDT');
-  let mobileMeta = $derived(MOBILE_TAB_META[mobileTab]);
+  $: pair = $gameState.pair || 'BTC/USDT';
+  $: mobileMeta = MOBILE_TAB_META[mobileTab];
+  $: mobileOpenTrades = $openTradeCount;
+  $: mobileTrackedSignals = $activeSignalCount;
 
   function onTokenSelect(e: CustomEvent<{ pair: string }>) {
     gameState.update(s => ({ ...s, pair: e.detail.pair }));
@@ -289,8 +789,14 @@
   type WarRoomHandle = {
     triggerScanFromChart?: () => void;
   };
+  type ChartPanelHandle = {
+    activateTradeDrawing?: (dir?: 'LONG' | 'SHORT') => Promise<void> | void;
+  };
   let warRoomRef: WarRoomHandle | null = null;
-  let pendingChartScan = $state(false);
+  let mobileChartRef: ChartPanelHandle | null = null;
+  let tabletChartRef: ChartPanelHandle | null = null;
+  let desktopChartRef: ChartPanelHandle | null = null;
+  let pendingChartScan = false;
 
   function tryTriggerWarRoomScan(): boolean {
     if (!warRoomRef || typeof warRoomRef.triggerScanFromChart !== 'function') return false;
@@ -313,6 +819,11 @@
       toggleLeft();
     }
     if (isMobile && mobileTab !== 'warroom') {
+      gtmEvent('terminal_mobile_tab_auto_switch', {
+        from_tab: mobileTab,
+        to_tab: 'warroom',
+        reason: 'scan_request',
+      });
       setMobileTab('warroom');
     }
   }
@@ -361,11 +872,105 @@
   ];
   let isTyping = false;
   let latestScan: ScanIntelDetail | null = null;
+  type ChatTradeDirection = 'LONG' | 'SHORT';
+  let chatTradeReady = false;
+  let chatSuggestedDir: ChatTradeDirection = 'LONG';
+  let chatFocusKey = 0;
 
   // 에이전트 정보 맵 (아이콘/컬러 lookup)
   const AGENT_META: Record<string, { icon: string; color: string }> = {};
   for (const ag of AGDEFS) AGENT_META[ag.name] = { icon: ag.icon, color: ag.color };
   AGENT_META['ORCHESTRATOR'] = { icon: '🧠', color: '#ff2d9b' };
+
+  function inferSuggestedDirection(text: string): ChatTradeDirection | null {
+    const lower = text.toLowerCase();
+    let longScore = 0;
+    let shortScore = 0;
+    if (/\b(long|bull|bullish|breakout|uptrend|매수|롱|상승)\b/.test(lower)) longScore += 2;
+    if (/\b(short|bear|bearish|breakdown|downtrend|매도|숏|하락)\b/.test(lower)) shortScore += 2;
+    if (/\b(tp up|target up|higher high|support hold)\b/.test(lower)) longScore += 1;
+    if (/\b(tp down|target down|lower low|resistance reject)\b/.test(lower)) shortScore += 1;
+    if (longScore === shortScore) return null;
+    return longScore > shortScore ? 'LONG' : 'SHORT';
+  }
+
+  function getActiveChartPanel(): ChartPanelHandle | null {
+    if (isMobile) return mobileChartRef;
+    if (isTablet) return tabletChartRef;
+    return desktopChartRef;
+  }
+
+  function focusIntelChat(source: string) {
+    if (isDesktop && rightCollapsed) toggleRight();
+    if (isMobile && mobileTab !== 'intel') {
+      gtmEvent('terminal_mobile_tab_auto_switch', {
+        from_tab: mobileTab,
+        to_tab: 'intel',
+        reason: source,
+      });
+      setMobileTab('intel');
+    }
+    chatFocusKey += 1;
+  }
+
+  function handleChartChatRequest(e: CustomEvent<{ source?: string; pair?: string; timeframe?: string }>) {
+    const detail = e.detail ?? {};
+    gtmEvent('terminal_chat_request_shell', {
+      source: detail.source || 'chart-panel',
+      pair: detail.pair || $gameState.pair,
+      timeframe: detail.timeframe || $gameState.timeframe,
+      trade_ready: chatTradeReady,
+    });
+    focusIntelChat(detail.source || 'chart-panel');
+  }
+
+  async function triggerTradePlanFromChat(source: string) {
+    if (!chatTradeReady) {
+      gtmEvent('terminal_trade_plan_request_blocked', {
+        source,
+        reason: 'chat_answer_required',
+        pair: $gameState.pair,
+        timeframe: $gameState.timeframe,
+      });
+      focusIntelChat(`${source}-chat-first`);
+      return;
+    }
+
+    if (isDesktop && rightCollapsed) toggleRight();
+    if (isMobile && mobileTab !== 'chart') {
+      gtmEvent('terminal_mobile_tab_auto_switch', {
+        from_tab: mobileTab,
+        to_tab: 'chart',
+        reason: 'trade_plan_from_chat',
+      });
+      setMobileTab('chart');
+      await tick();
+    }
+
+    await tick();
+    const chartPanel = getActiveChartPanel();
+    if (!chartPanel || typeof chartPanel.activateTradeDrawing !== 'function') {
+      gtmEvent('terminal_trade_plan_request_failed', {
+        source,
+        reason: 'chart_panel_unavailable',
+        pair: $gameState.pair,
+        timeframe: $gameState.timeframe,
+      });
+      return;
+    }
+
+    gtmEvent('terminal_trade_plan_request', {
+      source,
+      pair: $gameState.pair,
+      timeframe: $gameState.timeframe,
+      suggested_dir: chatSuggestedDir,
+    });
+    await chartPanel.activateTradeDrawing(chatSuggestedDir);
+  }
+
+  function handleIntelGoTrade() {
+    void triggerTradePlanFromChat('intel-panel');
+  }
 
   async function handleSendChat(e: CustomEvent<{ text: string }>) {
     const text = e.detail.text;
@@ -380,6 +985,14 @@
     // 멘션된 에이전트 감지 (없으면 서버에서 ORCHESTRATOR로 기본 처리)
     const agent = AGDEFS.find(ag => text.toLowerCase().includes(`@${ag.name.toLowerCase()}`));
     const mentionedAgent = agent?.name || undefined;
+    chatTradeReady = false;
+    gtmEvent('terminal_chat_question_sent', {
+      source: 'intel-chat',
+      pair: $gameState.pair || 'BTC/USDT',
+      timeframe: $gameState.timeframe || '4h',
+      chars: text.length,
+      mentioned_agent: mentionedAgent || 'auto',
+    });
 
     try {
       const res = await fetch('/api/chat/messages', {
@@ -415,8 +1028,26 @@
             time,
             isUser: false,
           }];
+          const inferred = inferSuggestedDirection(String(r.message || ''));
+          if (inferred) chatSuggestedDir = inferred;
+          chatTradeReady = true;
+          gtmEvent('terminal_chat_answer_received', {
+            source: 'intel-chat',
+            pair: $gameState.pair || 'BTC/USDT',
+            timeframe: $gameState.timeframe || '4h',
+            responder: r.senderName || 'ORCHESTRATOR',
+            chars: String(r.message || '').length,
+            suggested_dir: inferred || chatSuggestedDir,
+          });
         }
       } else {
+        chatTradeReady = false;
+        gtmEvent('terminal_chat_answer_error', {
+          source: 'intel-chat',
+          pair: $gameState.pair || 'BTC/USDT',
+          timeframe: $gameState.timeframe || '4h',
+          status: res.status,
+        });
         chatMessages = [...chatMessages, {
           from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
           text: 'Connection error. Try again or check server status.',
@@ -425,6 +1056,13 @@
       }
     } catch (err) {
       isTyping = false;
+      chatTradeReady = false;
+      gtmEvent('terminal_chat_answer_error', {
+        source: 'intel-chat',
+        pair: $gameState.pair || 'BTC/USDT',
+        timeframe: $gameState.timeframe || '4h',
+        status: 'network',
+      });
       chatMessages = [...chatMessages, {
         from: 'SYSTEM', icon: '⚠️', color: '#ff8c3b',
         text: 'Network error. Please check your connection.',
@@ -448,42 +1086,121 @@
   <!-- ═══ MOBILE LAYOUT ═══ -->
   {#if isMobile}
   <div class="terminal-mobile">
-    <div class="mob-topbar" class:chart-focus={mobileTab === 'chart'}>
-      <div class="mob-topline">
-        <div class="mob-title-wrap">
-          <span class="mob-eyebrow">TERMINAL MOBILE</span>
-          <span class="mob-title">{mobileMeta.label}</span>
+    {#if mobileTab !== 'chart'}
+      <div class="mob-topbar">
+        <div class="mob-topline">
+          <div class="mob-title-wrap">
+            <span class="mob-eyebrow">TERMINAL MOBILE</span>
+            <span class="mob-title">{mobileMeta.label}</span>
+          </div>
+          <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
         </div>
-        <span class="mob-live"><span class="ctb-dot"></span>LIVE</span>
-      </div>
-      {#if mobileTab !== 'chart'}
         <div class="mob-meta">
           <div class="mob-token">
             <TokenDropdown value={pair} compact on:select={onTokenSelect} />
           </div>
           <span class="mob-meta-chip">{formatTimeframeLabel($gameState.timeframe)}</span>
-          <span class="mob-meta-chip subtle">{pair}</span>
         </div>
-      {/if}
-      {#if mobileTab !== 'chart'}
         <div class="mob-desc">{mobileMeta.desc}</div>
-      {/if}
-    </div>
+      </div>
+    {/if}
 
-    <div class="mob-content">
+    <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
       {#if mobileTab === 'warroom'}
-        <div class="mob-panel-wrap">
+        <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('warroom')}>
           <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-x"
+            title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize war room panel width with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'x', e)}
+            on:pointerdown={(e) => startMobilePanelDrag('warroom', 'x', e)}
+            on:touchstart={(e) => startMobilePanelTouchDrag('warroom', 'x', e)}
+            on:dblclick={() => resetMobilePanelSize('warroom')}
+          ></button>
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-y"
+            title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize war room panel height with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'y', e)}
+            on:pointerdown={(e) => startMobilePanelDrag('warroom', 'y', e)}
+            on:touchstart={(e) => startMobilePanelTouchDrag('warroom', 'y', e)}
+            on:dblclick={() => resetMobilePanelSize('warroom')}
+          ></button>
         </div>
       {:else if mobileTab === 'chart'}
-        <div class="mob-chart-section">
-          <div class="mob-chart-area">
-            <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
+        <div class="mob-chart-stack">
+          <div class="mob-chart-section mob-panel-resizable" style={getMobilePanelStyle('chart')}>
+            <div class="mob-chart-area">
+              <ChartPanel
+                bind:this={mobileChartRef}
+                advancedMode
+                enableTradeLineEntry
+                uiPreset="tradingview"
+                requireTradeConfirm
+                chatFirstMode
+                {chatTradeReady}
+                chatTradeDir={chatSuggestedDir}
+                on:scanrequest={handleChartScanRequest}
+                on:chatrequest={handleChartChatRequest}
+              />
+            </div>
+            <button
+              type="button"
+              class="mob-resize-handle mob-resize-handle-x"
+              title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+              aria-label="Resize chart panel width with scroll"
+              on:wheel={(e) => resizeMobilePanelByWheel('chart', 'x', e)}
+              on:pointerdown={(e) => startMobilePanelDrag('chart', 'x', e)}
+              on:touchstart={(e) => startMobilePanelTouchDrag('chart', 'x', e)}
+              on:dblclick={() => resetMobilePanelSize('chart')}
+            ></button>
+            <button
+              type="button"
+              class="mob-resize-handle mob-resize-handle-y"
+              title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+              aria-label="Resize chart panel height with scroll"
+              on:wheel={(e) => resizeMobilePanelByWheel('chart', 'y', e)}
+              on:pointerdown={(e) => startMobilePanelDrag('chart', 'y', e)}
+              on:touchstart={(e) => startMobilePanelTouchDrag('chart', 'y', e)}
+            on:dblclick={() => resetMobilePanelSize('chart')}
+          ></button>
           </div>
         </div>
       {:else if mobileTab === 'intel'}
-        <div class="mob-panel-wrap">
-          <IntelPanel {chatMessages} {isTyping} {latestScan} prioritizeChat on:sendchat={handleSendChat} />
+        <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('intel')}>
+          <IntelPanel
+            {chatMessages}
+            {isTyping}
+            {latestScan}
+            prioritizeChat
+            {chatTradeReady}
+            {chatFocusKey}
+            on:sendchat={handleSendChat}
+            on:gototrade={handleIntelGoTrade}
+          />
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-x"
+            title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize intel panel width with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('intel', 'x', e)}
+            on:pointerdown={(e) => startMobilePanelDrag('intel', 'x', e)}
+            on:touchstart={(e) => startMobilePanelTouchDrag('intel', 'x', e)}
+            on:dblclick={() => resetMobilePanelSize('intel')}
+          ></button>
+          <button
+            type="button"
+            class="mob-resize-handle mob-resize-handle-y"
+            title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize intel panel height with scroll"
+            on:wheel={(e) => resizeMobilePanelByWheel('intel', 'y', e)}
+            on:pointerdown={(e) => startMobilePanelDrag('intel', 'y', e)}
+            on:touchstart={(e) => startMobilePanelTouchDrag('intel', 'y', e)}
+            on:dblclick={() => resetMobilePanelSize('intel')}
+          ></button>
         </div>
       {/if}
     </div>
@@ -491,31 +1208,142 @@
     <div class="mob-bottom-nav">
       <button class="mob-nav-btn" class:active={mobileTab === 'warroom'} on:click={() => setMobileTab('warroom')}>
         <span class="mob-nav-label">WAR ROOM</span>
+        {#if mobileOpenTrades > 0}
+          <span class="mob-nav-badge">{mobileOpenTrades > 9 ? '9+' : mobileOpenTrades}</span>
+        {/if}
       </button>
       <button class="mob-nav-btn" class:active={mobileTab === 'chart'} on:click={() => setMobileTab('chart')}>
         <span class="mob-nav-label">CHART</span>
       </button>
       <button class="mob-nav-btn" class:active={mobileTab === 'intel'} on:click={() => setMobileTab('intel')}>
-        <span class="mob-nav-label">INTEL</span>
+        <span class="mob-nav-label">CHAT</span>
+        {#if mobileTrackedSignals > 0}
+          <span class="mob-nav-badge">{mobileTrackedSignals > 9 ? '9+' : mobileTrackedSignals}</span>
+        {/if}
       </button>
     </div>
   </div>
 
   <!-- ═══ TABLET LAYOUT (no side resizers, stacked) ═══ -->
   {:else if isTablet}
-  <div class="terminal-tablet">
+  <div class="terminal-tablet" style={tabletLayoutStyle}>
     <div class="tab-top">
       <div class="tab-left">
-        <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
+        <div class="tab-panel-resizable" style={getTabletPanelStyle('left')}>
+          <div class="tab-panel-body">
+            <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
+          </div>
+          <button
+            type="button"
+            class="tab-resize-handle tab-resize-handle-x"
+            title="WAR ROOM 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize tablet war room width with scroll"
+            on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
+            on:pointerdown={(e) => startTabletSplitDrag('x', e)}
+            on:dblclick={() => resetTabletPanelSize('left')}
+          ></button>
+          <button
+            type="button"
+            class="tab-resize-handle tab-resize-handle-y"
+            title="WAR ROOM 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize tablet war room height with scroll"
+            on:wheel={(e) => resizeTabletPanelByWheel('left', 'y', e)}
+            on:pointerdown={(e) => startTabletSplitDrag('y', e)}
+            on:dblclick={() => resetTabletPanelSize('left')}
+          ></button>
+        </div>
       </div>
+      <button
+        type="button"
+        class="tab-layout-split tab-layout-split-v"
+        title="WAR ROOM / CHART 분할 조절: 스크롤/드래그/더블클릭 리셋"
+        aria-label="Resize tablet left and chart split"
+        on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
+        on:pointerdown={(e) => startTabletSplitDrag('x', e)}
+        on:dblclick={() => resetTabletPanelSize('left')}
+      >
+        <span></span>
+      </button>
       <div class="tab-center">
-        <div class="tab-chart-area">
-          <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
+        <div class="tab-panel-resizable" style={getTabletPanelStyle('center')}>
+          <div class="tab-panel-body tab-chart-area">
+            <ChartPanel
+              bind:this={tabletChartRef}
+              advancedMode
+              enableTradeLineEntry
+              uiPreset="tradingview"
+              requireTradeConfirm
+              chatFirstMode
+              {chatTradeReady}
+              chatTradeDir={chatSuggestedDir}
+              on:scanrequest={handleChartScanRequest}
+              on:chatrequest={handleChartChatRequest}
+            />
+          </div>
+          <button
+            type="button"
+            class="tab-resize-handle tab-resize-handle-x"
+            title="CHART 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize tablet chart width with scroll"
+            on:wheel={(e) => resizeTabletPanelByWheel('center', 'x', e)}
+            on:pointerdown={(e) => startTabletSplitDrag('x', e)}
+            on:dblclick={() => resetTabletPanelSize('center')}
+          ></button>
+          <button
+            type="button"
+            class="tab-resize-handle tab-resize-handle-y"
+            title="CHART 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize tablet chart height with scroll"
+            on:wheel={(e) => resizeTabletPanelByWheel('center', 'y', e)}
+            on:pointerdown={(e) => startTabletSplitDrag('y', e)}
+            on:dblclick={() => resetTabletPanelSize('center')}
+          ></button>
         </div>
       </div>
     </div>
+    <button
+      type="button"
+      class="tab-layout-split tab-layout-split-h"
+      title="CHART / INTEL 높이 조절: 스크롤/드래그/더블클릭 리셋"
+      aria-label="Resize tablet chart and intel split"
+      on:wheel={(e) => resizeTabletPanelByWheel('bottom', 'y', e)}
+      on:pointerdown={(e) => startTabletSplitDrag('y', e)}
+      on:dblclick={() => resetTabletPanelSize('bottom')}
+    >
+      <span></span>
+    </button>
     <div class="tab-bottom">
-      <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} />
+      <div class="tab-panel-resizable" style={getTabletPanelStyle('bottom')}>
+        <div class="tab-panel-body">
+          <IntelPanel
+            {chatMessages}
+            {isTyping}
+            {latestScan}
+            {chatTradeReady}
+            {chatFocusKey}
+            on:sendchat={handleSendChat}
+            on:gototrade={handleIntelGoTrade}
+          />
+        </div>
+        <button
+          type="button"
+          class="tab-resize-handle tab-resize-handle-x"
+          title="좌우 패널 비율 조절: 스크롤 / 더블클릭 초기화"
+          aria-label="Resize tablet left and chart split with scroll"
+          on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
+          on:pointerdown={(e) => startTabletSplitDrag('x', e)}
+          on:dblclick={() => resetTabletPanelSize('left')}
+        ></button>
+        <button
+          type="button"
+            class="tab-resize-handle tab-resize-handle-y"
+            title="INTEL 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize tablet intel height with scroll"
+            on:wheel={(e) => resizeTabletPanelByWheel('bottom', 'y', e)}
+            on:pointerdown={(e) => startTabletSplitDrag('y', e)}
+            on:dblclick={() => resetTabletPanelSize('bottom')}
+          ></button>
+      </div>
     </div>
 
     <div class="ticker-bar">
@@ -528,15 +1356,40 @@
   <!-- ═══ DESKTOP LAYOUT (full 3-panel with resizers) ═══ -->
   {:else}
   <div class="terminal-page" bind:this={containerEl}
-    style="grid-template-columns: {leftCollapsed ? 32 : leftW}px 6px 1fr 6px {rightCollapsed ? 32 : rightW}px">
+    style="grid-template-columns: {leftCollapsed ? 30 : leftW}px 4px 1fr 4px {rightCollapsed ? 30 : rightW}px">
 
     <!-- Left: WAR ROOM or collapsed strip -->
     {#if !leftCollapsed}
-      <div class="tl">
-        <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scancomplete={handleScanComplete} />
+      <div class="tl" on:wheel={(e) => resizePanelByWheel('left', e)}>
+        <div class="desk-panel-resizable" style={getDesktopPanelStyle('left')}>
+          <div class="desk-panel-body">
+            <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scancomplete={handleScanComplete} />
+          </div>
+          <button
+            type="button"
+            class="desk-resize-handle desk-resize-handle-x"
+            title="WAR ROOM 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize war room panel width with scroll"
+            on:wheel={(e) => resizeDesktopPanelByWheel('left', 'x', e)}
+            on:dblclick={() => resetDesktopPanelSize('left')}
+          ></button>
+          <button
+            type="button"
+            class="desk-resize-handle desk-resize-handle-y"
+            title="WAR ROOM 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize war room panel height with scroll"
+            on:wheel={(e) => resizeDesktopPanelByWheel('left', 'y', e)}
+            on:dblclick={() => resetDesktopPanelSize('left')}
+          ></button>
+        </div>
       </div>
     {:else}
-      <button class="panel-strip panel-strip-left" on:click={toggleLeft} title="Show War Room">
+      <button
+        class="panel-strip panel-strip-left"
+        on:click={toggleLeft}
+        on:wheel={(e) => resizePanelByWheel('left', e, { force: true })}
+        title="Show War Room"
+      >
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="1" y="2" width="14" height="12" rx="1.5"/>
           <line x1="6" y1="2" x2="6" y2="14"/>
@@ -548,7 +1401,7 @@
     <!-- Left Resizer (drag only, no toggle) -->
     {#if !leftCollapsed}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="resizer resizer-h resizer-left">
+      <div class="resizer resizer-h resizer-left" on:wheel={(e) => resizePanelByWheel('left', e, { force: true })} title="스크롤/드래그로 WAR ROOM 너비 조절">
         <div class="resizer-drag" on:mousedown={(e) => startDrag('left', e)}></div>
       </div>
     {:else}
@@ -557,15 +1410,46 @@
 
     <!-- Center: Chart -->
     <div class="tc">
-      <div class="chart-area chart-area-full">
-        <ChartPanel advancedMode enableTradeLineEntry on:scanrequest={handleChartScanRequest} />
+      <div class="desk-panel-resizable" style={getDesktopPanelStyle('center')}>
+        <div class="desk-panel-body">
+          <div class="chart-area chart-area-full">
+            <ChartPanel
+              bind:this={desktopChartRef}
+              advancedMode
+              enableTradeLineEntry
+              uiPreset="tradingview"
+              requireTradeConfirm
+              chatFirstMode
+              {chatTradeReady}
+              chatTradeDir={chatSuggestedDir}
+              on:scanrequest={handleChartScanRequest}
+              on:chatrequest={handleChartChatRequest}
+            />
+          </div>
+        </div>
+        <button
+          type="button"
+          class="desk-resize-handle desk-resize-handle-x"
+          title="CHART 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+          aria-label="Resize chart panel width with scroll"
+          on:wheel={(e) => resizeDesktopPanelByWheel('center', 'x', e)}
+          on:dblclick={() => resetDesktopPanelSize('center')}
+        ></button>
+        <button
+          type="button"
+          class="desk-resize-handle desk-resize-handle-y"
+          title="CHART 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+          aria-label="Resize chart panel height with scroll"
+          on:wheel={(e) => resizeDesktopPanelByWheel('center', 'y', e)}
+          on:dblclick={() => resetDesktopPanelSize('center')}
+        ></button>
       </div>
     </div>
 
     <!-- Right Resizer (drag only, no toggle) -->
     {#if !rightCollapsed}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="resizer resizer-h resizer-right">
+      <div class="resizer resizer-h resizer-right" on:wheel={(e) => resizePanelByWheel('right', e, { force: true })} title="스크롤/드래그로 INTEL 너비 조절">
         <div class="resizer-drag" on:mousedown={(e) => startDrag('right', e)}></div>
       </div>
     {:else}
@@ -574,11 +1458,45 @@
 
     <!-- Right: Intel Panel or collapsed strip -->
     {#if !rightCollapsed}
-      <div class="tr">
-        <IntelPanel {chatMessages} {isTyping} {latestScan} on:sendchat={handleSendChat} on:collapse={toggleRight} />
+      <div class="tr" on:wheel={(e) => resizePanelByWheel('right', e)}>
+        <div class="desk-panel-resizable" style={getDesktopPanelStyle('right')}>
+          <div class="desk-panel-body">
+            <IntelPanel
+              {chatMessages}
+              {isTyping}
+              {latestScan}
+              {chatTradeReady}
+              {chatFocusKey}
+              on:sendchat={handleSendChat}
+              on:gototrade={handleIntelGoTrade}
+              on:collapse={toggleRight}
+            />
+          </div>
+          <button
+            type="button"
+            class="desk-resize-handle desk-resize-handle-x"
+            title="INTEL 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize intel panel width with scroll"
+            on:wheel={(e) => resizeDesktopPanelByWheel('right', 'x', e)}
+            on:dblclick={() => resetDesktopPanelSize('right')}
+          ></button>
+          <button
+            type="button"
+            class="desk-resize-handle desk-resize-handle-y"
+            title="INTEL 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
+            aria-label="Resize intel panel height with scroll"
+            on:wheel={(e) => resizeDesktopPanelByWheel('right', 'y', e)}
+            on:dblclick={() => resetDesktopPanelSize('right')}
+          ></button>
+        </div>
       </div>
     {:else}
-      <button class="panel-strip panel-strip-right" on:click={toggleRight} title="Show Intel">
+      <button
+        class="panel-strip panel-strip-right"
+        on:click={toggleRight}
+        on:wheel={(e) => resizePanelByWheel('right', e, { force: true })}
+        title="Show Intel"
+      >
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="1" y="2" width="14" height="12" rx="1.5"/>
           <line x1="10" y1="2" x2="10" y2="14"/>
@@ -630,12 +1548,17 @@
     --cyan: #9fd5cb;
     --blk: #0a1a0d;
 
-    position: relative;
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+    min-height: 0;
     overflow: hidden;
+    overflow-x: clip;
     overscroll-behavior: none;
     isolation: isolate;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
     background:
       radial-gradient(110% 72% at 15% 0%, rgba(232, 150, 125, 0.1) 0%, rgba(232, 150, 125, 0) 58%),
       radial-gradient(96% 68% at 88% 6%, rgba(135, 220, 190, 0.14) 0%, rgba(135, 220, 190, 0) 62%),
@@ -717,10 +1640,11 @@
      ═══════════════════════════════════════════ */
   .terminal-page {
     display: grid;
-    grid-template-columns: 280px 6px 1fr 6px 300px; /* overridden by inline style */
+    grid-template-columns: 280px 4px 1fr 4px 300px; /* overridden by inline style */
     grid-template-rows: 1fr auto;
     height: 100%;
     overflow: hidden;
+    overflow-x: clip;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
   }
@@ -729,6 +1653,14 @@
   }
   .tl,
   .tr,
+  .tc {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+  }
   .tab-left {
     overflow-y: auto;
     overflow-x: hidden;
@@ -745,27 +1677,91 @@
     grid-row: 1;
     grid-column: 5;
   }
-  .tl::-webkit-scrollbar,
-  .tr::-webkit-scrollbar,
   .tab-left::-webkit-scrollbar { width: 3px; }
-  .tl::-webkit-scrollbar-track,
-  .tr::-webkit-scrollbar-track,
   .tab-left::-webkit-scrollbar-track { background: transparent; }
-  .tl::-webkit-scrollbar-thumb,
-  .tr::-webkit-scrollbar-thumb,
   .tab-left::-webkit-scrollbar-thumb {
     background: rgba(232, 150, 125, 0.45);
-    border-radius: 3px;
+    border-radius: 2px;
   }
 
   .tc {
+    grid-row: 1;
+    grid-column: 3;
+    flex-direction: column;
+  }
+
+  .desk-panel-resizable {
+    --desk-panel-width: 100%;
+    --desk-panel-height: 100%;
+    position: relative;
+    width: min(100%, var(--desk-panel-width));
+    height: min(100%, var(--desk-panel-height));
+    min-width: 0;
+    min-height: 0;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    transition: width .16s ease, height .16s ease, box-shadow .16s ease, border-color .16s ease;
+    border: 1px solid transparent;
+    border-radius: 8px;
+  }
+  .desk-panel-resizable:hover,
+  .desk-panel-resizable:focus-within {
+    border-color: rgba(232, 150, 125, 0.24);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  }
+  .desk-panel-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    grid-row: 1;
-    grid-column: 3;
-    min-width: 0;
-    min-height: 0;
+  }
+  .desk-resize-handle {
+    position: absolute;
+    z-index: 18;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    opacity: 0.42;
+    transition: opacity .12s ease;
+  }
+  .desk-resize-handle::before {
+    content: '';
+    position: absolute;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: rgba(245, 196, 184, 0.45);
+  }
+  .desk-resize-handle:hover,
+  .desk-resize-handle:focus-visible {
+    opacity: 0.92;
+    outline: none;
+  }
+  .desk-resize-handle-x {
+    top: 12px;
+    right: 0;
+    width: 12px;
+    height: calc(100% - 24px);
+    cursor: ew-resize;
+  }
+  .desk-resize-handle-x::before {
+    width: 2px;
+    height: 46%;
+  }
+  .desk-resize-handle-y {
+    left: 12px;
+    bottom: 0;
+    width: calc(100% - 24px);
+    height: 12px;
+    cursor: ns-resize;
+  }
+  .desk-resize-handle-y::before {
+    width: 46%;
+    height: 2px;
   }
 
   /* Shared live status dot */
@@ -802,10 +1798,10 @@
   .resizer-left { grid-column: 2; }
   .resizer-right { grid-column: 4; }
   .resizer-h {
-    width: 6px;
-    background: rgba(10, 24, 16, 0.9);
-    border-left: 1px solid var(--term-border-soft);
-    border-right: 1px solid var(--term-border-soft);
+    width: 4px;
+    background: rgba(10, 24, 16, 0.82);
+    border-left: 1px solid rgba(232, 150, 125, 0.1);
+    border-right: 1px solid rgba(232, 150, 125, 0.1);
     transition: background .15s, border-color .15s;
   }
   .resizer-h:hover {
@@ -814,7 +1810,7 @@
     border-right-color: var(--term-border);
   }
   .resizer-spacer {
-    width: 2px;
+    width: 1px;
     grid-row: 1;
   }
   .resizer-spacer:nth-of-type(1) { grid-column: 2; }
@@ -823,8 +1819,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 8px 0;
+    gap: 5px;
+    padding: 7px 0;
     background: rgba(12, 29, 19, 0.95);
     border: none;
     cursor: pointer;
@@ -874,7 +1870,7 @@
      TICKER BAR — shared across all layouts
      ═══════════════════════════════════════════ */
   .ticker-bar {
-    height: 24px;
+    height: 22px;
     background: linear-gradient(180deg, rgba(15, 40, 24, 0.95) 0%, rgba(10, 27, 17, 0.98) 100%);
     border-top: 1px solid var(--term-border);
     overflow: hidden;
@@ -893,8 +1889,8 @@
     font-family: var(--fm);
     color: var(--term-live);
     font-weight: 600;
-    letter-spacing: 0.5px;
-    line-height: 24px;
+    letter-spacing: 0.35px;
+    line-height: 22px;
     padding: 0 20px;
   }
   @keyframes tickerScroll {
@@ -906,8 +1902,11 @@
      MOBILE — Context header + bottom nav
      ═══════════════════════════════════════════ */
   .terminal-mobile {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    --mob-nav-slot: calc(72px + env(safe-area-inset-bottom));
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
     height: 100%;
     min-height: 0;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
@@ -917,24 +1916,18 @@
   }
   .mob-topbar {
     flex-shrink: 0;
-    padding: 10px 12px 8px;
+    padding: 8px 10px 6px;
     border-bottom: 1px solid var(--term-border);
     background:
       linear-gradient(135deg, rgba(232, 150, 125, 0.14), rgba(232, 150, 125, 0.04)),
       linear-gradient(180deg, rgba(14, 36, 23, 0.92), rgba(10, 27, 17, 0.94));
     backdrop-filter: blur(8px);
   }
-  .mob-topbar.chart-focus {
-    padding: 8px 10px 6px;
-  }
-  .mob-topbar.chart-focus .mob-topline {
-    margin-bottom: 0;
-  }
   .mob-topline {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    margin-bottom: 8px;
+    gap: 6px;
+    margin-bottom: 6px;
   }
   .mob-title-wrap {
     display: flex;
@@ -953,7 +1946,7 @@
     font-family: var(--fd);
     font-size: 14px;
     font-weight: 900;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.35px;
     color: var(--term-text);
     line-height: 1.2;
   }
@@ -976,7 +1969,7 @@
   .mob-meta {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     min-width: 0;
   }
   .mob-token {
@@ -992,37 +1985,43 @@
     font-family: var(--fm);
     font-size: 9px;
     font-weight: 700;
-    letter-spacing: 0.35px;
+    letter-spacing: 0.2px;
     color: rgba(240, 237, 228, 0.84);
     max-width: 44vw;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .mob-meta-chip.subtle {
-    color: rgba(240, 237, 228, 0.65);
-    border-color: rgba(240, 237, 228, 0.13);
-    background: rgba(240, 237, 228, 0.04);
-  }
   .mob-desc {
-    margin-top: 8px;
+    margin-top: 6px;
     font-family: var(--fm);
-    font-size: 10px;
+    font-size: 9px;
     color: rgba(240, 237, 228, 0.56);
     letter-spacing: 0.15px;
     line-height: 1.35;
   }
   .mob-content {
+    flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     touch-action: pan-y;
-    padding: 10px 10px calc(12px + env(safe-area-inset-bottom));
-    scroll-padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    padding: 8px 8px calc(10px + var(--mob-nav-slot));
+    scroll-padding-bottom: calc(8px + var(--mob-nav-slot));
     display: flex;
     flex-direction: column;
+  }
+  .mob-content.chart-only {
+    padding: 4px 6px calc(6px + var(--mob-nav-slot));
+  }
+  .mob-chart-stack {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+    gap: 0;
   }
   .mob-panel-wrap,
   .mob-chart-section {
@@ -1037,6 +2036,65 @@
     background: rgba(8, 22, 14, 0.58);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
   }
+  .mob-panel-resizable {
+    position: relative;
+    width: min(100%, var(--mob-panel-width, 100%));
+    height: min(100%, var(--mob-panel-height, 100%));
+    margin-inline: auto;
+    transition: width .16s ease, height .16s ease, box-shadow .16s ease, border-color .16s ease;
+  }
+  .mob-panel-resizable:focus-within,
+  .mob-panel-resizable:hover {
+    border-color: rgba(232, 150, 125, 0.28);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+  .mob-resize-handle {
+    position: absolute;
+    z-index: 8;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    opacity: 0.45;
+    transition: opacity .12s ease;
+    touch-action: none;
+    user-select: none;
+  }
+  .mob-resize-handle::before {
+    content: '';
+    position: absolute;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: rgba(245, 196, 184, 0.44);
+  }
+  .mob-resize-handle:hover,
+  .mob-resize-handle:focus-visible {
+    opacity: 0.95;
+    outline: none;
+  }
+  .mob-resize-handle-x {
+    top: 10px;
+    right: 0;
+    width: 12px;
+    height: calc(100% - 20px);
+    cursor: ew-resize;
+  }
+  .mob-resize-handle-x::before {
+    width: 2px;
+    height: 42%;
+  }
+  .mob-resize-handle-y {
+    left: 10px;
+    bottom: 0;
+    width: calc(100% - 20px);
+    height: 12px;
+    cursor: ns-resize;
+  }
+  .mob-resize-handle-y::before {
+    width: 42%;
+    height: 2px;
+  }
   .mob-chart-area {
     flex: 1 1 auto;
     min-height: 0;
@@ -1048,16 +2106,28 @@
   .mob-bottom-nav {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    padding: 8px 10px calc(6px + env(safe-area-inset-bottom));
+    grid-auto-rows: minmax(44px, 44px);
+    align-items: center;
+    gap: 6px;
+    padding: 7px 8px calc(5px + env(safe-area-inset-bottom));
+    min-height: calc(60px + env(safe-area-inset-bottom));
+    max-height: calc(72px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--term-border);
     background: rgba(10, 26, 16, 0.92);
     backdrop-filter: blur(8px);
-    position: relative;
+    margin-top: 0;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 4;
+    overflow: hidden;
   }
   .mob-nav-btn {
-    min-height: 50px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    align-self: center;
     border-radius: 12px;
     border: 1px solid rgba(232, 150, 125, 0.16);
     background: rgba(240, 237, 228, 0.03);
@@ -1080,56 +2150,198 @@
   .mob-nav-label {
     font-size: 10px;
     font-weight: 800;
-    letter-spacing: 1.1px;
+    letter-spacing: 0.8px;
     line-height: 1;
+  }
+  .mob-nav-badge {
+    margin-left: 6px;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 900;
+    line-height: 1;
+    color: #0b1b12;
+    background: var(--term-live);
+    box-shadow: 0 0 8px rgba(135, 220, 190, 0.45);
   }
 
   /* ═══════════════════════════════════════════
      TABLET — 2-col top + Intel bottom
      ═══════════════════════════════════════════ */
   .terminal-tablet {
-    display: flex;
-    flex-direction: column;
+    --tab-left-width: clamp(196px, 23vw, 232px);
+    --tab-bottom-height: clamp(176px, 24vh, 230px);
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) 6px var(--tab-bottom-height) auto;
     height: 100%;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
     overflow: hidden;
   }
   .tab-top {
-    flex: 1;
-    display: flex;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: var(--tab-left-width) 6px minmax(0, 1fr);
     min-height: 0;
     overflow: hidden;
   }
   .tab-left {
-    width: 240px;
-    flex-shrink: 0;
+    grid-column: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 3px 4px 4px;
+    overflow: hidden;
   }
   .tab-center {
-    flex: 1;
+    grid-column: 3;
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 4px 4px 3px;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+  }
+  .tab-panel-resizable {
+    --tab-panel-width: 100%;
+    --tab-panel-height: 100%;
+    position: relative;
+    width: min(100%, var(--tab-panel-width));
+    height: min(100%, var(--tab-panel-height));
+    margin: auto;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition: width .16s ease, height .16s ease, box-shadow .16s ease, border-color .16s ease;
+    min-width: 0;
+    min-height: 0;
+  }
+  .tab-panel-resizable:hover,
+  .tab-panel-resizable:focus-within {
+    border-color: rgba(232, 150, 125, 0.24);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.26);
+  }
+  .tab-panel-body {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .tab-resize-handle {
+    position: absolute;
+    z-index: 16;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    opacity: 0.42;
+    transition: opacity .12s ease;
+  }
+  .tab-resize-handle::before {
+    content: '';
+    position: absolute;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: rgba(245, 196, 184, 0.45);
+  }
+  .tab-resize-handle:hover,
+  .tab-resize-handle:focus-visible {
+    opacity: 0.92;
+    outline: none;
+  }
+  .tab-resize-handle-x {
+    top: 10px;
+    right: 0;
+    width: 12px;
+    height: calc(100% - 20px);
+    cursor: ew-resize;
+  }
+  .tab-resize-handle-x::before {
+    width: 2px;
+    height: 44%;
+  }
+  .tab-resize-handle-y {
+    left: 10px;
+    bottom: 0;
+    width: calc(100% - 20px);
+    height: 12px;
+    cursor: ns-resize;
+  }
+  .tab-resize-handle-y::before {
+    width: 44%;
+    height: 2px;
   }
   .tab-chart-area {
     flex: 1;
     min-height: 200px;
     overflow: hidden;
   }
+  .tab-layout-split {
+    border: 0;
+    background: rgba(8, 18, 13, 0.86);
+    padding: 0;
+    margin: 0;
+    position: relative;
+    z-index: 16;
+    cursor: col-resize;
+    transition: background .14s ease;
+  }
+  .tab-layout-split span {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    display: block;
+    border-radius: 999px;
+    background: rgba(245, 196, 184, 0.45);
+  }
+  .tab-layout-split:hover,
+  .tab-layout-split:focus-visible {
+    background: rgba(232, 150, 125, 0.14);
+    outline: none;
+  }
+  .tab-layout-split-v {
+    grid-column: 2;
+  }
+  .tab-layout-split-v span {
+    width: 2px;
+    height: 42px;
+  }
+  .tab-layout-split-h {
+    grid-row: 2;
+    width: 100%;
+    cursor: row-resize;
+  }
+  .tab-layout-split-h span {
+    width: 44px;
+    height: 2px;
+  }
   .tab-bottom {
-    height: 200px;
-    flex-shrink: 0;
+    grid-row: 3;
+    height: 100%;
     border-top: 1px solid var(--term-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
     overflow: hidden;
+  }
+  .terminal-tablet .ticker-bar {
+    grid-row: 4;
   }
 
   /* Route-scoped tone overrides for terminal child components */
   .terminal-shell :global(.war-room),
-  .terminal-shell :global(.intel-panel),
-  .terminal-shell :global(.chart-wrapper),
-  .terminal-shell :global(.tv-container) {
+  .terminal-shell :global(.intel-panel) {
     background: var(--term-panel-2);
   }
 
@@ -1281,6 +2493,22 @@
   .terminal-shell :global(.intel-panel .ac-name) {
     color: rgba(240, 237, 228, 0.68);
   }
+  .terminal-shell :global(.war-room .wr-msg-text),
+  .terminal-shell :global(.war-room .wr-msg-name),
+  .terminal-shell :global(.intel-panel .hl-txt),
+  .terminal-shell :global(.intel-panel .comm-txt),
+  .terminal-shell :global(.intel-panel .ev-body),
+  .terminal-shell :global(.intel-panel .ac-txt) {
+    line-height: 1.4;
+    letter-spacing: 0.08px;
+  }
+  .terminal-shell :global(.war-room .deriv-val),
+  .terminal-shell :global(.war-room .wr-msg-price),
+  .terminal-shell :global(.intel-panel .flow-amt),
+  .terminal-shell :global(.intel-panel .hl-time),
+  .terminal-shell :global(.intel-panel .ev-etime) {
+    font-variant-numeric: tabular-nums;
+  }
   .terminal-shell :global(.intel-panel .hl-row:hover),
   .terminal-shell :global(.intel-panel .comm-react:hover) {
     background: rgba(232, 150, 125, 0.08);
@@ -1297,91 +2525,104 @@
     border-color: rgba(232, 150, 125, 0.42);
   }
 
-  .terminal-shell :global(.chart-wrapper),
-  .terminal-shell :global(.tv-container) {
-    background: #0f2316;
+  /* Text density tuning (desktop/tablet): denser headers, clearer body hierarchy */
+  .terminal-shell {
+    --term-font-2xs: clamp(7px, 0.42vw, 8px);
+    --term-font-xs: clamp(8px, 0.5vw, 9px);
+    --term-font-sm: clamp(9px, 0.62vw, 10px);
+    --term-font-md: clamp(10px, 0.78vw, 11.5px);
+    --term-font-lg: clamp(11px, 0.9vw, 13px);
   }
-  .terminal-shell :global(.chart-bar) {
-    background: linear-gradient(90deg, rgba(17, 42, 27, 0.98), rgba(15, 34, 24, 0.95));
-    border-bottom-color: rgba(232, 150, 125, 0.28);
+  .terminal-shell :global(.war-room .wr-title) {
+    font-size: var(--term-font-md);
+    letter-spacing: 1.05px;
   }
-  .terminal-shell :global(.tfbtn),
-  .terminal-shell :global(.mode-btn),
-  .terminal-shell :global(.scan-btn),
-  .terminal-shell :global(.draw-btn),
-  .terminal-shell :global(.ind-chip),
-  .terminal-shell :global(.legend-chip) {
-    color: rgba(240, 237, 228, 0.8);
+  .terminal-shell :global(.war-room .wr-chip),
+  .terminal-shell :global(.war-room .ticker-chip),
+  .terminal-shell :global(.war-room .scan-tab),
+  .terminal-shell :global(.war-room .token-tab),
+  .terminal-shell :global(.intel-panel .rp-inner-tab),
+  .terminal-shell :global(.intel-panel .ac-trade-btn) {
+    font-size: var(--term-font-xs);
+    letter-spacing: 0.42px;
   }
-  .terminal-shell :global(.tfbtn.active) {
-    background: rgba(232, 150, 125, 0.18);
-    color: var(--term-accent-soft);
-    border-color: rgba(232, 150, 125, 0.35);
+  .terminal-shell :global(.war-room .scan-tab-history),
+  .terminal-shell :global(.war-room .token-tab-count),
+  .terminal-shell :global(.war-room .wr-msg-time),
+  .terminal-shell :global(.war-room .wr-msg-src),
+  .terminal-shell :global(.intel-panel .hl-time),
+  .terminal-shell :global(.intel-panel .ev-etime),
+  .terminal-shell :global(.intel-panel .flow-addr),
+  .terminal-shell :global(.intel-panel .ac-name) {
+    font-size: var(--term-font-2xs);
+    letter-spacing: 0.28px;
   }
-  .terminal-shell :global(.mode-toggle) {
-    border-color: rgba(232, 150, 125, 0.3);
+  .terminal-shell :global(.war-room .deriv-lbl),
+  .terminal-shell :global(.war-room .scan-status-text),
+  .terminal-shell :global(.war-room .select-all-btn),
+  .terminal-shell :global(.war-room .wr-act-btn),
+  .terminal-shell :global(.war-room .src-count),
+  .terminal-shell :global(.war-room .src-tracked),
+  .terminal-shell :global(.intel-panel .hl-net),
+  .terminal-shell :global(.intel-panel .hl-engage),
+  .terminal-shell :global(.intel-panel .hl-creator),
+  .terminal-shell :global(.intel-panel .trend-name),
+  .terminal-shell :global(.intel-panel .trend-vol),
+  .terminal-shell :global(.intel-panel .trend-soc),
+  .terminal-shell :global(.intel-panel .trend-galaxy) {
+    font-size: var(--term-font-xs);
+    letter-spacing: 0.18px;
   }
-  .terminal-shell :global(.mode-btn:first-child) {
-    border-right-color: rgba(232, 150, 125, 0.2);
+  .terminal-shell :global(.war-room .wr-msg-name),
+  .terminal-shell :global(.war-room .wr-msg-vote),
+  .terminal-shell :global(.war-room .wr-msg-conf),
+  .terminal-shell :global(.war-room .wr-msg-signal-row),
+  .terminal-shell :global(.war-room .wr-msg-text),
+  .terminal-shell :global(.war-room .src-text),
+  .terminal-shell :global(.war-room .ctc-text),
+  .terminal-shell :global(.intel-panel .rp-tab),
+  .terminal-shell :global(.intel-panel .hl-txt),
+  .terminal-shell :global(.intel-panel .flow-lbl),
+  .terminal-shell :global(.intel-panel .flow-amt),
+  .terminal-shell :global(.intel-panel .comm-name),
+  .terminal-shell :global(.intel-panel .comm-txt),
+  .terminal-shell :global(.intel-panel .ev-body),
+  .terminal-shell :global(.intel-panel .ac-title),
+  .terminal-shell :global(.intel-panel .ac-txt),
+  .terminal-shell :global(.intel-panel .ac-input input),
+  .terminal-shell :global(.intel-panel .trend-sym),
+  .terminal-shell :global(.intel-panel .trend-price),
+  .terminal-shell :global(.intel-panel .trend-chg) {
+    font-size: var(--term-font-sm);
+    letter-spacing: 0.12px;
   }
-  .terminal-shell :global(.mode-btn:hover) {
-    background: rgba(232, 150, 125, 0.1);
-    color: var(--term-text);
+  .terminal-shell :global(.war-room .deriv-val),
+  .terminal-shell :global(.war-room .stat-val),
+  .terminal-shell :global(.war-room .wr-msg-entry),
+  .terminal-shell :global(.war-room .wr-msg-tp),
+  .terminal-shell :global(.war-room .wr-msg-sl),
+  .terminal-shell :global(.intel-panel .pos-pnl),
+  .terminal-shell :global(.intel-panel .pick-score) {
+    font-size: var(--term-font-md);
+    letter-spacing: 0.08px;
   }
-  .terminal-shell :global(.mode-btn.active) {
-    background: linear-gradient(135deg, rgba(232, 150, 125, 0.28), rgba(232, 150, 125, 0.14));
-    color: var(--term-accent-soft);
-    text-shadow: 0 0 8px rgba(232, 150, 125, 0.35);
+  .terminal-shell :global(.war-room .wr-msg-text),
+  .terminal-shell :global(.intel-panel .hl-txt),
+  .terminal-shell :global(.intel-panel .comm-txt),
+  .terminal-shell :global(.intel-panel .ev-body),
+  .terminal-shell :global(.intel-panel .ac-txt) {
+    line-height: 1.38;
   }
-  .terminal-shell :global(.scan-btn) {
-    border-color: rgba(232, 150, 125, 0.45);
-    background: linear-gradient(135deg, rgba(232, 150, 125, 0.3), rgba(232, 150, 125, 0.15));
-    color: var(--term-accent-soft);
-  }
-  .terminal-shell :global(.scan-btn:hover) {
-    border-color: rgba(232, 150, 125, 0.62);
-    background: linear-gradient(135deg, rgba(232, 150, 125, 0.42), rgba(232, 150, 125, 0.24));
-    color: var(--term-text);
-    box-shadow: 0 0 10px rgba(232, 150, 125, 0.28);
-  }
-  .terminal-shell :global(.draw-btn:hover) {
-    background: rgba(232, 150, 125, 0.11);
-    color: var(--term-accent-soft);
-    border-color: rgba(232, 150, 125, 0.35);
-  }
-  .terminal-shell :global(.draw-btn.active) {
-    background: rgba(232, 150, 125, 0.22);
-    color: var(--term-accent-soft);
-    border-color: rgba(232, 150, 125, 0.42);
-    box-shadow: 0 0 6px rgba(232, 150, 125, 0.24);
-  }
-  .terminal-shell :global(.drawing-indicator) {
-    background: rgba(232, 150, 125, 0.14);
-    border-color: rgba(232, 150, 125, 0.34);
-    color: var(--term-accent-soft);
-  }
-  .terminal-shell :global(.loading-overlay) {
-    background: rgba(10, 26, 13, 0.86);
-    color: rgba(240, 237, 228, 0.8);
-  }
-  .terminal-shell :global(.loader) {
-    border-color: rgba(232, 150, 125, 0.25);
-    border-top-color: var(--term-accent);
-  }
-  .terminal-shell :global(.chart-footer) {
-    border-top-color: rgba(232, 150, 125, 0.14);
-    background: rgba(8, 20, 13, 0.55);
-    color: rgba(240, 237, 228, 0.68);
-  }
-  .terminal-shell :global(.src-badge),
-  .terminal-shell :global(.draw-count) {
-    color: var(--term-accent);
-  }
-  .terminal-shell :global(.src-ws) {
-    color: var(--term-live);
-  }
-  .terminal-shell :global(.pos-rr) {
-    color: var(--term-accent-soft);
+  .terminal-shell :global(.war-room .deriv-val),
+  .terminal-shell :global(.war-room .wr-msg-conf),
+  .terminal-shell :global(.war-room .wr-msg-time),
+  .terminal-shell :global(.war-room .stat-val),
+  .terminal-shell :global(.intel-panel .flow-amt),
+  .terminal-shell :global(.intel-panel .trend-price),
+  .terminal-shell :global(.intel-panel .trend-chg),
+  .terminal-shell :global(.intel-panel .pick-score),
+  .terminal-shell :global(.intel-panel .pos-pnl) {
+    font-variant-numeric: tabular-nums lining-nums;
   }
 
   /* Mobile-only readability and touch ergonomics */
@@ -1581,109 +2822,137 @@
   }
 
   .terminal-mobile :global(.chart-wrapper .chart-bar) {
-    gap: 5px;
-    padding: 6px 8px;
+    gap: 2px;
+    padding: 3px 5px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-top) {
-    gap: 5px;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-top) { gap: 5px; }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-tools) {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    gap: 3px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .bar-left) {
-    gap: 5px;
-    width: 100%;
+    gap: 4px;
+    width: auto;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot) {
-    min-width: 136px;
-    flex: 1 1 148px;
+    min-width: 124px;
+    flex: 0 0 auto;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-trigger) {
-    min-height: 24px;
-    padding: 2px 7px;
+    min-height: 20px;
+    padding: 1px 6px;
     gap: 3px;
     border-radius: 7px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-sym) {
-    font-size: 9px;
-    letter-spacing: .7px;
+    font-size: 10px;
+    letter-spacing: .55px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-pair),
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-arrow) {
-    font-size: 7px;
+    font-size: 8px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-panel) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-panel:not(.mobile)) {
     width: min(92vw, 320px);
     max-height: min(62vh, 340px);
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns) {
-    width: 100%;
+    width: auto;
+    flex: 0 0 auto;
+    min-width: max-content;
     padding-bottom: 1px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns .tfbtn) {
-    min-height: 22px;
-    height: 22px;
-    padding: 0 7px;
-    font-size: 8px;
-    letter-spacing: .5px;
+    min-height: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-size: 9px;
+    letter-spacing: .25px;
     border-radius: 5px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-right) {
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats) {
     width: 100%;
     gap: 4px;
-    row-gap: 4px;
-    align-items: center;
-  }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls) {
-    width: 100%;
-    gap: 4px;
-    flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
     white-space: nowrap;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls::-webkit-scrollbar) {
-    height: 3px;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat) {
+    height: 20px;
+    padding: 0 6px;
+    gap: 4px;
   }
-  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls::-webkit-scrollbar-thumb) {
-    background: rgba(240, 237, 228, 0.2);
-    border-radius: 999px;
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-k) {
+    font-size: 8px;
+    letter-spacing: .25px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-v) {
+    font-size: 9px;
+    letter-spacing: .1px;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-right) {
+    width: auto;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-controls) {
+    width: auto;
+    flex: 0 0 auto;
+    min-width: max-content;
+    gap: 4px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+  .terminal-mobile :global(.chart-wrapper .chart-bar .draw-tools) {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 2px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .mode-toggle .mode-btn) {
-    min-height: 22px;
-    padding: 0 7px;
-    font-size: 8px;
-    letter-spacing: .55px;
+    min-height: 20px;
+    padding: 0 6px;
+    font-size: 9px;
+    letter-spacing: .25px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .draw-tools .draw-btn) {
-    width: 22px;
-    height: 22px;
-    font-size: 9px;
+    width: 20px;
+    height: 20px;
+    font-size: 8px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .scan-btn) {
-    min-height: 22px;
-    height: 22px;
-    padding: 0 7px;
-    font-size: 8px;
-    letter-spacing: .5px;
+    min-height: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-size: 9px;
+    letter-spacing: .2px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info) {
-    margin-left: 0;
-    width: 100%;
+    margin-left: auto;
+    width: auto;
     justify-content: flex-end;
-    border-left: none;
-    padding-left: 0;
-    order: 99;
+    border-left: 1px solid rgba(240, 237, 228, 0.12);
+    padding-left: 4px;
+    gap: 3px;
+    order: initial;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .cprc) {
-    font-size: 12px;
-    letter-spacing: .3px;
+    font-size: 11px;
+    letter-spacing: .08px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .price-info .pchg) {
     font-size: 9px;
   }
   .terminal-mobile :global(.chart-wrapper .indicator-strip) {
-    padding: 4px 6px;
-    gap: 4px;
+    padding: 3px 5px;
+    gap: 3px;
     max-height: none;
     flex-wrap: nowrap;
     white-space: nowrap;
@@ -1694,9 +2963,9 @@
   .terminal-mobile :global(.chart-wrapper .ind-chip),
   .terminal-mobile :global(.chart-wrapper .legend-chip),
   .terminal-mobile :global(.chart-wrapper .view-chip) {
-    min-height: 20px;
-    height: 20px;
-    padding: 0 6px;
+    min-height: 18px;
+    height: 18px;
+    padding: 0 5px;
     font-size: 8px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-footer) {
@@ -1720,6 +2989,7 @@
   .terminal-mobile :global(.war-room .scan-tabs),
   .terminal-mobile :global(.war-room .token-tabs),
   .terminal-mobile :global(.chart-wrapper .indicator-strip),
+  .terminal-mobile :global(.chart-wrapper .chart-bar .bar-tools),
   .terminal-mobile :global(.chart-wrapper .chart-bar .tf-btns) {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
@@ -1743,6 +3013,9 @@
   }
 
   @media (max-width: 768px) and (max-height: 760px) {
+    .terminal-mobile {
+      --mob-nav-slot: calc(64px + env(safe-area-inset-bottom));
+    }
     .mob-topbar {
       padding: 8px 10px 6px;
     }
@@ -1753,13 +3026,21 @@
       display: none;
     }
     .mob-content {
-      padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
+      padding: 8px 8px calc(10px + var(--mob-nav-slot));
+    }
+    .mob-content.chart-only {
+      padding: 4px 6px calc(6px + var(--mob-nav-slot));
     }
     .mob-bottom-nav {
       padding: 6px 8px calc(4px + env(safe-area-inset-bottom));
+      min-height: calc(54px + env(safe-area-inset-bottom));
+      max-height: calc(64px + env(safe-area-inset-bottom));
+      grid-auto-rows: minmax(40px, 40px);
     }
     .mob-nav-btn {
-      min-height: 44px;
+      height: 40px;
+      min-height: 40px;
+      max-height: 40px;
     }
   }
 
@@ -1775,8 +3056,9 @@
       padding: 4px 7px;
       font-size: 8px;
     }
-    .mob-meta-chip.subtle {
-      display: none;
+    .mob-nav-label {
+      font-size: 9px;
+      letter-spacing: 0.9px;
     }
   }
 </style>

@@ -13,10 +13,53 @@ import { fetchCoinGeckoGlobal, fetchStablecoinMcap } from '$lib/server/coingecko
 import { fetchDefiLlamaStableMcap } from '$lib/server/defillama';
 import { fetchYahooSeries } from '$lib/server/yahooFinance';
 import { fetchCoinMarketCapQuote } from '$lib/server/coinmarketcap';
+import { fetchCryptoQuantData } from '$lib/server/cryptoquant';
+import { estimateExchangeNetflow } from '$lib/server/etherscan';
+import { fetchTopicSocial } from '$lib/server/lunarcrush';
 import { withTransaction } from '$lib/server/db';
-import { errorContains } from '$lib/utils/errorUtils';
+import { getCached, setCache } from '$lib/server/providers/cache';
 
 const SNAPSHOT_UNAVAILABLE_CODES = new Set(['42P01', '42703', '23503']);
+
+// ── Performance: 타임아웃 + 캐시 + 요청 병합 ───────────────
+const API_TIMEOUT_MS = 5_000;
+const SNAPSHOT_CACHE_TTL_MS = 30_000; // 30초 결과 캐시
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`[snapshot] ${label} timed out`)), API_TIMEOUT_MS)
+    ),
+  ]);
+}
+
+/** 소스별 캐시 TTL */
+const SRC_TTL = {
+  binance: 10_000,       // 10초 (가격 데이터)
+  coinalyze: 300_000,    // 5분 (rate limit 절약)
+  feargreed: 120_000,    // 2분
+  coingecko: 60_000,     // 1분
+  defillama: 120_000,    // 2분
+  yahoo: 300_000,        // 5분
+  news: 120_000,         // 2분
+  cmc: 120_000,          // 2분
+  cryptoquant: 300_000,  // 5분
+  etherscan: 120_000,    // 2분
+  lunarcrush: 120_000,   // 2분
+};
+
+function cf<T>(key: string, fetcher: () => Promise<T>, ttl: number, label: string): Promise<T> {
+  const hit = getCached<T>(key);
+  if (hit !== null) return Promise.resolve(hit);
+  return withTimeout(fetcher(), label).then(r => {
+    if (r !== null && r !== undefined) setCache(key, r, ttl);
+    return r;
+  });
+}
+
+// ── 동일 pair/timeframe 동시 요청 병합 ──
+const _inflightSnapshots = new Map<string, Promise<MarketSnapshotResult>>();
 
 type SnapshotSource = {
   source: string;
@@ -49,6 +92,9 @@ export type MarketSnapshotResult = {
     yahoo: boolean;
     coinmarketcap: boolean;
     news: boolean;
+    cryptoquant: boolean;
+    etherscan: boolean;
+    lunarcrush: boolean;
   };
 };
 
@@ -239,10 +285,41 @@ export async function collectMarketSnapshot(
   const pair = normalizePair(input.pair);
   const timeframe = normalizeTimeframe(input.timeframe);
   const persist = input.persist !== false;
-  const at = Date.now();
   const symbol = pairToSymbol(pair);
   const token = pair.split('/')[0];
+  const cqAsset = (token.toLowerCase() === 'btc' || token.toLowerCase() === 'eth')
+    ? token.toLowerCase() as 'btc' | 'eth' : 'btc';
 
+  // ── 결과 캐시 (30초 TTL) ──
+  const snapKey = `snap:${pair}:${timeframe}`;
+  const snapCached = getCached<MarketSnapshotResult>(snapKey);
+  if (snapCached) return snapCached;
+
+  // ── 동시 요청 병합 ──
+  const inflight = _inflightSnapshots.get(snapKey);
+  if (inflight) return inflight;
+
+  const snapPromise = _collectInternal(eventFetch, pair, timeframe, symbol, token, cqAsset, persist);
+  _inflightSnapshots.set(snapKey, snapPromise);
+
+  try {
+    const result = await snapPromise;
+    setCache(snapKey, result, SNAPSHOT_CACHE_TTL_MS);
+    return result;
+  } finally {
+    _inflightSnapshots.delete(snapKey);
+  }
+}
+
+async function _collectInternal(
+  eventFetch: typeof fetch,
+  pair: string, timeframe: string, symbol: string, token: string,
+  cqAsset: 'btc' | 'eth',
+  persist: boolean,
+): Promise<MarketSnapshotResult> {
+  const at = Date.now();
+
+  // ── 17개 소스 병렬 (개별 5초 타임아웃 + 소스별 캐시) ──
   const [
     klinesRes,
     klines1hRes,
@@ -258,21 +335,27 @@ export async function collectMarketSnapshot(
     us10yRes,
     newsRes,
     cmcRes,
+    cryptoQuantRes,
+    ethNetflowRes,
+    lunarCrushRes,
   ] = await Promise.allSettled([
-    fetchKlinesServer(symbol, timeframe, 300),
-    fetchKlinesServer(symbol, '1h', 300),
-    fetchKlinesServer(symbol, '1d', 300),
-    fetch24hrServer(symbol),
-    fetchDerivatives(eventFetch, pair, timeframe),
-    fetchFearGreed(60),
-    fetchCoinGeckoGlobal(),
-    fetchStablecoinMcap(),
-    fetchDefiLlamaStableMcap(),
-    fetchYahooSeries('DX-Y.NYB', '1mo', '1d'),
-    fetchYahooSeries('^GSPC', '1mo', '1d'),
-    fetchYahooSeries('^TNX', '1mo', '1d'),
-    fetchNews(20),
-    fetchCoinMarketCapQuote(token),
+    cf(`bn:k:${symbol}:${timeframe}`, () => fetchKlinesServer(symbol, timeframe, 300), SRC_TTL.binance, 'Binance klines'),
+    cf(`bn:k:${symbol}:1h`, () => fetchKlinesServer(symbol, '1h', 300), SRC_TTL.binance, 'Binance 1h'),
+    cf(`bn:k:${symbol}:1d`, () => fetchKlinesServer(symbol, '1d', 300), SRC_TTL.binance, 'Binance 1d'),
+    cf(`bn:24h:${symbol}`, () => fetch24hrServer(symbol), SRC_TTL.binance, 'Binance 24hr'),
+    cf(`ca:deriv:${pair}:${timeframe}`, () => fetchDerivatives(eventFetch, pair, timeframe), SRC_TTL.coinalyze, 'Coinalyze Deriv'),
+    cf('fng:60', () => fetchFearGreed(60), SRC_TTL.feargreed, 'FearGreed'),
+    cf('cg:global', () => fetchCoinGeckoGlobal(), SRC_TTL.coingecko, 'CoinGecko Global'),
+    cf('cg:stable', () => fetchStablecoinMcap(), SRC_TTL.coingecko, 'CoinGecko Stable'),
+    cf('dl:stable', () => fetchDefiLlamaStableMcap(), SRC_TTL.defillama, 'DefiLlama Stable'),
+    cf('yahoo:dxy', () => fetchYahooSeries('DX-Y.NYB', '1mo', '1d'), SRC_TTL.yahoo, 'Yahoo DXY'),
+    cf('yahoo:spx', () => fetchYahooSeries('^GSPC', '1mo', '1d'), SRC_TTL.yahoo, 'Yahoo SPX'),
+    cf('yahoo:us10y', () => fetchYahooSeries('^TNX', '1mo', '1d'), SRC_TTL.yahoo, 'Yahoo US10Y'),
+    cf('news:latest', () => fetchNews(20), SRC_TTL.news, 'News RSS'),
+    cf(`cmc:${token}`, () => fetchCoinMarketCapQuote(token), SRC_TTL.cmc, 'CoinMarketCap'),
+    cf(`cq:${cqAsset}`, () => fetchCryptoQuantData(cqAsset), SRC_TTL.cryptoquant, 'CryptoQuant'),
+    cf('eth:netflow', () => estimateExchangeNetflow(), SRC_TTL.etherscan, 'Etherscan'),
+    cf(`lc:${token}`, () => fetchTopicSocial(token.toLowerCase()), SRC_TTL.lunarcrush, 'LunarCrush'),
   ]);
 
   const klines = requireKlines(klinesRes);
@@ -289,6 +372,9 @@ export async function collectMarketSnapshot(
   const us10y = us10yRes.status === 'fulfilled' ? us10yRes.value : null;
   const news = newsRes.status === 'fulfilled' ? newsRes.value : [];
   const cmc = cmcRes.status === 'fulfilled' ? cmcRes.value : null;
+  const cryptoQuant = cryptoQuantRes.status === 'fulfilled' ? cryptoQuantRes.value : null;
+  const ethNetflow = ethNetflowRes.status === 'fulfilled' ? ethNetflowRes.value : null;
+  const lunarCrush = lunarCrushRes.status === 'fulfilled' ? lunarCrushRes.value : null;
 
   const stableMcap = llamaStable?.totalMcapUsd ?? geckoStable?.totalMcapUsd ?? null;
   const stableMcapChange24h = llamaStable?.change24hPct ?? geckoStable?.change24hPct ?? null;
@@ -337,12 +423,24 @@ export async function collectMarketSnapshot(
         }
       : undefined,
     onchain: {
+      mvrv: cryptoQuant?.onchainMetrics?.mvrv ?? null,
+      nupl: cryptoQuant?.onchainMetrics?.nupl ?? null,
+      sopr: cryptoQuant?.onchainMetrics?.sopr ?? null,
+      exchangeNetflow: ethNetflow ?? null,
+      whaleActivity: cryptoQuant?.whaleData?.whaleNetflow ?? null,
+      minerFlow: cryptoQuant?.minerData ? (cryptoQuant.minerData as any).outflow24h ?? null : null,
       stablecoinFlow: stableMcapChange24h,
+      activeAddresses: null, // TODO: Etherscan active address count
+      etfFlow: null, // TODO: ETF 유출입 데이터 소스 연결
       realizedCap: cmc?.marketCap ?? null,
+      supplyInProfit: null, // TODO: Glassnode/CryptoQuant 연결
     },
     sentiment: {
       fearGreed: fearGreed.current?.value ?? null,
+      socialVolume: lunarCrush?.interactions24h ?? null,
+      socialSentiment: lunarCrush ? Math.round((lunarCrush.sentiment - 1) / 4 * 100) : null, // 1-5 → 0-100
       newsImpact: buildNewsImpact(news),
+      searchTrend: null, // TODO: Google Trends 연결
     },
     macro: {
       dxy: dxy?.points?.length ? dxy.points[dxy.points.length - 1].close : null,
@@ -437,6 +535,9 @@ export async function collectMarketSnapshot(
       ttlMs: 120_000,
     },
     { source: 'coinmarketcap', dataType: 'quote', payload: cmc, ttlMs: 180_000 },
+    { source: 'cryptoquant', dataType: 'onchain', payload: cryptoQuant, ttlMs: 300_000 },
+    { source: 'etherscan', dataType: 'netflow', payload: { netflow: ethNetflow }, ttlMs: 300_000 },
+    { source: 'lunarcrush', dataType: 'social', payload: lunarCrush, ttlMs: 300_000 },
   ];
 
   let updated = indicators.map((row) => row.indicator);
@@ -473,6 +574,9 @@ export async function collectMarketSnapshot(
       yahoo: Boolean(dxy || spx || us10y),
       coinmarketcap: Boolean(cmc),
       news: Array.isArray(news) && news.length > 0,
+      cryptoquant: Boolean(cryptoQuant?.onchainMetrics),
+      etherscan: ethNetflow !== null,
+      lunarcrush: Boolean(lunarCrush),
     },
   };
 }

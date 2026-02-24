@@ -78,9 +78,9 @@ export const PATCH: RequestHandler = async ({ cookies, request }) => {
       return json({ error: 'nickname must be at least 2 characters' }, { status: 400 });
     }
 
-    const allowedTier = ['bronze', 'silver', 'gold', 'diamond'];
+    const allowedTier = ['bronze', 'silver', 'gold', 'diamond', 'master'];
     if (displayTier && !allowedTier.includes(displayTier)) {
-      return json({ error: 'displayTier must be bronze|silver|gold|diamond' }, { status: 400 });
+      return json({ error: 'displayTier must be bronze|silver|gold|diamond|master' }, { status: 400 });
     }
 
     if (nickname || avatar) {

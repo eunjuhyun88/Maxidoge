@@ -51,7 +51,9 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
     ).catch(() => undefined);
 
     return json({
+      success: true,
       ok: true,
+      scanId: result.scanId,
       persisted: result.persisted,
       warning: result.warning,
       data: result.data,
@@ -67,4 +69,3 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
     return json({ error: 'Failed to run terminal scan' }, { status: 500 });
   }
 };
-

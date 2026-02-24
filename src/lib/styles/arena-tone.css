@@ -687,3 +687,77 @@
 .arena-lobby-v3 .lat {
   color: var(--arena-accent-2) !important;
 }
+
+/* Lost-in-space tone for upgraded Arena flow */
+.arena-page.arena-space-theme,
+.arena-page.arena-space-theme .battle-stage {
+  --arena-bg-0: #040916;
+  --arena-bg-1: #071129;
+  --arena-bg-2: #0a1734;
+  --arena-surface: #0a1633;
+  --arena-surface-2: #102049;
+  --arena-line: rgba(110, 217, 255, 0.44);
+  --arena-line-soft: rgba(110, 217, 255, 0.26);
+  --arena-accent: #68d8ff;
+  --arena-accent-2: #ffab76;
+  --arena-good: #1effa0;
+  --arena-bad: #ff607c;
+  --arena-warn: #ffc57d;
+  --arena-text: #eff7ff;
+  --arena-text-dim: rgba(211, 229, 255, 0.86);
+  --arena-text-muted: rgba(190, 215, 246, 0.76);
+}
+
+.arena-page.arena-space-theme {
+  background: linear-gradient(180deg, #050b1d 0%, #081127 58%, #060d1e 100%) !important;
+}
+
+.arena-page.arena-space-theme .chart-side {
+  background: #060f24 !important;
+  border-right: 1px solid var(--arena-line) !important;
+}
+
+.arena-page.arena-space-theme .arena-side {
+  background:
+    radial-gradient(circle at 45% 25%, rgba(104, 216, 255, 0.2), transparent 38%),
+    radial-gradient(circle at 80% 70%, rgba(255, 148, 96, 0.15), transparent 42%),
+    linear-gradient(180deg, #050b1d 0%, #071127 56%, #08122b 100%) !important;
+}
+
+.arena-page.arena-space-theme .score-bar {
+  border-top: 1px solid var(--arena-line) !important;
+  background: linear-gradient(90deg, rgba(8, 18, 44, 0.96), rgba(6, 13, 33, 0.94)) !important;
+}
+
+.arena-page.arena-space-theme .arena-rail {
+  background: rgba(6, 15, 38, 0.84) !important;
+  border-color: var(--arena-line) !important;
+}
+
+.arena-page.arena-space-theme .rail-head {
+  background: linear-gradient(180deg, rgba(104, 216, 255, 0.16), rgba(5, 12, 28, 0.24)) !important;
+}
+
+.arena-page.arena-space-theme .rail-tabs button.active {
+  background: rgba(104, 216, 255, 0.16) !important;
+  box-shadow: inset 0 -2px 0 rgba(104, 216, 255, 0.95) !important;
+}
+
+.arena-page.arena-space-theme .rail-conf {
+  color: #9ce7ff !important;
+}
+
+.arena-page.arena-space-theme .compare-side.user {
+  background: rgba(104, 216, 255, 0.14) !important;
+}
+
+.arena-page.arena-space-theme .compare-side.agents {
+  background: rgba(255, 171, 118, 0.13) !important;
+}
+
+.arena-page.arena-space-theme .pvp-btn.again,
+.arena-page.arena-space-theme .preview-confirm {
+  background: linear-gradient(180deg, rgba(255, 182, 117, 0.3), rgba(255, 140, 79, 0.24)) !important;
+  border-color: rgba(255, 186, 124, 0.72) !important;
+  color: #ffe2c3 !important;
+}

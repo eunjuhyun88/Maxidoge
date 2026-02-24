@@ -103,45 +103,53 @@ async function syncAgentStatsToServer(data: Record<string, AgentStats>) {
 }
 
 let _agentHydrated = false;
+let _agentHydratePromise: Promise<void> | null = null;
 export async function hydrateAgentStats(force = false) {
   if (typeof window === 'undefined') return;
   if (_agentHydrated && !force) return;
+  if (_agentHydratePromise) return _agentHydratePromise;
 
-  const rows = await fetchAgentStatsApi();
-  if (!rows) return;
-  if (rows.length === 0) {
+  _agentHydratePromise = (async () => {
+    const rows = await fetchAgentStatsApi();
+    if (!rows) return;
+    if (rows.length === 0) {
+      _agentHydrated = true;
+      return;
+    }
+
+    const next = createDefaultStats();
+    for (const row of rows) {
+      if (!next[row.agentId]) continue;
+      next[row.agentId] = {
+        ...next[row.agentId],
+        level: Number(row.level ?? next[row.agentId].level),
+        xp: Number(row.xp ?? next[row.agentId].xp),
+        xpMax: Number(row.xpMax ?? next[row.agentId].xpMax),
+        wins: Number(row.wins ?? next[row.agentId].wins),
+        losses: Number(row.losses ?? next[row.agentId].losses),
+        bestStreak: Number(row.bestStreak ?? next[row.agentId].bestStreak),
+        curStreak: Number(row.curStreak ?? next[row.agentId].curStreak),
+        avgConf: Number(row.avgConf ?? next[row.agentId].avgConf),
+        bestConf: Number(row.bestConf ?? next[row.agentId].bestConf),
+        stamps: {
+          ...next[row.agentId].stamps,
+          ...(row.stamps || {}),
+        },
+      };
+    }
+
     _agentHydrated = true;
-    return;
-  }
+    agentStats.set(next);
+  })();
 
-  const next = createDefaultStats();
-  for (const row of rows) {
-    if (!next[row.agentId]) continue;
-    next[row.agentId] = {
-      ...next[row.agentId],
-      level: Number(row.level ?? next[row.agentId].level),
-      xp: Number(row.xp ?? next[row.agentId].xp),
-      xpMax: Number(row.xpMax ?? next[row.agentId].xpMax),
-      wins: Number(row.wins ?? next[row.agentId].wins),
-      losses: Number(row.losses ?? next[row.agentId].losses),
-      bestStreak: Number(row.bestStreak ?? next[row.agentId].bestStreak),
-      curStreak: Number(row.curStreak ?? next[row.agentId].curStreak),
-      avgConf: Number(row.avgConf ?? next[row.agentId].avgConf),
-      bestConf: Number(row.bestConf ?? next[row.agentId].bestConf),
-      stamps: {
-        ...next[row.agentId].stamps,
-        ...(row.stamps || {}),
-      },
-    };
+  try {
+    await _agentHydratePromise;
+  } finally {
+    _agentHydratePromise = null;
   }
-
-  _agentHydrated = true;
-  agentStats.set(next);
 }
 
-if (typeof window !== 'undefined') {
-  void hydrateAgentStats();
-}
+// 자동 hydration은 hydrateDomainStores() 단일 진입점에서 수행한다.
 
 agentStats.subscribe(data => {
   if (typeof window === 'undefined') return;

@@ -252,15 +252,16 @@ export function convertToTrade(signalId: string, currentPrice: number): string |
 
 let _lastTrackedPriceSnap = '';
 export function updateTrackedPrices(priceInput: PriceLikeMap) {
-  const prices = toNumericPriceMap(priceInput);
-  const snap = buildPriceMapHash(prices);
-  if (snap === _lastTrackedPriceSnap) return;
-  _lastTrackedPriceSnap = snap;
-
-  const now = Date.now();
   const state = get(trackedSignalStore);
   const hasTracking = state.signals.some((sig) => sig.status === 'tracking');
   if (!hasTracking) return;
+  const now = Date.now();
+  const hasExpired = state.signals.some((sig) => sig.status === 'tracking' && sig.expiresAt < now);
+
+  const prices = toNumericPriceMap(priceInput);
+  const snap = buildPriceMapHash(prices);
+  if (!hasExpired && snap === _lastTrackedPriceSnap) return;
+  _lastTrackedPriceSnap = snap;
 
   let changed = false;
   const signals = state.signals.map((sig) => {
@@ -297,6 +298,4 @@ export function clearAll() {
   trackedSignalStore.update(() => ({ signals: [] }));
 }
 
-if (typeof window !== 'undefined') {
-  void hydrateTrackedSignals();
-}
+// 자동 hydration은 hydrateDomainStores() 단일 진입점에서 수행한다.

@@ -3,7 +3,6 @@
   import type { ScanTab, SignalDiff } from './types';
 
   export let filteredSignals: AgentSignal[] = [];
-  export let signalPool: AgentSignal[] = [];
   export let scanTabs: ScanTab[] = [];
   export let selectedIds: Set<string> = new Set();
   export let selectedCount = 0;

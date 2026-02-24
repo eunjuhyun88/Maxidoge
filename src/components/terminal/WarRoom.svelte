@@ -15,8 +15,8 @@
     formatOI,
     formatFunding
   } from '$lib/api/coinalyze';
-  import { runWarRoomScan } from '$lib/engine/warroomScan';
   import { runTerminalScan, getScanHistory } from '$lib/api/terminalApi';
+  import { AGENT_POOL } from '$lib/engine/agents';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import { createEventDispatcher } from 'svelte';
@@ -78,6 +78,7 @@
   let derivLoading = $state(false);
   let derivLastPair = $state('');
   let derivRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  let _visibilityHandler: (() => void) | null = null;
 
   // ── Cache: avoid redundant API calls (60s TTL per pair) ──
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -349,7 +350,49 @@
         prevMap.set(key, { vote: sig.vote, conf: sig.conf });
       }
 
-      const scan = await runWarRoomScan(pair, timeframe);
+      // ── 서버 API 1회 호출로 스캔 + DB 저장 동시 처리 ──
+      const res = await runTerminalScan(pair, timeframe);
+      const detail = res.data;
+
+      // ── 서버 응답 → AgentSignal 변환 ──
+      const agentMeta: Record<string, { icon: string; color: string }> = {};
+      for (const [id, def] of Object.entries(AGENT_POOL)) {
+        agentMeta[id] = { icon: def.icon, color: def.color };
+      }
+      const signals: AgentSignal[] = detail.signals.map(s => {
+        const meta = agentMeta[s.agentId.toUpperCase()] ?? { icon: '?', color: '#888' };
+        return {
+          id: s.id,
+          agentId: s.agentId,
+          icon: meta.icon,
+          name: s.name,
+          color: meta.color,
+          token: detail.token,
+          pair: detail.pair,
+          vote: s.vote as AgentSignal['vote'],
+          conf: s.conf,
+          text: s.text,
+          src: s.src,
+          time: s.time,
+          entry: s.entry,
+          tp: s.tp,
+          sl: s.sl,
+        };
+      });
+
+      const scan = {
+        pair: detail.pair,
+        timeframe: detail.timeframe,
+        token: detail.token,
+        createdAt: detail.createdAt,
+        label: detail.label,
+        signals,
+        consensus: detail.consensus as AgentSignal['vote'],
+        avgConfidence: detail.avgConfidence,
+        summary: detail.summary,
+        highlights: detail.highlights as ScanHighlight[],
+      };
+
       const existingTab = scanTabs.find((tab) => tab.pair === scan.pair && tab.timeframe === scan.timeframe);
       const nextTab: ScanTab = existingTab
         ? {
@@ -409,17 +452,8 @@
       });
       scanError = '';
       scanStep = 'DONE';
-
-      // ── Server sync: persist scan results ──
-      serverScanSynced = false;
-      runTerminalScan(scan.pair, scan.timeframe)
-        .then(() => {
-          serverScanSynced = true;
-          console.log('[WarRoom] Scan persisted to server');
-        })
-        .catch(err => {
-          console.warn('[WarRoom] Server persistence failed (local scan still available):', err);
-        });
+      serverScanSynced = res.persisted;
+      if (res.warning) console.warn('[WarRoom] Scan warning:', res.warning);
     } catch (err) {
       console.error('[WarRoom] Agent scan error:', err);
       scanError = err instanceof Error ? err.message : '스캔 중 오류가 발생했습니다.';
@@ -478,11 +512,21 @@
     dispatch('quicktrade', { dir, pair: sig.pair, price: entry });
   }
 
+  function isDocumentVisible() {
+    return typeof document === 'undefined' || document.visibilityState === 'visible';
+  }
+
+  function handleVisibilityChange() {
+    if (!isDocumentVisible()) return;
+    fetchDerivativesData();
+  }
+
   onMount(() => {
     restoreScanState();
     scanStateHydrated = true;
 
     volatilityInterval = setInterval(() => {
+      if (!isDocumentVisible()) return;
       if (Math.random() < 0.2) {
         volatilityAlert = true;
         setTimeout(() => { volatilityAlert = false; }, 8000);
@@ -490,7 +534,15 @@
     }, 30000);
 
     fetchDerivativesData();
-    derivRefreshTimer = setInterval(fetchDerivativesData, 30000);
+    derivRefreshTimer = setInterval(() => {
+      if (!isDocumentVisible()) return;
+      fetchDerivativesData();
+    }, 30000);
+
+    if (typeof document !== 'undefined') {
+      _visibilityHandler = handleVisibilityChange;
+      document.addEventListener('visibilitychange', _visibilityHandler);
+    }
 
     // Load scan history from server
     getScanHistory({ limit: 5 })
@@ -508,6 +560,10 @@
     if (volatilityInterval) clearInterval(volatilityInterval);
     if (derivRefreshTimer) clearInterval(derivRefreshTimer);
     if (_derivDebounce) clearTimeout(_derivDebounce);
+    if (typeof document !== 'undefined' && _visibilityHandler) {
+      document.removeEventListener('visibilitychange', _visibilityHandler);
+      _visibilityHandler = null;
+    }
   });
 </script>
 
@@ -544,7 +600,6 @@
 
   <WarRoomSignalFeed
     {filteredSignals}
-    {signalPool}
     {scanTabs}
     {selectedIds}
     {selectedCount}

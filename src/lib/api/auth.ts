@@ -2,7 +2,31 @@ export interface RegisterAuthPayload {
   email: string;
   nickname: string;
   walletAddress?: string;
+  walletMessage?: string;
   walletSignature?: string;
+}
+
+export interface LoginAuthPayload {
+  email: string;
+  nickname: string;
+  walletAddress: string;
+  walletMessage: string;
+  walletSignature: string;
+}
+
+export interface AuthUserPayload {
+  id: string;
+  email: string;
+  nickname: string;
+  tier: 'guest' | 'registered' | 'connected' | 'verified' | string;
+  phase: number;
+  walletAddress?: string | null;
+  wallet?: string | null;
+}
+
+export interface AuthSessionResponse {
+  authenticated: boolean;
+  user: AuthUserPayload | null;
 }
 
 export interface WalletNoncePayload {
@@ -50,8 +74,24 @@ async function postJson<TResponse>(url: string, body: unknown): Promise<TRespons
   return (await res.json()) as TResponse;
 }
 
+async function getJson<TResponse>(url: string): Promise<TResponse> {
+  const res = await fetch(url, { method: 'GET' });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+  return (await res.json()) as TResponse;
+}
+
 export function registerAuth(payload: RegisterAuthPayload) {
-  return postJson<{ success: boolean; user: { id: string } }>('/api/auth/register', payload);
+  return postJson<{ success: boolean; user: AuthUserPayload }>('/api/auth/register', payload);
+}
+
+export function loginAuth(payload: LoginAuthPayload) {
+  return postJson<{ success: boolean; user: AuthUserPayload }>('/api/auth/login', payload);
+}
+
+export function fetchAuthSession() {
+  return getJson<AuthSessionResponse>('/api/auth/session');
 }
 
 export function requestWalletNonce(payload: WalletNoncePayload) {

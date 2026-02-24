@@ -14,6 +14,11 @@
   const dispatch = createEventDispatcher();
 
   // Chat props (passed from terminal page)
+  export let chatMessages: { from: string; icon: string; color: string; text: string; time: string; isUser: boolean; isSystem?: boolean }[] = [];
+  export let isTyping = false;
+  export let prioritizeChat = false;
+  export let chatFocusKey = 0;
+  export let chatTradeReady = false;
   type ScanHighlight = {
     agent: string;
     vote: 'long' | 'short' | 'neutral';
@@ -101,6 +106,7 @@
   // Chat input (local)
   let chatInput = $state('');
   let chatEl: HTMLDivElement;
+  let _lastChatFocusKey = 0;
 
   function setTab(tab: string) {
     if (activeTab === tab) {
@@ -160,9 +166,16 @@
     }
   });
 
-  let opens = $derived($openTrades);
-  let openCount = $derived(opens.length);
-  let latestScanTime = $derived(latestScan ? new Date(latestScan.createdAt).toTimeString().slice(0, 5) : '');
+  $: if (chatFocusKey !== _lastChatFocusKey) {
+    _lastChatFocusKey = chatFocusKey;
+    activeTab = 'intel';
+    innerTab = 'chat';
+    tabCollapsed = false;
+  }
+
+  $: opens = $openTrades;
+  $: openCount = opens.length;
+  $: latestScanTime = latestScan ? new Date(latestScan.createdAt).toTimeString().slice(0, 5) : '';
 
   // ═══ Filter headlines by current chart ticker ═══
   let currentToken = $derived($gameState.pair.split('/')[0] || 'BTC');
@@ -494,6 +507,15 @@
             <div class="ac-section ac-embedded">
               <div class="ac-header">
                 <span class="ac-title">🤖 AGENT CHAT</span>
+                <button
+                  class="ac-trade-btn"
+                  class:ready={chatTradeReady}
+                  on:click={() => dispatch('gototrade')}
+                  disabled={!chatTradeReady}
+                  title={chatTradeReady ? 'Move to chart and start drag trade planner' : 'Ask in chat first to unlock trade action'}
+                >
+                  TRADE ON CHART
+                </button>
               </div>
               <!-- scan-brief 제거: 스캔 데이터는 채팅 패널에 표시하지 않음 -->
               <div class="ac-msgs" bind:this={chatEl}>
@@ -1289,7 +1311,6 @@
     border-color: rgba(139,92,246,.45);
     background: rgba(139,92,246,.12);
   }
-  .pp-linked:hover .pp-q { text-decoration: underline; }
   .pp-ext {
     display: block;
     margin-top: 4px;
@@ -1298,7 +1319,6 @@
     color: rgba(139,92,246,.5);
     text-align: right;
   }
-  .pp-linked:hover .pp-ext { color: rgba(139,92,246,.85); }
   .pp-q {
     font-family: var(--fm); font-size: 10px; font-weight: 700;
     color: rgba(255,255,255,.84); line-height: 1.35;
@@ -1339,6 +1359,7 @@
   .ac-section.ac-embedded { border-top: 0; }
   .ac-header {
     display: flex; align-items: center; gap: 6px;
+    justify-content: space-between;
     padding: 5px 8px 3px;
     flex-shrink: 0;
   }
@@ -1395,6 +1416,34 @@
   .ac-title {
     font-family: var(--fm); font-size: 10px; font-weight: 900;
     letter-spacing: 2px; color: var(--yel);
+  }
+  .ac-trade-btn {
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.58);
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .65px;
+    white-space: nowrap;
+    cursor: not-allowed;
+    transition: all .12s ease;
+  }
+  .ac-trade-btn.ready {
+    border-color: rgba(0, 255, 136, 0.46);
+    background: rgba(0, 255, 136, 0.18);
+    color: #d9ffe9;
+    cursor: pointer;
+  }
+  .ac-trade-btn.ready:hover {
+    border-color: rgba(0, 255, 136, 0.7);
+    background: rgba(0, 255, 136, 0.28);
+    color: #f4fff8;
+  }
+  .ac-trade-btn:disabled {
+    opacity: 0.66;
   }
   .ac-msgs {
     flex: 1;
@@ -1663,38 +1712,14 @@
   }
   .gmx-open-btn:hover { background: rgba(255,140,0,.15); border-color: rgba(255,140,0,.4); color: #ffa033; }
 
-  /* Desktop resizable zones (x/y per intel section) */
-  @media (min-width: 1024px) and (pointer: fine) {
-    .rp-body:not(.chat-mode),
-    .ac-msgs,
-    .hl-scrollable,
-    .trend-list,
-    .picks-panel {
-      min-height: 140px;
-      max-height: 100%;
-      resize: vertical;
-      overflow-y: auto;
-    }
-
-    .pp-scroll {
-      width: 100%;
-      max-width: 100%;
-      min-width: 180px;
-      align-self: flex-start;
-      resize: horizontal;
-      overflow-x: auto;
-      overflow-y: hidden;
-    }
-  }
-
-  @media (max-width: 1023px), (pointer: coarse) {
-    .rp-body,
-    .ac-msgs,
-    .hl-scrollable,
-    .trend-list,
-    .picks-panel,
-    .pp-scroll {
-      resize: none;
-    }
+  /* Internal section resizing disabled.
+     Panel sizing is controlled by terminal-level column resizers for consistency. */
+  .rp-body,
+  .ac-msgs,
+  .hl-scrollable,
+  .trend-list,
+  .picks-panel,
+  .pp-scroll {
+    resize: none;
   }
 </style>

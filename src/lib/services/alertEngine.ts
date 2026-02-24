@@ -50,16 +50,20 @@ const PRICE_SPIKE_THRESHOLD_1H = 5;               // % change 1h to trigger spik
 const NEW_ENTRY_NOTIFY = true;                    // notify when new coin enters top 5
 const INIT_JITTER_MAX_MS = 60_000;               // randomize initial delay 30s-90s (prevent thundering herd)
 const INTERVAL_JITTER_PCT = 0.15;                // ±15% jitter on each polling interval
+const HIDDEN_INTERVAL_MS = 15 * 60 * 1000;       // hidden tab에서는 폴링 빈도 축소
 
 // ── State ────────────────────────────────────────────────────
 
-let _timer: ReturnType<typeof setInterval> | null = null;
+let _timer: ReturnType<typeof setTimeout> | null = null;
 let _initTimer: ReturnType<typeof setTimeout> | null = null;
+let _startLoopTimer: ReturnType<typeof setTimeout> | null = null;
 let _running = false;
 let _intervalMs = DEFAULT_INTERVAL_MS;
 let _previousSnapshot: ScanSnapshot | null = null;
 let _scanCount = 0;
 let _lastScanAt = 0;
+let _visibilityHandler: (() => void) | null = null;
+let _scheduleNext: (() => void) | null = null;
 
 // ── Core Logic ───────────────────────────────────────────────
 
@@ -195,6 +199,30 @@ async function runScanCycle(): Promise<void> {
   _previousSnapshot = snapshot;
 }
 
+function isDocumentVisible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState === 'visible';
+}
+
+function getEffectiveIntervalMs(): number {
+  if (isDocumentVisible()) return _intervalMs;
+  return Math.max(_intervalMs, HIDDEN_INTERVAL_MS);
+}
+
+function clearTimers() {
+  if (_initTimer) {
+    clearTimeout(_initTimer);
+    _initTimer = null;
+  }
+  if (_timer) {
+    clearTimeout(_timer);
+    _timer = null;
+  }
+  if (_startLoopTimer) {
+    clearTimeout(_startLoopTimer);
+    _startLoopTimer = null;
+  }
+}
+
 // ── Public API ───────────────────────────────────────────────
 
 export const alertEngine = {
@@ -206,25 +234,58 @@ export const alertEngine = {
 
     // Jittered initial delay: 30s + random(0-60s) → spreads 1000 clients over 90s window
     const initDelay = 30_000 + Math.floor(Math.random() * INIT_JITTER_MAX_MS);
-    _initTimer = setTimeout(() => {
-      _initTimer = null;
+    const scheduleNext = () => {
       if (!_running) return;
-      void runScanCycle();
-    }, initDelay);
-
-    // Jittered periodic scans: ±15% randomization per interval
-    // This ensures 1000 clients don't hit the server at exact same moment
-    function scheduleNext() {
-      if (!_running) return;
-      const jitter = _intervalMs * INTERVAL_JITTER_PCT;
-      const nextMs = _intervalMs + Math.floor(Math.random() * jitter * 2 - jitter);
+      const baseInterval = getEffectiveIntervalMs();
+      const jitter = baseInterval * INTERVAL_JITTER_PCT;
+      const nextMs = baseInterval + Math.floor(Math.random() * jitter * 2 - jitter);
+      if (_timer) {
+        clearTimeout(_timer);
+        _timer = null;
+      }
       _timer = setTimeout(() => {
+        _timer = null;
         if (!_running) return;
         void runScanCycle().finally(scheduleNext);
       }, Math.max(MIN_INTERVAL_MS, nextMs));
+    };
+    _scheduleNext = scheduleNext;
+
+    _initTimer = setTimeout(() => {
+      _initTimer = null;
+      if (!_running) return;
+      if (!isDocumentVisible()) return;
+      void runScanCycle();
+    }, initDelay);
+
+    _startLoopTimer = setTimeout(() => {
+      _startLoopTimer = null;
+      if (!_running) return;
+      scheduleNext();
+    }, initDelay + 1000);
+
+    if (typeof document !== 'undefined') {
+      _visibilityHandler = () => {
+        if (!_running) return;
+        if (document.visibilityState !== 'visible') return;
+        if (_timer) {
+          clearTimeout(_timer);
+          _timer = null;
+        }
+        if (_startLoopTimer) {
+          clearTimeout(_startLoopTimer);
+          _startLoopTimer = null;
+        }
+        if (_initTimer) {
+          clearTimeout(_initTimer);
+          _initTimer = null;
+        }
+        void runScanCycle().finally(() => {
+          _scheduleNext?.();
+        });
+      };
+      document.addEventListener('visibilitychange', _visibilityHandler);
     }
-    // Start the jittered loop after initial delay
-    setTimeout(scheduleNext, initDelay + 1000);
 
     console.log(`[AlertEngine] Started (interval: ~${_intervalMs / 1000}s, initDelay: ${(initDelay / 1000).toFixed(0)}s)`);
   },
@@ -232,13 +293,11 @@ export const alertEngine = {
   /** Stop background monitoring. */
   stop() {
     _running = false;
-    if (_initTimer) {
-      clearTimeout(_initTimer);
-      _initTimer = null;
-    }
-    if (_timer) {
-      clearTimeout(_timer);
-      _timer = null;
+    clearTimers();
+    _scheduleNext = null;
+    if (typeof document !== 'undefined' && _visibilityHandler) {
+      document.removeEventListener('visibilitychange', _visibilityHandler);
+      _visibilityHandler = null;
     }
     console.log('[AlertEngine] Stopped');
   },

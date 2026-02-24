@@ -5,11 +5,15 @@
   import { AGDEFS, SOURCES } from '$lib/data/agents';
   import { sfx } from '$lib/audio/sfx';
   import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_GATHER, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, DOGE_VOTE_LONG, DOGE_WORDS, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
+  import { normalizeAgentId } from '$lib/engine/agents';
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, resetPhaseInit, startAnalysisFromDraft } from '$lib/engine/gameLoop';
   import { calculateLP, determineConsensus } from '$lib/engine/scoring';
   import Lobby from '../../components/arena/Lobby.svelte';
   import ChartPanel from '../../components/arena/ChartPanel.svelte';
   import HypothesisPanel from '../../components/arena/HypothesisPanel.svelte';
+  import ArenaHUD from '../../components/arena/ArenaHUD.svelte';
+  import ArenaEventCard from '../../components/arena/ArenaEventCard.svelte';
+  import ArenaRewardModal from '../../components/arena/ArenaRewardModal.svelte';
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
   import MatchHistory from '../../components/arena/MatchHistory.svelte';
   import SpeechBubble from '../../components/arena/SpeechBubble.svelte';
@@ -21,8 +25,9 @@
   import { onMount, onDestroy } from 'svelte';
   import { isWalletConnected, connectWallet, recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
-  import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch } from '$lib/api/arenaApi';
-  import type { AnalyzeResponse } from '$lib/api/arenaApi';
+  import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket } from '$lib/api/arenaApi';
+  import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
+  import type { DraftSelection } from '$lib/engine/types';
 
   let walletOk = $derived($isWalletConnected);
 
@@ -55,6 +60,43 @@
   let matchHistoryOpen = $state(false);
   let arenaRailTab: 'rank' | 'log' | 'map' = $state('rank');
 
+  type ArenaLiveEvent = {
+    id: number;
+    icon: string;
+    title: string;
+    detail: string;
+    severity: 'LOW' | 'MID' | 'HIGH';
+    tint: string;
+    expiresAt: number;
+  };
+  const LIVE_EVENT_TTL_MS = 8000;
+  const LIVE_EVENT_DECK: Record<'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE', Array<Omit<ArenaLiveEvent, 'id' | 'expiresAt'>>> = {
+    ANALYSIS: [
+      { icon: '🛰️', title: 'VOL SHIFT', detail: 'Micro volatility spike detected on last swing.', severity: 'MID', tint: '#6fd6ff' },
+      { icon: '🐋', title: 'WHALE TRACE', detail: 'On-chain flow leaning to directional build-up.', severity: 'LOW', tint: '#7ef0c2' },
+      { icon: '📡', title: 'SOCIAL PULSE', detail: 'Narrative momentum rising in high-beta clusters.', severity: 'LOW', tint: '#89a8ff' },
+    ],
+    HYPOTHESIS: [
+      { icon: '⏱️', title: 'ENTRY WINDOW', detail: 'Timing edge narrows. Tighten your trigger zone.', severity: 'MID', tint: '#7ecbff' },
+      { icon: '🧭', title: 'BIAS CHECK', detail: 'Model confidence diverges across macro and flow.', severity: 'HIGH', tint: '#ff8ea5' },
+      { icon: '🛡️', title: 'RISK GATE', detail: 'Suggested risk budget below 2% per attempt.', severity: 'LOW', tint: '#76f2bf' },
+    ],
+    BATTLE: [
+      { icon: '🌌', title: 'MOMENTUM BURST', detail: 'Directional acceleration in active candle range.', severity: 'HIGH', tint: '#ff9b7f' },
+      { icon: '💥', title: 'LIQUIDITY SWEEP', detail: 'Fast wick event cleared a nearby stop pocket.', severity: 'MID', tint: '#ffb26f' },
+      { icon: '📈', title: 'TREND HOLD', detail: 'Price structure remains aligned with current bias.', severity: 'LOW', tint: '#65f4c0' },
+    ],
+  };
+
+  let liveEvents: ArenaLiveEvent[] = [];
+  let liveEventTimer: ReturnType<typeof setInterval> | null = null;
+  let rewardVisible = false;
+  let rewardXp = 0;
+  let rewardStreak = 0;
+  let rewardBadges: string[] = [];
+
+  $: hudPhaseProgress = ({ DRAFT: 0.1, ANALYSIS: 0.35, HYPOTHESIS: 0.55, BATTLE: 0.78, RESULT: 1 } as const)[state.phase] ?? 0.1;
+
   // ═══════ SERVER SYNC STATE ═══════
   let serverMatchId: string | null = null;
   let serverAnalysis: AnalyzeResponse | null = null;
@@ -80,9 +122,10 @@
 
       // Build draft from selected agents (equal weight for now)
       const agentCount = currentState.selectedAgents.length;
+      if (agentCount <= 0) throw new Error('No agents selected for draft');
       const weight = Math.round(100 / agentCount);
-      const draft = currentState.selectedAgents.map((agentId, i) => ({
-        agentId,
+      const draft: DraftSelection[] = currentState.selectedAgents.map((agentId, i) => ({
+        agentId: normalizeAgentId(agentId),
         specId: 'base',
         weight: i === agentCount - 1 ? 100 - weight * (agentCount - 1) : weight,
       }));
@@ -407,6 +450,55 @@
     }
   }
 
+  function clearLiveEventTimer() {
+    if (liveEventTimer) {
+      clearInterval(liveEventTimer);
+      liveEventTimer = null;
+    }
+  }
+
+  function trimExpiredEvents() {
+    const now = Date.now();
+    liveEvents = liveEvents.filter((ev) => ev.expiresAt > now);
+  }
+
+  function pushLiveEvent(phase: 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE') {
+    const bucket = LIVE_EVENT_DECK[phase];
+    if (!bucket || bucket.length === 0) return;
+    const picked = bucket[Math.floor(Math.random() * bucket.length)];
+    const ev: ArenaLiveEvent = {
+      ...picked,
+      id: Date.now() + Math.floor(Math.random() * 10000),
+      expiresAt: Date.now() + LIVE_EVENT_TTL_MS
+    };
+    liveEvents = [ev, ...liveEvents].slice(0, 3);
+    addFeed(ev.icon, 'EVENT', ev.tint, `${ev.title} · ${ev.detail}`);
+    setTimeout(() => {
+      liveEvents = liveEvents.filter((item) => item.id !== ev.id);
+    }, LIVE_EVENT_TTL_MS + 60);
+  }
+
+  function startLiveEventStream(phase: 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE') {
+    clearLiveEventTimer();
+    trimExpiredEvents();
+    pushLiveEvent(phase);
+    const cadence = phase === 'BATTLE' ? 3600 : phase === 'HYPOTHESIS' ? 4400 : 5000;
+    liveEventTimer = setInterval(() => {
+      if (_arenaDestroyed) return;
+      trimExpiredEvents();
+      pushLiveEvent(phase);
+    }, Math.max(2200, Math.round(cadence / Math.max(1, state.speed || 1))));
+  }
+
+  function clearArenaDynamics() {
+    clearLiveEventTimer();
+    liveEvents = [];
+    rewardVisible = false;
+    rewardXp = 0;
+    rewardStreak = 0;
+    rewardBadges = [];
+  }
+
   // ═══════ HYPOTHESIS HANDLERS ═══════
   function onHypothesisSubmit(e: CustomEvent) {
     const h = e.detail;
@@ -512,6 +604,7 @@
   }
 
   function initDraft() {
+    clearArenaDynamics();
     findings = [];
     verdictVisible = false;
     resultVisible = false;
@@ -540,6 +633,7 @@
   }
 
   function initAnalysis() {
+    startLiveEventStream('ANALYSIS');
     initScout();
     initGather();
     initCouncil();
@@ -559,6 +653,7 @@
   }
 
   function initHypothesis() {
+    startLiveEventStream('HYPOTHESIS');
     // Show hypothesis panel for user prediction
     hypothesisVisible = true;
     floatDir = null; // Reset floating dir bar
@@ -832,6 +927,7 @@
   }
 
   function initBattle() {
+    startLiveEventStream('BATTLE');
     verdictVisible = false;
     compareVisible = false;
     addFeed('⚔', 'BATTLE', '#FF5E7A', 'Battle in progress!');
@@ -880,6 +976,8 @@
   }
 
   function initResult() {
+    clearLiveEventTimer();
+    liveEvents = [];
     const myScore = Math.round(state.score);
     const oppScore = Math.round(50 + Math.random() * 35);
     const br = state.battleResult;
@@ -969,6 +1067,22 @@
       tag: resultTag,
       motto: win ? WIN_MOTTOS[Math.floor(Math.random() * WIN_MOTTOS.length)] : LOSE_MOTTOS[Math.floor(Math.random() * LOSE_MOTTOS.length)]
     };
+
+    const streakNow = win ? state.streak + 1 : 0;
+    const scoreBonus = Math.round(Math.max(0, myScore - 45) * 1.15);
+    const winBonus = win ? 42 : 12;
+    const streakBonus = streakNow >= 2 ? streakNow * 10 : 0;
+    const consensusBonus = Math.round(consensus.lpMult * 16);
+    rewardXp = winBonus + scoreBonus + streakBonus + consensusBonus;
+    rewardStreak = streakNow;
+    rewardBadges = [
+      win ? 'MISSION CLEAR' : 'FIELD REPORT',
+      myScore >= 80 ? 'PRECISION+' : '',
+      consensus.type === 'consensus' ? 'COUNCIL SYNC' : consensus.type === 'partial' ? 'PARTIAL READ' : 'HIGH DIVERGENCE',
+      streakNow >= 3 ? 'STREAK ENGINE' : ''
+    ].filter(Boolean);
+    rewardVisible = true;
+
     resultVisible = true;
 
     if (win) {
@@ -989,6 +1103,7 @@
   }
 
   function initCooldown() {
+    clearArenaDynamics();
     verdictVisible = false;
     resultVisible = false;
     councilActive = false;
@@ -1003,6 +1118,7 @@
   }
 
   function goLobby() {
+    clearArenaDynamics();
     serverMatchId = null;
     serverAnalysis = null;
     apiError = null;
@@ -1032,6 +1148,7 @@
   }
 
   function playAgain() {
+    clearArenaDynamics();
     serverMatchId = null;
     serverAnalysis = null;
     apiError = null;
@@ -1048,11 +1165,69 @@
     engineStartMatch();
   }
 
+  // ═══════ BRACKET STATE ═══════
+  let bracketMatches: TournamentBracketMatch[] = [];
+  let bracketRound = 1;
+  let bracketLoading = false;
+
+  async function loadBracket() {
+    if (!state.tournament?.tournamentId) return;
+    bracketLoading = true;
+    try {
+      const res = await getTournamentBracket(state.tournament.tournamentId);
+      bracketMatches = res.matches;
+      bracketRound = res.round;
+    } catch (e) {
+      console.warn('[Arena] bracket load failed:', e);
+    } finally {
+      bracketLoading = false;
+    }
+  }
+
+  // Load bracket when switching to MAP tab in tournament mode
+  $: if (arenaRailTab === 'map' && state.arenaMode === 'TOURNAMENT') {
+    loadBracket();
+  }
+
+  // ═══════ ESC KEY HANDLER ═══════
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !state.inLobby) {
+      e.preventDefault();
+      if (state.phase === 'RESULT' || pvpVisible || resultVisible) {
+        goLobby();
+      } else if (confirmingExit) {
+        confirmingExit = false;
+      } else {
+        confirmingExit = true;
+        setTimeout(() => { confirmingExit = false; }, 3000);
+      }
+    }
+  }
+
+  let confirmingExit = false;
+
+  function confirmGoLobby() {
+    if (state.phase === 'RESULT' || pvpVisible || state.phase === 'DRAFT') {
+      goLobby();
+    } else if (confirmingExit) {
+      goLobby();
+    } else {
+      confirmingExit = true;
+      setTimeout(() => { confirmingExit = false; }, 3000);
+    }
+  }
+
   onMount(() => {
     setPhaseInitCallback(onPhaseInit);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', handleKeydown);
+    }
   });
 
   onDestroy(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', handleKeydown);
+    }
     _arenaDestroyed = true;
     if (hypothesisInterval) clearInterval(hypothesisInterval);
     if (_battleInterval) clearInterval(_battleInterval);
@@ -1061,12 +1236,13 @@
     if (feedCursorTimer) clearTimeout(feedCursorTimer);
     if (compareAutoTimer) clearTimeout(compareAutoTimer);
     if (pvpShowTimer) clearTimeout(pvpShowTimer);
+    clearLiveEventTimer();
     // Clean up typing timers
     Object.values(speechTimers).forEach(t => clearInterval(t));
   });
 </script>
 
-<div class="arena-page">
+<div class="arena-page arena-space-theme">
   <!-- Wallet Gate Overlay -->
   {#if !walletOk}
     <div class="wallet-gate">
@@ -1094,10 +1270,47 @@
   {:else if state.phase === 'DRAFT'}
     <SquadConfig selectedAgents={state.selectedAgents} on:deploy={onSquadDeploy} on:back={onSquadBack} />
   {:else}
-    <!-- Match History Toggle -->
-    <button class="mh-toggle" on:click={() => matchHistoryOpen = !matchHistoryOpen}>
-      📋 {state.wins}W-{state.losses}L
-    </button>
+    <!-- ═══════ TOP ARENA NAV BAR ═══════ -->
+    <div class="arena-topbar">
+      <button class="atb-back" on:click={confirmGoLobby}>
+        {#if confirmingExit}
+          <span class="atb-confirm-pulse">EXIT? CLICK AGAIN</span>
+        {:else}
+          <span class="atb-arrow">←</span> LOBBY
+        {/if}
+      </button>
+      <div class="atb-phase-track">
+        <div class="atb-phase done">
+          <span class="atp-dot"></span><span class="atp-label">DRAFT</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'ANALYSIS'} class:done={['HYPOTHESIS','BATTLE','RESULT'].includes(state.phase)}>
+          <span class="atp-dot"></span><span class="atp-label">SCAN</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'HYPOTHESIS'} class:done={['BATTLE','RESULT'].includes(state.phase)}>
+          <span class="atp-dot"></span><span class="atp-label">HYPO</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'BATTLE'} class:done={state.phase === 'RESULT'}>
+          <span class="atp-dot"></span><span class="atp-label">BATTLE</span>
+        </div>
+        <div class="atb-connector"></div>
+        <div class="atb-phase" class:active={state.phase === 'RESULT'}>
+          <span class="atp-dot"></span><span class="atp-label">RESULT</span>
+        </div>
+      </div>
+      <div class="atb-right">
+        <div class="atb-mode" class:pvp={state.arenaMode === 'PVP'} class:tour={state.arenaMode === 'TOURNAMENT'}>
+          {modeLabel}{#if state.arenaMode === 'TOURNAMENT' && tournamentInfo.round} · R{tournamentInfo.round}{/if}
+        </div>
+        <div class="atb-stats">
+          <span class="atb-lp">⚡{state.lp}</span>
+          <span class="atb-wl">{state.wins}W-{state.losses}L</span>
+        </div>
+        <button class="atb-hist" on:click={() => matchHistoryOpen = !matchHistoryOpen}>📋</button>
+      </div>
+    </div>
     <MatchHistory visible={matchHistoryOpen} on:close={() => matchHistoryOpen = false} />
 
       <div class="battle-layout">
@@ -1215,6 +1428,29 @@
         <div class="arena-texture arena-grid"></div>
         <div class="arena-texture arena-doodle"></div>
         <div class="arena-vignette"></div>
+        <ArenaHUD
+          phaseName={phaseLabel.name}
+          timer={state.timer}
+          score={state.score}
+          streak={state.streak}
+          lp={state.lp}
+          mode={modeLabel}
+          phaseProgress={hudPhaseProgress}
+        />
+        {#if liveEvents.length > 0}
+          <div class="live-event-stack">
+            {#each liveEvents as ev (ev.id)}
+              <ArenaEventCard
+                icon={ev.icon}
+                title={ev.title}
+                detail={ev.detail}
+                severity={ev.severity}
+                tint={ev.tint}
+                freshness={Math.max(0, Math.min(1, (ev.expiresAt - Date.now()) / LIVE_EVENT_TTL_MS))}
+              />
+            {/each}
+          </div>
+        {/if}
         <div class="battle-floor">
           <span>ARENA SIGNAL PLANE</span>
         </div>
@@ -1373,6 +1609,14 @@
         </div>
 
         <!-- ═══════ COMPARE OVERLAY ═══════ -->
+        <ArenaRewardModal
+          visible={rewardVisible}
+          xpGain={rewardXp}
+          streak={rewardStreak}
+          badges={rewardBadges}
+          on:close={() => { rewardVisible = false; }}
+        />
+
         {#if compareVisible}
           <div class="compare-overlay">
             <div class="compare-card">
@@ -1553,7 +1797,195 @@
 
 <style>
   .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; }
+  .arena-space-theme {
+    --space-line: rgba(117, 224, 255, 0.32);
+    --space-line-strong: rgba(153, 230, 255, 0.58);
+    --space-surface: rgba(6, 13, 31, 0.86);
+    --space-surface-soft: rgba(8, 18, 41, 0.68);
+    --space-text: #ecf7ff;
+    --space-text-soft: rgba(195, 222, 255, 0.84);
+    --space-accent: #68d8ff;
+    --space-accent-2: #ff9f70;
+    --space-good: #1effa0;
+    --space-bad: #ff607c;
+  }
+  .arena-space-theme::before {
+    content: '';
+    position: absolute;
+    inset: -20% -10%;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(circle at 16% 18%, rgba(123, 215, 255, 0.2), transparent 36%),
+      radial-gradient(circle at 85% 12%, rgba(255, 164, 110, 0.14), transparent 34%),
+      radial-gradient(circle at 70% 82%, rgba(125, 140, 255, 0.12), transparent 38%);
+    animation: spaceDrift 30s linear infinite alternate;
+  }
+  .arena-space-theme::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: radial-gradient(circle at center, rgba(255,255,255,.55) 0 1px, transparent 1.5px);
+    background-size: 3px 3px;
+    opacity: 0.065;
+    mix-blend-mode: screen;
+  }
+  @keyframes spaceDrift {
+    from { transform: translate3d(-2%, 0, 0) scale(1); }
+    to { transform: translate3d(2%, -2%, 0) scale(1.03); }
+  }
+
   .battle-layout { display: grid; grid-template-columns: 45% 1fr; height: 100%; overflow: hidden; }
+
+  .arena-topbar {
+    position: relative;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--space-line);
+    background:
+      linear-gradient(180deg, rgba(4, 12, 31, 0.95), rgba(4, 10, 23, 0.88)),
+      radial-gradient(circle at 8% -20%, rgba(109, 212, 255, 0.22), transparent 40%);
+    backdrop-filter: blur(10px);
+  }
+  .atb-back {
+    border: 1px solid var(--space-line-strong);
+    border-radius: 999px;
+    background: rgba(11, 24, 48, 0.72);
+    color: var(--space-text);
+    font: 800 10px/1 var(--fd);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    padding: 7px 13px;
+    cursor: pointer;
+    transition: transform .16s ease, border-color .16s ease, background .16s ease;
+  }
+  .atb-back:hover {
+    transform: translateY(-1px);
+    border-color: rgba(128, 232, 255, 0.9);
+    background: rgba(10, 30, 63, 0.84);
+  }
+  .atb-arrow {
+    margin-right: 5px;
+  }
+  .atb-confirm-pulse {
+    color: #ff9c89;
+    animation: pulseWarn .9s ease-in-out infinite;
+  }
+  @keyframes pulseWarn {
+    0%, 100% { opacity: .8; }
+    50% { opacity: 1; }
+  }
+  .atb-phase-track {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+  }
+  .atb-phase {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: .62;
+    transition: opacity .2s ease, filter .2s ease;
+  }
+  .atb-phase.active,
+  .atb-phase.done {
+    opacity: 1;
+  }
+  .atp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid rgba(181, 216, 255, 0.5);
+    background: rgba(120, 167, 232, 0.35);
+    box-shadow: 0 0 0 rgba(104, 216, 255, 0);
+  }
+  .atb-phase.active .atp-dot {
+    background: #6bd8ff;
+    box-shadow: 0 0 10px rgba(107, 216, 255, 0.85);
+  }
+  .atb-phase.done .atp-dot {
+    background: #1effa0;
+    border-color: rgba(130, 255, 207, 0.9);
+  }
+  .atp-label {
+    font: 800 8px/1 var(--fd);
+    letter-spacing: 1.3px;
+    color: var(--space-text-soft);
+    white-space: nowrap;
+  }
+  .atb-connector {
+    width: 20px;
+    height: 1px;
+    margin: 0 4px;
+    background: linear-gradient(90deg, rgba(108, 165, 241, 0.18), rgba(106, 225, 255, 0.55), rgba(108, 165, 241, 0.18));
+  }
+  .atb-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .atb-mode {
+    border: 1px solid rgba(115, 221, 255, 0.62);
+    border-radius: 999px;
+    background: rgba(33, 113, 173, 0.2);
+    color: #c6ebff;
+    font: 800 8px/1 var(--fd);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    padding: 4px 8px;
+  }
+  .atb-mode.pvp {
+    border-color: rgba(255, 158, 112, 0.7);
+    background: rgba(198, 93, 52, 0.18);
+    color: #ffd7bb;
+  }
+  .atb-mode.tour {
+    border-color: rgba(249, 199, 127, 0.72);
+    background: rgba(186, 133, 54, 0.18);
+    color: #ffdeb2;
+  }
+  .atb-stats {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font: 700 8px/1 var(--fm);
+    color: var(--space-text-soft);
+  }
+  .atb-lp {
+    color: #ffd39e;
+  }
+  .atb-hist {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid rgba(136, 221, 255, 0.62);
+    background: rgba(13, 32, 56, 0.8);
+    color: #d7edff;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .atb-hist:hover {
+    border-color: rgba(170, 239, 255, 0.92);
+    background: rgba(21, 55, 95, 0.9);
+  }
+
+  .live-event-stack {
+    position: absolute;
+    z-index: 21;
+    top: 70px;
+    left: 10px;
+    width: min(328px, calc(100% - 220px));
+    display: grid;
+    gap: 7px;
+    pointer-events: none;
+  }
 
   /* Match History Toggle */
   .mh-toggle {
@@ -2649,6 +3081,18 @@
     .hist-btn {
       right: 184px;
     }
+    .atb-phase-track {
+      justify-content: flex-start;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .atb-phase-track::-webkit-scrollbar {
+      display: none;
+    }
+    .live-event-stack {
+      width: min(288px, calc(100% - 190px));
+    }
   }
   @media (max-width: 900px) {
     .arena-rail {
@@ -2660,6 +3104,33 @@
     .hist-btn {
       right: 8px;
     }
+    .arena-topbar {
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        'back right'
+        'track track';
+      row-gap: 8px;
+    }
+    .atb-back {
+      grid-area: back;
+      justify-self: start;
+    }
+    .atb-right {
+      grid-area: right;
+      justify-self: end;
+    }
+    .atb-phase-track {
+      grid-area: track;
+      justify-content: flex-start;
+      width: 100%;
+    }
+    .live-event-stack {
+      width: min(300px, calc(100% - 18px));
+      top: 106px;
+    }
+    .phase-display {
+      top: 110px;
+    }
   }
 
   @keyframes popIn { from { transform: translate(-50%, -50%) scale(.8); opacity: 0 } to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }
@@ -2668,6 +3139,25 @@
   @media (max-width: 768px) {
     .battle-layout { grid-template-columns: 1fr; grid-template-rows: 45% 1fr; }
     .chart-side { border-right: none; border-bottom: 4px solid #000; }
+    .atp-label {
+      font-size: 7px;
+      letter-spacing: 1px;
+    }
+    .atb-connector {
+      width: 12px;
+      margin: 0 3px;
+    }
+    .atb-back {
+      font-size: 9px;
+      padding: 6px 10px;
+    }
+    .atb-hist {
+      width: 28px;
+      height: 28px;
+    }
+    .live-event-stack {
+      top: 98px;
+    }
   }
 
   /* ── Wallet Gate ── */

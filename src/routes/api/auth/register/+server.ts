@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // MAXI⚡DOGE — User Registration API (PostgreSQL backed)
 // POST /api/auth/register
-// Body: { email: string, nickname: string, walletAddress?: string, walletSignature?: string }
+// Body: { email, nickname, walletAddress?, walletMessage?, walletSignature? }
 // ═══════════════════════════════════════════════════════════════
 
 import { json } from '@sveltejs/kit';
@@ -14,35 +14,116 @@ import { errorContains } from '$lib/utils/errorUtils';
   SESSION_COOKIE_OPTIONS,
   SESSION_MAX_AGE_SEC,
 } from '$lib/server/session';
+import {
+  isValidEthAddress,
+  normalizeEthAddress,
+  verifyAndConsumeEvmNonce,
+} from '$lib/server/walletAuthRepository';
+import { authRegisterLimiter } from '$lib/server/rateLimit';
+import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
+import { evaluateIpReputation } from '$lib/server/ipReputation';
+import { isBodyTooLarge, readTurnstileToken } from '$lib/server/requestGuards';
+import { verifyTurnstile } from '$lib/server/turnstile';
 
-const GENERIC_WALLET_RE = /^0x[0-9a-fA-F]{40}$|^[A-Za-z0-9]{20,64}$/;
-const WALLET_SIGNATURE_RE = /^0x[0-9a-fA-F]{64,512}$/;
+const EVM_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
 
-export const POST: RequestHandler = async ({ request, cookies }) => {
+export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
+  const fallbackIp = getClientAddress();
+  const reputation = evaluateIpReputation(request, fallbackIp);
+  if (!reputation.allowed) {
+    return json({ error: 'Request blocked by security policy' }, { status: 403 });
+  }
+
+  const ip = reputation.clientIp || fallbackIp || 'unknown';
+  if (!authRegisterLimiter.check(ip)) {
+    return json({ error: 'Too many registration attempts. Please wait.' }, { status: 429 });
+  }
+  const distributedAllowed = await checkDistributedRateLimit({
+    scope: 'auth:register',
+    key: ip,
+    windowMs: 60_000,
+    max: 8,
+  });
+  if (!distributedAllowed) {
+    return json({ error: 'Too many registration attempts. Please wait.' }, { status: 429 });
+  }
+  if (isBodyTooLarge(request, 16 * 1024)) {
+    return json({ error: 'Request body too large' }, { status: 413 });
+  }
+
   try {
     const body = await request.json();
+    const turnstile = await verifyTurnstile({
+      token: readTurnstileToken(body),
+      remoteIp: reputation.clientIp || fallbackIp || null,
+    });
+    if (!turnstile.ok) {
+      return json({ error: 'Bot verification failed' }, { status: 403 });
+    }
+
     const email = typeof body?.email === 'string' ? body.email.trim() : '';
     const nickname = typeof body?.nickname === 'string' ? body.nickname.trim() : '';
     const walletAddressRaw = typeof body?.walletAddress === 'string' ? body.walletAddress.trim() : '';
-    const walletSignatureRaw = typeof body?.walletSignature === 'string' ? body.walletSignature.trim() : '';
-    const walletAddress = walletAddressRaw || null;
-    const walletSignature = walletSignatureRaw || null;
+    const walletMessage = typeof body?.walletMessage === 'string'
+      ? body.walletMessage.trim()
+      : typeof body?.message === 'string'
+        ? body.message.trim()
+        : '';
+    const walletSignatureRaw = typeof body?.walletSignature === 'string'
+      ? body.walletSignature.trim()
+      : typeof body?.signature === 'string'
+        ? body.signature.trim()
+        : '';
 
-    // Validate
     if (!email || !email.includes('@')) {
       return json({ error: 'Valid email required' }, { status: 400 });
+    }
+    if (email.length > 254) {
+      return json({ error: 'Email is too long' }, { status: 400 });
     }
     if (!nickname || nickname.length < 2) {
       return json({ error: 'Nickname must be 2+ characters' }, { status: 400 });
     }
-    if (walletAddress && !GENERIC_WALLET_RE.test(walletAddress)) {
-      return json({ error: 'Invalid wallet address format' }, { status: 400 });
+    if (nickname.length > 32) {
+      return json({ error: 'Nickname must be 32 characters or less' }, { status: 400 });
     }
-    if (walletSignature && !WALLET_SIGNATURE_RE.test(walletSignature)) {
-      return json({ error: 'Invalid wallet signature format' }, { status: 400 });
-    }
-    if (walletSignature && !walletAddress) {
-      return json({ error: 'walletAddress is required when walletSignature is provided' }, { status: 400 });
+
+    let walletAddress: string | null = null;
+    let walletSignature: string | null = null;
+
+    if (walletAddressRaw) {
+      if (!isValidEthAddress(walletAddressRaw)) {
+        return json({ error: 'Valid EVM wallet address required' }, { status: 400 });
+      }
+      if (!walletMessage) {
+        return json({ error: 'Signed wallet message is required when walletAddress is provided' }, { status: 400 });
+      }
+      if (walletMessage.length > 2048) {
+        return json({ error: 'Signed wallet message is too long' }, { status: 400 });
+      }
+      if (!EVM_SIGNATURE_RE.test(walletSignatureRaw)) {
+        return json({ error: 'Valid wallet signature is required when walletAddress is provided' }, { status: 400 });
+      }
+
+      const normalizedAddress = normalizeEthAddress(walletAddressRaw);
+      walletAddress = normalizedAddress;
+      walletSignature = walletSignatureRaw;
+
+      const verification = await verifyAndConsumeEvmNonce({
+        address: normalizedAddress,
+        message: walletMessage,
+        signature: walletSignatureRaw,
+      });
+
+      if (verification === 'missing_nonce') {
+        return json({ error: 'Nonce not found in signed message' }, { status: 400 });
+      }
+      if (verification === 'invalid_signature') {
+        return json({ error: 'Signature does not match wallet address' }, { status: 401 });
+      }
+      if (verification === 'invalid_nonce') {
+        return json({ error: 'Signup challenge is expired or already used' }, { status: 401 });
+      }
     }
 
     const conflict = await findAuthUserConflict(email, nickname);
@@ -53,7 +134,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       return json({ error: 'Nickname already taken' }, { status: 409 });
     }
 
-    // Create user record
     const user = await createAuthUser({
       email,
       nickname,
@@ -61,7 +141,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       walletSignature,
     });
 
-    // Create session
     const sessionToken = crypto.randomUUID().toLowerCase();
     const createdAt = Date.now();
     const expiresAtMs = createdAt + SESSION_MAX_AGE_SEC * 1000;
@@ -69,7 +148,10 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       token: sessionToken,
       userId: user.id,
       expiresAtIso: new Date(expiresAtMs).toISOString(),
+      userAgent: request.headers.get('user-agent'),
+      ipAddress: ip,
     });
+
     cookies.set(
       SESSION_COOKIE_NAME,
       buildSessionCookieValue(sessionToken, user.id),
@@ -86,8 +168,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
         walletVerified: Boolean(walletAddress && walletSignature),
         tier: user.tier,
         phase: user.phase,
-        createdAt: new Date(createdAt).toISOString()
-      }
+        createdAt: new Date(createdAt).toISOString(),
+      },
     });
   } catch (error: unknown) {
     if (error?.code === '23505') {
