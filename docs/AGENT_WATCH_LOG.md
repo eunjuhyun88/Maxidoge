@@ -1104,3 +1104,17 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Merge hash: `98734d6`
 - Push status: SUCCESS (`origin/codex/passport-backend-architecture-v1`, `origin/main`)
 - Status: DONE
+
+### W-20260225-0113-passport-codex
+
+- Start (KST): 2026-02-25 01:13
+- Agent: Codex (GPT-5)
+- Branch: `codex/passport-ml-orpo-design-v2`
+- Scope (planned):
+  - Passport 학습 파이프라인 정교화(Pretraining, Continual Pretraining, SFT, ORPO, Retraining)
+  - 터미널 액션 기반 데이터셋 버저닝/라벨링/평가/배포 게이트 설계 구체화
+  - 트레이딩 성과 분석 글 생성 모델과 정책 모델의 이원화 아키텍처 확정
+- Overlap check (before work):
+  - `## main...origin/main`에서 분기, 워킹트리 clean 확인
+  - single worktree(`/Users/ej/Downloads/maxidoge-clones/frontend-passport`) 확인
+- Status: IN_PROGRESS
