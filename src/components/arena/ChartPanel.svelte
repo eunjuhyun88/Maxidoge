@@ -1124,6 +1124,7 @@
     const ctx = drawingCanvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    drawPatternOverlays(ctx);
     for (const d of drawings) {
       ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.5;
       if (d.type === 'hline') { ctx.setLineDash([6, 3]); ctx.moveTo(0, d.points[0].y); ctx.lineTo(drawingCanvas.width, d.points[0].y); }
@@ -1155,6 +1156,115 @@
     if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry')) {
       const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
       if (preview) drawTradePreview(ctx, preview);
+    }
+  }
+
+  function toOverlayPoint(time: number, price: number): { x: number; y: number } | null {
+    if (!chart || !drawingCanvas) return null;
+    if (!Number.isFinite(time) || !Number.isFinite(price)) return null;
+    try {
+      const x = chart.timeScale().timeToCoordinate(time as any);
+      const y = toChartY(price);
+      if (!Number.isFinite(x) || y === null || !Number.isFinite(y)) return null;
+      return { x, y };
+    } catch {
+      return null;
+    }
+  }
+
+  function drawPatternTag(
+    ctx: CanvasRenderingContext2D,
+    point: { x: number; y: number },
+    text: string,
+    color: string
+  ) {
+    if (!drawingCanvas) return;
+    ctx.save();
+    ctx.font = "700 9px 'JetBrains Mono', monospace";
+    const padX = 6;
+    const h = 16;
+    const w = Math.ceil(ctx.measureText(text).width) + padX * 2;
+    const x = Math.max(4, Math.min(point.x + 8, drawingCanvas.width - w - 4));
+    const y = Math.max(4, Math.min(point.y - h - 8, drawingCanvas.height - h - 4));
+
+    ctx.fillStyle = withAlpha('#05070d', 0.84);
+    ctx.strokeStyle = withAlpha(color, 0.72);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = withAlpha(color, 0.96);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + padX, y + h / 2);
+    ctx.restore();
+  }
+
+  function drawPatternOverlays(ctx: CanvasRenderingContext2D) {
+    if (!drawingCanvas || !chart || chartMode !== 'agent' || detectedPatterns.length === 0) return;
+
+    for (const pattern of detectedPatterns.slice(0, 3)) {
+      const active = !selectedPatternId || selectedPatternId === pattern.id;
+      const lineAlpha = active ? 0.92 : 0.45;
+      const fillAlpha = active ? 0.16 : 0.07;
+
+      const upperGuide = pattern.guideLines.find((g) => g.label === 'upper');
+      const lowerGuide = pattern.guideLines.find((g) => g.label === 'lower');
+      if (upperGuide && lowerGuide) {
+        const p1 = toOverlayPoint(upperGuide.from.time, upperGuide.from.price);
+        const p2 = toOverlayPoint(upperGuide.to.time, upperGuide.to.price);
+        const p3 = toOverlayPoint(lowerGuide.to.time, lowerGuide.to.price);
+        const p4 = toOverlayPoint(lowerGuide.from.time, lowerGuide.from.price);
+        if (p1 && p2 && p3 && p4) {
+          ctx.save();
+          ctx.fillStyle = withAlpha(upperGuide.color, fillAlpha);
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p3.x, p3.y);
+          ctx.lineTo(p4.x, p4.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      for (const guide of pattern.guideLines) {
+        const from = toOverlayPoint(guide.from.time, guide.from.price);
+        const to = toOverlayPoint(guide.to.time, guide.to.price);
+        if (!from || !to) continue;
+
+        ctx.save();
+        ctx.strokeStyle = withAlpha(guide.color, lineAlpha);
+        ctx.lineWidth = active ? (guide.style === 'dashed' ? 2 : 2.2) : 1.4;
+        ctx.setLineDash(guide.style === 'dashed' ? [7, 5] : []);
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (active) {
+          ctx.fillStyle = withAlpha(guide.color, 0.95);
+          ctx.beginPath();
+          ctx.arc(from.x, from.y, 2.2, 0, Math.PI * 2);
+          ctx.arc(to.x, to.y, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      const marker = toOverlayPoint(pattern.markerTime, pattern.markerPrice);
+      if (!marker) continue;
+      const tagColor = pattern.direction === 'BULLISH' ? '#58d78d' : '#ff657a';
+      const statusLabel = pattern.status === 'CONFIRMED' ? 'OK' : 'PEND';
+      drawPatternTag(
+        ctx,
+        marker,
+        `${pattern.shortName} ${statusLabel} ${Math.round(pattern.confidence * 100)}%`,
+        tagColor
+      );
     }
   }
 
@@ -1231,6 +1341,7 @@
       _patternSignature = '';
       applyCombinedMarkers();
       clearPatternLineSeries();
+      renderDrawings();
       return;
     }
 
@@ -1245,6 +1356,7 @@
     patternMarkers = next.map(toPatternMarker);
     applyCombinedMarkers();
     applyPatternLineSeries();
+    renderDrawings();
   }
 
   function forcePatternScan() {
@@ -1270,6 +1382,9 @@
     }
     return detectedPatterns.find((p) => p.id === selectedPatternId) ?? detectedPatterns[0];
   })();
+  $: if (selectedPatternId) {
+    renderDrawings();
+  }
 
   // ═══════════════════════════════════════════
   //  PRICE & POSITION
@@ -1512,6 +1627,7 @@
         if (range && range.from < 20 && !_isLoadingMore && !_noMoreHistory) {
           loadMoreHistory();
         }
+        renderDrawings();
       });
 
       const ro = new ResizeObserver(() => {
