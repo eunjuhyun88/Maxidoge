@@ -18,6 +18,7 @@
   import { copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { alertEngine } from '$lib/services/alertEngine';
+  import { detectMentionedAgent, inferAgentFromIntent } from '$lib/chat/agentRouting';
   import { onMount, onDestroy, tick } from 'svelte';
 
   // ── Panel resize state ──
@@ -910,33 +911,8 @@
     return longScore > shortScore ? 'LONG' : 'SHORT';
   }
 
-  function detectMentionedAgentLocal(text: string): string | null {
-    const mention = text.match(/@([a-z0-9_]+)/i);
-    if (!mention) return null;
-    const token = String(mention[1] || '').toUpperCase();
-    const exact = AGDEFS.find((ag) => ag.name.toUpperCase() === token);
-    if (exact) return exact.name;
-    if (token === 'ORCHESTRATOR' || token === 'SYSTEM' || token === 'AGENT') return 'ORCHESTRATOR';
-    if (token === 'SENTIMENT') return 'SENTI';
-    if (token === 'VALUE') return 'VALUATION';
-    return null;
-  }
-
-  function inferAgentFromIntentLocal(text: string): string {
-    const lower = text.toLowerCase();
-    if (/차트|candle|캔들|패턴|pattern|bos|choch|ob|fvg|support|resist|지지|저항|추세|trend|구조|structure/.test(lower)) return 'STRUCTURE';
-    if (/파생|deriv|펀딩|funding|oi|open.?interest|청산|liquid|옵션|option|선물|futures|숏|롱|레버/.test(lower)) return 'DERIV';
-    if (/온체인|on.?chain|mvrv|nupl|sopr|nvt|valuation|밸류|네트워크|network|active.?addr|whale|고래/.test(lower)) return 'VALUATION';
-    if (/자금|flow|플로우|넷플로우|netflow|거래소|exchange|inflow|outflow|유입|유출|이동/.test(lower)) return 'FLOW';
-    if (/거래량|volume|볼륨|cvd|delta|vwap|profile|흡수|absorption/.test(lower)) return 'VPA';
-    if (/스마트.?머니|smart.?money|ict|유동성|imbalance|breaker|mitigation/.test(lower)) return 'ICT';
-    if (/센티|senti|감정|공포|탐욕|fear|greed|소셜|social|여론|분위기/.test(lower)) return 'SENTI';
-    if (/매크로|macro|경제|금리|interest.?rate|연준|fed|cpi|gdp|달러|dollar|dxy|국채/.test(lower)) return 'MACRO';
-    return 'ORCHESTRATOR';
-  }
-
   function buildOfflineAgentReply(userText: string, statusLabel: string): { sender: string; text: string; tradeDir: ChatTradeDirection | null } {
-    const sender = detectMentionedAgentLocal(userText) || inferAgentFromIntentLocal(userText);
+    const sender = detectMentionedAgent(userText) || inferAgentFromIntent(userText) || 'ORCHESTRATOR';
     const pair = $gameState.pair || 'BTC/USDT';
     const timeframe = ($gameState.timeframe || '4h').toUpperCase();
     const scanSummary = latestScan
@@ -1154,8 +1130,7 @@
     isTyping = true;
 
     // 멘션된 에이전트 감지 (없으면 서버에서 ORCHESTRATOR로 기본 처리)
-    const agent = AGDEFS.find(ag => text.toLowerCase().includes(`@${ag.name.toLowerCase()}`));
-    const mentionedAgent = agent?.name || undefined;
+    const mentionedAgent = detectMentionedAgent(text) || undefined;
     const patternIntent = isPatternScanIntent(text);
     chatTradeReady = false;
     gtmEvent('terminal_chat_question_sent', {
