@@ -304,8 +304,8 @@ function checkBadges(profile: UserProfile): Badge[] {
       case 'pnl_10': earned = s.totalPnL >= 10; break;
       case 'pnl_50': earned = s.totalPnL >= 50; break;
       case 'winrate_70': earned = s.winRate >= 70 && s.totalMatches >= 10; break;
-      case 'tier_gold': earned = profile.tier === 'gold' || profile.tier === 'diamond'; break;
-      case 'tier_diamond': earned = profile.tier === 'diamond'; break;
+      case 'tier_gold': earned = profile.tier === 'gold' || profile.tier === 'diamond' || profile.tier === 'master'; break;
+      case 'tier_diamond': earned = profile.tier === 'diamond' || profile.tier === 'master'; break;
       case 'first_track': earned = s.trackedSignals >= 1; break;
     }
     return earned ? { ...badge, earnedAt: Date.now() } : badge;
