@@ -4,6 +4,8 @@ import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { query } from '$lib/server/db';
 import { runTerminalScan } from '$lib/services/scanService';
 import { scanLimiter } from '$lib/server/rateLimit';
+import { runIpRateLimitGuard } from '$lib/server/authSecurity';
+import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
 
 function parseValidationMessage(message: string): string | null {
   if (message.startsWith('pair must be like')) return message;
@@ -12,17 +14,22 @@ function parseValidationMessage(message: string): string | null {
 }
 
 export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
-  // Rate limit: 6 scans/min per IP
-  const ip = getClientAddress();
-  if (!scanLimiter.check(ip)) {
-    return json({ error: 'Too many scan requests. Please wait.' }, { status: 429 });
-  }
+  const fallbackIp = getClientAddress();
+  const guard = await runIpRateLimitGuard({
+    request,
+    fallbackIp,
+    limiter: scanLimiter,
+    scope: 'terminal:scan',
+    max: 6,
+    tooManyMessage: 'Too many scan requests. Please wait.',
+  });
+  if (!guard.ok) return guard.response;
 
   try {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
-    const body = await request.json().catch(() => ({}));
+    const body = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);
     const source = typeof body?.source === 'string' ? body.source.trim() : 'terminal';
 
     const result = await runTerminalScan(user.id, {
@@ -58,6 +65,9 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
       data: result.data,
     });
   } catch (error: any) {
+    if (isRequestBodyTooLargeError(error)) {
+      return json({ error: 'Request body too large' }, { status: 413 });
+    }
     const validationMessage = typeof error?.message === 'string' ? parseValidationMessage(error.message) : null;
     if (validationMessage) return json({ error: validationMessage }, { status: 400 });
     if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {

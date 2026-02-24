@@ -16,6 +16,46 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
   return Math.max(min, Math.min(max, parsed));
 }
 
+function isPrivateIpv4(ip: string): boolean {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return false;
+  const nums = parts.map((part) => Number.parseInt(part, 10));
+  if (nums.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) return false;
+
+  const [a, b] = nums;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  return false;
+}
+
+function isPrivateIpv6(ip: string): boolean {
+  const normalized = ip.toLowerCase();
+  if (normalized === '::1') return true;
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
+  if (normalized.startsWith('fe80:')) return true;
+  return false;
+}
+
+function isPrivateOrLoopbackIp(ip: string | null): boolean {
+  if (!ip) return false;
+  if (isIP(ip) === 4) return isPrivateIpv4(ip);
+  if (isIP(ip) === 6) return isPrivateIpv6(ip);
+  return false;
+}
+
+function shouldTrustProxyHeaders(fallbackIp: string | null): boolean {
+  const raw = env.SECURITY_TRUST_PROXY_HEADERS;
+  if (typeof raw === 'string' && raw.trim()) {
+    return envBool('SECURITY_TRUST_PROXY_HEADERS', false);
+  }
+  // Auto-trust proxy headers only when direct peer appears to be private/local.
+  return isPrivateOrLoopbackIp(fallbackIp);
+}
+
 function sanitizeIp(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const first = raw.split(',')[0]?.trim() || '';
@@ -54,9 +94,10 @@ export interface IpReputationDecision {
 }
 
 export function evaluateIpReputation(request: Request, fallbackIp?: string | null): IpReputationDecision {
-  const cfIp = sanitizeIp(request.headers.get('cf-connecting-ip'));
-  const xffIp = sanitizeIp(request.headers.get('x-forwarded-for'));
   const fallback = sanitizeIp(fallbackIp || null);
+  const trustProxyHeaders = shouldTrustProxyHeaders(fallback);
+  const cfIp = trustProxyHeaders ? sanitizeIp(request.headers.get('cf-connecting-ip')) : null;
+  const xffIp = trustProxyHeaders ? sanitizeIp(request.headers.get('x-forwarded-for')) : null;
   const clientIp = cfIp || xffIp || fallback;
 
   const blockedIps = parseBlockedIps();

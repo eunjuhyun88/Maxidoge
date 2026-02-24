@@ -4,6 +4,7 @@ import { AGENT_POOL } from '$lib/engine/agents';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt, UUID_RE } from '$lib/server/apiValidation';
+import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
 import { isPersistenceUnavailableError } from '$lib/services/scanService';
 import {
   callLLM, isLLMAvailable,
@@ -466,7 +467,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
-    const body = await request.json();
+    const body = await readJsonBody<Record<string, unknown>>(request, 32 * 1024);
 
     const channel = typeof body?.channel === 'string' ? body.channel.trim() : 'terminal';
     const senderKind = typeof body?.senderKind === 'string' ? body.senderKind.trim().toLowerCase() : 'user';
@@ -477,6 +478,9 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
 
     if (!message) return json({ error: 'message is required' }, { status: 400 });
     if (!SENDER_KINDS.has(senderKind)) return json({ error: 'senderKind must be user|agent|system' }, { status: 400 });
+    if (channel.length > 64) return json({ error: 'channel is too long' }, { status: 400 });
+    if (senderName.length > 64) return json({ error: 'senderName is too long' }, { status: 400 });
+    if (message.length > 4000) return json({ error: 'message is too long' }, { status: 400 });
 
     const insert = await query<AgentChatRow>(
       `
@@ -557,6 +561,9 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       agentResponse,
     });
   } catch (error: unknown) {
+    if (isRequestBodyTooLargeError(error)) {
+      return json({ error: 'Request body too large' }, { status: 413 });
+    }
     if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
@@ -565,4 +572,3 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     return json({ error: 'Failed to create chat message' }, { status: 500 });
   }
 };
-

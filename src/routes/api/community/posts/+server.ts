@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt } from '$lib/server/apiValidation';
+import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
 import { errorContains } from '$lib/utils/errorUtils';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,9 +69,9 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
-    const body = await request.json();
+    const body = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);
 
-    const author = typeof body?.author === 'string' ? body.author.trim() : user.nickname;
+    const author = user.nickname;
     const avatar = typeof body?.avatar === 'string' ? body.avatar.trim() : '🐕';
     const avatarColor = typeof body?.avatarColor === 'string' ? body.avatarColor.trim() : '#ffe600';
     const content = typeof body?.body === 'string' ? body.body.trim() : '';
@@ -78,6 +79,15 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
 
     if (!content || content.length < 2) {
       return json({ error: 'body must be at least 2 chars' }, { status: 400 });
+    }
+    if (content.length > 2000) {
+      return json({ error: 'body must be 2000 chars or fewer' }, { status: 400 });
+    }
+    if (avatar.length > 32) {
+      return json({ error: 'avatar must be 32 chars or fewer' }, { status: 400 });
+    }
+    if (avatarColor.length > 32) {
+      return json({ error: 'avatarColor must be 32 chars or fewer' }, { status: 400 });
     }
     if (signal && signal !== 'long' && signal !== 'short') {
       return json({ error: 'signal must be long|short or null' }, { status: 400 });
@@ -104,6 +114,9 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
 
     return json({ success: true, post: mapRow(insert.rows[0]) });
   } catch (error: unknown) {
+    if (isRequestBodyTooLargeError(error)) {
+      return json({ error: 'Request body too large' }, { status: 413 });
+    }
     if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }

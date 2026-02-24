@@ -2,44 +2,28 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { isValidEthAddress, issueWalletNonce, normalizeEthAddress } from '$lib/server/walletAuthRepository';
 import { authNonceLimiter } from '$lib/server/rateLimit';
-import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
-import { evaluateIpReputation } from '$lib/server/ipReputation';
-import { isBodyTooLarge, readTurnstileToken } from '$lib/server/requestGuards';
-import { verifyTurnstile } from '$lib/server/turnstile';
+import { readAuthBodyWithTurnstile, runAuthAbuseGuard } from '$lib/server/authSecurity';
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   const fallbackIp = getClientAddress();
-  const reputation = evaluateIpReputation(request, fallbackIp);
-  if (!reputation.allowed) {
-    return json({ error: 'Request blocked by security policy' }, { status: 403 });
-  }
-
-  const ip = reputation.clientIp || fallbackIp || 'unknown';
-  if (!authNonceLimiter.check(ip)) {
-    return json({ error: 'Too many nonce requests. Please wait.' }, { status: 429 });
-  }
-  const distributedAllowed = await checkDistributedRateLimit({
+  const guard = await runAuthAbuseGuard({
+    request,
+    fallbackIp,
+    limiter: authNonceLimiter,
     scope: 'auth:nonce',
-    key: ip,
-    windowMs: 60_000,
     max: 8,
+    tooManyMessage: 'Too many nonce requests. Please wait.',
   });
-  if (!distributedAllowed) {
-    return json({ error: 'Too many nonce requests. Please wait.' }, { status: 429 });
-  }
-  if (isBodyTooLarge(request, 8 * 1024)) {
-    return json({ error: 'Request body too large' }, { status: 413 });
-  }
+  if (!guard.ok) return guard.response;
 
   try {
-    const body = await request.json();
-    const turnstile = await verifyTurnstile({
-      token: readTurnstileToken(body),
-      remoteIp: reputation.clientIp || fallbackIp || null,
+    const bodyResult = await readAuthBodyWithTurnstile({
+      request,
+      remoteIp: guard.remoteIp,
+      maxBytes: 8 * 1024,
     });
-    if (!turnstile.ok) {
-      return json({ error: 'Bot verification failed' }, { status: 403 });
-    }
+    if (!bodyResult.ok) return bodyResult.response;
+    const body = bodyResult.body;
 
     const addressField = typeof body?.address === 'string' ? body.address.trim() : '';
     const walletAddressField = typeof body?.walletAddress === 'string' ? body.walletAddress.trim() : '';
@@ -67,7 +51,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
       address: normalizeEthAddress(addressRaw),
       provider,
       userAgent: request.headers.get('user-agent'),
-      issuedIp: reputation.clientIp || fallbackIp || null,
+      issuedIp: guard.remoteIp,
       ttlMinutes: 10,
     });
 
@@ -88,9 +72,6 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
     }
     if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
-    }
-    if (error instanceof SyntaxError) {
-      return json({ error: 'Invalid request body' }, { status: 400 });
     }
     console.error('[auth/nonce] unexpected error:', error);
     return json({ error: 'Failed to issue wallet nonce' }, { status: 500 });

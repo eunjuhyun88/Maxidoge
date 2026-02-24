@@ -14,6 +14,8 @@ import { query } from '$lib/server/db';
 import { buildAuthTypedData, deriveApiCredentials } from '$lib/server/polymarketClob';
 import { polymarketOrderLimiter } from '$lib/server/rateLimit';
 import { encryptSecret, isSecretsEncryptionConfigured } from '$lib/server/secretCrypto';
+import { runIpRateLimitGuard } from '$lib/server/authSecurity';
+import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
 
 const ETH_ADDRESS_RE = /^0x[0-9a-f]{40}$/i;
 
@@ -21,11 +23,17 @@ const ETH_ADDRESS_RE = /^0x[0-9a-f]{40}$/i;
  * GET — Build ClobAuth EIP-712 typed data for the user to sign.
  * Query params: walletAddress
  */
-export const GET: RequestHandler = async ({ cookies, url, getClientAddress }) => {
-  const ip = getClientAddress();
-  if (!polymarketOrderLimiter.check(ip)) {
-    return json({ error: 'Too many requests.' }, { status: 429 });
-  }
+export const GET: RequestHandler = async ({ cookies, url, getClientAddress, request }) => {
+  const fallbackIp = getClientAddress();
+  const guard = await runIpRateLimitGuard({
+    request,
+    fallbackIp,
+    limiter: polymarketOrderLimiter,
+    scope: 'polymarket:auth:get',
+    max: 10,
+    tooManyMessage: 'Too many requests.',
+  });
+  if (!guard.ok) return guard.response;
 
   try {
     const user = await getAuthUserFromCookies(cookies);
@@ -57,19 +65,31 @@ export const GET: RequestHandler = async ({ cookies, url, getClientAddress }) =>
  * Body: { walletAddress, signature, timestamp, nonce }
  */
 export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
-  const ip = getClientAddress();
-  if (!polymarketOrderLimiter.check(ip)) {
-    return json({ error: 'Too many requests.' }, { status: 429 });
-  }
+  const fallbackIp = getClientAddress();
+  const guard = await runIpRateLimitGuard({
+    request,
+    fallbackIp,
+    limiter: polymarketOrderLimiter,
+    scope: 'polymarket:auth:post',
+    max: 10,
+    tooManyMessage: 'Too many requests.',
+  });
+  if (!guard.ok) return guard.response;
 
   try {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
-    const body = await request.json().catch(() => null);
+    const body = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);
     if (!body) return json({ error: 'Invalid request body' }, { status: 400 });
 
-    const { walletAddress, signature, timestamp, nonce = 0 } = body;
+    const walletAddress = body.walletAddress;
+    const signature = body.signature;
+    const timestamp = body.timestamp;
+    const nonceRaw = body.nonce;
+    const nonce = typeof nonceRaw === 'number' && Number.isFinite(nonceRaw)
+      ? Math.trunc(nonceRaw)
+      : 0;
 
     if (typeof walletAddress !== 'string' || !ETH_ADDRESS_RE.test(walletAddress)) {
       return json({ error: 'Invalid wallet address' }, { status: 400 });
@@ -124,6 +144,12 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
       authenticated: true,
     });
   } catch (error: unknown) {
+    if (isRequestBodyTooLargeError(error)) {
+      return json({ error: 'Request body too large' }, { status: 413 });
+    }
+    if (error instanceof SyntaxError) {
+      return json({ error: 'Invalid request body' }, { status: 400 });
+    }
     console.error('[polymarket/auth POST] error:', error);
     return json({ error: 'Failed to authenticate with Polymarket' }, { status: 500 });
   }
