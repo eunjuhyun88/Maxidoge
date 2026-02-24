@@ -52,7 +52,6 @@
   let volumePaneIndex: number | null = null;
   let rsiPaneIndex: number | null = null;
   let klineCache: BinanceKline[] = [];
-  let _klineIndexByTime = new Map<number, number>();
   let _isLoadingMore = false;
   let _noMoreHistory = false; // true when Binance returns 0 older candles
   let _currentSymbol = '';
@@ -397,30 +396,6 @@
   function toChartY(price: number): number | null {
     if (!series) return null;
     try { return series.priceToCoordinate(price); } catch { return null; }
-  }
-
-  function rebuildKlineIndexMap() {
-    const next = new Map<number, number>();
-    for (let i = 0; i < klineCache.length; i += 1) {
-      next.set(klineCache[i].time, i);
-    }
-    _klineIndexByTime = next;
-  }
-
-  function toOverlayX(time: number): number | null {
-    if (!chart) return null;
-    try {
-      const direct = chart.timeScale().timeToCoordinate(time);
-      if (Number.isFinite(direct)) return direct;
-    } catch {}
-
-    const idx = _klineIndexByTime.get(time);
-    if (idx === undefined) return null;
-    try {
-      const logical = chart.timeScale().logicalToCoordinate(idx);
-      if (Number.isFinite(logical)) return logical;
-    } catch {}
-    return null;
   }
 
   function clampRoundPrice(v: number) {
@@ -1151,6 +1126,7 @@
     const ctx = drawingCanvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    drawPatternOverlays(ctx);
     for (const d of drawings) {
       ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.5;
       if (d.type === 'hline') { ctx.setLineDash([6, 3]); ctx.moveTo(0, d.points[0].y); ctx.lineTo(drawingCanvas.width, d.points[0].y); }
@@ -1183,16 +1159,19 @@
       const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
       if (preview) drawTradePreview(ctx, preview);
     }
-    drawPatternOverlays(ctx);
   }
 
   function toOverlayPoint(time: number, price: number): { x: number; y: number } | null {
     if (!chart || !drawingCanvas) return null;
     if (!Number.isFinite(time) || !Number.isFinite(price)) return null;
-    const x = toOverlayX(time);
-    const y = toChartY(price);
-    if (x == null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return null;
-    return { x, y };
+    try {
+      const x = chart.timeScale().timeToCoordinate(time as any);
+      const y = toChartY(price);
+      if (!Number.isFinite(x) || y === null || !Number.isFinite(y)) return null;
+      return { x, y };
+    } catch {
+      return null;
+    }
   }
 
   function drawPatternTag(
@@ -1319,7 +1298,7 @@
         try {
           const lineSeries = chart.addSeries(lwcModule.LineSeries, {
             color: guide.color,
-            lineWidth: pattern.status === 'CONFIRMED' ? 2.5 : 2,
+            lineWidth: pattern.status === 'CONFIRMED' ? 2 : 1.5,
             lineStyle: guide.style === 'dashed' ? 2 : 0,
             priceLineVisible: false,
             lastValueVisible: false,
@@ -1372,10 +1351,7 @@
     const signature = next
       .map((p) => `${p.id}:${p.status}:${Math.round(p.confidence * 100)}`)
       .join('|');
-    if (signature === _patternSignature) {
-      renderDrawings();
-      return;
-    }
+    if (signature === _patternSignature) return;
 
     _patternSignature = signature;
     detectedPatterns = next;
@@ -1386,11 +1362,6 @@
   }
 
   function forcePatternScan() {
-    if (!chart || !series || klineCache.length < 30) {
-      pushChartNotice('패턴 스캔용 데이터가 부족합니다');
-      return;
-    }
-    _patternSignature = '';
     runPatternDetection();
     if (detectedPatterns.length === 0) {
       pushChartNotice('패턴 미감지 · 조건 미충족');
@@ -1660,7 +1631,6 @@
       chart.panes()[rsiIdx].setStretchFactor(0.12);
       applyTimeScale();
       applyIndicatorVisibility();
-      resizeDrawingCanvas();
 
       await loadKlines();
 
@@ -1690,7 +1660,6 @@
         else if (k === 'f') fitChartRange();
         else if (k === 'h') setDrawingMode('hline');
         else if (k === 't') setDrawingMode('trendline');
-        else if (k === 'p') forcePatternScan();
         else if (enableTradeLineEntry && k === 'l') setDrawingMode('longentry');
         else if (enableTradeLineEntry && k === 's') setDrawingMode('shortentry');
       };
@@ -1727,7 +1696,6 @@
 
       // Prepend to cache
       klineCache = [...unique, ...klineCache];
-      rebuildKlineIndexMap();
 
       // Re-set all series data
       series.setData(klineCache.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close })));
@@ -1769,7 +1737,6 @@
     detectedPatterns = [];
     patternMarkers = [];
     _patternSignature = '';
-    _klineIndexByTime = new Map<number, number>();
     applyCombinedMarkers();
     clearPatternLineSeries();
     isLoading = true; error = '';
@@ -1794,7 +1761,6 @@
 
       // ═══ Indicators ═══
       klineCache = klines;
-      rebuildKlineIndexMap();
       const closes = klines.map(k => ({ time: k.time, close: k.close }));
 
       if (ma7Series) ma7Series.setData(computeSMA(closes, 7));
@@ -1866,7 +1832,6 @@
         if (isUpdate) klineCache[klineCache.length - 1] = kline;
         else klineCache.push(kline);
         const cLen = klineCache.length;
-        _klineIndexByTime.set(kline.time, cLen - 1);
         runPatternDetection();
 
         // MA — simple running average from last N
@@ -2059,7 +2024,10 @@
   <div class="chart-bar">
     <div class="bar-top top-meta">
       <div class="pair-summary">
-        <span class="pair-name">{pairBaseLabel}/{pairQuoteLabel}</span>
+        {#if chartMode === 'trading'}
+          <span class="pair-name">{pairBaseLabel}/{pairQuoteLabel}</span>
+        {/if}
+        <span class="pair-k">LAST</span>
         <span class="pair-last">${formatPrice(livePrice)}</span>
         <span class="pair-move" class:up={priceChange24h >= 0} class:down={priceChange24h < 0}>
           {priceChange24h >= 0 ? '+' : '-'}{Math.abs(priceChange24h).toFixed(2)}%
@@ -2093,21 +2061,33 @@
             <TokenDropdown value={state.pair} compact={isCompactViewport()} on:select={e => changePair(e.detail.pair)} />
           </div>
         {/if}
+
+        <div class="tf-compact">
+          <span class="tf-compact-label">TF</span>
+          <select
+            class="tf-compact-select"
+            value={normalizeTimeframe(state.timeframe)}
+            on:change={(e) => changeTF((e.currentTarget as HTMLSelectElement).value)}
+            aria-label="Timeframe"
+          >
+            {#each CORE_TIMEFRAME_OPTIONS as tf}
+              <option value={tf.value}>{tf.label}</option>
+            {/each}
+          </select>
+        </div>
       </div>
 
-      {#if chartMode === 'agent'}
-        <div class="tf-btns">
-          {#each CORE_TIMEFRAME_OPTIONS as tf}
-            <button
-              class="tfbtn"
-              class:active={normalizeTimeframe(state.timeframe) === tf.value}
-              on:click={() => changeTF(tf.value)}
-            >
-              {tf.label}
-            </button>
-          {/each}
-        </div>
-      {/if}
+      <div class="tf-btns">
+        {#each CORE_TIMEFRAME_OPTIONS as tf}
+          <button
+            class="tfbtn"
+            class:active={normalizeTimeframe(state.timeframe) === tf.value}
+            on:click={() => changeTF(tf.value)}
+          >
+            {tf.label}
+          </button>
+        {/each}
+      </div>
 
       <div class="bar-controls">
         <div class="mode-toggle">
@@ -2516,13 +2496,26 @@
 </div>
 
 <style>
-  .chart-wrapper { display: flex; flex-direction: column; height: 100%; background: #0a0a1a; overflow: hidden; }
+  .chart-wrapper {
+    --cp-font-2xs: clamp(8px, 0.56vw, 9px);
+    --cp-font-xs: clamp(9px, 0.64vw, 10px);
+    --cp-font-sm: clamp(10px, 0.74vw, 11px);
+    --cp-font-md: clamp(11px, 0.86vw, 13px);
+    --cp-font-lg: clamp(15px, 1.15vw, 18px);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #0a0a1a;
+    overflow: hidden;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
   .chart-bar {
-    padding: 4px 8px;
+    padding: 3px 6px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
     background: linear-gradient(90deg, #1a1a3a, #0a0a2a);
     font-size: 10px;
     font-family: var(--fm);
@@ -2531,7 +2524,7 @@
   .bar-top.top-meta {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
@@ -2540,7 +2533,7 @@
     padding-bottom: 1px;
   }
   .bar-top.top-meta::-webkit-scrollbar {
-    height: 3px;
+    height: 2px;
   }
   .bar-top.top-meta::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.18);
@@ -2549,7 +2542,7 @@
   .pair-summary {
     display: inline-flex;
     align-items: baseline;
-    gap: 8px;
+    gap: 6px;
     min-width: max-content;
     flex: 0 0 auto;
     white-space: nowrap;
@@ -2557,23 +2550,32 @@
   .pair-name {
     color: rgba(232, 237, 247, 0.92);
     font-family: var(--fd);
-    font-size: 13px;
+    font-size: var(--cp-font-md);
     font-weight: 800;
-    letter-spacing: .3px;
+    letter-spacing: .18px;
+  }
+  .pair-k {
+    color: rgba(187, 198, 216, 0.66);
+    font-family: var(--fm);
+    font-size: var(--cp-font-2xs);
+    font-weight: 700;
+    letter-spacing: .42px;
   }
   .pair-last {
     color: #f5f8ff;
     font-family: var(--fd);
-    font-size: 19px;
+    font-size: var(--cp-font-lg);
     font-weight: 900;
-    letter-spacing: .35px;
+    letter-spacing: .18px;
     line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
   .pair-move {
     font-family: var(--fd);
-    font-size: 12px;
+    font-size: var(--cp-font-sm);
     font-weight: 800;
-    letter-spacing: .2px;
+    letter-spacing: .12px;
+    font-variant-numeric: tabular-nums;
   }
   .pair-move.up { color: #00ff88; }
   .pair-move.down { color: #ff2d55; }
@@ -2581,7 +2583,7 @@
   .bar-left {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
     min-width: max-content;
     flex: 0 0 auto;
   }
@@ -2592,7 +2594,7 @@
   .market-stats {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
@@ -2600,7 +2602,7 @@
     scrollbar-width: thin;
     padding-bottom: 1px;
   }
-  .market-stats::-webkit-scrollbar { height: 3px; }
+  .market-stats::-webkit-scrollbar { height: 2px; }
   .market-stats::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.18);
     border-radius: 999px;
@@ -2620,32 +2622,33 @@
   }
   .mstat-k {
     font-family: var(--fm);
-    font-size: 9px;
+    font-size: var(--cp-font-2xs);
     font-weight: 700;
-    letter-spacing: .55px;
+    letter-spacing: .4px;
     color: rgba(187, 198, 216, 0.66);
   }
   .mstat-v {
     font-family: var(--fd);
-    font-size: 13px;
+    font-size: var(--cp-font-md);
     font-weight: 800;
-    letter-spacing: .2px;
+    letter-spacing: .12px;
     color: rgba(255,255,255,.92);
+    font-variant-numeric: tabular-nums;
   }
   .bar-tools {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
-    padding-top: 2px;
+    padding-top: 1px;
     padding-bottom: 1px;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
-  .bar-tools::-webkit-scrollbar { height: 3px; }
+  .bar-tools::-webkit-scrollbar { height: 2px; }
   .bar-tools::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.18);
     border-radius: 999px;
@@ -2653,7 +2656,7 @@
   .bar-controls {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     min-width: max-content;
     flex: 0 0 auto;
   }
@@ -2667,12 +2670,12 @@
     scrollbar-width: thin;
     padding-bottom: 1px;
   }
-  .bar-meta::-webkit-scrollbar { height: 3px; }
+  .bar-meta::-webkit-scrollbar { height: 2px; }
   .bar-meta::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.18);
     border-radius: 999px;
   }
-  .live-indicator { font-size: 10px; font-weight: 800; color: var(--grn); display: flex; align-items: center; gap: 4px; letter-spacing: .75px; }
+  .live-indicator { font-size: var(--cp-font-xs); font-weight: 800; color: var(--grn); display: flex; align-items: center; gap: 4px; letter-spacing: .45px; }
   .live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--grn); animation: pulse .8s infinite; }
   .live-dot.err { background: #ff2d55; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
@@ -2689,46 +2692,92 @@
     scrollbar-width: thin;
     -webkit-overflow-scrolling: touch;
   }
-  .tf-btns::-webkit-scrollbar { height: 4px; }
+  .tf-btns::-webkit-scrollbar { height: 2px; }
   .tf-btns::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 999px;
   }
-  .tfbtn { padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #b8c0cc; font-size: 9px; font-family: var(--fd); font-weight: 700; letter-spacing: .8px; cursor: pointer; transition: all .15s; }
+  .tf-compact {
+    display: none;
+    align-items: center;
+    gap: 3px;
+    margin-left: 1px;
+    min-width: max-content;
+    flex: 0 0 auto;
+  }
+  .tf-compact-label {
+    color: rgba(187, 198, 216, 0.66);
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .5px;
+  }
+  .tf-compact-select {
+    height: 24px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.06);
+    color: rgba(232, 237, 247, 0.92);
+    font-family: var(--fd);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .35px;
+    padding: 0 24px 0 8px;
+    appearance: none;
+    cursor: pointer;
+  }
+  .tf-compact-select:focus-visible {
+    outline: 1px solid rgba(255,230,0,.45);
+    outline-offset: 1px;
+  }
+  .tfbtn { padding: 2px 7px; border-radius: 4px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #b8c0cc; font-size: var(--cp-font-2xs); font-family: var(--fd); font-weight: 700; letter-spacing: .3px; cursor: pointer; transition: all .15s; }
   .tfbtn:hover { background: rgba(255,255,255,.1); color: #fff; }
   .tfbtn.active { background: rgba(255,230,0,.15); color: #ffe600; border-color: rgba(255,230,0,.3); }
 
   .ma-vals { display: flex; gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
-  .ma-tag { font-size: 8px; font-family: var(--fm); font-weight: 700; letter-spacing: .3px; opacity: 1; }
+  .ma-tag { font-size: var(--cp-font-2xs); font-family: var(--fm); font-weight: 700; letter-spacing: .2px; opacity: 1; }
 
   @media (max-width: 1280px) {
-    .pair-last { font-size: 17px; }
-    .mstat-v { font-size: 12px; }
+    .pair-last { font-size: clamp(14px, 1.05vw, 16px); }
+    .mstat-v { font-size: clamp(10px, 0.72vw, 11px); }
+  }
+
+  @media (max-width: 1180px) {
+    .tf-btns {
+      display: none;
+    }
+    .tf-compact {
+      display: inline-flex;
+    }
   }
 
   @media (max-width: 768px) {
     .chart-bar {
-      padding: 5px 7px;
-      gap: 4px;
+      padding: 4px 6px;
+      gap: 3px;
     }
     .bar-top.top-meta {
-      gap: 8px;
+      gap: 6px;
     }
     .pair-summary {
       gap: 6px;
+    }
+    .pair-k {
+      font-size: 8px;
+      letter-spacing: .42px;
     }
     .pair-name {
       font-size: 12px;
       letter-spacing: .25px;
     }
     .pair-last {
-      font-size: 15px;
+      font-size: 14px;
     }
     .pair-move {
-      font-size: 11px;
+      font-size: 10px;
     }
     .market-stats {
-      gap: 8px;
+      gap: 6px;
     }
     .mstat-k {
       font-size: 8px;
@@ -2738,7 +2787,7 @@
       font-size: 11px;
     }
     .bar-left {
-      gap: 5px;
+      gap: 4px;
     }
     .live-indicator {
       font-size: 10px;
@@ -2755,32 +2804,40 @@
       width: auto;
       flex: 0 0 auto;
     }
-    .tfbtn {
+    .tf-compact {
+      margin-left: 0;
+    }
+    .tf-compact-select {
       height: 24px;
-      padding: 0 8px;
       font-size: 10px;
+      padding: 0 20px 0 7px;
+    }
+    .tfbtn {
+      height: 22px;
+      padding: 0 7px;
+      font-size: 9px;
       letter-spacing: .32px;
       white-space: nowrap;
     }
     .bar-controls {
-      gap: 3px;
+      gap: 2px;
     }
     .mode-toggle .mode-btn {
-      min-height: 24px;
-      padding: 0 8px;
-      font-size: 10px;
+      min-height: 22px;
+      padding: 0 7px;
+      font-size: 9px;
       letter-spacing: .3px;
     }
     .draw-tools .draw-btn {
-      width: 24px;
-      height: 24px;
-      font-size: 10px;
+      width: 22px;
+      height: 22px;
+      font-size: 9px;
     }
     .scan-btn {
-      min-height: 24px;
-      height: 24px;
-      padding: 0 8px;
-      font-size: 10px;
+      min-height: 22px;
+      height: 22px;
+      padding: 0 7px;
+      font-size: 9px;
       letter-spacing: .28px;
     }
     .ma-vals {
@@ -2922,23 +2979,23 @@
     box-shadow: 0 0 6px var(--legend-color);
   }
 
-  .mode-toggle { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1.5px solid rgba(255,230,0,.25); margin-left: 0; }
-  .mode-btn { padding: 3px 10px; background: rgba(255,255,255,.03); border: none; color: #b2b9c5; font-size: 9px; font-family: var(--fd); font-weight: 800; letter-spacing: .9px; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .mode-toggle { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,230,0,.25); margin-left: 0; }
+  .mode-btn { padding: 2px 8px; background: rgba(255,255,255,.03); border: none; color: #b2b9c5; font-size: var(--cp-font-2xs); font-family: var(--fd); font-weight: 800; letter-spacing: .4px; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 2px; white-space: nowrap; }
   .mode-btn:first-child { border-right: 1px solid rgba(255,230,0,.15); }
   .mode-btn:hover { background: rgba(255,230,0,.08); color: #ccc; }
   .mode-btn.active { background: linear-gradient(135deg, rgba(255,230,0,.2), rgba(255,180,0,.15)); color: #ffe600; text-shadow: 0 0 8px rgba(255,230,0,.5); }
   .mode-icon { font-size: 10px; line-height: 1; }
   .scan-btn {
-    height: 24px;
-    padding: 0 10px;
+    height: 22px;
+    padding: 0 8px;
     border-radius: 4px;
-    border: 1.5px solid rgba(255,230,0,.35);
+    border: 1px solid rgba(255,230,0,.35);
     background: linear-gradient(135deg, rgba(255,230,0,.2), rgba(255,180,0,.12));
     color: #ffe600;
-    font-size: 9px;
+    font-size: var(--cp-font-2xs);
     font-family: var(--fd);
     font-weight: 900;
-    letter-spacing: .85px;
+    letter-spacing: .45px;
     cursor: pointer;
     transition: all .15s;
     white-space: nowrap;
@@ -2981,7 +3038,7 @@
   }
 
   .draw-tools { display: flex; gap: 2px; margin-left: 0; padding-left: 0; border-left: none; }
-  .draw-btn { width: 24px; height: 20px; border-radius: 4px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: #b5bdc9; font-size: 11px; font-family: monospace; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
+  .draw-btn { width: 22px; height: 19px; border-radius: 4px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: #b5bdc9; font-size: var(--cp-font-sm); font-family: monospace; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
   .draw-btn:hover { background: rgba(255,230,0,.1); color: #ffe600; border-color: rgba(255,230,0,.3); }
   .draw-btn.active { background: rgba(255,230,0,.2); color: #ffe600; border-color: #ffe600; box-shadow: 0 0 6px rgba(255,230,0,.3); }
   .draw-btn.long-tool { font-family: var(--fd); font-size: 8px; color: #5cd4a0; border-color: rgba(92,212,160,.22); }
@@ -3560,7 +3617,7 @@
   .ann-popup-label { font-family: var(--fm); font-size: 9px; font-weight: 900; color: #fff; margin-bottom: 2px; }
   .ann-popup-detail { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.74); line-height: 1.4; }
 
-  .chart-footer { padding: 3px 10px; border-top: 1px solid rgba(255,255,255,.05); background: rgba(0,0,0,.3); display: flex; align-items: center; gap: 8px; font-size: 8px; font-family: var(--fm); color: rgba(255,255,255,.62); flex-shrink: 0; }
+  .chart-footer { padding: 2px 8px; border-top: 1px solid rgba(255,255,255,.05); background: rgba(0,0,0,.3); display: flex; align-items: center; gap: 6px; font-size: var(--cp-font-2xs); font-family: var(--fm); color: rgba(255,255,255,.62); flex-shrink: 0; }
   .src-badge { color: #ffe600; font-weight: 700; }
   .src-ws { margin-left: auto; color: #00ff88; }
   .footer-ind { font-weight: 800; letter-spacing: .4px; }
@@ -3670,17 +3727,6 @@
     border-color: rgba(38, 166, 154, 0.8);
     background: rgba(38, 166, 154, 0.33);
     color: #f2ffff;
-  }
-  .chart-wrapper.tv-like .scan-btn.pattern-btn {
-    border-color: rgba(38, 166, 154, 0.58);
-    background: rgba(38, 166, 154, 0.24);
-    color: #d8fffb;
-  }
-  .chart-wrapper.tv-like .scan-btn.pattern-btn:hover {
-    border-color: rgba(38, 166, 154, 0.8);
-    background: rgba(38, 166, 154, 0.34);
-    color: #f1ffff;
-    box-shadow: none;
   }
   .chart-wrapper.tv-like .draw-btn.active {
     border-color: rgba(79, 140, 255, 0.8);
