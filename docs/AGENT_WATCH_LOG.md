@@ -1162,3 +1162,44 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - single worktree(`/Users/ej/Downloads/maxidoge-clones/frontend-passport`) 확인
   - 기존 IN_PROGRESS 항목은 과거 세션 기록이며 현재 브랜치 변경 파일과 직접 충돌 없음
 - Status: IN_PROGRESS
+
+### W-20260225-0129-passport-codex (finish addendum)
+
+- End (KST): 2026-02-25 01:54
+- Agent: Codex (GPT-5)
+- Branch / merge target:
+  - source: `codex/passport-ml-pipeline-skeleton-v1` (`567c9de`)
+  - target: `main`
+- Changes (actual):
+  - 신규 마이그레이션 추가
+    - `db/migrations/0006_passport_ml_pipeline.sql`
+    - `supabase/migrations/013_passport_ml_pipeline.sql`
+    - outbox/inference/trajectory/dataset/train/eval/report 테이블 및 인덱스 추가
+  - 신규 서버 유틸 추가
+    - `src/lib/server/passportOutbox.ts` (outbox enqueue best-effort helper)
+    - `src/lib/server/passportMlPipeline.ts` (status/list/create/worker run 스켈레톤)
+  - 신규 Passport learning API 추가
+    - `src/routes/api/profile/passport/learning/status/+server.ts`
+    - `src/routes/api/profile/passport/learning/datasets/+server.ts`
+    - `src/routes/api/profile/passport/learning/evals/+server.ts`
+    - `src/routes/api/profile/passport/learning/train-jobs/+server.ts`
+    - `src/routes/api/profile/passport/learning/reports/generate/+server.ts`
+    - `src/routes/api/profile/passport/learning/workers/run/+server.ts`
+  - 기존 write 경로 outbox 연동
+    - `src/routes/api/quick-trades/open/+server.ts`
+    - `src/routes/api/quick-trades/[id]/close/+server.ts`
+    - `src/routes/api/signals/track/+server.ts`
+    - `src/routes/api/copy-trades/publish/+server.ts`
+  - main 최신 보안 변경 반영 후 마이그레이션 번호 충돌(`0005`, `012`)을 `0006`, `013`으로 재정렬
+- Diff vs plan:
+  - main 동기화 과정에서 신규 보안 마이그레이션 선반영 확인 후 번호 재정렬 커밋 1회 추가
+- Validation:
+  - feature(`codex/passport-ml-pipeline-skeleton-v1`) `npm run check`: PASS
+  - feature(`codex/passport-ml-pipeline-skeleton-v1`) `npm run build`: PASS
+  - main(`merge result`) `npm run check`: PASS
+  - main(`merge result`) `npm run build`: PASS
+- Commit hash: `567c9de` (feature head; includes `d5ce6ea` + renumber fix)
+- Merge hash: `91e1041`
+- Push status: SUCCESS (`origin/codex/passport-ml-pipeline-skeleton-v1`, `origin/main`)
+- Working tree check (before final push): `## main...origin/main [ahead 3]` (clean)
+- Status: DONE
