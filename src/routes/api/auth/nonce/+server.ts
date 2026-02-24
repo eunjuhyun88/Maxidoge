@@ -4,7 +4,7 @@ import { isValidEthAddress, issueWalletNonce, normalizeEthAddress } from '$lib/s
 import { authNonceLimiter } from '$lib/server/rateLimit';
 import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
 import { evaluateIpReputation } from '$lib/server/ipReputation';
-import { isBodyTooLarge, readTurnstileToken } from '$lib/server/requestGuards';
+import { isRequestBodyTooLargeError, readJsonBody, readTurnstileToken } from '$lib/server/requestGuards';
 import { verifyTurnstile } from '$lib/server/turnstile';
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
@@ -27,12 +27,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   if (!distributedAllowed) {
     return json({ error: 'Too many nonce requests. Please wait.' }, { status: 429 });
   }
-  if (isBodyTooLarge(request, 8 * 1024)) {
-    return json({ error: 'Request body too large' }, { status: 413 });
-  }
-
   try {
-    const body = await request.json();
+    const body = await readJsonBody<Record<string, unknown>>(request, 8 * 1024);
     const turnstile = await verifyTurnstile({
       token: readTurnstileToken(body),
       remoteIp: reputation.clientIp || fallbackIp || null,
@@ -88,6 +84,9 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
     }
     if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
+    }
+    if (isRequestBodyTooLargeError(error)) {
+      return json({ error: 'Request body too large' }, { status: 413 });
     }
     if (error instanceof SyntaxError) {
       return json({ error: 'Invalid request body' }, { status: 400 });

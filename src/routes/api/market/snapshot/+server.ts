@@ -6,7 +6,7 @@ import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { marketSnapshotLimiter } from '$lib/server/rateLimit';
 import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
 import { evaluateIpReputation } from '$lib/server/ipReputation';
-import { isBodyTooLarge } from '$lib/server/requestGuards';
+import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
 
 type MarketSnapshotResult = Awaited<ReturnType<typeof collectMarketSnapshot>>;
 
@@ -61,6 +61,9 @@ function successResponse(snapshot: MarketSnapshotResult) {
 }
 
 function errorResponse(error: any, method: 'get' | 'post') {
+  if (isRequestBodyTooLargeError(error)) {
+    return json({ error: 'Request body too large' }, { status: 413 });
+  }
   const validationMessage = toValidationMessage(error);
   if (validationMessage) return json({ error: validationMessage }, { status: 400 });
   console.error(`[market/snapshot/${method}] unexpected error:`, error);
@@ -130,12 +133,8 @@ export const POST: RequestHandler = async ({ fetch, request, cookies, getClientA
   if (!distributedAllowed) {
     return json({ error: 'Too many snapshot requests. Please wait.' }, { status: 429 });
   }
-  if (isBodyTooLarge(request, 16 * 1024)) {
-    return json({ error: 'Request body too large' }, { status: 413 });
-  }
-
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);
     const pair = typeof body?.pair === 'string' ? body.pair : null;
     const timeframe = typeof body?.timeframe === 'string' ? body.timeframe : null;
     const requestedPersist = toPersistFlag(body?.persist, true);

@@ -15,7 +15,7 @@ import {
 import { authLoginLimiter } from '$lib/server/rateLimit';
 import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
 import { evaluateIpReputation } from '$lib/server/ipReputation';
-import { isBodyTooLarge, readTurnstileToken } from '$lib/server/requestGuards';
+import { isRequestBodyTooLargeError, readJsonBody, readTurnstileToken } from '$lib/server/requestGuards';
 import { verifyTurnstile } from '$lib/server/turnstile';
 
 const EVM_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
@@ -40,12 +40,8 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
   if (!distributedAllowed) {
     return json({ error: 'Too many login attempts. Please wait.' }, { status: 429 });
   }
-  if (isBodyTooLarge(request, 16 * 1024)) {
-    return json({ error: 'Request body too large' }, { status: 413 });
-  }
-
   try {
-    const body = await request.json();
+    const body = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);
     const turnstile = await verifyTurnstile({
       token: readTurnstileToken(body),
       remoteIp: reputation.clientIp || fallbackIp || null,
@@ -145,6 +141,9 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
       },
     });
   } catch (error: any) {
+    if (isRequestBodyTooLargeError(error)) {
+      return json({ error: 'Request body too large' }, { status: 413 });
+    }
     if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }

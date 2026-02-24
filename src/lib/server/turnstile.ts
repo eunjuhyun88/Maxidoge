@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
@@ -28,8 +29,12 @@ export async function verifyTurnstile(args: {
   remoteIp?: string | null;
 }): Promise<TurnstileVerification> {
   const secret = env.TURNSTILE_SECRET_KEY?.trim() || '';
+  const allowBypass = envBool('TURNSTILE_ALLOW_BYPASS', dev);
   if (!secret) {
-    return { ok: true, skipped: true };
+    if (allowBypass) {
+      return { ok: true, skipped: true, reason: 'not_configured_bypass' };
+    }
+    return { ok: false, skipped: false, reason: 'not_configured' };
   }
 
   const token = args.token?.trim() || '';
