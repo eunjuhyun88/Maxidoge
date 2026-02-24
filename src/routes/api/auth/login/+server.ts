@@ -7,22 +7,87 @@ import {
   SESSION_COOKIE_OPTIONS,
   SESSION_MAX_AGE_SEC,
 } from '$lib/server/session';
+import {
+  isValidEthAddress,
+  normalizeEthAddress,
+  verifyAndConsumeEvmNonce,
+} from '$lib/server/walletAuthRepository';
+import { authLoginLimiter } from '$lib/server/rateLimit';
+import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
 
-export const POST: RequestHandler = async ({ request, cookies }) => {
+const EVM_SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
+
+export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
+  const ip = getClientAddress();
+  if (!authLoginLimiter.check(ip)) {
+    return json({ error: 'Too many login attempts. Please wait.' }, { status: 429 });
+  }
+  const distributedAllowed = await checkDistributedRateLimit({
+    scope: 'auth:login',
+    key: ip,
+    windowMs: 60_000,
+    max: 10,
+  });
+  if (!distributedAllowed) {
+    return json({ error: 'Too many login attempts. Please wait.' }, { status: 429 });
+  }
+
   try {
     const body = await request.json();
     const email = typeof body?.email === 'string' ? body.email.trim() : '';
     const nickname = typeof body?.nickname === 'string' ? body.nickname.trim() : '';
-    const walletAddress = typeof body?.walletAddress === 'string' ? body.walletAddress.trim() : '';
+    const walletAddressRaw = typeof body?.walletAddress === 'string' ? body.walletAddress.trim() : '';
+    const walletMessage = typeof body?.walletMessage === 'string'
+      ? body.walletMessage.trim()
+      : typeof body?.message === 'string'
+        ? body.message.trim()
+        : '';
+    const walletSignature = typeof body?.walletSignature === 'string'
+      ? body.walletSignature.trim()
+      : typeof body?.signature === 'string'
+        ? body.signature.trim()
+        : '';
 
     if (!email || !email.includes('@')) {
       return json({ error: 'Valid email required' }, { status: 400 });
     }
+    if (email.length > 254) {
+      return json({ error: 'Email is too long' }, { status: 400 });
+    }
     if (!nickname || nickname.length < 2) {
       return json({ error: 'Nickname must be 2+ characters' }, { status: 400 });
     }
-    if (!walletAddress) {
-      return json({ error: 'Wallet connection is required for login' }, { status: 400 });
+    if (nickname.length > 32) {
+      return json({ error: 'Nickname must be 32 characters or less' }, { status: 400 });
+    }
+    if (!isValidEthAddress(walletAddressRaw)) {
+      return json({ error: 'Valid EVM wallet address required for login' }, { status: 400 });
+    }
+    if (!walletMessage) {
+      return json({ error: 'Signed wallet message is required for login' }, { status: 400 });
+    }
+    if (walletMessage.length > 2048) {
+      return json({ error: 'Signed wallet message is too long' }, { status: 400 });
+    }
+    if (!EVM_SIGNATURE_RE.test(walletSignature)) {
+      return json({ error: 'Valid wallet signature is required for login' }, { status: 400 });
+    }
+
+    const walletAddress = normalizeEthAddress(walletAddressRaw);
+    const verification = await verifyAndConsumeEvmNonce({
+      address: walletAddress,
+      message: walletMessage,
+      signature: walletSignature,
+    });
+
+    if (verification === 'missing_nonce') {
+      return json({ error: 'Nonce not found in signed message' }, { status: 400 });
+    }
+    if (verification === 'invalid_signature') {
+      return json({ error: 'Signature does not match wallet address' }, { status: 401 });
+    }
+    if (verification === 'invalid_nonce') {
+      return json({ error: 'Login challenge is expired or already used' }, { status: 401 });
     }
 
     const user = await findAuthUserForLogin(email, nickname, walletAddress);
@@ -37,6 +102,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       token: sessionToken,
       userId: user.id,
       expiresAtIso: new Date(expiresAtMs).toISOString(),
+      userAgent: request.headers.get('user-agent'),
+      ipAddress: ip,
     });
 
     cookies.set(

@@ -1,6 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import type { Cookies } from '@sveltejs/kit';
 import { collectMarketSnapshot } from '$lib/server/marketSnapshotService';
+import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { marketSnapshotLimiter } from '$lib/server/rateLimit';
+import { checkDistributedRateLimit } from '$lib/server/distributedRateLimit';
 
 type MarketSnapshotResult = Awaited<ReturnType<typeof collectMarketSnapshot>>;
 
@@ -61,11 +65,36 @@ function errorResponse(error: any, method: 'get' | 'post') {
   return json({ error: 'Failed to build market snapshot' }, { status: 500 });
 }
 
-export const GET: RequestHandler = async ({ fetch, url }) => {
+async function isAuthenticated(cookies: Cookies): Promise<boolean> {
+  try {
+    const user = await getAuthUserFromCookies(cookies);
+    return Boolean(user);
+  } catch {
+    return false;
+  }
+}
+
+export const GET: RequestHandler = async ({ fetch, url, cookies, getClientAddress }) => {
+  const ip = getClientAddress();
+  if (!marketSnapshotLimiter.check(ip)) {
+    return json({ error: 'Too many snapshot requests. Please wait.' }, { status: 429 });
+  }
+  const distributedAllowed = await checkDistributedRateLimit({
+    scope: 'market:snapshot:get',
+    key: ip,
+    windowMs: 60_000,
+    max: 20,
+  });
+  if (!distributedAllowed) {
+    return json({ error: 'Too many snapshot requests. Please wait.' }, { status: 429 });
+  }
+
   try {
     const pair = url.searchParams.get('pair');
     const timeframe = url.searchParams.get('timeframe');
-    const persist = toPersistFlag(url.searchParams.get('persist'), true);
+    const requestedPersist = toPersistFlag(url.searchParams.get('persist'), true);
+    const persist = requestedPersist && (await isAuthenticated(cookies));
+
     const snapshot = await collectMarketSnapshot(fetch, { pair, timeframe, persist });
     return successResponse(snapshot);
   } catch (error: any) {
@@ -73,12 +102,27 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
   }
 };
 
-export const POST: RequestHandler = async ({ fetch, request }) => {
+export const POST: RequestHandler = async ({ fetch, request, cookies, getClientAddress }) => {
+  const ip = getClientAddress();
+  if (!marketSnapshotLimiter.check(ip)) {
+    return json({ error: 'Too many snapshot requests. Please wait.' }, { status: 429 });
+  }
+  const distributedAllowed = await checkDistributedRateLimit({
+    scope: 'market:snapshot:post',
+    key: ip,
+    windowMs: 60_000,
+    max: 20,
+  });
+  if (!distributedAllowed) {
+    return json({ error: 'Too many snapshot requests. Please wait.' }, { status: 429 });
+  }
+
   try {
     const body = await request.json().catch(() => ({}));
     const pair = typeof body?.pair === 'string' ? body.pair : null;
     const timeframe = typeof body?.timeframe === 'string' ? body.timeframe : null;
-    const persist = toPersistFlag(body?.persist, true);
+    const requestedPersist = toPersistFlag(body?.persist, true);
+    const persist = requestedPersist && (await isAuthenticated(cookies));
 
     const snapshot = await collectMarketSnapshot(fetch, { pair, timeframe, persist });
     return successResponse(snapshot);
