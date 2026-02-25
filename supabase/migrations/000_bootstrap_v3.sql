@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- STOCKCLAW — V3 Bootstrap (idempotent, single-run)
+-- Stockclaw — V3 Bootstrap (idempotent, single-run)
 -- ═══════════════════════════════════════════════════════════════
 -- Current DB state:
 --   • `users` table exists (real table with Supabase auth)

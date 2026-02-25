@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — CryptoQuant On-chain Data API
+// Stockclaw — CryptoQuant On-chain Data API
 // ═══════════════════════════════════════════════════════════════
 // Exchange reserves, MVRV, NUPL, whale + miner data
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Opportunity Scan API
+// Stockclaw — Opportunity Scan API
 // ═══════════════════════════════════════════════════════════════
 // Multi-asset scan: scores trending coins → ranked opportunities
 // Stores results in DB for history tracking

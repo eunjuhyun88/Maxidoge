@@ -1,4 +1,4 @@
-// STOCKCLAW — Arena Hypothesis Submit
+// Stockclaw — Arena Hypothesis Submit
 // POST /api/arena/hypothesis — Submit user direction + confidence
 
 import { json } from '@sveltejs/kit';

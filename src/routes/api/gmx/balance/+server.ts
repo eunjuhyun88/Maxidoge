@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — GMX Balance & Allowance API
+// Stockclaw — GMX Balance & Allowance API
 // ═══════════════════════════════════════════════════════════════
 // GET /api/gmx/balance?address=0x...
 // Returns USDC balance, ETH balance, and approval status.

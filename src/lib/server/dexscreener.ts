@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — DexScreener server client
+// Stockclaw — DexScreener server client
 // ═══════════════════════════════════════════════════════════════
 
 const DEX_BASE = 'https://api.dexscreener.com';

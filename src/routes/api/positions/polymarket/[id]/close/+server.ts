@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Polymarket Position Close API
+// Stockclaw — Polymarket Position Close API
 // ═══════════════════════════════════════════════════════════════
 // Prepares a SELL order to close an existing filled position.
 // Returns EIP-712 typed data for wallet signing (same 2-step flow).

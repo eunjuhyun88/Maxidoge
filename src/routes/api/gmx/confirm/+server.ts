@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — GMX V2 Order Confirm API
+// Stockclaw — GMX V2 Order Confirm API
 // ═══════════════════════════════════════════════════════════════
 // POST /api/gmx/confirm
 // After user sends the transaction from their wallet, frontend

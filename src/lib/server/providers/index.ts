@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Data Provider Barrel Export (B-05)
+// Stockclaw — Data Provider Barrel Export (B-05)
 // ═══════════════════════════════════════════════════════════════
 
 export { getCached, setCache, invalidate, invalidatePrefix, cacheStats } from './cache';

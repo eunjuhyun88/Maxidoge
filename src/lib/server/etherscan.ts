@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Etherscan API Client (server-side) (B-05)
+// Stockclaw — Etherscan API Client (server-side) (B-05)
 // ═══════════════════════════════════════════════════════════════
 // On-chain data: ETH supply, gas, token transfers, contract interactions
 

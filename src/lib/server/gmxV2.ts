@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — GMX V2 Server Module (Arbitrum)
+// Stockclaw — GMX V2 Server Module (Arbitrum)
 // ═══════════════════════════════════════════════════════════════
 // Server-side GMX V2 interactions:
 //   - Market data reading (prices, positions)

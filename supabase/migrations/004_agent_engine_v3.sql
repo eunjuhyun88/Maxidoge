@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- STOCKCLAW — Agent Engine v3 Migration
+-- Stockclaw — Agent Engine v3 Migration
 -- 8 Agent Pool × 3 Draft × LLM Spec × RAG Memory × FBS Scoring
 -- ═══════════════════════════════════════════════════════════════
 BEGIN;

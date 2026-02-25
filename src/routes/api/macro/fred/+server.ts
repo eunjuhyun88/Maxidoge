@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — FRED Macro Data API
+// Stockclaw — FRED Macro Data API
 // ═══════════════════════════════════════════════════════════════
 // Exposes Fed Funds, Treasuries, Yield Curve, CPI, M2 to client
 

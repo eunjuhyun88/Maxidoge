@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Server-side Scan Engine (B-02)
+// Stockclaw — Server-side Scan Engine (B-02)
 // ═══════════════════════════════════════════════════════════════
 // Replaces client-side warroomScan for server context.
 // 13 data sources → scoring → WarRoomScanResult

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — FRED API Client (server-side)
+// Stockclaw — FRED API Client (server-side)
 // ═══════════════════════════════════════════════════════════════
 // Federal Reserve Economic Data — macro indicators for MACRO agent
 // Series: Fed Funds Rate, 10Y/2Y Treasury, Yield Curve, CPI, M2

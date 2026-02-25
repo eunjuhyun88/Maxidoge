@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Bounded LRU In-Memory Cache (B-05)
+// Stockclaw — Bounded LRU In-Memory Cache (B-05)
 // ═══════════════════════════════════════════════════════════════
 // - Max entries capped to prevent unbounded memory growth
 // - LRU eviction when cache is full

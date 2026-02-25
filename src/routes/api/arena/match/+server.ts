@@ -1,4 +1,4 @@
-// STOCKCLAW — Arena Match API
+// Stockclaw — Arena Match API
 // POST /api/arena/match — Create new match
 // GET /api/arena/match — List user matches
 

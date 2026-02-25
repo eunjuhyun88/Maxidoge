@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — LLM Configuration (server-side only)
+// Stockclaw — LLM Configuration (server-side only)
 // ═══════════════════════════════════════════════════════════════
 //
 // 모든 LLM 호출은 이 모듈을 통해 키/엔드포인트를 가져온다.

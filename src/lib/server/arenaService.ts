@@ -1,4 +1,4 @@
-// STOCKCLAW — Arena Service (B-01)
+// Stockclaw — Arena Service (B-01)
 // Server-side match lifecycle management
 
 import { randomUUID } from 'node:crypto';

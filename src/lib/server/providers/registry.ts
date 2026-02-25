@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Data Provider Registry (B-05)
+// Stockclaw — Data Provider Registry (B-05)
 // ═══════════════════════════════════════════════════════════════
 // Unified interface to query all data sources with caching + health tracking
 
