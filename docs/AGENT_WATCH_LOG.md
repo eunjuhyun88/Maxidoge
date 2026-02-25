@@ -1458,3 +1458,33 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)`
 - Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225`
 - Status: DONE
+
+### W-20260226-0155-backend-codex (finish)
+
+- End (KST): 2026-02-26 02:03:30 +0900
+- Agent: Codex (GPT-5)
+- Branch: `codex/intel-policy-v3-runtime-clean-20260225`
+- What changed:
+  - `src/lib/server/intelShadowAgent.ts`
+    - `shouldExecute`를 고정 false에서 정책/엣지/커버리지/신뢰도/가드레일 기반 실계산(boolean)으로 변경
+    - fallback 원인(`provider_unavailable` / `llm_call_failed`) 노출
+  - `src/lib/server/llmService.ts`
+    - LLM runtime 상태 조회 함수(`getLLMRuntimeStatus`) 추가
+  - `src/routes/api/terminal/intel-agent-shadow/+server.ts`
+    - 응답 확장: `policy` 전체 + `llm` runtime + `execution.enabled`
+  - `src/routes/api/terminal/intel-agent-shadow/execute/+server.ts` 신규
+    - 인증 필수, `INTEL_SHADOW_EXECUTION_ENABLED=true` 조건에서만 실행
+    - shadow 가드 재검증 후 `/api/quick-trades/open` 호출로 실제 quick trade 생성
+  - `src/components/terminal/IntelPanel.svelte`
+    - shadow API 연동(정책+shadow 통합 fetch)
+    - Shadow 배너(LLM 상태/source/proposal/enforced) 추가
+    - Execute 버튼 추가 및 실행 성공 시 `hydrateQuickTrades(true)` 반영
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `GET /api/terminal/intel-agent-shadow?pair=BTC/USDT&timeframe=1h`: 200 (llm/runtime/execution/shadow 필드 확인)
+  - `POST /api/terminal/intel-agent-shadow/execute` (no auth): 401 확인
+- Commit hash: `c07411f`
+- Push status: `SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)`
+- Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225`
+- Status: DONE
