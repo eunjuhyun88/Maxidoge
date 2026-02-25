@@ -37,18 +37,27 @@ export function deepseekUrl(path = '/chat/completions'): string {
   return `${DEEPSEEK_ENDPOINT}${path}`;
 }
 
+const PLACEHOLDER_HINTS = ['your_', 'your-', 'placeholder', 'changeme', 'example', 'dummy', '<'];
+
+function isUsableApiKey(value: string, minLength = 16): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length < minLength) return false;
+  const lower = trimmed.toLowerCase();
+  return !PLACEHOLDER_HINTS.some((hint) => lower.includes(hint));
+}
+
 // ─── Availability Check ───────────────────────────────────────
 
 export function isGeminiAvailable(): boolean {
-  return GEMINI_API_KEY.length > 0;
+  return isUsableApiKey(GEMINI_API_KEY, 20);
 }
 
 export function isGroqAvailable(): boolean {
-  return GROQ_API_KEY.length > 0;
+  return isUsableApiKey(GROQ_API_KEY, 20);
 }
 
 export function isDeepSeekAvailable(): boolean {
-  return DEEPSEEK_API_KEY.length > 0;
+  return isUsableApiKey(DEEPSEEK_API_KEY, 20);
 }
 
 export type LLMProvider = 'groq' | 'gemini' | 'deepseek';

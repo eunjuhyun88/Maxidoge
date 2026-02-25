@@ -10,6 +10,9 @@ import {
   GEMINI_API_KEY, GEMINI_MODEL, geminiUrl,
   DEEPSEEK_API_KEY, DEEPSEEK_MODEL, deepseekUrl,
   getAvailableProvider,
+  isDeepSeekAvailable,
+  isGeminiAvailable,
+  isGroqAvailable,
   type LLMProvider,
 } from './llmConfig';
 
@@ -194,9 +197,9 @@ const FALLBACK_ORDER: LLMProvider[] = ['groq', 'deepseek', 'gemini'];
 
 function availableProviders(): LLMProvider[] {
   const checks: Record<LLMProvider, boolean> = {
-    groq: GROQ_API_KEY.length > 0,
-    deepseek: DEEPSEEK_API_KEY.length > 0,
-    gemini: GEMINI_API_KEY.length > 0,
+    groq: isGroqAvailable(),
+    deepseek: isDeepSeekAvailable(),
+    gemini: isGeminiAvailable(),
   };
   return FALLBACK_ORDER.filter(p => checks[p]);
 }
