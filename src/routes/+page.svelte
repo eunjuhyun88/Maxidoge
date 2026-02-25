@@ -589,7 +589,7 @@
   <!-- ═══ FOOTER ═══ -->
   <footer class="foot">
     <div class="foot-top">
-      <div class="foot-logo" data-px="-0.04">Stockclaw</div>
+      <div class="foot-logo" data-px="-0.04">STOCKCLAW</div>
       <div class="foot-nav">
         <button on:click={() => goto('/terminal')}>TERMINAL</button>
         <button on:click={() => goto('/arena')}>ARENA</button>

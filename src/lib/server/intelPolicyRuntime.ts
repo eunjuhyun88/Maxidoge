@@ -128,12 +128,40 @@ function delayMinutes(ts: number): number {
   return Math.max(0, raw);
 }
 
+function logScore(value: number, scale = 12, cap = 100): number {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return clamp(Math.log10(value + 1) * scale, 0, cap);
+}
+
+function freshnessScore(minutes: number, fullAtMin = 0, zeroAtMin = 240): number {
+  if (!Number.isFinite(minutes)) return 0;
+  if (minutes <= fullAtMin) return 100;
+  if (minutes >= zeroAtMin) return 0;
+  return clamp(((zeroAtMin - minutes) / Math.max(1, zeroAtMin - fullAtMin)) * 100, 0, 100);
+}
+
+function strengthFromDeviation(value: number, neutral = 0, unit = 1): number {
+  if (!Number.isFinite(value) || !Number.isFinite(unit) || unit <= 0) return 0;
+  return clamp((Math.abs(value - neutral) / unit) * 100, 0, 100);
+}
+
+function calibrateConfidence(parts: Array<{ score: number; weight: number }>, offset = 0): number {
+  const totalWeight = parts.reduce((sum, item) => sum + Math.max(0, item.weight), 0);
+  if (totalWeight <= 0) return clamp(offset);
+  const weighted = parts.reduce((sum, item) => sum + clamp(item.score) * Math.max(0, item.weight), 0) / totalWeight;
+  return clamp(weighted + offset);
+}
+
 function sourceReliabilityScore(source: string): number {
   const normalized = source.toLowerCase();
+  if (normalized.includes('coinalyze')) return 94;
+  if (normalized.includes('binance')) return 93;
+  if (normalized.includes('coinmarketcap')) return 92;
   if (normalized.includes('rss') || normalized.includes('coindesk') || normalized.includes('cointelegraph')) return 90;
-  if (normalized.includes('coinalyze') || normalized.includes('coinmarketcap') || normalized.includes('binance')) return 92;
-  if (normalized.includes('dexscreener')) return 82;
-  if (normalized.includes('lunarcrush') || normalized.includes('social')) return 66;
+  if (normalized.includes('opportunity_scan')) return 88;
+  if (normalized.includes('dexscreener')) return 84;
+  if (normalized.includes('lunarcrush')) return 74;
+  if (normalized.includes('social')) return 68;
   return 78;
 }
 
@@ -147,10 +175,22 @@ function manipulationRiskFor(source: string): ManipulationRiskLevel {
 function relevanceScore(text: string, pairToken: string): number {
   const lower = text.toLowerCase();
   const token = pairToken.toLowerCase();
-  const generic = /crypto|market|exchange|bitcoin|ethereum|solana/.test(lower);
-  if (lower.includes(token)) return 96;
-  if (generic) return 78;
-  return 62;
+  const aliases: Record<string, string[]> = {
+    btc: ['btc', 'bitcoin'],
+    eth: ['eth', 'ethereum'],
+    sol: ['sol', 'solana'],
+    doge: ['doge', 'dogecoin'],
+    xrp: ['xrp', 'ripple'],
+  };
+  const hits = new Set<string>();
+  for (const alias of aliases[token] ?? [token]) {
+    if (lower.includes(alias)) hits.add(alias);
+  }
+  const generic = /crypto|market|exchange|macro|futures|perp|liquidation|funding/.test(lower);
+  if (hits.size >= 2) return 100;
+  if (hits.size === 1) return 95;
+  if (generic) return 80;
+  return 66;
 }
 
 function biasToActionText(bias: DecisionBias): string {
@@ -167,14 +207,13 @@ function visualAidForBias(bias: DecisionBias): string {
 
 function textBias(text: string): DecisionBias {
   const lower = text.toLowerCase();
-  let longScore = 0;
-  let shortScore = 0;
-  if (/long|bull|breakout|uptrend|상승|매수|롱/.test(lower)) longScore += 2;
-  if (/short|bear|breakdown|downtrend|하락|매도|숏/.test(lower)) shortScore += 2;
-  if (/risk-on|유입|squeeze|support/.test(lower)) longScore += 1;
-  if (/risk-off|청산|매도압력|resistance/.test(lower)) shortScore += 1;
-  if (longScore > shortScore) return 'long';
-  if (shortScore > longScore) return 'short';
+  let biasScore = 0;
+  if (/long|bull|breakout|uptrend|상승|매수|롱/.test(lower)) biasScore += 2;
+  if (/short|bear|breakdown|downtrend|하락|매도|숏/.test(lower)) biasScore -= 2;
+  if (/risk-on|유입|squeeze|support|accumulation|매집/.test(lower)) biasScore += 1;
+  if (/risk-off|청산|매도압력|resistance|distribution|과열/.test(lower)) biasScore -= 1;
+  if (biasScore >= 2) return 'long';
+  if (biasScore <= -2) return 'short';
   return 'wait';
 }
 
@@ -289,7 +328,42 @@ function buildHeadlineCards(input: IntelPolicyInput, maxCount: number): IntelPol
     const createdAt = toNum(raw.publishedAt, Date.now());
     const sourceLabel = raw.source ?? raw.network ?? 'MARKET_NEWS';
     const source = `${sourceLabel}${raw.network ? `:${raw.network}` : ''}`;
-    const confidence = clamp(45 + importance * 0.4 + Math.min(20, Math.log10(interactions + 1) * 8));
+    const ageMin = delayMinutes(createdAt);
+    const freshness = freshnessScore(ageMin, 5, 240);
+    const sourceReliability = sourceReliabilityScore(source);
+    const pairRelevance = relevanceScore(`${title} ${raw.summary ?? ''}`, token);
+    const interactionScore = logScore(interactions, 26);
+    const impactStrength = strengthFromDeviation(importance, 50, 18);
+    const hasStructuredSignal = /\d+%|\$\d+|etf|fomc|cpi|funding|liquidation|listing|delist|hack/i.test(title);
+    const clarityScore = clamp((title.length >= 28 ? 34 : 30) + (hasStructuredSignal ? 4 : 0), 26, 40);
+
+    const confidence = calibrateConfidence(
+      [
+        { score: importance, weight: 0.30 },
+        { score: interactionScore, weight: 0.18 },
+        { score: impactStrength, weight: 0.16 },
+        { score: freshness, weight: 0.20 },
+        { score: sourceReliability, weight: 0.08 },
+        { score: pairRelevance, weight: 0.08 },
+      ],
+      bias === 'wait' ? -10 : -2,
+    );
+    const backtestWinRateLiftPct = clamp(
+      3 + impactStrength / 20 + interactionScore / 22 + pairRelevance / 80 + freshness / 120,
+      3,
+      9.6,
+    );
+    const feedbackPositivePct = clamp(
+      58 + interactionScore * 0.22 + importance * 0.1 + (bias === 'wait' ? -4 : 4),
+      52,
+      92,
+    );
+    const applyRatePct = clamp(confidence * 0.82 + freshness * 0.18, 45, 95);
+    const pnlLiftPct = clamp(
+      1.6 + impactStrength / 24 + (bias === 'wait' ? 0.5 : 1.2) + pairRelevance / 90,
+      1.2,
+      8.4,
+    );
 
     const score = gateCard(
       'headlines',
@@ -309,21 +383,21 @@ function buildHeadlineCards(input: IntelPolicyInput, maxCount: number): IntelPol
               : '명확한 방향 촉매가 부족해 단독 신호로는 약합니다.',
         nowWhat: biasToActionText(bias),
         why: `${sourceLabel} 기반 중요도 ${Math.round(importance)} · 상호작용 ${Math.round(interactions).toLocaleString()}`,
-        helpfulnessWhy: `유사 헤드라인 군집에서 importance ${Math.round(importance)} / interactions ${Math.round(interactions)} 반영`,
+        helpfulnessWhy: `신선도 ${Math.round(freshness)} · 영향도 ${Math.round(impactStrength)} · 상호작용 ${Math.round(interactionScore)}`,
         visualAid: visualAidForBias(bias),
       },
       {
         actionTypeCount: bias === 'wait' ? 1 : 3,
-        clarityScore: title.length >= 28 ? 36 : 30,
-        sourceReliability: sourceReliabilityScore(source),
+        clarityScore,
+        sourceReliability,
         failureRatePct: raw.network === 'rss' ? 4 : 7,
         manipulationRisk: manipulationRiskFor(source),
-        pairKeywordMatchPct: relevanceScore(`${title} ${raw.summary ?? ''}`, token),
-        timeframeAligned: delayMinutes(createdAt) <= 120,
-        backtestWinRateLiftPct: Math.min(9, importance / 15),
-        feedbackPositivePct: 68 + Math.min(22, Math.log10(interactions + 10) * 10),
-        applyRatePct: confidence,
-        pnlLiftPct: Math.min(8, importance / 12),
+        pairKeywordMatchPct: pairRelevance,
+        timeframeAligned: ageMin <= 120,
+        backtestWinRateLiftPct,
+        feedbackPositivePct,
+        applyRatePct,
+        pnlLiftPct,
       },
     );
 
@@ -359,8 +433,13 @@ function buildEventCards(input: IntelPolicyInput, maxCount: number): IntelPolicy
     const level = (raw.level ?? 'info').toLowerCase();
     const createdAt = toNum(raw.createdAt, Date.now());
     const source = raw.source ?? 'MARKET_EVENTS';
+    const ageMin = delayMinutes(createdAt);
+    const freshness = freshnessScore(ageMin, 10, 720);
+    const sourceReliability = sourceReliabilityScore(source);
+    const pairRelevance = relevanceScore(`${tag} ${text}`, token);
 
     let bias: DecisionBias = 'wait';
+    let derivativeStrength = 0;
     if (tag === 'DERIV') {
       const funding = parseDerivFunding(text);
       const lsRatio = parseLsRatio(text);
@@ -369,6 +448,11 @@ function buildEventCards(input: IntelPolicyInput, maxCount: number): IntelPolicy
       else if (lsRatio != null && lsRatio < 0.9) bias = 'long';
       else if (lsRatio != null && lsRatio > 1.1) bias = 'short';
       else bias = 'wait';
+
+      derivativeStrength = Math.max(
+        funding == null ? 0 : strengthFromDeviation(funding, 0, 0.0005),
+        lsRatio == null ? 0 : strengthFromDeviation(lsRatio, 1, 0.12),
+      );
     } else if (tag === 'TAKEOVER' || tag === 'BOOST') {
       bias = 'long';
     } else if (tag === 'ADS') {
@@ -377,8 +461,53 @@ function buildEventCards(input: IntelPolicyInput, maxCount: number): IntelPolicy
       bias = textBias(text);
     }
 
-    const baseConfidence = tag === 'DERIV' ? 82 : tag === 'TAKEOVER' ? 68 : tag === 'BOOST' ? 64 : 58;
-    const confidence = clamp(baseConfidence + (level === 'warning' ? 8 : 0));
+    const tagBaseScore =
+      tag === 'DERIV'
+        ? 94
+        : tag === 'TAKEOVER'
+          ? 72
+          : tag === 'BOOST'
+            ? 66
+            : tag === 'ADS'
+              ? 54
+              : 64;
+    const levelScore = level === 'critical' ? 95 : level === 'warning' ? 84 : level === 'info' ? 70 : 64;
+    const textSignal = textBias(text) === 'wait' ? 52 : 74;
+    const signalStrength = tag === 'DERIV' ? Math.max(58, derivativeStrength) : calibrateConfidence(
+      [
+        { score: tagBaseScore, weight: 0.55 },
+        { score: textSignal, weight: 0.45 },
+      ],
+    );
+    const hasTimingHint = /\b(t-|t\+|분|minute|hour|h)\b/i.test(text);
+    const clarityScore = clamp((text.length >= 24 ? 32 : 28) + (hasTimingHint ? 4 : 0), 24, 40);
+    const confidence = calibrateConfidence(
+      [
+        { score: tagBaseScore, weight: 0.30 },
+        { score: levelScore, weight: 0.15 },
+        { score: signalStrength, weight: 0.24 },
+        { score: freshness, weight: 0.20 },
+        { score: sourceReliability, weight: 0.05 },
+        { score: pairRelevance, weight: 0.06 },
+      ],
+      (bias === 'wait' ? -10 : -2) + (tag === 'ADS' ? -8 : 0),
+    );
+    const backtestWinRateLiftPct = clamp(
+      3 + signalStrength / 25 + (tag === 'DERIV' ? 1.8 : 0.8) + freshness / 140,
+      3,
+      9,
+    );
+    const feedbackPositivePct = clamp(
+      57 + tagBaseScore * 0.22 + (level === 'warning' ? 5 : 0) + (bias === 'wait' ? -4 : 3) - (tag === 'ADS' ? 6 : 0),
+      50,
+      90,
+    );
+    const applyRatePct = clamp(confidence * 0.85 + freshness * 0.15, 42, 95);
+    const pnlLiftPct = clamp(
+      1.8 + signalStrength / 30 + (tag === 'DERIV' ? 1.9 : 0.9),
+      1.5,
+      7.4,
+    );
 
     out.push(
       gateCard(
@@ -397,21 +526,21 @@ function buildEventCards(input: IntelPolicyInput, maxCount: number): IntelPolicy
               : '단기 유동성/관심도에 영향을 주는 이벤트로 변동성 트리거가 됩니다.',
           nowWhat: biasToActionText(bias),
           why: `${source} · ${tag} · ${level}`,
-          helpfulnessWhy: `태그 ${tag} 이벤트 히스토리 기반 영향도 반영`,
+          helpfulnessWhy: `태그강도 ${Math.round(tagBaseScore)} · 신호강도 ${Math.round(signalStrength)} · 신선도 ${Math.round(freshness)}`,
           visualAid: visualAidForBias(bias),
         },
         {
           actionTypeCount: bias === 'wait' ? 1 : 3,
-          clarityScore: text.length >= 24 ? 34 : 28,
-          sourceReliability: sourceReliabilityScore(source),
+          clarityScore,
+          sourceReliability,
           failureRatePct: 6,
           manipulationRisk: manipulationRiskFor(`${source}:${tag}`),
-          pairKeywordMatchPct: relevanceScore(text, token),
-          timeframeAligned: delayMinutes(createdAt) <= 120,
-          backtestWinRateLiftPct: tag === 'DERIV' ? 7.2 : 5.8,
-          feedbackPositivePct: tag === 'DERIV' ? 78 : 68,
-          applyRatePct: confidence,
-          pnlLiftPct: tag === 'DERIV' ? 6.8 : 4.1,
+          pairKeywordMatchPct: pairRelevance,
+          timeframeAligned: ageMin <= 120,
+          backtestWinRateLiftPct,
+          feedbackPositivePct,
+          applyRatePct,
+          pnlLiftPct,
         },
       ),
     );
@@ -430,7 +559,22 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
   const funding = snap.funding ?? null;
   if (funding != null) {
     const bias: DecisionBias = funding < -0.0006 ? 'long' : funding > 0.0006 ? 'short' : 'wait';
-    const confidence = clamp(58 + Math.min(32, Math.abs(funding) * 100000));
+    const fundingStrength = strengthFromDeviation(funding, 0, 0.00045);
+    const pairRelevance = relevanceScore(`${token} funding`, token);
+    const confidence = calibrateConfidence(
+      [
+        { score: fundingStrength, weight: 0.58 },
+        { score: 96, weight: 0.18 },
+        { score: 100, weight: 0.14 },
+        { score: bias === 'wait' ? 52 : 75, weight: 0.10 },
+      ],
+      bias === 'wait' ? -14 : -2,
+    );
+    const backtestWinRateLiftPct = clamp(4 + fundingStrength / 20, 4, 9.4);
+    const feedbackPositivePct = clamp(60 + fundingStrength * 0.22 + (bias === 'wait' ? -6 : 4), 54, 91);
+    const applyRatePct = clamp(confidence * 0.86 + fundingStrength * 0.14, 46, 96);
+    const pnlLiftPct = clamp(2.2 + fundingStrength / 26, 2, 7.2);
+
     out.push(
       gateCard(
         'flow',
@@ -450,7 +594,7 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
                 : '펀딩 단독으로는 방향성이 중립입니다.',
           nowWhat: biasToActionText(bias),
           why: '펀딩 극단값 임계(±0.06%) 기반',
-          helpfulnessWhy: `펀딩 절대값 ${Math.abs(funding * 100).toFixed(4)}%를 단기 과열 지표로 반영`,
+          helpfulnessWhy: `펀딩강도 ${Math.round(fundingStrength)} · 값 ${(funding * 100).toFixed(4)}%`,
           visualAid: visualAidForBias(bias),
         },
         {
@@ -459,12 +603,12 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
           sourceReliability: 92,
           failureRatePct: 4,
           manipulationRisk: 'low',
-          pairKeywordMatchPct: 96,
+          pairKeywordMatchPct: pairRelevance,
           timeframeAligned: true,
-          backtestWinRateLiftPct: 7.4,
-          feedbackPositivePct: 74,
-          applyRatePct: confidence,
-          pnlLiftPct: 5.2,
+          backtestWinRateLiftPct,
+          feedbackPositivePct,
+          applyRatePct,
+          pnlLiftPct,
         },
       ),
     );
@@ -473,7 +617,22 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
   const lsRatio = snap.lsRatio ?? null;
   if (lsRatio != null) {
     const bias: DecisionBias = lsRatio < 0.9 ? 'long' : lsRatio > 1.1 ? 'short' : 'wait';
-    const confidence = clamp(55 + Math.abs(lsRatio - 1) * 120);
+    const lsStrength = strengthFromDeviation(lsRatio, 1, 0.12);
+    const pairRelevance = relevanceScore(`${token} long short ratio`, token);
+    const confidence = calibrateConfidence(
+      [
+        { score: lsStrength, weight: 0.56 },
+        { score: 95, weight: 0.18 },
+        { score: 100, weight: 0.16 },
+        { score: bias === 'wait' ? 50 : 74, weight: 0.10 },
+      ],
+      bias === 'wait' ? -12 : 0,
+    );
+    const backtestWinRateLiftPct = clamp(3.8 + lsStrength / 22, 3.8, 8.8);
+    const feedbackPositivePct = clamp(59 + lsStrength * 0.2 + (bias === 'wait' ? -5 : 3), 53, 89);
+    const applyRatePct = clamp(confidence * 0.84 + lsStrength * 0.16, 45, 95);
+    const pnlLiftPct = clamp(2 + lsStrength / 28, 1.8, 6.8);
+
     out.push(
       gateCard(
         'flow',
@@ -488,7 +647,7 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
           soWhat: bias === 'wait' ? '롱/숏 포지션 비대칭이 약해 중립입니다.' : '포지션 비대칭으로 역방향 압력이 확대될 수 있습니다.',
           nowWhat: biasToActionText(bias),
           why: 'L/S 임계(0.9 / 1.1) 기반 쏠림 판단',
-          helpfulnessWhy: `L/S 편차 ${(Math.abs(lsRatio - 1) * 100).toFixed(1)}% 반영`,
+          helpfulnessWhy: `L/S 강도 ${Math.round(lsStrength)} · 편차 ${(Math.abs(lsRatio - 1) * 100).toFixed(1)}%`,
           visualAid: visualAidForBias(bias),
         },
         {
@@ -497,12 +656,12 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
           sourceReliability: 90,
           failureRatePct: 4,
           manipulationRisk: 'low',
-          pairKeywordMatchPct: 96,
+          pairKeywordMatchPct: pairRelevance,
           timeframeAligned: true,
-          backtestWinRateLiftPct: 6.8,
-          feedbackPositivePct: 72,
-          applyRatePct: confidence,
-          pnlLiftPct: 4.8,
+          backtestWinRateLiftPct,
+          feedbackPositivePct,
+          applyRatePct,
+          pnlLiftPct,
         },
       ),
     );
@@ -513,7 +672,24 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
   if (liqLong + liqShort > 0) {
     const bias: DecisionBias = liqLong > liqShort ? 'short' : liqShort > liqLong ? 'long' : 'wait';
     const imbalance = Math.abs(liqLong - liqShort) / Math.max(liqLong + liqShort, 1);
-    const confidence = clamp(56 + imbalance * 42);
+    const totalLiq = liqLong + liqShort;
+    const imbalanceStrength = clamp(imbalance * 100);
+    const sizeScore = logScore(totalLiq, 24);
+    const pairRelevance = relevanceScore(`${token} liquidation`, token);
+    const confidence = calibrateConfidence(
+      [
+        { score: imbalanceStrength, weight: 0.46 },
+        { score: sizeScore, weight: 0.28 },
+        { score: 94, weight: 0.16 },
+        { score: bias === 'wait' ? 52 : 74, weight: 0.10 },
+      ],
+      bias === 'wait' ? -10 : 0,
+    );
+    const backtestWinRateLiftPct = clamp(3.6 + imbalanceStrength / 22 + sizeScore / 80, 3.6, 9.1);
+    const feedbackPositivePct = clamp(58 + imbalanceStrength * 0.18 + sizeScore * 0.08 + (bias === 'wait' ? -4 : 4), 52, 90);
+    const applyRatePct = clamp(confidence * 0.82 + imbalanceStrength * 0.18, 44, 95);
+    const pnlLiftPct = clamp(2 + imbalanceStrength / 24 + sizeScore / 140, 1.8, 7.4);
+
     out.push(
       gateCard(
         'flow',
@@ -528,7 +704,7 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
           soWhat: '청산 쏠림이 단기 가격 압력을 만들어 추세 가속/반전 트리거가 됩니다.',
           nowWhat: biasToActionText(bias),
           why: `청산 불균형 ${(imbalance * 100).toFixed(1)}%`,
-          helpfulnessWhy: `24h 청산 편중도 ${(imbalance * 100).toFixed(1)}%를 압력 지표로 사용`,
+          helpfulnessWhy: `편중강도 ${Math.round(imbalanceStrength)} · 규모점수 ${Math.round(sizeScore)}`,
           visualAid: visualAidForBias(bias),
         },
         {
@@ -537,12 +713,12 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
           sourceReliability: 90,
           failureRatePct: 4,
           manipulationRisk: 'low',
-          pairKeywordMatchPct: 95,
+          pairKeywordMatchPct: pairRelevance,
           timeframeAligned: true,
-          backtestWinRateLiftPct: 7.0,
-          feedbackPositivePct: 75,
-          applyRatePct: confidence,
-          pnlLiftPct: 5.5,
+          backtestWinRateLiftPct,
+          feedbackPositivePct,
+          applyRatePct,
+          pnlLiftPct,
         },
       ),
     );
@@ -551,7 +727,22 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
   const cmcChange = snap.cmcChange24hPct ?? null;
   if (cmcChange != null) {
     const bias: DecisionBias = cmcChange > 0.6 ? 'long' : cmcChange < -0.6 ? 'short' : 'wait';
-    const confidence = clamp(52 + Math.min(35, Math.abs(cmcChange) * 8));
+    const regimeStrength = strengthFromDeviation(cmcChange, 0, 0.75);
+    const pairRelevance = relevanceScore(`${token} market cap regime`, token);
+    const confidence = calibrateConfidence(
+      [
+        { score: regimeStrength, weight: 0.52 },
+        { score: 92, weight: 0.20 },
+        { score: 100, weight: 0.18 },
+        { score: bias === 'wait' ? 52 : 72, weight: 0.10 },
+      ],
+      bias === 'wait' ? -12 : -5,
+    );
+    const backtestWinRateLiftPct = clamp(3.2 + regimeStrength / 24, 3.2, 7.9);
+    const feedbackPositivePct = clamp(56 + regimeStrength * 0.18 + (bias === 'wait' ? -5 : 2), 50, 86);
+    const applyRatePct = clamp(confidence * 0.86 + regimeStrength * 0.14, 42, 94);
+    const pnlLiftPct = clamp(1.6 + regimeStrength / 30, 1.4, 5.8);
+
     out.push(
       gateCard(
         'flow',
@@ -566,7 +757,7 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
           soWhat: '전체 시총 레짐은 개별 종목 변동성의 방향 확률을 보정합니다.',
           nowWhat: biasToActionText(bias),
           why: '시장 레짐 필터 (mcap 24h 변화율)',
-          helpfulnessWhy: `글로벌 레짐 변화 ${Math.abs(cmcChange).toFixed(2)}% 반영`,
+          helpfulnessWhy: `레짐강도 ${Math.round(regimeStrength)} · 변화 ${Math.abs(cmcChange).toFixed(2)}%`,
           visualAid: visualAidForBias(bias),
         },
         {
@@ -575,12 +766,12 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
           sourceReliability: 92,
           failureRatePct: 5,
           manipulationRisk: 'low',
-          pairKeywordMatchPct: relevanceScore(token, token),
+          pairKeywordMatchPct: pairRelevance,
           timeframeAligned: true,
-          backtestWinRateLiftPct: 5.9,
-          feedbackPositivePct: 69,
-          applyRatePct: confidence,
-          pnlLiftPct: 3.8,
+          backtestWinRateLiftPct,
+          feedbackPositivePct,
+          applyRatePct,
+          pnlLiftPct,
         },
       ),
     );
@@ -589,37 +780,61 @@ function buildFlowCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
   for (const rec of input.flowRecords.slice(0, 4)) {
     const text = (rec.text ?? '').trim();
     if (!text) continue;
-    const bias = normalizeBias(rec.vote) === 'wait' ? textBias(text) : normalizeBias(rec.vote);
-    const confidence = clamp(toNum(rec.confidence, 55));
+
+    const sourceLabel = rec.source ?? source;
+    const recBias = normalizeBias(rec.vote);
+    const bias = recBias === 'wait' ? textBias(text) : recBias;
+    const rawConfidence = clamp(toNum(rec.confidence, 55));
+    const recCreatedAt = toNum(rec.createdAt, createdAt);
+    const ageMin = delayMinutes(recCreatedAt);
+    const freshness = freshnessScore(ageMin, 0, 180);
+    const sourceReliability = sourceReliabilityScore(sourceLabel);
+    const pairRelevance = relevanceScore(text, token);
+    const confidence = calibrateConfidence(
+      [
+        { score: rawConfidence, weight: 0.46 },
+        { score: freshness, weight: 0.24 },
+        { score: sourceReliability, weight: 0.20 },
+        { score: pairRelevance, weight: 0.10 },
+      ],
+      bias === 'wait' ? -8 : 0,
+    );
+    const hasNumericContext = /\d+%|\$\d+|liq|funding|ratio/i.test(text);
+    const clarityScore = clamp((text.length >= 30 ? 32 : 28) + (hasNumericContext ? 4 : 0), 24, 40);
+    const backtestWinRateLiftPct = clamp(3 + rawConfidence / 30 + freshness / 120, 3, 7.2);
+    const feedbackPositivePct = clamp(52 + rawConfidence * 0.2 + freshness * 0.12, 48, 85);
+    const applyRatePct = clamp(confidence * 0.84 + rawConfidence * 0.16, 40, 94);
+    const pnlLiftPct = clamp(1.4 + rawConfidence / 35 + freshness / 150, 1.2, 5.6);
+
     out.push(
       gateCard(
         'flow',
         `flow:record:${rec.id ?? text.slice(0, 24)}`,
-        rec.source ?? source,
+        sourceLabel,
         {
           title: `${rec.agent ?? 'FLOW'} SNAPSHOT`,
-          createdAt: toNum(rec.createdAt, createdAt),
+          createdAt: recCreatedAt,
           bias,
           confidence,
           what: text,
           soWhat: '실시간 플로우 레코드는 방향 압력을 보조 확인하는 증거입니다.',
           nowWhat: biasToActionText(bias),
-          why: `${rec.source ?? source} 레코드`,
-          helpfulnessWhy: `실시간 confidence ${Math.round(confidence)} 반영`,
+          why: `${sourceLabel} 레코드`,
+          helpfulnessWhy: `원본신뢰 ${Math.round(rawConfidence)} · 신선도 ${Math.round(freshness)} · 출처 ${Math.round(sourceReliability)}`,
           visualAid: visualAidForBias(bias),
         },
         {
           actionTypeCount: bias === 'wait' ? 1 : 2,
-          clarityScore: 28,
-          sourceReliability: sourceReliabilityScore(rec.source ?? source),
+          clarityScore,
+          sourceReliability,
           failureRatePct: 7,
-          manipulationRisk: manipulationRiskFor(rec.source ?? source),
-          pairKeywordMatchPct: relevanceScore(text, token),
-          timeframeAligned: true,
-          backtestWinRateLiftPct: 5.4,
-          feedbackPositivePct: 66,
-          applyRatePct: confidence,
-          pnlLiftPct: 3,
+          manipulationRisk: manipulationRiskFor(sourceLabel),
+          pairKeywordMatchPct: pairRelevance,
+          timeframeAligned: ageMin <= 120,
+          backtestWinRateLiftPct,
+          feedbackPositivePct,
+          applyRatePct,
+          pnlLiftPct,
         },
       ),
     );
@@ -635,10 +850,44 @@ function buildTrendingCards(input: IntelPolicyInput, maxCount: number): IntelPol
   for (const coin of input.trendingCoins.slice(0, 20)) {
     const symbol = (coin.symbol ?? '').toUpperCase();
     if (!symbol) continue;
+
+    const rank = Math.max(1, Math.floor(toNum(coin.rank, 1)));
     const change24h = toNum(coin.change24h, 0);
-    const bias: DecisionBias = change24h > 1.2 ? 'long' : change24h < -1.2 ? 'short' : 'wait';
     const socialVolume = toNum(coin.socialVolume, 0);
-    const confidence = clamp(48 + Math.min(30, Math.abs(change24h) * 3) + Math.min(15, Math.log10(socialVolume + 1) * 6));
+    const bias: DecisionBias = change24h > 1.2 ? 'long' : change24h < -1.2 ? 'short' : 'wait';
+    const momentumStrength = strengthFromDeviation(change24h, 0, 1.4);
+    const socialScore = logScore(socialVolume, 28);
+    const rankScore = clamp(100 - (rank - 1) * 11, 22, 100);
+    const pairRelevance = symbol === token ? 100 : relevanceScore(`${symbol} ${coin.name ?? ''}`, token);
+    const pumpRisk = change24h > 20 && socialVolume > 120_000;
+    const manipulationRisk: ManipulationRiskLevel = pumpRisk ? 'high' : socialVolume > 80_000 ? 'medium' : 'low';
+    const confidence = calibrateConfidence(
+      [
+        { score: momentumStrength, weight: 0.40 },
+        { score: socialScore, weight: 0.22 },
+        { score: rankScore, weight: 0.18 },
+        { score: 86, weight: 0.10 },
+        { score: pairRelevance, weight: 0.10 },
+      ],
+      (bias === 'wait' ? -8 : 0) - (pumpRisk ? 14 : 0),
+    );
+    const clarityScore = clamp(30 + (bias === 'wait' ? 0 : 4), 28, 40);
+    const backtestWinRateLiftPct = clamp(
+      3 + momentumStrength / 24 + socialScore / 60 + (symbol === token ? 1 : 0),
+      3,
+      8.8,
+    );
+    const feedbackPositivePct = clamp(
+      56 + rankScore * 0.12 + momentumStrength * 0.14 - (pumpRisk ? 15 : 0),
+      45,
+      88,
+    );
+    const applyRatePct = clamp(confidence * 0.82 + rankScore * 0.18, 40, 95);
+    const pnlLiftPct = clamp(
+      1.4 + momentumStrength / 28 + (pumpRisk ? -0.8 : 0.6),
+      1,
+      6.5,
+    );
 
     out.push(
       gateCard(
@@ -646,29 +895,29 @@ function buildTrendingCards(input: IntelPolicyInput, maxCount: number): IntelPol
         `trending:${symbol}`,
         'CMC_LUNARCRUSH',
         {
-          title: `TRENDING #${Math.max(1, toNum(coin.rank, 1))} ${symbol}`,
+          title: `TRENDING #${rank} ${symbol}`,
           createdAt: Date.now(),
           bias,
           confidence,
           what: `${symbol} 24h ${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%`,
           soWhat: '트렌딩 강도는 단기 후보군 우선순위에 직접 반영됩니다.',
           nowWhat: biasToActionText(bias),
-          why: `rank ${Math.max(1, toNum(coin.rank, 1))} · social ${Math.round(socialVolume).toLocaleString()}`,
-          helpfulnessWhy: `모멘텀(${Math.abs(change24h).toFixed(2)}%) + 소셜 볼륨 결합 점수`,
+          why: `rank ${rank} · social ${Math.round(socialVolume).toLocaleString()} · pumpRisk ${pumpRisk ? 'Y' : 'N'}`,
+          helpfulnessWhy: `모멘텀 ${Math.round(momentumStrength)} · 소셜 ${Math.round(socialScore)} · 랭크 ${Math.round(rankScore)}`,
           visualAid: visualAidForBias(bias),
         },
         {
           actionTypeCount: bias === 'wait' ? 1 : 2,
-          clarityScore: 32,
-          sourceReliability: 88,
+          clarityScore,
+          sourceReliability: 86,
           failureRatePct: 5,
-          manipulationRisk: socialVolume > 50_000 ? 'medium' : 'low',
-          pairKeywordMatchPct: symbol === token ? 100 : 74,
+          manipulationRisk,
+          pairKeywordMatchPct: pairRelevance,
           timeframeAligned: true,
-          backtestWinRateLiftPct: Math.min(8.5, Math.abs(change24h) / 1.8 + 3),
-          feedbackPositivePct: 67,
-          applyRatePct: confidence,
-          pnlLiftPct: Math.min(6, Math.abs(change24h) / 2),
+          backtestWinRateLiftPct,
+          feedbackPositivePct,
+          applyRatePct,
+          pnlLiftPct,
         },
       ),
     );
@@ -688,9 +937,30 @@ function buildPickCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
     const direction = (coin.direction ?? 'neutral').toLowerCase();
     const bias: DecisionBias = direction === 'long' ? 'long' : direction === 'short' ? 'short' : 'wait';
     const totalScore = clamp(toNum(coin.totalScore, 50));
-    const confidence = clamp(toNum(coin.confidence, 55));
+    const baseConfidence = clamp(toNum(coin.confidence, 55));
     const reasons = Array.isArray(coin.reasons) ? coin.reasons.filter((r) => typeof r === 'string') : [];
     const alerts = Array.isArray(coin.alerts) ? coin.alerts.filter((r) => typeof r === 'string') : [];
+    const alertText = alerts.join(' ').toLowerCase();
+    const highRiskAlert = /(rug|honeypot|exploit|drain|scam|spoof|wash|blacklist|⚠)/.test(alertText);
+    const mediumRiskAlert = !highRiskAlert && /(risk|warning|volatility|unlock|dilution|dump)/.test(alertText);
+    const riskPenalty = highRiskAlert ? 18 : mediumRiskAlert ? 8 : 0;
+    const riskLevel: ManipulationRiskLevel = highRiskAlert ? 'high' : mediumRiskAlert ? 'medium' : 'low';
+    const reasonScore = clamp(reasons.length * 14 + (reasons[0] ? 12 : 0), 0, 100);
+    const pairRelevance = symbol === token ? 100 : relevanceScore(`${symbol} ${coin.name ?? ''} ${reasons.join(' ')}`, token);
+    const confidence = calibrateConfidence(
+      [
+        { score: totalScore, weight: 0.34 },
+        { score: baseConfidence, weight: 0.30 },
+        { score: reasonScore, weight: 0.18 },
+        { score: pairRelevance, weight: 0.10 },
+        { score: 86, weight: 0.08 },
+      ],
+      (bias === 'wait' ? -8 : 0) - riskPenalty,
+    );
+    const backtestWinRateLiftPct = clamp(3.5 + totalScore / 24 + reasonScore / 100 - riskPenalty / 20, 3, 9.3);
+    const feedbackPositivePct = clamp(58 + totalScore * 0.18 + reasonScore * 0.08 - riskPenalty * 1.2, 45, 91);
+    const applyRatePct = clamp(confidence * 0.84 + totalScore * 0.16, 40, 96);
+    const pnlLiftPct = clamp(1.8 + totalScore / 22 - riskPenalty / 16 + (bias === 'wait' ? 0 : 0.9), 1, 7.6);
     const createdAt = Date.now();
 
     out.push(
@@ -707,7 +977,7 @@ function buildPickCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
           soWhat: totalScore >= 70 ? '다중 팩터가 동시 정렬된 상위 후보입니다.' : '후보군이지만 확신도는 중간 수준입니다.',
           nowWhat: biasToActionText(bias),
           why: reasons.slice(0, 2).join(' · ') || '복합 스코어 기반 선별',
-          helpfulnessWhy: `score ${Math.round(totalScore)} · alerts ${alerts.length} · confidence ${Math.round(confidence)}`,
+          helpfulnessWhy: `score ${Math.round(totalScore)} · reason ${Math.round(reasonScore)} · riskPenalty ${riskPenalty}`,
           visualAid: visualAidForBias(bias),
         },
         {
@@ -715,13 +985,13 @@ function buildPickCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
           clarityScore: 36,
           sourceReliability: 86,
           failureRatePct: 6,
-          manipulationRisk: alerts.some((a) => a.includes('⚠')) ? 'medium' : 'low',
-          pairKeywordMatchPct: symbol === token ? 100 : 70,
+          manipulationRisk: riskLevel,
+          pairKeywordMatchPct: pairRelevance,
           timeframeAligned: true,
-          backtestWinRateLiftPct: Math.min(9.2, totalScore / 12),
-          feedbackPositivePct: 72,
-          applyRatePct: confidence,
-          pnlLiftPct: Math.min(7.5, totalScore / 14),
+          backtestWinRateLiftPct,
+          feedbackPositivePct,
+          applyRatePct,
+          pnlLiftPct,
         },
       ),
     );
@@ -732,7 +1002,12 @@ function buildPickCards(input: IntelPolicyInput, maxCount: number): IntelPolicyC
 
 function evidenceFromCard(domain: EngineEvidence['domain'], card: IntelPolicyCard): EngineEvidence {
   const strength = clamp(card.confidence);
-  const confidence = clamp((card.confidence + card.gate.weightedScore) / 2);
+  const confidence = calibrateConfidence(
+    [
+      { score: card.confidence, weight: 0.62 },
+      { score: card.gate.weightedScore, weight: 0.38 },
+    ],
+  );
   return {
     domain,
     bias: card.bias,
