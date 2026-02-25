@@ -1346,3 +1346,29 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `git push --force-with-lease origin codex/terminal-be-gap-redesign-w121`: SUCCESS
 - Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
 - Status: DONE
+
+### W-20260225-1913-backend-codex (finish)
+
+- End (KST): 2026-02-25 19:16
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - 프로젝트 브랜드명을 `Stockclaw`로 전환 (핵심 런타임/설정/마이그레이션 범위)
+  - 주요 치환 대상:
+    - UI/문구: `MAXI⚡DOGE`, `MAXI DOGE`, `MAXI-DOGE`, `MAXIDOGE` -> `STOCKCLAW`
+    - 소문자 식별자: `maxidoge*`, `maxi-doge*` -> `stockclaw*`
+  - 대표 변경 파일:
+    - `package.json`, `package-lock.json` (`stockclaw-unified`)
+    - `src/lib/server/session.ts` (`stockclaw_session`)
+    - `src/lib/stores/storageKeys.ts` (`stockclaw_*` localStorage key)
+    - `src/lib/server/polymarketClob.ts` (`User-Agent: STOCKCLAW/1.0`)
+    - `src/routes/+page.svelte`, `src/components/layout/Header.svelte`, `src/routes/terminal/+page.svelte` (브랜드 표시)
+    - `.env.example` (`RATE_LIMIT_REDIS_PREFIX=stockclaw:rl`)
+    - `db/supabase migrations` 주석 브랜드 문자열
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `3ada61a`
+- Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
+- Status: DONE
