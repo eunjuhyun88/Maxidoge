@@ -12,6 +12,13 @@ cd "$ROOT_DIR"
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 echo "[pre-push] branch: $CURRENT_BRANCH"
 
+if [ "$CURRENT_BRANCH" = "main" ] && [ "${ALLOW_MAIN_PUSH:-0}" != "1" ]; then
+	echo "[pre-push] blocked: direct push to main is disabled."
+	echo "[pre-push] push a codex/* branch and merge via PR."
+	echo "[pre-push] override (emergency only): ALLOW_MAIN_PUSH=1 git push ..."
+	exit 1
+fi
+
 echo "[pre-push] fetching origin"
 git fetch origin --prune
 

@@ -1,7 +1,7 @@
 # STOCKCLAW Unified
 
 > Single source of truth: this `README.md` is the canonical collaboration and project guide for all humans and agents.
-> Mandatory gate: every task must log start/end in `docs/AGENT_WATCH_LOG.md` and pass `npm run check` + `npm run build` before push/merge.
+> Mandatory gate: every task must log start/end in the development log path defined by `AGENTS.md` and pass `npm run check` + `npm run build` before push/merge.
 
 AI 에이전트 기반 트레이딩 시뮬레이션 웹앱입니다.  
 SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signals`, `Passport` 경험을 제공합니다.
@@ -10,21 +10,18 @@ SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signa
 
 아래 규칙은 모든 에이전트/기여자 공통 강제 규칙입니다.
 
-1. 매 작업(매 요청) 시작 시, 이 `README.md`를 다시 읽는다.
-2. 코드/문서 수정 전에 `docs/AGENT_WATCH_LOG.md`에 시작 기록을 남긴다.
-3. 작업 브랜치에서 `npm run check`와 `npm run build`를 모두 통과시킨다.
-4. 둘 중 하나라도 실패하면 push/merge를 중단하고 먼저 에러를 수정한다.
-5. push/merge 후에도 `docs/AGENT_WATCH_LOG.md`에 완료 기록(검증 결과, commit hash, merge hash, push 상태)을 남긴다.
-6. `main` 머지 후 `main`에서 다시 `npm run check` + `npm run build`를 실행한다.
-7. 한 요청(한 작업 단위)은 **하나의 atomic commit**으로 마감한다.  
-   해당 요청에서 바뀐 코드/문서와 `docs/AGENT_WATCH_LOG.md` 기록을 같은 커밋에 포함한다.
-8. 작업 종료 직전에 `git status --short --branch`를 실행해 워킹트리가 clean인지 확인하고, 결과를 로그에 남긴다.
-9. `main` 머지/검증(`npm run check`, `npm run build`)은 **clean 상태의 main worktree**에서만 수행한다.  
-   main worktree가 dirty면 기존 변경을 임의로 reset/revert하지 말고, 별도 clean worktree를 만들어 같은 절차를 수행한다.
-9. push 전 워킹트리에 요청과 무관한 변경이 남아 있으면 먼저 정리한다.
-   필요 시 `git stash push -u -m "wip/<task>"`로 백업 후 push하고, 이후 `git stash pop`으로 복원한다.
-10. 모든 구현 작업은 반드시 설계안을 먼저 작성하고, 설계 검토/승인을 받은 뒤에만 실제 구현을 시작한다.
-11. 매 작업 시작 메시지에서 현재 브랜치 위치를 먼저 보고한 뒤 작업을 시작한다.
+1. 매 작업(매 요청) 시작 시, 이 `README.md`와 `AGENTS.md`를 다시 읽는다.
+2. 코드/문서 수정 전에 `AGENTS.md`에 지정된 development log 경로에 시작 기록을 남긴다.
+3. 수정 전 `npm run safe:status`로 현재 브랜치/워크트리/겹치는 변경 여부를 확인한다.
+4. 구현은 반드시 `codex/*` 작업 브랜치에서 진행한다(`main` 직접 개발 금지).
+5. 작업 브랜치에서 `npm run check`와 `npm run build`를 모두 통과시킨다.
+6. 둘 중 하나라도 실패하면 push/merge를 중단하고 먼저 에러를 수정한다.
+7. push 직전 `npm run safe:sync:gate`를 실행해 `origin/main` 기준 동기화 + 게이트를 완료한다.
+8. `main` 반영은 PR 기반으로만 수행한다(직접 `origin/main` push 금지, squash/rebase merge 권장).
+9. push/merge 후 development log에 완료 기록(검증 결과, commit hash, merge/PR 정보, push 상태)을 남긴다.
+10. `main` 머지 후 `main`에서 다시 `npm run check` + `npm run build`를 실행한다.
+11. 작업 종료 직전에 `git status --short --branch`를 실행해 워킹트리가 clean인지 확인하고 로그에 남긴다.
+12. push 전 요청과 무관한 변경은 정리한다(`npm run safe:cleanup` dry-run 기본).
 
 참고:
 - 에이전트 자동 실행 규칙 파일은 `AGENTS.md`다.
@@ -98,6 +95,9 @@ npm run preview
 - `npm run safe:hooks`: 로컬 pre-push/post-merge 훅 설치 (`.githooks/*`)
 - `npm run safe:sync`: 브랜치 동기화 (`main`은 `pull --ff-only`, 작업 브랜치는 `origin/main` rebase + check)
 - `npm run safe:sync:gate`: 동기화 후 `check + build`까지 실행
+- `npm run safe:audit:agents`: 주요 clone들의 브랜치/dirty 상태/AGENTS 해시 일관성 점검
+- `npm run safe:cleanup`: 로컬 정리 dry-run (`gone` 브랜치, merged local 브랜치 후보, 빌드 산출물)
+- `npm run safe:cleanup:apply`: 안전 후보 실제 정리 적용
 
 ### Solo Safety Routine (Recommended)
 
@@ -109,6 +109,7 @@ npm run preview
    ```bash
    npm run safe:status
    npm run safe:worktree -- ui-refresh main
+   npm run safe:audit:agents
    ```
 3. 작업 중 pull/merge 전후:
    ```bash
@@ -117,12 +118,14 @@ npm run preview
 4. 작업 끝나기 전:
    ```bash
    npm run safe:sync:gate
+   npm run safe:cleanup
    ```
 
 참고:
 - pre-push는 기본적으로 `npm run check` + `npm run build`를 자동 실행합니다.
 - post-merge는 pull/merge 직후 `npm run check`를 자동 실행합니다.
-- 긴급 상황에서만 `SKIP_PREPUSH=1 git push`로 일시 우회하세요.
+- pre-push는 기본적으로 `main` 직접 push를 차단합니다.
+- 긴급 상황 우회: `SKIP_PREPUSH=1 git push` 또는 `ALLOW_MAIN_PUSH=1 git push` (정말 필요한 경우에만).
 
 ### Multi-Agent Parallel Routine (Conflict-Avoidance)
 
@@ -130,19 +133,19 @@ npm run preview
 
 1. `main` 직접 개발 금지
    - 모든 구현은 `codex/<task-name>` 브랜치에서만 진행합니다.
-   - `main`은 통합(merge) 전용 브랜치로 유지합니다.
+   - `main`은 통합/검증 확인 용도로만 사용합니다.
 
-2. 에이전트별 분리 워크트리 생성
+2. 에이전트별 분리 작업공간 사용
    ```bash
    npm run safe:worktree -- pattern-engine main
    npm run safe:worktree -- chart-overlay main
    npm run safe:worktree -- api-pattern-feed main
    ```
-   - 각 스레드는 서로 다른 worktree 경로를 사용합니다.
-   - 같은 worktree에서 브랜치만 바꿔 병렬 작업하지 않습니다.
+   - 가능하면 clone 자체를 분리해 독립 운영(`integration`, `backend`, `frontend`, `frontend-passport`).
+   - worktree를 쓰더라도 같은 브랜치를 여러 worktree에서 공유하지 않습니다.
 
 3. 작업 시작 전 오너십(파일 범위) 고정
-   - `docs/AGENT_WATCH_LOG.md` 시작 기록에 담당 파일/디렉터리를 명시합니다.
+   - development log 시작 기록에 담당 파일/디렉터리를 명시합니다.
    - 대형 파일(예: `src/components/arena/ChartPanel.svelte`)은 한 시점에 한 에이전트만 수정합니다.
    - 공통 타입/계약 변경이 필요하면 해당 변경을 먼저 작은 커밋으로 분리합니다.
 
@@ -152,6 +155,7 @@ npm run preview
    npm run safe:sync
    # code changes
    npm run gate
+   npm run safe:cleanup
    git push -u origin codex/<task-name>
    ```
    - push 직전 `safe:sync`로 `origin/main` 기준 rebase 상태를 맞춥니다.
@@ -190,28 +194,32 @@ npm run gate
 git push -u origin codex/<task-name>
 ```
 
-`main` 반영(Integrator만):
+`main` 반영(Integrator만, PR 기반):
 
 ```bash
-git switch main
-git pull --ff-only
-git merge --no-ff origin/codex/<task-name>
+git switch codex/<task-name>
+git fetch origin --prune
+git rebase origin/main
 npm run gate
-git push origin main
+git push --force-with-lease origin codex/<task-name>
+# GitHub PR 생성 -> checks/approve -> squash 또는 rebase merge
+
+git switch main
+git pull --ff-only origin main
+npm run gate
 ```
 
 5. 통합은 Integrator 1인만 수행
    ```bash
+   # task-1 PR 머지 후
    git switch main
-   git pull --ff-only
-   git merge --no-ff origin/codex/<task-1>
+   git pull --ff-only origin main
    npm run gate
-   git merge --no-ff origin/codex/<task-2>
-   npm run gate
-   git push origin main
+
+   # task-2 PR 진행 시 동일 반복
    ```
-   - 머지는 한 번에 하나씩 순차 진행합니다.
-   - 각 merge 직후 `gate`를 실행해 문제를 조기 차단합니다.
+   - PR은 한 번에 하나씩 순차 머지합니다.
+   - 각 PR 머지 후 `gate`를 실행해 문제를 조기 차단합니다.
 
 6. 충돌 발생 시 기준
    - 먼저 `git status --short --branch`와 충돌 파일 목록을 로그에 남깁니다.
