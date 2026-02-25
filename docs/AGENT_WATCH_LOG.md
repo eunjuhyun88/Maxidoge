@@ -1609,3 +1609,26 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)
 - Final working tree status: clean after push
 - Status: DONE
+
+### W-20260226-0340-backend-codex (finish)
+
+- End (KST): 2026-02-26 03:45:55 +0900
+- Agent: Codex (GPT-5)
+- Branch: codex/intel-policy-v3-runtime-clean-20260225
+- What changed:
+  - Added ORPO v1 server modules:
+    - src/lib/server/orpo/contextContract.ts
+    - src/lib/server/orpo/utilityScore.ts
+    - src/lib/server/orpo/pairBuilder.ts
+    - src/lib/server/orpo/exportJsonl.ts
+  - Added dataset builder API endpoint:
+    - src/routes/api/profile/passport/learning/datasets/build/+server.ts
+  - Implemented dry-run and persisted ORPO dataset build flow (ml_dataset_versions + ml_preference_pairs).
+- Validation results:
+  - npm run check: PASS
+  - npm run build: PASS
+  - POST /api/profile/passport/learning/datasets/build (without auth): 401 Authentication required
+- Commit hash: pending
+- Push status: pending
+- Final working tree status: pending
+- Status: DONE
