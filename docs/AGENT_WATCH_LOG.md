@@ -1550,7 +1550,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - runtime smoke:
     - 시장 질문(`BTC 지금 롱이야 숏이야?`) -> 형식화된 BIAS/CONFIDENCE 응답 확인
     - 일반 질문(`너 누구야?`) -> 대화형 소개 응답 확인
-- Commit hash: `TBD`
-- Push status: `TBD`
-- Final working tree status: `TBD`
+- Commit hash: `c804bd0`
+- Push status: `SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)`
+- Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225`
 - Status: DONE
