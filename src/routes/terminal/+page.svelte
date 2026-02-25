@@ -2134,7 +2134,7 @@
     background:
       linear-gradient(135deg, rgba(232, 150, 125, 0.14), rgba(232, 150, 125, 0.04)),
       linear-gradient(180deg, rgba(14, 36, 23, 0.92), rgba(10, 27, 17, 0.94));
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(5px);
   }
   .mob-topline {
     display: flex;
@@ -2327,7 +2327,7 @@
     max-height: calc(76px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--term-border);
     background: rgba(10, 26, 16, 0.92);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(5px);
     margin-top: 0;
     position: absolute;
     left: 0;

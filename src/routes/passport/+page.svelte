@@ -1761,7 +1761,7 @@
     top: 0;
     z-index: 9;
     background: rgba(0, 0, 0, 0.26);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(5px);
     border-top: 1px solid var(--sp-line);
     border-bottom: 1px solid var(--sp-line);
   }
@@ -1830,7 +1830,7 @@
     padding: var(--sp-space-2) var(--sp-space-3);
     border-bottom: 1px solid var(--sp-soft);
     background: rgba(0, 0, 0, 0.22);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(5px);
   }
 
   .quick-actions {

@@ -253,7 +253,7 @@
   .nav-tab.active {
     color: #E8967D;
     background: rgba(232,150,125,0.08);
-    text-shadow: 0 0 8px rgba(232,150,125,0.4);
+    text-shadow: 0 0 5px rgba(232,150,125,0.26);
   }
   .nav-tab.active::after {
     content: '';
@@ -261,7 +261,7 @@
     bottom: 0; left: 0; right: 0;
     height: 2px;
     background: #E8967D;
-    box-shadow: 0 0 8px rgba(232,150,125,0.5);
+    box-shadow: 0 0 4px rgba(232,150,125,0.28);
   }
 
   .nav-tab.arena-accent { letter-spacing: 1.5px; }
@@ -309,13 +309,13 @@
     cursor: pointer;
     letter-spacing: 1px;
     transition: all .15s;
-    box-shadow: 0 0 10px rgba(232,150,125,0.2);
+    box-shadow: 0 0 6px rgba(232,150,125,0.14);
     display: flex;
     align-items: center;
     gap: 4px;
   }
   .wallet-btn:hover {
-    box-shadow: 0 0 16px rgba(232,150,125,0.4);
+    box-shadow: 0 0 10px rgba(232,150,125,0.24);
     transform: translateY(-1px);
   }
   .wallet-btn.connected {
@@ -329,7 +329,7 @@
     width: 5px; height: 5px;
     border-radius: 50%;
     background: #00cc66;
-    box-shadow: 0 0 6px #00cc66;
+    box-shadow: 0 0 4px #00cc66;
   }
 
   .settings-btn {
