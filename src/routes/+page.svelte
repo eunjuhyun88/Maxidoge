@@ -589,7 +589,7 @@
   <!-- ═══ FOOTER ═══ -->
   <footer class="foot">
     <div class="foot-top">
-      <div class="foot-logo" data-px="-0.04">MAXI<span class="foot-bolt">⚡</span>DOGE</div>
+      <div class="foot-logo" data-px="-0.04">STOCKCLAW</div>
       <div class="foot-nav">
         <button on:click={() => goto('/terminal')}>TERMINAL</button>
         <button on:click={() => goto('/arena')}>ARENA</button>
@@ -1763,7 +1763,6 @@
   }
   .foot-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
   .foot-logo { font-family: var(--fp); font-size: 12px; color: var(--sp-w); letter-spacing: 2px; }
-  .foot-bolt { color: var(--sp-pk); text-shadow: 0 0 10px var(--sp-glow); }
   .foot-nav { display: flex; gap: 6px; flex-wrap: wrap; }
   .foot-nav button {
     font-family: var(--fp); font-size: 6px;

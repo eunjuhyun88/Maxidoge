@@ -1406,3 +1406,23 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `N/A` (머지 차단)
 - Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
 - Status: BLOCKED
+
+### W-20260225-2200-backend-codex (finish)
+
+- End (KST): 2026-02-25 22:10:49 +0900
+- Agent: Codex (GPT-5)
+- Branch: `codex/intel-policy-v3-runtime-clean-20260225`
+- What changed:
+  - `src/routes/+page.svelte`: footer branding `STOCKCLAW` 통일 + 미사용 `.foot-bolt` CSS 제거
+  - `src/lib/server/intelPolicyRuntime.ts`: Intel 카드 스코어 휴리스틱 정밀 튜닝
+    - 신호강도/신선도/출처신뢰도 기반 confidence 재계산
+    - 패널별(Headlines/Events/Flow/Trending/Picks) helpfulness 파라미터 재조정
+    - 위험 경고(alert/pump) 기반 manipulation 리스크 페널티 반영
+    - evidence confidence 가중 합산 로직 정교화
+- Validation results:
+  - `npm run check`: PASS (0 errors, 0 warnings)
+  - `npm run build`: PASS
+- Commit hash: `N/A` (not committed)
+- Push status: `N/A`
+- Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225` + 2 modified files
+- Status: DONE
