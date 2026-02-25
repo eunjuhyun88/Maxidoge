@@ -1531,3 +1531,26 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `N/A`
 - Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225`
 - Status: DONE
+
+### W-20260226-0307-backend-codex (finish)
+
+- End (KST): 2026-02-26 03:09:04 +0900
+- Agent: Codex (GPT-5)
+- Branch: `codex/intel-policy-v3-runtime-clean-20260225`
+- What changed:
+  - `src/routes/api/chat/messages/+server.ts` 응답 품질 가드 강화
+    - 시장 질문 감지(`isMarketQuestion`) 추가
+    - 시장 질문 시 출력 계약(편향/신뢰도/행동/리스크) 강제 프롬프트 적용
+    - 시장 질문은 temperature 0.25로 하향, 비시장 질문은 0.55
+    - LLM 응답 후 bias/confidence 토큰 검증, 미충족 시 안전 fallback
+    - whitespace/line 정규화 후 과도한 장문 억제
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - runtime smoke:
+    - 시장 질문(`BTC 지금 롱이야 숏이야?`) -> 형식화된 BIAS/CONFIDENCE 응답 확인
+    - 일반 질문(`너 누구야?`) -> 대화형 소개 응답 확인
+- Commit hash: `TBD`
+- Push status: `TBD`
+- Final working tree status: `TBD`
+- Status: DONE

@@ -89,6 +89,43 @@ type AgentReply = {
   scanId: string | null;
 };
 
+const MARKET_QUERY_RE =
+  /btc|eth|sol|xrp|doge|usdt|가격|차트|캔들|패턴|롱|숏|매수|매도|트레이드|거래|시장|분석|예측|진입|청산|손절|익절|지지|저항|추세|변동성|funding|open.?interest|oi|liquidation|support|resistance|trend|breakout|breakdown|entry|stop|take.?profit/i;
+const BIAS_TOKEN_RE = /\b(long|short|neutral|wait)\b|롱|숏|중립|관망/i;
+const CONFIDENCE_RE = /(\d{1,3})\s?%/;
+
+function hasKorean(text: string): boolean {
+  return /[가-힣]/.test(text);
+}
+
+function isMarketQuestion(text: string): boolean {
+  return MARKET_QUERY_RE.test(text);
+}
+
+function normalizeWhitespace(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function trimLines(text: string, maxLines = 6): string {
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  return lines.slice(0, maxLines).join('\n');
+}
+
+function hasBiasToken(text: string): boolean {
+  return BIAS_TOKEN_RE.test(text);
+}
+
+function hasConfidenceToken(text: string): boolean {
+  const match = text.match(CONFIDENCE_RE);
+  if (!match) return false;
+  const value = Number(match[1] ?? 0);
+  return Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
 function toNum(value: unknown, fallback = 0): number {
   const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
   return Number.isFinite(n) ? Number(n) : fallback;
@@ -368,6 +405,8 @@ async function buildAgentReply(
 
   const fallbackPair = typeof meta.pair === 'string' && meta.pair ? meta.pair : 'BTC/USDT';
   const fallbackTf = typeof meta.timeframe === 'string' && meta.timeframe ? meta.timeframe : '4h';
+  const marketQuestion = isMarketQuestion(message);
+  const preferKorean = hasKorean(message);
 
   // 실시간 가격 (meta에서 전달받음)
   const livePrices = (meta.livePrices && typeof meta.livePrices === 'object')
@@ -415,22 +454,51 @@ async function buildAgentReply(
 
   const messages: LLMMessage[] = [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: message },
+    {
+      role: 'user',
+      content: marketQuestion
+        ? [
+            message,
+            '',
+            'Output contract (must follow exactly):',
+            `- Language: ${preferKorean ? 'Korean' : 'same as user message'}`,
+            '- Line1: BIAS: LONG|SHORT|NEUTRAL | CONFIDENCE: NN%',
+            '- Line2: WHAT CHANGED: one concrete signal',
+            '- Line3: NOW WHAT: entry/invalid/stop plan',
+            '- Line4: RISK: one invalidation risk',
+            '- Keep total <= 5 lines. No markdown.',
+          ].join('\n')
+        : [
+            message,
+            '',
+            `Language: ${preferKorean ? 'Korean' : 'same as user message'}.`,
+            'Be direct and concise. No markdown.',
+          ].join('\n'),
+    },
   ];
 
   try {
     const result = await callLLM({
       messages,
       maxTokens: 300,
-      temperature: 0.7,
+      temperature: marketQuestion ? 0.25 : 0.55,
       timeoutMs: 12000,
     });
+
+    const cleaned = trimLines(normalizeWhitespace(result.text), marketQuestion ? 5 : 6);
+    if (!cleaned) {
+      return buildAgentReplyFallback(agentId, message, context, meta);
+    }
+
+    if (marketQuestion && (!hasBiasToken(cleaned) || !hasConfidenceToken(cleaned))) {
+      return buildAgentReplyFallback(agentId, message, context, meta);
+    }
 
     return {
       agentId,
       scanId: context?.scanId ?? null,
       source: context?.signals?.length ? 'scan_context' : 'fallback',
-      text: result.text,
+      text: cleaned,
     };
   } catch (err: unknown) {
     console.warn(`[chat/messages] LLM call failed for ${agentId}, using template fallback:`, getErrorMessage(err));
