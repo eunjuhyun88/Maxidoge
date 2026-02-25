@@ -189,7 +189,7 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
 
   if (typeof CoinbaseWalletSDK === 'function') {
     const sdk = new CoinbaseWalletSDK({
-      appName: 'MAXI DOGE',
+      appName: 'Stockclaw',
     });
     provider = typeof sdk?.makeWeb3Provider === 'function'
       ? sdk.makeWeb3Provider(rpcUrl, chainId)
@@ -198,7 +198,7 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
         : null;
   } else if (typeof mod?.createCoinbaseWalletSDK === 'function') {
     const sdk = mod.createCoinbaseWalletSDK({
-      appName: 'MAXI DOGE',
+      appName: 'Stockclaw',
     });
     provider = typeof sdk?.makeWeb3Provider === 'function'
       ? sdk.makeWeb3Provider(rpcUrl, chainId)

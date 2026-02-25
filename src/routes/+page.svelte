@@ -263,7 +263,7 @@
       {:else}
         <!-- Default hero content -->
         <div class="hero-stack">
-          <span class="htag ha" style="--ha-d:0s">//MAXI⚡DOGE</span>
+          <span class="htag ha" style="--ha-d:0s">//Stockclaw</span>
           <div class="ha" style="--ha-d:0.12s"><span class="hl hl-pk">ALPHA</span></div>
           <div class="hl-row ha" style="--ha-d:0.24s">
             <span class="hl hl-xl">DOGS</span>
@@ -567,7 +567,7 @@
       <span class="cta-txt cta-w sr sl" style="--d:0.1s">THE</span>
       <span class="cta-txt cta-pk sr sl" style="--d:0.2s">PACK</span>
       <div class="cta-det sr sl" style="--d:0.3s">
-        <span class="cta-brand">MAXI⚡DOGE</span>
+        <span class="cta-brand">Stockclaw</span>
         <span class="cta-loc">AI TRADING PLATFORM</span>
       </div>
     </div>
@@ -589,7 +589,7 @@
   <!-- ═══ FOOTER ═══ -->
   <footer class="foot">
     <div class="foot-top">
-      <div class="foot-logo" data-px="-0.04">MAXI<span class="foot-bolt">⚡</span>DOGE</div>
+      <div class="foot-logo" data-px="-0.04">Stockclaw</div>
       <div class="foot-nav">
         <button on:click={() => goto('/terminal')}>TERMINAL</button>
         <button on:click={() => goto('/arena')}>ARENA</button>
@@ -600,7 +600,7 @@
       </div>
     </div>
     <div class="foot-bot">
-      <span class="foot-copy">© 2025 MAXI⚡DOGE. ALL RIGHTS RESERVED.</span>
+      <span class="foot-copy">© 2025 Stockclaw. ALL RIGHTS RESERVED.</span>
       <span class="foot-tag">such AI. very trade. much profit. wow.</span>
     </div>
   </footer>
@@ -608,7 +608,7 @@
 
 <style>
   /* ═══════════════════════════════════════════════
-     MAXI⚡DOGE — LOOX LOST-IN-SPACE STYLE
+     Stockclaw — LOOX LOST-IN-SPACE STYLE
      Dark green-black + Salmon pink retro game
      ═══════════════════════════════════════════════ */
 
@@ -1763,7 +1763,6 @@
   }
   .foot-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
   .foot-logo { font-family: var(--fp); font-size: 12px; color: var(--sp-w); letter-spacing: 2px; }
-  .foot-bolt { color: var(--sp-pk); text-shadow: 0 0 10px var(--sp-glow); }
   .foot-nav { display: flex; gap: 6px; flex-wrap: wrap; }
   .foot-nav button {
     font-family: var(--fp); font-size: 6px;

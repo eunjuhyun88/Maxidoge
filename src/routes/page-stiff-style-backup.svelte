@@ -274,7 +274,7 @@
       <span class="cta-txt cta-dk sr sl" style="--d:0.1s">THE</span>
       <span class="cta-txt cta-rd sr sl" style="--d:0.2s">PACK</span>
       <div class="cta-det sr sl" style="--d:0.3s">
-        <span class="cta-brand">MAXI⚡DOGE</span>
+        <span class="cta-brand">Stockclaw</span>
         <span class="cta-loc">AI TRADING PLATFORM</span>
       </div>
     </div>
@@ -302,7 +302,7 @@
   <!-- ═══ FOOTER ═══ -->
   <footer class="foot">
     <div class="foot-top">
-      <div class="foot-logo" data-px="-0.04">MAXI<span class="foot-bolt">⚡</span>DOGE</div>
+      <div class="foot-logo" data-px="-0.04">Stockclaw</div>
       <div class="foot-nav">
         <button on:click={() => goto('/terminal')}>TERMINAL</button>
         <button on:click={() => goto('/arena')}>ARENA</button>
@@ -313,7 +313,7 @@
       </div>
     </div>
     <div class="foot-bot">
-      <span class="foot-copy">© 2025 MAXI⚡DOGE. ALL RIGHTS RESERVED.</span>
+      <span class="foot-copy">© 2025 Stockclaw. ALL RIGHTS RESERVED.</span>
       <span class="foot-tag">such AI. very trade. much profit. wow.</span>
     </div>
   </footer>
@@ -321,7 +321,7 @@
 
 <style>
   /* ═══════════════════════════════════════════════
-     MAXI⚡DOGE — STIFF-STYLE RETRO PREMIUM
+     Stockclaw — STIFF-STYLE RETRO PREMIUM
      Complete animation system + platform flow
      ═══════════════════════════════════════════════ */
 
@@ -759,7 +759,6 @@
   }
   .foot-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
   .foot-logo { font-family: var(--fd), sans-serif; font-size: 20px; font-weight: 900; letter-spacing: 3px; color: #F0ECD9; }
-  .foot-bolt { color: #D93535; }
   .foot-nav { display: flex; gap: 6px; flex-wrap: wrap; }
   .foot-nav button {
     font-family: var(--fm), sans-serif; font-size: 9px; font-weight: 700;

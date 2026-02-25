@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Polymarket Orderbook Proxy
+// Stockclaw — Polymarket Orderbook Proxy
 // Proxies to clob.polymarket.com for orderbook data
 // GET /api/polymarket/orderbook?token_id=xxx
 // ═══════════════════════════════════════════════════════════════
@@ -20,7 +20,7 @@ export const GET: RequestHandler = async ({ url }) => {
     const res = await fetch(`${CLOB_API}/book?token_id=${tokenId}`, {
       headers: {
         'Accept': 'application/json',
-        'User-Agent': 'MAXI-DOGE/1.0'
+        'User-Agent': 'Stockclaw/1.0'
       }
     });
 
