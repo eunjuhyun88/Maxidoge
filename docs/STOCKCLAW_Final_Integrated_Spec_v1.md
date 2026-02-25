@@ -1,4 +1,4 @@
-# MAXI⚡DOGE — Final Integrated System Spec v1.0
+# STOCKCLAW — Final Integrated System Spec v1.0
 
 > **Crypto Intelligence OS × Arena Battle × Passport Progression**
 > 2026-02-22 · 모든 Stockclaw 문서 + StockHoo 비전 + Agent Engine v3 통합

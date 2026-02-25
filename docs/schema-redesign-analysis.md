@@ -1,4 +1,4 @@
-# MAXI-DOGE Schema Redesign Analysis (Page/Reaction Based)
+# STOCKCLAW Schema Redesign Analysis (Page/Reaction Based)
 
 ## 1) Scope
 

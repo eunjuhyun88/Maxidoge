@@ -4,7 +4,7 @@
 
 ## 1) 목적
 
-이 문서는 MAXI⚡DOGE 기준으로 `Terminal -> 저장 -> 집계/분석 -> Passport 표시 -> AI 학습 확장`을 하나의 백엔드 흐름으로 고정하기 위한 설계안이다.
+이 문서는 STOCKCLAW 기준으로 `Terminal -> 저장 -> 집계/분석 -> Passport 표시 -> AI 학습 확장`을 하나의 백엔드 흐름으로 고정하기 위한 설계안이다.
 
 핵심 목표:
 
@@ -15,7 +15,7 @@
 
 ## 2) 설계 기준 (근거 문서)
 
-- `/Users/ej/Downloads/maxi-doge-unified.backup-20260224-055018/docs/MAXIDOGE_FlowSpec_v2_0.md`
+- `/Users/ej/Downloads/stockclaw-unified.backup-20260224-055018/docs/STOCKCLAW_FlowSpec_v2_0.md`
   - F-TERM-002/003/004/005: Track/Quick Trade/Copy Trade/Convert 저장 플로우
   - F-PASS-002/007: Passport 메트릭 계산식 + 트리거 시점
 - `/Users/ej/Desktop/항목을 포함하는 새로운 폴더/젠베리파이/Stockclaw/STOCKCLAW_PassportUX_v1_20260220 (1).html`
