@@ -1628,7 +1628,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - npm run check: PASS
   - npm run build: PASS
   - POST /api/profile/passport/learning/datasets/build (without auth): 401 Authentication required
-- Commit hash: pending
-- Push status: pending
-- Final working tree status: pending
+- Commit hash: 9089860 (code+local log)
+- Push status: SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)
+- Final working tree status: clean after push
 - Status: DONE
