@@ -1436,3 +1436,25 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `npm run check`: PASS
   - `npm run build`: PASS
 - Summary: home footer branding cleanup + Intel 카드 휴리스틱 정밀 튜닝 반영 완료
+
+### W-20260225-2249-backend-codex (finish)
+
+- End (KST): 2026-02-26 01:29:20 +0900
+- Agent: Codex (GPT-5)
+- Branch: `codex/intel-policy-v3-runtime-clean-20260225`
+- What changed:
+  - `src/lib/server/intelShadowAgent.ts` 신규 추가
+    - Intel policy 입력 기반 Shadow 제안/가드 산출
+    - LLM 응답(JSON) 파싱 + fallback 경로
+    - 블로커/충돌/신뢰도 규칙으로 enforced 결과 계산
+  - `src/routes/api/terminal/intel-agent-shadow/+server.ts` 신규 추가
+    - 정책 API 연계 + shadow 응답 엔드포인트 제공
+    - 20초 캐시 및 in-flight 요청 병합
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `curl /api/terminal/intel-agent-shadow?pair=BTC/USDT&timeframe=1h`: 200
+- Commit hash: `1941ae1`
+- Push status: `SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)`
+- Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225`
+- Status: DONE
