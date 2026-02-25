@@ -1554,3 +1554,25 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)`
 - Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225`
 - Status: DONE
+
+### W-20260226-0317-backend-codex (finish)
+
+- End (KST): 2026-02-26 03:25:32 +0900
+- Agent: Codex (GPT-5)
+- Branch: codex/intel-policy-v3-runtime-clean-20260225
+- What changed:
+  - Added server-side multi-timeframe indicator context module for LLM input.
+    - Timeframes: 1H / 4H / 1D / 1W / 1M
+    - Indicators per TF: EMA20/60, RSI14, MACD histogram, ATR%, volume ratio(20), directional score/bias/confidence
+    - Added short cache for context reuse.
+  - Enabled monthly (1M) Binance interval in server Binance client.
+  - Injected MTF context into both agent/orchestrator system prompts.
+  - Updated chat API to load MTF context for market questions with timeout guard (2.2s) to avoid response blocking.
+- Validation results:
+  - npm run check: PASS
+  - npm run build: PASS
+  - runtime smoke (guest terminal chat API): PASS on local dev server
+- Commit hash: d23b75e
+- Push status: SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)
+- Final working tree status: clean (after code push)
+- Status: DONE
