@@ -1426,3 +1426,13 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `N/A`
 - Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225` + 2 modified files
 - Status: DONE
+
+### W-20260225-2200-backend-codex (finish addendum)
+
+- End (KST): 2026-02-25 22:30:33 +0900
+- Commit hash (code): `0c08f0e`
+- Push status: `SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)`
+- Validation recap:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Summary: home footer branding cleanup + Intel 카드 휴리스틱 정밀 튜닝 반영 완료
