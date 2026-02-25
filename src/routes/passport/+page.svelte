@@ -854,179 +854,6 @@
             </section>
 
             <section class="content-panel">
-              <div class="section-header">AI LEARNING PIPELINE</div>
-
-              <div class="ml-action-row">
-                <button class="qa-btn qa-sync" on:click={hydrateLearningPanel} disabled={learningRefreshing}>
-                  {learningRefreshing ? 'REFRESHING...' : 'REFRESH'}
-                </button>
-                <button class="qa-btn qa-terminal" on:click={runLearningWorkerNow} disabled={learningActionRunning}>
-                  RUN WORKER
-                </button>
-                <button class="qa-btn qa-arena" on:click={queueLearningRetrainNow} disabled={learningActionRunning}>
-                  QUEUE RETRAIN
-                </button>
-                <button class="qa-btn qa-wallet" on:click={generateLearningReportNow} disabled={learningActionRunning}>
-                  GENERATE REPORT
-                </button>
-              </div>
-
-              {#if learningActionMessage}
-                <div class="ml-info-line">{learningActionMessage}</div>
-              {/if}
-
-              {#if learningErrorMessage}
-                <div class="ml-error-line">{learningErrorMessage}</div>
-              {/if}
-
-              <div class="metrics-grid metrics-detail">
-                <div class="metric-card">
-                  <div class="mc-icon">📦</div>
-                  <div class="mc-value" style="color:{statusColor(learningPipelineState)}">{learningPipelineState}</div>
-                  <div class="mc-label">PIPELINE</div>
-                </div>
-                <div class="metric-card">
-                  <div class="mc-icon">⏳</div>
-                  <div class="mc-value">{learningStatusRemote?.outbox.pending ?? 0}</div>
-                  <div class="mc-label">OUTBOX PENDING</div>
-                </div>
-                <div class="metric-card">
-                  <div class="mc-icon">🛠️</div>
-                  <div class="mc-value">{learningStatusRemote?.trainJobs.running ?? 0}</div>
-                  <div class="mc-label">TRAIN RUNNING</div>
-                </div>
-                <div class="metric-card">
-                  <div class="mc-icon">🧾</div>
-                  <div class="mc-value">{learningReportsRemote.length}</div>
-                  <div class="mc-label">REPORTS</div>
-                </div>
-              </div>
-
-              <div class="summary-line">{latestLearningStatusLine}</div>
-
-              <details class="detail-block">
-                <summary>LEARNING REPORTS ({learningReportsRemote.length})</summary>
-                {#if learningReportsRemote.length === 0}
-                  <div class="ml-empty-row">
-                    {learningHydrated
-                      ? 'No report snapshot yet. Use GENERATE REPORT to create the first analysis.'
-                      : 'Loading reports...'}
-                  </div>
-                {:else}
-                  {#each learningReportsRemote as report (report.reportId)}
-                    <div class="pos-row">
-                      <div class="pr-left">
-                        <span class="pr-pair">{report.reportType.toUpperCase()}</span>
-                        <span class="pr-src">{report.modelName}:{report.modelVersion}</span>
-                      </div>
-                      <div class="pr-right">
-                        <span class="pr-pnl" style="color:{statusColor(report.status)}">{report.status.toUpperCase()}</span>
-                        <span class="pr-time">{formatDateTime(report.createdAt)}</span>
-                      </div>
-                    </div>
-                    <div class="ml-summary-preview">{compactSummary(report.summary)}</div>
-                  {/each}
-                {/if}
-              </details>
-
-              <details class="detail-block">
-                <summary>DATASETS ({learningDatasetsRemote.length})</summary>
-                {#if learningDatasetsRemote.length === 0}
-                  <div class="ml-empty-row">No dataset versions found yet.</div>
-                {:else}
-                  {#each learningDatasetsRemote as dataset (dataset.datasetVersionId)}
-                    <div class="pos-row">
-                      <div class="pr-left">
-                        <span class="pr-pair">{dataset.versionLabel}</span>
-                        <span class="pr-src">{dataset.datasetType.toUpperCase()} · {dataset.sampleCount} samples</span>
-                      </div>
-                      <div class="pr-right">
-                        <span class="pr-pnl" style="color:{statusColor(dataset.status)}">{dataset.status.toUpperCase()}</span>
-                        <span class="pr-time">{formatAgo(dataset.createdAt)}</span>
-                      </div>
-                    </div>
-                  {/each}
-                {/if}
-              </details>
-
-              <details class="detail-block">
-                <summary>TRAIN JOBS ({learningTrainJobsRemote.length})</summary>
-                {#if learningTrainJobsRemote.length === 0}
-                  <div class="ml-empty-row">No train jobs yet.</div>
-                {:else}
-                  {#each learningTrainJobsRemote as job (job.trainJobId)}
-                    <div class="pos-row">
-                      <div class="pr-left">
-                        <span class="pr-pair">{job.trainType.toUpperCase()} · {job.modelRole.toUpperCase()}</span>
-                        <span class="pr-src">{job.targetModelVersion}</span>
-                      </div>
-                      <div class="pr-right">
-                        <span class="pr-pnl" style="color:{statusColor(job.status)}">{job.status.toUpperCase()}</span>
-                        <span class="pr-time">{formatAgo(job.createdAt)}</span>
-                      </div>
-                    </div>
-                  {/each}
-                {/if}
-              </details>
-
-              <details class="detail-block">
-                <summary>EVAL REPORTS ({learningEvalsRemote.length})</summary>
-                {#if learningEvalsRemote.length === 0}
-                  <div class="ml-empty-row">No evaluation reports yet.</div>
-                {:else}
-                  {#each learningEvalsRemote as evalReport (evalReport.evalId)}
-                    <div class="pos-row">
-                      <div class="pr-left">
-                        <span class="pr-pair">{evalReport.evalScope.toUpperCase()}</span>
-                        <span class="pr-src">{evalReport.modelVersion}</span>
-                      </div>
-                      <div class="pr-right">
-                        <span class="pr-pnl" style="color:{statusColor(evalReport.gateResult)}">{evalReport.gateResult.toUpperCase()}</span>
-                        <span class="pr-time">{formatAgo(evalReport.createdAt)}</span>
-                      </div>
-                    </div>
-                    <div class="ml-metric-preview">{evalMetricsPreview(evalReport.metrics)}</div>
-                  {/each}
-                {/if}
-              </details>
-
-              {#if !learningOpsConnected && learningHydrated}
-                <div class="ml-empty-row">
-                  Learning pipeline rows are empty. This is expected before outbox worker and first train/report cycle.
-                </div>
-              {/if}
-            </section>
-
-            <section class="content-panel">
-              <details class="detail-block">
-                <summary>AGENT SQUAD ({AGDEFS.length})</summary>
-                <div class="agent-perf-grid">
-                  {#each AGDEFS as ag}
-                    {@const ags = agStats[ag.id]}
-                    <div class="agent-perf-card" style="border-left-color:{ag.color}">
-                      <div class="apc-head">
-                        {#if ag.img?.def}
-                          <img src={ag.img.def} alt={ag.name} class="apc-img" />
-                        {:else}
-                          <span class="apc-icon">{ag.icon}</span>
-                        {/if}
-                        <div>
-                          <div class="apc-name" style="color:{ag.color}">{ag.name}</div>
-                          <div class="apc-role">{ag.role}</div>
-                        </div>
-                        <div class="apc-level">Lv.{ags?.level || 1}</div>
-                      </div>
-                      <div class="apc-bar-wrap">
-                        <div class="apc-bar" style="width:{Math.min((ags?.xp || 0) / (((ags?.level || 1) + 1) * 100) * 100, 100)}%;background:{ag.color}"></div>
-                      </div>
-                      <div class="apc-xp">XP: {ags?.xp || 0} / {((ags?.level || 1) + 1) * 100}</div>
-                    </div>
-                  {/each}
-                </div>
-              </details>
-            </section>
-
-            <section class="content-panel">
               <details class="detail-block">
                 <summary>BADGES ({earned.length}/{earned.length + locked.length})</summary>
                 <div class="badges-grid">
@@ -1250,6 +1077,179 @@
                 <div class="as-item"><div class="asi-val" style="color:#ff8c3b">🔥 {bStreak}</div><div class="asi-label">BEST STREAK</div></div>
                 <div class="as-item"><div class="asi-val" style="color:#ffd060">{gState.lp.toLocaleString()}</div><div class="asi-label">LP EARNED</div></div>
               </div>
+            </section>
+
+            <section class="content-panel">
+              <div class="section-header">AI LEARNING PIPELINE</div>
+
+              <div class="ml-action-row">
+                <button class="qa-btn qa-sync" on:click={hydrateLearningPanel} disabled={learningRefreshing}>
+                  {learningRefreshing ? 'REFRESHING...' : 'REFRESH'}
+                </button>
+                <button class="qa-btn qa-terminal" on:click={runLearningWorkerNow} disabled={learningActionRunning}>
+                  RUN WORKER
+                </button>
+                <button class="qa-btn qa-arena" on:click={queueLearningRetrainNow} disabled={learningActionRunning}>
+                  QUEUE RETRAIN
+                </button>
+                <button class="qa-btn qa-wallet" on:click={generateLearningReportNow} disabled={learningActionRunning}>
+                  GENERATE REPORT
+                </button>
+              </div>
+
+              {#if learningActionMessage}
+                <div class="ml-info-line">{learningActionMessage}</div>
+              {/if}
+
+              {#if learningErrorMessage}
+                <div class="ml-error-line">{learningErrorMessage}</div>
+              {/if}
+
+              <div class="metrics-grid metrics-detail">
+                <div class="metric-card">
+                  <div class="mc-icon">📦</div>
+                  <div class="mc-value" style="color:{statusColor(learningPipelineState)}">{learningPipelineState}</div>
+                  <div class="mc-label">PIPELINE</div>
+                </div>
+                <div class="metric-card">
+                  <div class="mc-icon">⏳</div>
+                  <div class="mc-value">{learningStatusRemote?.outbox.pending ?? 0}</div>
+                  <div class="mc-label">OUTBOX PENDING</div>
+                </div>
+                <div class="metric-card">
+                  <div class="mc-icon">🛠️</div>
+                  <div class="mc-value">{learningStatusRemote?.trainJobs.running ?? 0}</div>
+                  <div class="mc-label">TRAIN RUNNING</div>
+                </div>
+                <div class="metric-card">
+                  <div class="mc-icon">🧾</div>
+                  <div class="mc-value">{learningReportsRemote.length}</div>
+                  <div class="mc-label">REPORTS</div>
+                </div>
+              </div>
+
+              <div class="summary-line">{latestLearningStatusLine}</div>
+
+              <details class="detail-block">
+                <summary>LEARNING REPORTS ({learningReportsRemote.length})</summary>
+                {#if learningReportsRemote.length === 0}
+                  <div class="ml-empty-row">
+                    {learningHydrated
+                      ? 'No report snapshot yet. Use GENERATE REPORT to create the first analysis.'
+                      : 'Loading reports...'}
+                  </div>
+                {:else}
+                  {#each learningReportsRemote as report (report.reportId)}
+                    <div class="pos-row">
+                      <div class="pr-left">
+                        <span class="pr-pair">{report.reportType.toUpperCase()}</span>
+                        <span class="pr-src">{report.modelName}:{report.modelVersion}</span>
+                      </div>
+                      <div class="pr-right">
+                        <span class="pr-pnl" style="color:{statusColor(report.status)}">{report.status.toUpperCase()}</span>
+                        <span class="pr-time">{formatDateTime(report.createdAt)}</span>
+                      </div>
+                    </div>
+                    <div class="ml-summary-preview">{compactSummary(report.summary)}</div>
+                  {/each}
+                {/if}
+              </details>
+
+              <details class="detail-block">
+                <summary>DATASETS ({learningDatasetsRemote.length})</summary>
+                {#if learningDatasetsRemote.length === 0}
+                  <div class="ml-empty-row">No dataset versions found yet.</div>
+                {:else}
+                  {#each learningDatasetsRemote as dataset (dataset.datasetVersionId)}
+                    <div class="pos-row">
+                      <div class="pr-left">
+                        <span class="pr-pair">{dataset.versionLabel}</span>
+                        <span class="pr-src">{dataset.datasetType.toUpperCase()} · {dataset.sampleCount} samples</span>
+                      </div>
+                      <div class="pr-right">
+                        <span class="pr-pnl" style="color:{statusColor(dataset.status)}">{dataset.status.toUpperCase()}</span>
+                        <span class="pr-time">{formatAgo(dataset.createdAt)}</span>
+                      </div>
+                    </div>
+                  {/each}
+                {/if}
+              </details>
+
+              <details class="detail-block">
+                <summary>TRAIN JOBS ({learningTrainJobsRemote.length})</summary>
+                {#if learningTrainJobsRemote.length === 0}
+                  <div class="ml-empty-row">No train jobs yet.</div>
+                {:else}
+                  {#each learningTrainJobsRemote as job (job.trainJobId)}
+                    <div class="pos-row">
+                      <div class="pr-left">
+                        <span class="pr-pair">{job.trainType.toUpperCase()} · {job.modelRole.toUpperCase()}</span>
+                        <span class="pr-src">{job.targetModelVersion}</span>
+                      </div>
+                      <div class="pr-right">
+                        <span class="pr-pnl" style="color:{statusColor(job.status)}">{job.status.toUpperCase()}</span>
+                        <span class="pr-time">{formatAgo(job.createdAt)}</span>
+                      </div>
+                    </div>
+                  {/each}
+                {/if}
+              </details>
+
+              <details class="detail-block">
+                <summary>EVAL REPORTS ({learningEvalsRemote.length})</summary>
+                {#if learningEvalsRemote.length === 0}
+                  <div class="ml-empty-row">No evaluation reports yet.</div>
+                {:else}
+                  {#each learningEvalsRemote as evalReport (evalReport.evalId)}
+                    <div class="pos-row">
+                      <div class="pr-left">
+                        <span class="pr-pair">{evalReport.evalScope.toUpperCase()}</span>
+                        <span class="pr-src">{evalReport.modelVersion}</span>
+                      </div>
+                      <div class="pr-right">
+                        <span class="pr-pnl" style="color:{statusColor(evalReport.gateResult)}">{evalReport.gateResult.toUpperCase()}</span>
+                        <span class="pr-time">{formatAgo(evalReport.createdAt)}</span>
+                      </div>
+                    </div>
+                    <div class="ml-metric-preview">{evalMetricsPreview(evalReport.metrics)}</div>
+                  {/each}
+                {/if}
+              </details>
+
+              {#if !learningOpsConnected && learningHydrated}
+                <div class="ml-empty-row">
+                  Learning pipeline rows are empty. This is expected before outbox worker and first train/report cycle.
+                </div>
+              {/if}
+            </section>
+
+            <section class="content-panel">
+              <details class="detail-block">
+                <summary>AGENT SQUAD ({AGDEFS.length})</summary>
+                <div class="agent-perf-grid">
+                  {#each AGDEFS as ag}
+                    {@const ags = agStats[ag.id]}
+                    <div class="agent-perf-card" style="border-left-color:{ag.color}">
+                      <div class="apc-head">
+                        {#if ag.img?.def}
+                          <img src={ag.img.def} alt={ag.name} class="apc-img" />
+                        {:else}
+                          <span class="apc-icon">{ag.icon}</span>
+                        {/if}
+                        <div>
+                          <div class="apc-name" style="color:{ag.color}">{ag.name}</div>
+                          <div class="apc-role">{ag.role}</div>
+                        </div>
+                        <div class="apc-level">Lv.{ags?.level || 1}</div>
+                      </div>
+                      <div class="apc-bar-wrap">
+                        <div class="apc-bar" style="width:{Math.min((ags?.xp || 0) / (((ags?.level || 1) + 1) * 100) * 100, 100)}%;background:{ag.color}"></div>
+                      </div>
+                      <div class="apc-xp">XP: {ags?.xp || 0} / {((ags?.level || 1) + 1) * 100}</div>
+                    </div>
+                  {/each}
+                </div>
+              </details>
             </section>
 
             <section class="content-panel list-panel">
