@@ -626,6 +626,14 @@
 
   /* ── BASE ── */
   .home {
+    --fx-orb-blur: 62px;
+    --fx-floor-glow: 0 0 10px var(--sp-pk), 0 0 24px var(--sp-glow), 0 0 44px rgba(232,150,125,0.16);
+    --fx-card-hover-glow: inset 0 0 14px rgba(232,150,125,0.05), 0 0 10px rgba(232,150,125,0.06);
+    --fx-btn-glow: 0 0 10px var(--sp-glow);
+    --fx-btn-glow-hover: 0 0 16px var(--sp-pk);
+    --fx-cta-glow: 0 0 14px var(--sp-glow), 0 4px 12px rgba(0,0,0,0.26);
+    --fx-cta-glow-hover: 0 0 20px var(--sp-pk), 0 6px 14px rgba(0,0,0,0.32);
+    --fx-live-dot-glow: 0 0 5px #00cc66;
     width: 100%; height: 100%;
     overflow-y: auto; overflow-x: hidden;
     background: var(--sp-bg);
@@ -791,7 +799,7 @@
   .orb {
     position: absolute;
     border-radius: 50%;
-    filter: blur(62px);
+    filter: blur(var(--fx-orb-blur));
     opacity: 0.12;
     will-change: transform;
   }
@@ -890,7 +898,7 @@
     content: '';
     position: absolute; top: 0; left: 0; right: 0; height: 3px;
     background: var(--sp-pk);
-    box-shadow: 0 0 10px var(--sp-pk), 0 0 24px var(--sp-glow), 0 0 44px rgba(232,150,125,0.16);
+    box-shadow: var(--fx-floor-glow);
   }
 
   /* ════════════════════════════════════════════
@@ -1069,9 +1077,9 @@
   }
   .hero-btn-primary {
     color: var(--sp-bg); background: var(--sp-pk);
-    box-shadow: 0 0 10px var(--sp-glow);
+    box-shadow: var(--fx-btn-glow);
   }
-  .hero-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 16px var(--sp-pk); }
+  .hero-btn-primary:hover { transform: translateY(-2px); box-shadow: var(--fx-btn-glow-hover); }
   .hero-btn-secondary {
     color: var(--sp-pk); background: transparent;
     border: 1px solid rgba(232,150,125,0.3);
@@ -1140,7 +1148,7 @@
   }
   .fc:hover {
     background: rgba(232,150,125,0.06);
-    box-shadow: inset 0 0 14px rgba(232,150,125,0.05), 0 0 10px rgba(232,150,125,0.06);
+    box-shadow: var(--fx-card-hover-glow);
     border-bottom-color: rgba(232,150,125,0.25);
   }
   .fc-img {
@@ -1239,9 +1247,9 @@
     border: none; border-radius: 6px;
     padding: 12px 24px; cursor: pointer; margin-top: 8px;
     transition: all .2s;
-    box-shadow: 0 0 10px var(--sp-glow);
+    box-shadow: var(--fx-btn-glow);
   }
-  .feat-detail-cta:hover { transform: translateY(-2px); box-shadow: 0 0 16px var(--sp-pk); }
+  .feat-detail-cta:hover { transform: translateY(-2px); box-shadow: var(--fx-btn-glow-hover); }
 
   /* ═══ FLOW — MISSION STAGES ═══ */
   .flow {
@@ -1737,16 +1745,16 @@
     border: none; border-radius: 30px;
     padding: 16px 32px; cursor: pointer;
     transition: all .2s;
-    box-shadow: 0 0 14px var(--sp-glow), 0 4px 12px rgba(0,0,0,0.26);
+    box-shadow: var(--fx-cta-glow);
   }
-  .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 0 20px var(--sp-pk), 0 6px 14px rgba(0,0,0,0.32); }
+  .cta-btn:hover { transform: translateY(-2px); box-shadow: var(--fx-cta-glow-hover); }
   .cta-connected {
     display: flex; align-items: center; gap: 8px;
     font-family: var(--fp); font-size: 10px;
     color: #00cc66; background: var(--sp-bg); padding: 12px 20px;
     border: 1px solid rgba(0,204,102,0.3); border-radius: 8px;
   }
-  .wc-dot { width: 8px; height: 8px; border-radius: 50%; background: #00cc66; box-shadow: 0 0 5px #00cc66; }
+  .wc-dot { width: 8px; height: 8px; border-radius: 50%; background: #00cc66; box-shadow: var(--fx-live-dot-glow); }
   .wc-tier { font-size: 9px; background: rgba(255,200,0,.15); color: #c8a000; padding: 2px 6px; border-radius: 4px; }
 
   .grid-floor-cta {
