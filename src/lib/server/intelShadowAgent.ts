@@ -14,7 +14,7 @@ export interface ShadowAgentProposal {
 export interface ShadowAgentEnforcedDecision {
   bias: DecisionBias;
   wouldTrade: boolean;
-  shouldExecute: false;
+  shouldExecute: boolean;
   reasons: string[];
 }
 
@@ -22,6 +22,7 @@ export interface ShadowAgentDecision {
   mode: 'shadow';
   generatedAt: number;
   source: 'llm' | 'fallback';
+  fallbackReason: 'provider_unavailable' | 'llm_call_failed' | null;
   provider: string | null;
   model: string | null;
   proposal: ShadowAgentProposal;
@@ -221,10 +222,31 @@ function enforceGuards(policy: IntelPolicyOutput, proposal: ShadowAgentProposal)
   if (bias === 'wait' && reasons.length === 0) reasons.push('shadow_conservative_wait');
   if (bias !== 'wait' && reasons.length === 0) reasons.push('passes_guardrails');
 
+  const executionGateFailures: string[] = [];
+  if (bias === 'wait') executionGateFailures.push('bias_wait');
+  if (!policy.decision.shouldTrade) executionGateFailures.push('policy_should_trade_false');
+  if (policy.decision.qualityGateScore < 75) executionGateFailures.push('policy_quality_low');
+  if (policy.decision.edgePct < 12) executionGateFailures.push('policy_edge_low');
+  if (policy.decision.coveragePct < 85) executionGateFailures.push('policy_coverage_low');
+  if (policy.decision.confidence < 60) executionGateFailures.push('policy_confidence_low');
+  if (proposal.confidence < 62) executionGateFailures.push('proposal_confidence_low');
+  if (reasons.some((reason) => reason === 'hard_no_trade_blocker' || reason === 'direction_conflict_with_policy')) {
+    executionGateFailures.push('guardrail_blocked');
+  }
+
+  const shouldExecute = executionGateFailures.length === 0;
+  if (shouldExecute) {
+    reasons.push('execution_gate_passed');
+  } else {
+    for (const failure of executionGateFailures.slice(0, 4)) {
+      reasons.push(`execution_block:${failure}`);
+    }
+  }
+
   return {
     bias,
     wouldTrade: bias !== 'wait',
-    shouldExecute: false,
+    shouldExecute,
     reasons,
   };
 }
@@ -234,11 +256,17 @@ export async function buildShadowAgentDecision(policy: IntelPolicyOutput): Promi
   const llmResult = await askLLM(policy);
   const proposal = llmResult?.proposal ?? fallback;
   const enforced = enforceGuards(policy, proposal);
+  const fallbackReason: ShadowAgentDecision['fallbackReason'] = llmResult
+    ? null
+    : isLLMAvailable()
+      ? 'llm_call_failed'
+      : 'provider_unavailable';
 
   return {
     mode: 'shadow',
     generatedAt: Date.now(),
     source: llmResult ? 'llm' : 'fallback',
+    fallbackReason,
     provider: llmResult?.llm.provider ?? null,
     model: llmResult?.llm.model ?? null,
     proposal,

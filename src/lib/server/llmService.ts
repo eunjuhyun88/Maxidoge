@@ -201,6 +201,21 @@ function availableProviders(): LLMProvider[] {
   return FALLBACK_ORDER.filter(p => checks[p]);
 }
 
+export interface LLMRuntimeStatus {
+  available: boolean;
+  providers: LLMProvider[];
+  preferred: LLMProvider | null;
+}
+
+export function getLLMRuntimeStatus(): LLMRuntimeStatus {
+  const providers = availableProviders();
+  return {
+    available: providers.length > 0,
+    providers,
+    preferred: getAvailableProvider(),
+  };
+}
+
 /**
  * 통합 LLM 호출. 지정된 provider 또는 자동 선택 후, 실패 시 다음 provider로 fallback.
  */

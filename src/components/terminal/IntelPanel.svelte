@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Headline } from '$lib/data/warroom';
   import { communityPosts, hydrateCommunityPosts, likeCommunityPost } from '$lib/stores/communityStore';
-  import { openTrades, closeQuickTrade } from '$lib/stores/quickTradeStore';
+  import { openTrades, closeQuickTrade, hydrateQuickTrades } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
   import { predictMarkets, loadPolymarkets } from '$lib/stores/predictStore';
   import {
@@ -175,6 +175,39 @@
     shouldTrade: boolean;
   }
 
+  interface ShadowProposal {
+    bias: 'long' | 'short' | 'wait';
+    confidence: number;
+    horizonMin: number;
+    rationale: string[];
+    risks: string[];
+    nowWhat: string;
+  }
+
+  interface ShadowEnforcedDecision {
+    bias: 'long' | 'short' | 'wait';
+    wouldTrade: boolean;
+    shouldExecute: boolean;
+    reasons: string[];
+  }
+
+  interface ShadowDecision {
+    mode: 'shadow';
+    generatedAt: number;
+    source: 'llm' | 'fallback';
+    fallbackReason: 'provider_unavailable' | 'llm_call_failed' | null;
+    provider: string | null;
+    model: string | null;
+    proposal: ShadowProposal;
+    enforced: ShadowEnforcedDecision;
+  }
+
+  interface ShadowRuntime {
+    available: boolean;
+    providers: string[];
+    preferred: string | null;
+  }
+
   let policyDecision: PolicyDecision | null = null;
   let policyPanels: Record<PolicyPanel, PolicyCard[]> = {
     headlines: [],
@@ -188,6 +221,13 @@
   let policyUpdatedAt = 0;
   let policySummary: { pair: string; timeframe: string; domainsUsed: string[]; avgHelpfulness: number } | null = null;
   let policyCardsForTab: PolicyCard[] = [];
+  let shadowDecision: ShadowDecision | null = null;
+  let shadowRuntime: ShadowRuntime | null = null;
+  let shadowExecutionEnabled = false;
+  let shadowLoading = false;
+  let shadowExecLoading = false;
+  let shadowExecMessage = '';
+  let shadowExecError = '';
 
   // Chat input (local)
   let chatInput = '';
@@ -401,35 +441,121 @@
     }
   }
 
+  function applyPolicyPayload(raw: any) {
+    const panels = raw?.panels ?? {};
+    policyPanels = {
+      headlines: Array.isArray(panels.headlines) ? panels.headlines : [],
+      events: Array.isArray(panels.events) ? panels.events : [],
+      flow: Array.isArray(panels.flow) ? panels.flow : [],
+      trending: Array.isArray(panels.trending) ? panels.trending : [],
+      picks: Array.isArray(panels.picks) ? panels.picks : [],
+    };
+    policyDecision = raw?.decision ?? null;
+    policySummary = raw?.summary ?? null;
+    policyUpdatedAt = Number(raw?.generatedAt ?? Date.now());
+    policyLoaded = true;
+  }
+
+  function apiErrorMessage(payload: any, fallback: string): string {
+    return typeof payload?.error === 'string' && payload.error.trim().length > 0 ? payload.error.trim() : fallback;
+  }
+
   async function fetchIntelPolicy() {
     if (policyLoading) return;
     policyLoading = true;
+    shadowLoading = true;
     try {
       const pair = $gameState.pair || 'BTC/USDT';
       const timeframe = $gameState.timeframe || '4h';
-      const res = await fetch(
-        `/api/terminal/intel-policy?pair=${encodeURIComponent(pair)}&timeframe=${encodeURIComponent(timeframe)}`,
-        { signal: AbortSignal.timeout(12000) },
-      );
+      const qs = `pair=${encodeURIComponent(pair)}&timeframe=${encodeURIComponent(timeframe)}`;
+
+      const shadowRes = await fetch(`/api/terminal/intel-agent-shadow?${qs}`, {
+        signal: AbortSignal.timeout(12000),
+      });
+
+      if (shadowRes.ok) {
+        const shadowJson = await shadowRes.json();
+        if (shadowJson?.ok && shadowJson?.data?.policy) {
+          applyPolicyPayload(shadowJson.data.policy);
+          shadowDecision = shadowJson.data.shadow ?? null;
+          shadowRuntime = shadowJson.data.llm ?? null;
+          shadowExecutionEnabled = Boolean(shadowJson.data.execution?.enabled);
+          shadowLoading = false;
+          return;
+        }
+      }
+
+      const res = await fetch(`/api/terminal/intel-policy?${qs}`, {
+        signal: AbortSignal.timeout(12000),
+      });
       const json = await res.json();
       if (json?.ok && json?.data) {
-        const panels = json.data.panels ?? {};
-        policyPanels = {
-          headlines: Array.isArray(panels.headlines) ? panels.headlines : [],
-          events: Array.isArray(panels.events) ? panels.events : [],
-          flow: Array.isArray(panels.flow) ? panels.flow : [],
-          trending: Array.isArray(panels.trending) ? panels.trending : [],
-          picks: Array.isArray(panels.picks) ? panels.picks : [],
-        };
-        policyDecision = json.data.decision ?? null;
-        policySummary = json.data.summary ?? null;
-        policyUpdatedAt = Number(json.data.generatedAt ?? Date.now());
-        policyLoaded = true;
+        applyPolicyPayload(json.data);
+        shadowDecision = null;
+        shadowRuntime = null;
+        shadowExecutionEnabled = false;
       }
     } catch (error) {
       console.warn('[IntelPanel] Intel policy API unavailable');
     } finally {
       policyLoading = false;
+      shadowLoading = false;
+    }
+  }
+
+  async function executeShadowTrade() {
+    if (shadowExecLoading) return;
+    if (!shadowDecision || !shadowDecision.enforced.shouldExecute) {
+      shadowExecError = '실행 게이트를 통과한 상태가 아닙니다.';
+      shadowExecMessage = '';
+      return;
+    }
+
+    shadowExecLoading = true;
+    shadowExecError = '';
+    shadowExecMessage = '';
+
+    try {
+      const pair = $gameState.pair || 'BTC/USDT';
+      const timeframe = $gameState.timeframe || '4h';
+      const token = pair.split('/')[0] || 'BTC';
+      const prices = ($gameState.prices ?? {}) as Record<string, number>;
+      const currentPrice = Number(prices[token] ?? prices.BTC ?? 0);
+
+      if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
+        throw new Error('현재가를 확인할 수 없습니다. 차트 로딩 후 다시 시도하세요.');
+      }
+
+      const response = await fetch('/api/terminal/intel-agent-shadow/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pair,
+          timeframe,
+          currentPrice,
+          entry: currentPrice,
+          refresh: true,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.ok) {
+        throw new Error(apiErrorMessage(payload, `실행 실패 (${response.status})`));
+      }
+
+      await hydrateQuickTrades(true);
+      const dir = String(payload?.data?.dir ?? '').toUpperCase();
+      shadowExecMessage = `${dir || 'TRADE'} 실행 완료 · ${pair} @ ${currentPrice.toLocaleString()}`;
+      shadowExecError = '';
+      await fetchIntelPolicy();
+    } catch (error: any) {
+      shadowExecError = typeof error?.message === 'string' ? error.message : 'Shadow 실행 중 오류가 발생했습니다.';
+      shadowExecMessage = '';
+    } finally {
+      shadowExecLoading = false;
     }
   }
 
@@ -621,6 +747,20 @@
     return 'wait';
   }
 
+  function shadowSourceLabel(decision: ShadowDecision): string {
+    if (decision.source === 'llm') {
+      const provider = decision.provider ? decision.provider.toUpperCase() : 'LLM';
+      return decision.model ? `${provider} · ${decision.model}` : provider;
+    }
+    if (decision.fallbackReason === 'provider_unavailable') return 'FALLBACK · NO API KEY';
+    if (decision.fallbackReason === 'llm_call_failed') return 'FALLBACK · LLM ERROR';
+    return 'FALLBACK';
+  }
+
+  function shadowExecuteLabel(decision: ShadowDecision): string {
+    return decision.enforced.shouldExecute ? 'EXECUTE READY' : 'EXECUTION BLOCKED';
+  }
+
   function scoreBreakdownText(scores: PolicyScores): string {
     return `A ${Math.round(scores.actionability)} · T ${Math.round(scores.timeliness)} · R ${Math.round(scores.reliability)} · Re ${Math.round(scores.relevance)} · H ${Math.round(scores.helpfulness)}`;
   }
@@ -796,6 +936,61 @@
           </div>
         {:else if policyLoading}
           <div class="policy-loading">INTEL DECISION v3 계산 중...</div>
+        {/if}
+
+        {#if shadowDecision}
+          <div class="shadow-decision-banner">
+            <div class="shadow-decision-head">
+              <span class="shadow-decision-title">SHADOW AGENT</span>
+              <span class="policy-decision-bias {policyBiasClass(shadowDecision.enforced.bias)}">
+                {policyBiasLabel(shadowDecision.enforced.bias)}
+              </span>
+            </div>
+            <div class="shadow-decision-meta">
+              <span>{shadowSourceLabel(shadowDecision)}</span>
+              <span>Proposal {policyBiasLabel(shadowDecision.proposal.bias)} {shadowDecision.proposal.confidence.toFixed(0)}%</span>
+              <span>{shadowExecuteLabel(shadowDecision)}</span>
+              <span>LLM {shadowRuntime?.available ? 'ON' : 'OFF'}</span>
+              {#if shadowRuntime?.providers?.length}
+                <span>Providers {shadowRuntime.providers.map((provider) => provider.toUpperCase()).join(', ')}</span>
+              {/if}
+              {#if shadowDecision.generatedAt > 0}
+                <span>Updated {formatRelativeTime(shadowDecision.generatedAt)} ago</span>
+              {/if}
+            </div>
+            <div class="shadow-decision-line">
+              <strong>Now:</strong> {shadowDecision.proposal.nowWhat}
+            </div>
+            {#if shadowDecision.enforced.reasons?.length}
+              <div class="shadow-decision-line">
+                <strong>Guard:</strong> {shadowDecision.enforced.reasons.slice(0, 4).join(' · ')}
+              </div>
+            {/if}
+
+            {#if shadowExecutionEnabled}
+              <button
+                class="shadow-exec-btn"
+                class:ready={shadowDecision.enforced.shouldExecute}
+                on:click={executeShadowTrade}
+                disabled={!shadowDecision.enforced.shouldExecute || shadowExecLoading}
+              >
+                {shadowExecLoading ? 'EXECUTING...' : 'EXECUTE SHADOW TRADE'}
+              </button>
+            {:else}
+              <div class="shadow-exec-disabled">
+                Execution disabled (INTEL_SHADOW_EXECUTION_ENABLED=false)
+              </div>
+            {/if}
+
+            {#if shadowExecMessage}
+              <div class="shadow-exec-msg success">{shadowExecMessage}</div>
+            {/if}
+            {#if shadowExecError}
+              <div class="shadow-exec-msg error">{shadowExecError}</div>
+            {/if}
+          </div>
+        {:else if shadowLoading && !policyLoading}
+          <div class="policy-loading">SHADOW AGENT 계산 중...</div>
         {/if}
 
         <div class="rp-body" class:chat-mode={innerTab === 'chat'}>
@@ -1494,6 +1689,87 @@
     font-size: 11px;
     line-height: 1.35;
     color: rgba(255, 255, 255, 0.82);
+  }
+  .shadow-decision-banner {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+    padding: 8px 10px;
+    font-family: var(--fm);
+    display: grid;
+    gap: 5px;
+  }
+  .shadow-decision-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .shadow-decision-title {
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 10px;
+    letter-spacing: 1px;
+    font-weight: 700;
+  }
+  .shadow-decision-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.66);
+  }
+  .shadow-decision-line {
+    font-size: 11px;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.84);
+  }
+  .shadow-decision-line strong {
+    color: rgba(255, 255, 255, 0.95);
+    margin-right: 4px;
+  }
+  .shadow-exec-btn {
+    margin-top: 2px;
+    height: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.54);
+    font-family: var(--fm);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    cursor: not-allowed;
+  }
+  .shadow-exec-btn.ready {
+    background: rgba(0, 230, 118, 0.16);
+    border-color: rgba(0, 230, 118, 0.42);
+    color: #00e676;
+    cursor: pointer;
+  }
+  .shadow-exec-btn.ready:hover:not(:disabled) {
+    background: rgba(0, 230, 118, 0.24);
+  }
+  .shadow-exec-btn:disabled {
+    opacity: 0.88;
+  }
+  .shadow-exec-disabled {
+    margin-top: 2px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.58);
+  }
+  .shadow-exec-msg {
+    font-size: 10px;
+    padding: 4px 6px;
+    border-radius: 4px;
+  }
+  .shadow-exec-msg.success {
+    color: #00e676;
+    background: rgba(0, 230, 118, 0.08);
+    border: 1px solid rgba(0, 230, 118, 0.24);
+  }
+  .shadow-exec-msg.error {
+    color: #ff8a80;
+    background: rgba(255, 82, 82, 0.08);
+    border: 1px solid rgba(255, 82, 82, 0.24);
   }
   .policy-cards-wrap {
     display: grid;
