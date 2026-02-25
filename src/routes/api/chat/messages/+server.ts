@@ -11,6 +11,7 @@ import {
   buildAgentSystemPrompt, buildOrchestratorSystemPrompt,
   type LLMMessage,
 } from '$lib/server/llmService';
+import { getMultiTimeframeIndicatorContext } from '$lib/server/multiTimeframeContext';
 import { getErrorMessage, errorContains } from '$lib/utils/errorUtils';
 
 const SENDER_KINDS = new Set(['user', 'agent', 'system']);
@@ -129,6 +130,20 @@ function hasConfidenceToken(text: string): boolean {
 function toNum(value: unknown, fallback = 0): number {
   const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
   return Number.isFinite(n) ? Number(n) : fallback;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race<T>([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function mapRow(row: AgentChatRow) {
@@ -407,6 +422,16 @@ async function buildAgentReply(
   const fallbackTf = typeof meta.timeframe === 'string' && meta.timeframe ? meta.timeframe : '4h';
   const marketQuestion = isMarketQuestion(message);
   const preferKorean = hasKorean(message);
+  const mtfContext = marketQuestion
+    ? await withTimeout(
+        getMultiTimeframeIndicatorContext(fallbackPair).catch((error: unknown) => {
+          console.warn('[chat/messages] failed to build MTF context:', getErrorMessage(error));
+          return null;
+        }),
+        2200,
+        null
+      )
+    : null;
 
   // 실시간 가격 (meta에서 전달받음)
   const livePrices = (meta.livePrices && typeof meta.livePrices === 'object')
@@ -439,6 +464,7 @@ async function buildAgentReply(
       scanSummary,
       scanSignals,
       livePrices,
+      multiTimeframe: mtfContext,
     });
   } else {
     systemPrompt = buildAgentSystemPrompt({
@@ -449,6 +475,7 @@ async function buildAgentReply(
       scanSummary,
       scanSignals,
       livePrices,
+      multiTimeframe: mtfContext,
     });
   }
 
