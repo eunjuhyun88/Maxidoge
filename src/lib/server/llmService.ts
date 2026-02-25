@@ -15,6 +15,7 @@ import {
   isGroqAvailable,
   type LLMProvider,
 } from './llmConfig';
+import type { MultiTimeframeIndicatorContext } from './multiTimeframeContext';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -276,6 +277,8 @@ export interface AgentChatContext {
   }>;
   /** 실시간 가격 (클라이언트에서 전달) */
   livePrices?: Record<string, number>;
+  /** 다중 시간봉 기술지표 컨텍스트 (서버 계산) */
+  multiTimeframe?: MultiTimeframeIndicatorContext | null;
 }
 
 /**
@@ -308,6 +311,22 @@ export function buildAgentSystemPrompt(ctx: AgentChatContext): string {
       }
     }
     lines.push('IMPORTANT: Always use these LIVE prices. Never make up or guess prices.');
+  }
+
+  if (ctx.multiTimeframe && ctx.multiTimeframe.snapshots.length > 0) {
+    lines.push('', `── Multi-Timeframe Technical Context (${ctx.multiTimeframe.pair}) ──`);
+    lines.push(
+      `Consensus: ${ctx.multiTimeframe.consensusBias.toUpperCase()} ${ctx.multiTimeframe.consensusConfidence}% | ` +
+      `Alignment ${ctx.multiTimeframe.alignmentPct}% | Score ${ctx.multiTimeframe.weightedScore.toFixed(1)}`
+    );
+    for (const snap of ctx.multiTimeframe.snapshots.slice(0, 5)) {
+      lines.push(
+        `  ${snap.timeframe}: d${snap.changePct.toFixed(2)}% | EMA ${snap.emaTrend} | RSI ${snap.rsi14.toFixed(1)} ${snap.rsiState} | ` +
+        `MACD ${snap.macdState} | ATR ${snap.atrPct.toFixed(2)}% | VOLx${snap.volumeRatio20.toFixed(2)} | ` +
+        `${snap.bias.toUpperCase()} ${snap.confidence}%`
+      );
+    }
+    lines.push('For chart/timeframe questions, prioritize this MTF context before legacy scan rows.');
   }
 
   if (ctx.scanSummary || (ctx.scanSignals && ctx.scanSignals.length > 0)) {
@@ -361,6 +380,22 @@ export function buildOrchestratorSystemPrompt(ctx: Omit<AgentChatContext, 'agent
       }
     }
     lines.push('IMPORTANT: Always use these LIVE prices when discussing markets. Never guess or use outdated prices.');
+  }
+
+  if (ctx.multiTimeframe && ctx.multiTimeframe.snapshots.length > 0) {
+    lines.push('', `── Multi-Timeframe Technical Context (${ctx.multiTimeframe.pair}) ──`);
+    lines.push(
+      `Consensus: ${ctx.multiTimeframe.consensusBias.toUpperCase()} ${ctx.multiTimeframe.consensusConfidence}% | ` +
+      `Alignment ${ctx.multiTimeframe.alignmentPct}% | Score ${ctx.multiTimeframe.weightedScore.toFixed(1)}`
+    );
+    for (const snap of ctx.multiTimeframe.snapshots.slice(0, 5)) {
+      lines.push(
+        `  ${snap.timeframe}: d${snap.changePct.toFixed(2)}% | EMA ${snap.emaTrend} | RSI ${snap.rsi14.toFixed(1)} ${snap.rsiState} | ` +
+        `MACD ${snap.macdState} | ATR ${snap.atrPct.toFixed(2)}% | VOLx${snap.volumeRatio20.toFixed(2)} | ` +
+        `${snap.bias.toUpperCase()} ${snap.confidence}%`
+      );
+    }
+    lines.push('For trading answers, use this MTF section as primary chart evidence.');
   }
 
   if (ctx.scanSummary || (ctx.scanSignals && ctx.scanSignals.length > 0)) {

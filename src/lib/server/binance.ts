@@ -14,6 +14,13 @@ const BASE = 'https://api.binance.com';
 const FETCH_TIMEOUT = 8_000;
 const KLINE_CACHE_TTL = 60_000;    // 1min — klines change fast
 const TICKER_CACHE_TTL = 30_000;   // 30s
+const EXTENDED_INTERVALS = new Set(['1M']);
+
+function normalizeServerInterval(interval: string): string {
+  const trimmed = String(interval || '').trim();
+  if (EXTENDED_INTERVALS.has(trimmed)) return trimmed;
+  return toBinanceInterval(trimmed);
+}
 
 // ─── Klines ──────────────────────────────────────────────────
 
@@ -22,7 +29,7 @@ export async function fetchKlinesServer(
   interval: string = '4h',
   limit: number = 200
 ): Promise<BinanceKline[]> {
-  const normalizedInterval = toBinanceInterval(interval);
+  const normalizedInterval = normalizeServerInterval(interval);
   const cacheKey = `binance:klines:${symbol}:${normalizedInterval}:${limit}`;
   const cached = getCached<BinanceKline[]>(cacheKey);
   if (cached) return cached;
