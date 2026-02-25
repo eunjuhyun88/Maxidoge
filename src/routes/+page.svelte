@@ -972,27 +972,37 @@
   .hl {
     font-family: var(--fp); font-weight: 400;
     display: inline-block;
-    background: repeating-linear-gradient(
-      0deg,
-      var(--sp-w) 0px, var(--sp-w) 3px,
-      rgba(240,237,228,0.15) 3px, rgba(240,237,228,0.15) 5px
-    );
-    -webkit-background-clip: text; background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--sp-w);
     text-shadow: 0 0 12px rgba(240,237,228,0.5), 0 0 30px rgba(240,237,228,0.15);
+  }
+  @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+    .hl {
+      background: repeating-linear-gradient(
+        0deg,
+        var(--sp-w) 0px, var(--sp-w) 3px,
+        rgba(240,237,228,0.15) 3px, rgba(240,237,228,0.15) 5px
+      );
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
   }
   /* .hl-sm removed — no longer used */
   .hl-xl { font-size: clamp(40px, 7vw, 80px); letter-spacing: 6px; }
   .hl-pk {
     font-size: clamp(44px, 8vw, 90px); letter-spacing: 4px;
-    background: repeating-linear-gradient(
-      0deg,
-      var(--sp-pk) 0px, var(--sp-pk) 3px,
-      rgba(232,150,125,0.15) 3px, rgba(232,150,125,0.15) 5px
-    );
-    -webkit-background-clip: text; background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--sp-pk);
     text-shadow: var(--fx-title-pink-glow-hero);
+  }
+  @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+    .hl-pk {
+      background: repeating-linear-gradient(
+        0deg,
+        var(--sp-pk) 0px, var(--sp-pk) 3px,
+        rgba(232,150,125,0.15) 3px, rgba(232,150,125,0.15) 5px
+      );
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
   }
   .hl-row { display: flex; align-items: center; gap: 12px; }
 
@@ -1278,15 +1288,24 @@
   .fd-pk,
   .cta-pk {
     display: block;
-    background: repeating-linear-gradient(0deg, var(--sp-pk) 0px, var(--sp-pk) 3px, rgba(232,150,125,0.15) 3px, rgba(232,150,125,0.15) 4.5px);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--sp-pk);
     text-shadow: var(--fx-title-pink-glow);
   }
-  .fd-pk,
-  .cta-pk {
-    background: repeating-linear-gradient(0deg, var(--sp-pk) 0px, var(--sp-pk) 4px, rgba(232,150,125,0.15) 4px, rgba(232,150,125,0.15) 5.5px);
+  @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+    .ft-pk,
+    .sq-pk,
+    .dt-pk,
+    .fd-pk,
+    .cta-pk {
+      background: repeating-linear-gradient(0deg, var(--sp-pk) 0px, var(--sp-pk) 3px, rgba(232,150,125,0.15) 3px, rgba(232,150,125,0.15) 4.5px);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .fd-pk,
+    .cta-pk {
+      background: repeating-linear-gradient(0deg, var(--sp-pk) 0px, var(--sp-pk) 4px, rgba(232,150,125,0.15) 4px, rgba(232,150,125,0.15) 5.5px);
+    }
   }
   .ft-pk {
     font-size: clamp(28px, 6vw, 56px);
