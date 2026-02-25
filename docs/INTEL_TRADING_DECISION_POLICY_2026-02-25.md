@@ -1,200 +1,201 @@
-# Intel Trading Decision Policy (v1)
+# Intel Trading Decision Policy (v3)
 
 작성일: 2026-02-25  
-대상: `/terminal` 우측 Intel 패널(Headlines / Events / Flow / Trending / Positions)
+대상: `/terminal` 우측 Intel 패널 (Headlines / Events / Flow / Trending / Positions)
 
-## 1) 목적 정의
+변경 이력:
+- v1: 기본 목적, 4축 Gate, 보수적 No-Trade 정의
+- v2: 패널별 WHY 중심 정책 강화
+- v3: 정량 스코어링, 다단계 의사결정 엔진, 백테스트/피드백 루프를 운영 기준으로 고정
 
-Intel은 "정보 나열"이 아니라 아래 한 가지 목적만 가진다.
+## 1) 목적 정의 (v3)
+
+Intel은 "정보 나열"이 아니라 하나의 목적만 가진다.
 
 - 목적: **다음 30~120분 트레이드에서 Long / Short / Wait 결정을 돕는 것**
 
-따라서 Intel에 표시되는 모든 데이터는 "왜 이 데이터가 지금 의사결정에 필요하지?"를 통과해야 한다.
+v3 추가 정의:
+- 의사결정 범위: 단기 스캘핑/스윙(30~120분)
+- Long: 상승 기대 구간 엔트리/홀드
+- Short: 하락 기대 구간 엔트리/홀드
+- Wait: 신호 충돌/커버리지 부족/고변동 상태에서 보류
 
-## 2) 데이터 표시 자격 (Quality Gate)
+트레이딩 도움 KPI(월간):
+- 승률 개선: +7%p 이상
+- Sharpe 개선: +0.2 이상
+- 최대 낙폭 감소: 15%p 이상
+- 사용자 긍정 피드백(NPS Positive): 80% 이상
 
-모든 데이터 카드/행은 4개 축으로 평가한다.
+검증:
+- 과거 12개월 백테스트 (월 1회)
+- 실시간 A/B (v3 vs v2)
+- 앱 내 피드백 수집(도움 여부)
 
-1. Actionability (행동 가능성)
-- 이 데이터가 엔트리/청산/보류 판단에 직접 쓰이는가?
+## 2) 데이터 표시 자격 (Quality Gate v3)
 
-2. Timeliness (시의성)
-- 현재 의사결정 윈도우(30~120분)에 아직 유효한가?
+모든 Intel 데이터는 5축 점수(0~100)로 평가한다.
 
-3. Reliability (신뢰성)
-- 소스 품질, 계산 안정성, 실패율, 조작 가능성 리스크는 허용 범위인가?
+1. Actionability
+- 공식: `행동유형수 * 20 + 명확성(0~40)`
+- 컷: 70
 
-4. Relevance (연관성)
-- 현재 선택 페어/타임프레임과 직접 연관 있는가?
+2. Timeliness
+- 공식: `((120 - 지연분) / 120) * 100`
+- 컷: 65
 
-### Gate 통과 기준
+3. Reliability
+- 공식: `소스 신뢰도 - 실패율 + 조작리스크 보정(low +20 / medium 0 / high -20)`
+- 컷: 75
 
-- 최소 점수 컷:
-  - Actionability >= 65
-  - Timeliness >= 60
-  - Reliability >= 70
-  - Relevance >= 70
-- 가중 합산 점수 >= 70
+4. Relevance
+- 공식: `페어 키워드 매칭% + 타임프레임 보너스(+20)`
+- 컷: 75
 
-가중치:
+5. Helpfulness
+- 공식: `백테스트 승률개선*10 + 피드백긍정%*0.5 + 적용률*0.1 + PnL 보정`
+- 컷: 70
+- 하드 컷: 50 미만이면 강제 숨김
 
-- Actionability 0.30
-- Timeliness 0.20
-- Reliability 0.30
-- Relevance 0.20
+가중합:
+- Actionability 0.25
+- Timeliness 0.15
+- Reliability 0.25
+- Relevance 0.15
+- Helpfulness 0.20
 
-Gate 미통과 데이터는 숨기거나 "참고"로만 격하한다.
+판정:
+- 축별 최소컷 실패: `hidden`
+- 최소컷 통과 + 가중합 75 미만: `low_impact` (회색 표시)
+- 최소컷 통과 + 가중합 75 이상: `full`
 
-## 3) 패널별 역할과 표시 기준
+운영:
+- 점수 재계산 캐시 TTL: 5분
+- 미통과 로그: `src/lib/intel/gateLogs.ts`
 
-## 3.1 Headlines
+## 3) 패널별 역할/규칙 (v3)
 
-표시 목적:
+공통:
+- 패널당 최대 카드: 5
+- 정렬: 가중합 점수 내림차순
+- 카드 필드: `What / So What / Now What / Why / Help Score / Visual Aid`
 
-- 단기 방향/변동성에 영향을 주는 **촉매(catalyst)** 제공
+### 3.1 Headlines
+- 목적: 촉매 신호
+- 규칙:
+  - 임팩트 예측 >= 60%
+  - 중복 유사도 필터
+  - 페어 매칭 우선
+- WHY 예시: "유사 헤드라인 후 30분 변동성 확대"
 
-표시 규칙:
+### 3.2 Events
+- 목적: 타이밍 리스크 관리
+- 규칙:
+  - `T-xxm`/`T+xxm` 표시
+  - 역사적 임팩트 10% 미만 이벤트 축소
+  - 페어 연동 우선순위 반영
+- WHY 예시: "이벤트 직전 유동성 축소 가능"
 
-- 고중요도/고상호작용/고신선도 뉴스만 표시
-- 현재 페어 alias(BTC/ETH 등) 매칭 우선
-- 중복/재인용 헤드라인은 축약
+### 3.3 Flow
+- 목적: 단기 압력 식별
+- 규칙:
+  - 이상치 기준: Z-Score >= 2.5
+  - 노이즈 제거 후 방향 태그 부여
+- WHY 예시: "Funding/청산 쏠림으로 하방 압력"
 
-WHY 템플릿:
+### 3.4 Trending / Picks
+- 목적: 후보군 우선순위
+- 규칙:
+  - 스코어 분해: Momentum 40 / Volume 30 / Social 20 / Onchain 10
+  - Pump 패턴 감지 시 페널티
+  - 상단 노출 시 Why Top 태그 필수
+- WHY 예시: "거래량 + 소셜 동시 강화"
 
-- "거래소/ETF/규제 뉴스 -> 단기 변동성 확대 가능"
-- "프로토콜 이슈 -> 해당 자산 리스크 프리미엄 확대"
+### 3.5 Positions
+- 목적: 보유 포지션 조정
+- 규칙:
+  - 상태: `SYNCED / ERROR / PENDING`
+  - PnL 경보 임계값: 7%
+  - 외부 포지션 폴링: 30초
+- WHY 예시: "pending 해소 전 신규 리스크 확대 금지"
 
-## 3.2 Events
+## 4) 최종 의사결정 엔진 (v3)
 
-표시 목적:
+단계:
+1. 증거 수집
+2. 도메인 가중합
+3. 충돌 패널티
+4. Helpfulness 오버레이
+5. No-Trade 규칙
+6. Long / Short / Wait 출력
 
-- 발표/온체인 이벤트 전후의 리스크 타이밍 관리
+도메인 가중치:
+- Derivatives 0.24
+- Flow 0.21
+- Events 0.19
+- Headlines 0.13
+- Positions 0.13
+- Trending 0.10
 
-표시 규칙:
+충돌 규칙:
+- `|Long-Short|` 리드 비율이 25% 미만이면 충돌로 판단
+- 신뢰 페널티 40% 적용
+- Wait prior 0.6을 가중
 
-- 이벤트 시간과 현재 시점의 거리(전/후)를 함께 표기
-- "이미 가격에 반영" 가능성이 높은 오래된 이벤트는 축소
+No-Trade 강제 조건:
+- 커버리지 < 85%
+- 백테스트 승률 < 58%
+- 변동성 지수 > 50
+- 순에지(abs edge) < 8
 
-WHY 템플릿:
-
-- "이벤트 직전 유동성 축소 가능 -> 포지션 크기 조절 필요"
-
-## 3.3 Flow
-
-표시 목적:
-
-- 포지션 쏠림/청산 구조/자금 유입을 통해 단기 압력 식별
-
-표시 규칙:
-
-- Funding, Liquidation, Volume의 이상치만 표시
-- 평시 노이즈는 제거
-
-WHY 템플릿:
-
-- "롱 청산 급증 + 펀딩 하락 -> 하방 압력 우세"
-- "숏 청산 급증 + 거래량 확장 -> 숏스퀴즈 위험"
-
-## 3.4 Trending / Picks
-
-표시 목적:
-
-- 단순 인기 코인이 아니라 **후보군 우선순위**를 제공
-
-표시 규칙:
-
-- 스코어 분해(모멘텀/볼륨/소셜/매크로/온체인)와 함께 제공
-- "왜 상위인지" 사유 태그를 필수로 노출
-
-WHY 템플릿:
-
-- "모멘텀 + 거래량 동시 강화, 매크로 중립 이상"
-
-## 3.5 Positions
-
-표시 목적:
-
-- 현재 포지션 유지/축소/청산 의사결정
-
-표시 규칙:
-
-- 상태 동기화(SYNCING/SYNCED/ERROR) 명시
-- pending 주문 상태 추적(Polymarket/GMX)
-- 미연결/인증오류/단순 빈 상태를 명확히 구분
-
-WHY 템플릿:
-
-- "pending 해소 전 신규 리스크 확대 금지"
-- "PnL/상태 변화 기반으로 포지션 조정"
-
-## 4) 최종 의사결정 엔진 기준
-
-Intel은 각 도메인의 증거를 결합해 `Long / Short / Wait`를 만든다.
-
-## 4.1 도메인 가중치
-
-- Derivatives: 0.28
-- Flow: 0.22
-- Events: 0.18
-- Headlines: 0.14
-- Positions: 0.10
-- Trending: 0.08
-
-## 4.2 충돌 페널티
-
-- Long 증거와 Short 증거가 동시에 강하면 신뢰도를 감점
-- 충돌 시 기본 전략은 `Wait` 쪽으로 보수화
-
-## 4.3 No-Trade 규칙
-
-아래 중 하나면 `Wait`:
-
-- Quality Gate 미통과
-- Long/Short edge 차이 임계값 미만
-- 데이터 신선도 기준 초과(지연 데이터)
-- 핵심 도메인(Derivatives/Flow) 누락
+출력:
+- Long/Short: 에지와 근거 3개
+- Wait: 블로커 목록 명시
 
 ## 5) Intel 카드 출력 표준
 
-각 카드/신호는 아래 구조를 만족해야 한다.
-
-- What: 데이터 사실(숫자/상태)
-- So What: 시장에 미치는 의미
-- Now What: 트레이더 행동(진입/축소/보류/청산)
-- Why: 근거 1~2줄
+모든 카드 구조:
+- What: 관측 사실
+- So What: 시장 해석
+- Now What: 실행 행동
+- Why: 근거
+- Help Score: 0~100 + 근거 문장
+- Visual Aid: 아이콘/미니 차트 식별자
 
 예시:
+- What: Funding +0.035%, Long 청산 급증
+- So What: 롱 과밀, 하방 변동성 확대
+- Now What: 신규 Long 보류, 반등 Short 관찰
+- Why: 쏠림 해소 전 하방 압력 지속 가능성
+- Help Score: 85
+- Visual Aid: `bearish-arrow`
 
-- What: Funding +0.035%, Long liq 24h 급증
-- So What: 롱 포지션 과밀 + 하방 변동성 증가
-- Now What: 신규 Long 보류, 반등 숏 우선 관찰
-- Why: 포지션 쏠림 해소 전 하방 압력 지속 가능성
+## 6) 운영 원칙
 
-## 6) 운영 원칙 (신뢰성)
+- 상태 분리: loading/error/empty/stale
+- 실패 보수성: 핵심 소스 실패 시 Wait
+- 관측 가능성: freshness/pending/coverage 로그 및 메트릭
+- 백테스트 자동화: 일일 배치 + 월간 리포트
+- 피드백 루프: 점수식/임계값 튜닝
+- 정책 버전: semver + changelog
 
-1. 상태 분리
-- `loading` / `error` / `empty` / `stale` 분리 표기
+## 7) 구현 SSOT (이 저장소)
 
-2. 실패 보수성
-- 핵심 소스 실패 시 과감히 `Wait`
-
-3. 관측 가능성
-- 마지막 동기화 시각, 데이터 freshness, pending 개수 표시
-
-4. 정책 버전 관리
-- `IntelPolicy v1`처럼 버전 고정
-- 임계값 변경 시 변경 이력 남김
-
-## 7) 구현 기준 (이 저장소)
-
-실행 가능한 정책은 아래 코드 모듈을 SSOT로 사용한다.
-
+핵심 파일:
+- `config/intelThresholds.json`
+- `src/lib/intel/thresholds.ts`
+- `src/lib/intel/qualityGate.ts`
+- `src/lib/intel/helpfulnessEvaluator.ts`
+- `src/lib/intel/decisionEngine.ts`
+- `src/lib/intel/gateLogs.ts`
 - `src/lib/intel/decisionPolicy.ts`
 
-이 모듈이 Gate/가중치/No-Trade 임계값의 단일 기준이다.
-
----
+핵심 API:
+- `evaluateQualityGate(...)`
+- `evaluateQualityGateFromFeatures(...)`
+- `computeIntelDecision(...)`
+- `evaluateHelpfulness(...)`
+- `patchIntelThresholds(...)`
 
 요약:
-Intel은 "정보판"이 아니라 "행동판"이어야 한다.  
-표시 기준은 Quality Gate로 통제하고, 최종 의사결정은 충돌 페널티와 No-Trade 규칙을 포함한 보수적 정책으로 운영한다.
+Intel v3는 "보여주기"보다 "결정 정확도"를 우선한다.  
+표시와 결정을 분리하지 않고 같은 수치 체계(Quality Gate + Decision Engine)로 통합 운영한다.
