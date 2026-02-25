@@ -1257,3 +1257,20 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `origin/codex/terminal-be-gap-redesign-w121`: SUCCESS
   - `origin/main`: FAILED (protected branch policy: PR required, merge commit 금지, required checks gate)
 - Status: DONE (main push blocked by protection policy)
+
+### W-20260225-1651-backend-codex (finish)
+
+- End (KST): 2026-02-25 16:51
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - 신규 설계 문서 추가: `docs/INTEL_TRADING_DECISION_POLICY_2026-02-25.md`
+  - 실행 가능한 정책 스켈레톤 추가: `src/lib/intel/decisionPolicy.ts`
+  - Intel 데이터 표시 기준(quality gate), 도메인 가중치, no-trade 규칙, WHY 출력 표준을 문서/코드로 고정
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `6aeade7`
+- Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121 (clean)`
+- Status: DONE
