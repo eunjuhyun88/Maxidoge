@@ -259,7 +259,7 @@
         {/if}
       </span>
       <span class="wht">
-        {#if step === 'welcome'}WELCOME TO STOCKCLAW
+        {#if step === 'welcome'}WELCOME TO Stockclaw
         {:else if step === 'signup'}CREATE ACCOUNT
         {:else if step === 'login'}LOGIN
         {:else if step === 'demo-intro'}DEMO ROUND
@@ -282,7 +282,7 @@
       <div class="wb step-welcome">
         <div class="welcome-hero">
           <div class="welcome-doge">🐕</div>
-          <div class="welcome-title">STOCKCLAW</div>
+          <div class="welcome-title">Stockclaw</div>
           <div class="welcome-sub">8 AI Agents. 1 Decision. Your Call.</div>
         </div>
 
@@ -497,7 +497,7 @@
           </div>
           <div class="sign-row">
             <span class="sign-label">MESSAGE</span>
-            <span class="sign-msg">"STOCKCLAW verify {state.shortAddr} at {Date.now()}"</span>
+            <span class="sign-msg">"Stockclaw verify {state.shortAddr} at {Date.now()}"</span>
           </div>
           <div class="sign-row">
             <span class="sign-label">CHAIN</span>
