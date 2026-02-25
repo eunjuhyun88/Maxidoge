@@ -1,11 +1,15 @@
 <script lang="ts">
   import {
     walletStore,
-    closeWalletModal, setWalletModalStep,
-    applyAuthenticatedUser, clearAuthenticatedUser, completeDemoView,
-    connectWallet, signMessage,
+    closeWalletModal,
+    setWalletModalStep,
+    applyAuthenticatedUser,
+    clearAuthenticatedUser,
+    connectWallet,
+    signMessage,
     disconnectWallet
   } from '$lib/stores/walletStore';
+  import type { WalletState } from '$lib/stores/walletStore';
   import { loginAuth, logoutAuth, registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
   import {
     WALLET_PROVIDER_LABEL,
@@ -17,22 +21,53 @@
     type WalletProviderKey
   } from '$lib/wallet/providers';
 
+  type AuthMode = 'signup' | 'login';
+
+  const STEP_TITLE: Record<WalletState['walletModalStep'], string> = {
+    welcome: 'WALLET ACCESS',
+    'wallet-select': 'CONNECT WALLET',
+    connecting: 'CONNECTING',
+    'sign-message': 'VERIFY OWNERSHIP',
+    connected: 'WALLET READY',
+    signup: 'CREATE ACCOUNT',
+    login: 'LOG IN',
+    'demo-intro': 'DEMO',
+    profile: 'MY PROFILE'
+  };
+
+  const WALLET_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
+  const preferredEvmChain = getPreferredEvmChainCode();
+
   $: state = $walletStore;
   $: step = state.walletModalStep;
 
-  // Form state
+  let authMode: AuthMode = 'signup';
   let emailInput = '';
   let nicknameInput = '';
   let emailError = '';
   let actionError = '';
   let connectingProvider = '';
   let signingMessage = false;
+  let authSubmitting = false;
   let signedWalletMessage = '';
   let signedWalletSignature = '';
-  let preferredAuthStep: 'signup' | 'login' = 'signup';
 
-  const WALLET_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
-  const preferredEvmChain = getPreferredEvmChainCode();
+  $: headerTitle = STEP_TITLE[step] ?? 'WALLET ACCESS';
+
+  interface GTMWindow extends Window {
+    dataLayer?: Array<Record<string, unknown>>;
+  }
+
+  function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
+    if (typeof window === 'undefined') return;
+    const w = window as GTMWindow;
+    if (!Array.isArray(w.dataLayer)) return;
+    w.dataLayer.push({
+      event,
+      area: 'wallet_modal',
+      ...payload,
+    });
+  }
 
   function isWalletProviderKey(value: string): value is WalletProviderKey {
     return value === 'metamask'
@@ -45,112 +80,190 @@
     return address.startsWith('0x');
   }
 
-  function clearAuthErrors() {
+  function clearErrors() {
     emailError = '';
     actionError = '';
   }
 
-  function openWalletFirst(mode: 'signup' | 'login') {
-    preferredAuthStep = mode;
-    clearAuthErrors();
+  function clearWalletProof() {
+    signedWalletMessage = '';
+    signedWalletSignature = '';
+  }
+
+  function hasWalletProof(): boolean {
+    return Boolean(signedWalletMessage && WALLET_SIGNATURE_RE.test(signedWalletSignature));
+  }
+
+  function setAuthMode(mode: AuthMode, source: 'toggle' | 'welcome' | 'auto' = 'toggle') {
+    authMode = mode;
+    clearErrors();
+    gtmEvent('wallet_auth_mode_select', { mode, source, step });
+    if (step === 'signup' || step === 'login') {
+      setWalletModalStep(mode);
+    }
+  }
+
+  function startAuthFlow(mode: AuthMode) {
+    setAuthMode(mode, 'welcome');
+
+    if (state.connected && state.address) {
+      if (hasWalletProof()) {
+        setWalletModalStep(mode);
+      } else {
+        setWalletModalStep('sign-message');
+      }
+      return;
+    }
+
     setWalletModalStep('wallet-select');
   }
 
-  function openAuthStep(mode: 'signup' | 'login') {
-    preferredAuthStep = mode;
-    clearAuthErrors();
-    setWalletModalStep(mode);
+  function parseEmailOnly(): { email: string } | null {
+    clearErrors();
+    const email = emailInput.trim();
+    if (!email.includes('@')) {
+      emailError = 'Valid email required';
+      return null;
+    }
+    if (email.length > 254) {
+      emailError = 'Email is too long';
+      return null;
+    }
+    return { email };
   }
 
-  function parseAuthInput(): { email: string; nickname: string } | null {
-    clearAuthErrors();
-    if (!emailInput.includes('@')) { emailError = 'Valid email required'; return null; }
-    if (nicknameInput.trim().length < 2) { emailError = 'Nickname: 2+ chars'; return null; }
+  function parseSignupInput(): { email: string; nickname: string } | null {
+    const emailPayload = parseEmailOnly();
+    if (!emailPayload) return null;
+
+    const nickname = nicknameInput.trim();
+    if (nickname.length < 2) {
+      emailError = 'Nickname must be 2+ characters';
+      return null;
+    }
+    if (nickname.length > 32) {
+      emailError = 'Nickname must be 32 characters or less';
+      return null;
+    }
+
     return {
-      email: emailInput.trim(),
-      nickname: nicknameInput.trim(),
+      email: emailPayload.email,
+      nickname,
     };
   }
 
-  function getSignedWalletProof(): { walletMessage: string; walletSignature: string } | null {
-    if (!signedWalletMessage || !WALLET_SIGNATURE_RE.test(signedWalletSignature)) {
+  function parseLoginInput(): { email: string; nickname?: string } | null {
+    const emailPayload = parseEmailOnly();
+    if (!emailPayload) return null;
+
+    const nickname = nicknameInput.trim();
+    if (nickname && nickname.length < 2) {
+      emailError = 'Nickname must be 2+ characters if provided';
       return null;
     }
+    if (nickname.length > 32) {
+      emailError = 'Nickname must be 32 characters or less';
+      return null;
+    }
+
+    return nickname
+      ? { email: emailPayload.email, nickname }
+      : { email: emailPayload.email };
+  }
+
+  function getSignedWalletProof(): { walletMessage: string; walletSignature: string } | null {
+    if (!hasWalletProof()) return null;
     return {
       walletMessage: signedWalletMessage,
       walletSignature: signedWalletSignature,
     };
   }
 
-  async function handleSignupSubmit() {
-    const payload = parseAuthInput();
-    if (!payload) return;
+  function ensureWalletReadyForAuth(): boolean {
     if (!state.connected || !state.address) {
-      actionError = 'Connect wallet first before signup.';
+      actionError = 'Connect wallet first.';
       setWalletModalStep('wallet-select');
-      return;
+      return false;
     }
+
     const walletProof = getSignedWalletProof();
     if (!walletProof) {
-      actionError = 'Sign wallet message first before signup.';
+      actionError = 'Sign wallet message first.';
       setWalletModalStep('sign-message');
-      return;
+      return false;
     }
-    try {
-      const res = await registerAuth({
-        ...payload,
-        walletAddress: state.address || undefined,
-        walletMessage: walletProof.walletMessage,
-        walletSignature: walletProof.walletSignature,
-      });
-      applyAuthenticatedUser(res.user);
-    } catch (error) {
-      emailError = error instanceof Error ? error.message : 'Failed to register account';
-    }
+
+    return true;
   }
 
-  async function handleLoginSubmit() {
-    const payload = parseAuthInput();
+  async function handleSignupSubmit() {
+    const payload = parseSignupInput();
     if (!payload) return;
-    if (!state.connected || !state.address) {
-      actionError = 'Connect wallet first before login.';
-      setWalletModalStep('wallet-select');
-      return;
-    }
+    if (!ensureWalletReadyForAuth()) return;
+
     const walletProof = getSignedWalletProof();
-    if (!walletProof) {
-      actionError = 'Sign wallet message first before login.';
-      setWalletModalStep('sign-message');
-      return;
-    }
+    if (!walletProof || !state.address) return;
+
+    authSubmitting = true;
     try {
-      const res = await loginAuth({
+      const res = await registerAuth({
         ...payload,
         walletAddress: state.address,
         walletMessage: walletProof.walletMessage,
         walletSignature: walletProof.walletSignature,
       });
       applyAuthenticatedUser(res.user);
+      gtmEvent('wallet_signup_success', { mode: authMode, chain: state.chain });
     } catch (error) {
-      emailError = error instanceof Error ? error.message : 'Failed to login';
+      emailError = error instanceof Error ? error.message : 'Failed to create account';
+      gtmEvent('wallet_signup_error', { message: emailError });
+    } finally {
+      authSubmitting = false;
+    }
+  }
+
+  async function handleLoginSubmit() {
+    const payload = parseLoginInput();
+    if (!payload) return;
+    if (!ensureWalletReadyForAuth()) return;
+
+    const walletProof = getSignedWalletProof();
+    if (!walletProof || !state.address) return;
+
+    authSubmitting = true;
+    try {
+      const res = await loginAuth({
+        email: payload.email,
+        nickname: payload.nickname,
+        walletAddress: state.address,
+        walletMessage: walletProof.walletMessage,
+        walletSignature: walletProof.walletSignature,
+      });
+      applyAuthenticatedUser(res.user);
+      gtmEvent('wallet_login_success', { mode: authMode, chain: state.chain });
+    } catch (error) {
+      emailError = error instanceof Error ? error.message : 'Failed to log in';
+      gtmEvent('wallet_login_error', { message: emailError });
+    } finally {
+      authSubmitting = false;
     }
   }
 
   async function handleConnect(provider: string) {
-    actionError = '';
-    signedWalletMessage = '';
-    signedWalletSignature = '';
+    clearErrors();
+    clearWalletProof();
+
     if (!isWalletProviderKey(provider)) {
       actionError = 'Unsupported wallet provider.';
       return;
     }
 
     connectingProvider = WALLET_PROVIDER_LABEL[provider];
+    gtmEvent('wallet_connect_start', { provider, mode: authMode });
     setWalletModalStep('connecting');
 
     try {
       if (provider === 'phantom') {
-        // Prefer EVM-injected Phantom first. If unavailable, use Phantom Solana provider.
         if (hasInjectedEvmProvider('phantom')) {
           const walletAddress = await requestInjectedEvmAccount('phantom');
           connectWallet(provider, walletAddress, preferredEvmChain);
@@ -162,8 +275,13 @@
         const walletAddress = await requestInjectedEvmAccount(provider);
         connectWallet(provider, walletAddress, preferredEvmChain);
       }
+      gtmEvent('wallet_connect_success', { provider });
     } catch (error) {
       actionError = error instanceof Error ? error.message : 'Failed to connect wallet';
+      gtmEvent('wallet_connect_error', {
+        provider,
+        message: actionError,
+      });
       setWalletModalStep('wallet-select');
     } finally {
       connectingProvider = '';
@@ -180,42 +298,48 @@
       }
 
       if (!state.provider || !isWalletProviderKey(state.provider)) {
-        throw new Error('Wallet provider is missing.');
+        throw new Error('Wallet provider is missing');
       }
 
       const provider = state.provider;
 
-      if (isEvmAddress(state.address)) {
-        const noncePayload = await requestWalletNonce({
+      if (!isEvmAddress(state.address)) {
+        throw new Error('Solana wallet auth is temporarily unavailable. Use an EVM wallet.');
+      }
+
+      const noncePayload = await requestWalletNonce({
+        address: state.address,
+        provider,
+        chain: state.chain,
+      });
+
+      const signature = await signInjectedEvmMessage(provider, noncePayload.message, state.address);
+
+      if (state.email) {
+        await verifyWalletSignature({
           address: state.address,
+          message: noncePayload.message,
+          signature,
           provider,
           chain: state.chain,
         });
-
-        const signature = await signInjectedEvmMessage(provider, noncePayload.message, state.address);
-
-        // Existing users with an active account can immediately relink wallet proof.
-        if (state.email) {
-          await verifyWalletSignature({
-            address: state.address,
-            message: noncePayload.message,
-            signature,
-            provider,
-            chain: state.chain,
-          });
-        }
-
-        signedWalletMessage = noncePayload.message;
-        signedWalletSignature = signature;
-        signMessage(signature);
-        return;
       }
 
-      throw new Error('Solana wallet auth is temporarily unavailable. Use an EVM wallet.');
+      signedWalletMessage = noncePayload.message;
+      signedWalletSignature = signature;
+      signMessage(signature);
+
+      gtmEvent('wallet_sign_success', { mode: authMode, provider, chain: state.chain });
+
+      if (state.email) {
+        setWalletModalStep('profile');
+      } else {
+        setWalletModalStep(authMode);
+      }
     } catch (error) {
-      signedWalletMessage = '';
-      signedWalletSignature = '';
+      clearWalletProof();
       actionError = error instanceof Error ? error.message : 'Failed to sign wallet message';
+      gtmEvent('wallet_sign_error', { message: actionError, mode: authMode });
     } finally {
       signingMessage = false;
     }
@@ -227,15 +351,41 @@
     } catch (error) {
       console.warn('[WalletModal] logout api failed', error);
     }
-    signedWalletMessage = '';
-    signedWalletSignature = '';
+
+    clearWalletProof();
     disconnectWallet();
     clearAuthenticatedUser();
+    gtmEvent('wallet_disconnect', { hadSession: Boolean(state.email) });
     closeWalletModal();
   }
 
   function handleClose() {
     closeWalletModal();
+  }
+
+  function connectStepState(): 'active' | 'done' | 'idle' {
+    if (state.connected) return 'done';
+    if (step === 'welcome' || step === 'wallet-select' || step === 'connecting') return 'active';
+    return 'idle';
+  }
+
+  function signStepState(): 'active' | 'done' | 'idle' {
+    if (hasWalletProof()) return 'done';
+    if (step === 'sign-message') return 'active';
+    if (!state.connected) return 'idle';
+    return 'idle';
+  }
+
+  function authStepState(): 'active' | 'done' | 'idle' {
+    if (state.email) return 'done';
+    if (step === 'signup' || step === 'login' || step === 'connected') return 'active';
+    return 'idle';
+  }
+
+  $: if (!state.showWalletModal) {
+    authSubmitting = false;
+    signingMessage = false;
+    connectingProvider = '';
   }
 </script>
 
@@ -244,763 +394,731 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="modal-overlay" on:click={handleClose}>
   <div class="wallet-panel" on:click|stopPropagation>
-
-    <!-- ═══ HEADER ═══ -->
     <div class="wh">
-      <span class="whi">
-        {#if step === 'welcome'}🐕
-        {:else if step === 'signup' || step === 'login'}📝
-        {:else if step === 'demo-intro'}🎮
-        {:else if step === 'wallet-select'}🔗
-        {:else if step === 'sign-message'}✍️
-        {:else if step === 'connecting'}⏳
-        {:else if step === 'connected'}✨
-        {:else}👤
-        {/if}
-      </span>
-      <span class="wht">
-        {#if step === 'welcome'}WELCOME TO STOCKCLAW
-        {:else if step === 'signup'}CREATE ACCOUNT
-        {:else if step === 'login'}LOGIN
-        {:else if step === 'demo-intro'}DEMO ROUND
-        {:else if step === 'wallet-select'}CONNECT WALLET
-        {:else if step === 'sign-message'}VERIFY OWNERSHIP
-        {:else if step === 'connecting'}CONNECTING...
-        {:else if step === 'connected'}CONNECTED!
-        {:else}MY PROFILE
-        {/if}
-      </span>
-      <button class="whc" on:click={handleClose}>✕</button>
+      <div class="wh-left">
+        <span class="wh-tag">//WALLET AUTH</span>
+        <span class="wht">{headerTitle}</span>
+      </div>
+
+      {#if !state.email}
+        <div class="mode-toggle" role="tablist" aria-label="Auth mode">
+          <button
+            type="button"
+            class="mode-btn"
+            class:active={authMode === 'login'}
+            role="tab"
+            aria-selected={authMode === 'login'}
+            on:click={() => setAuthMode('login')}
+          >
+            LOG IN
+          </button>
+          <button
+            type="button"
+            class="mode-btn"
+            class:active={authMode === 'signup'}
+            role="tab"
+            aria-selected={authMode === 'signup'}
+            on:click={() => setAuthMode('signup')}
+          >
+            SIGN UP
+          </button>
+        </div>
+      {/if}
+
+      <button class="whc" type="button" aria-label="Close wallet modal" on:click={handleClose}>✕</button>
     </div>
 
     {#if actionError}
       <div class="global-error">{actionError}</div>
     {/if}
 
-    <!-- ═══ STEP: WELCOME (wallet-first auth) ═══ -->
+    <div class="progress-row" aria-hidden="true">
+      <div class="pstep" class:active={connectStepState() === 'active'} class:done={connectStepState() === 'done'}>1 CONNECT</div>
+      <div class="pstep" class:active={signStepState() === 'active'} class:done={signStepState() === 'done'}>2 SIGN</div>
+      <div class="pstep" class:active={authStepState() === 'active'} class:done={authStepState() === 'done'}>3 AUTH</div>
+    </div>
+
     {#if step === 'welcome'}
-      <div class="wb step-welcome">
-        <div class="welcome-hero">
-          <div class="welcome-doge">🐕</div>
-          <div class="welcome-title">STOCKCLAW</div>
-          <div class="welcome-sub">8 AI Agents. 1 Decision. Your Call.</div>
+      <div class="wb">
+        <div class="step-hero">
+          <span class="hero-kicker">SECURE WEB3 ACCESS</span>
+          <h3 class="hero-title">Wallet-first auth with one signature.</h3>
+          <p class="hero-sub">Use wallet ownership as base identity. Then continue with login or account creation.</p>
         </div>
 
-        <div class="welcome-features">
-          <div class="wf-item">
-            <span class="wf-icon">🤖</span>
-            <div>
-              <div class="wf-label">Watch AI Agents Debate</div>
-              <div class="wf-desc">7 specialized agents analyze the market in real-time</div>
-            </div>
-          </div>
-          <div class="wf-item">
-            <span class="wf-icon">🎯</span>
-            <div>
-              <div class="wf-label">Make Your Prediction First</div>
-              <div class="wf-desc">Enter your hypothesis before seeing agent analysis</div>
-            </div>
-          </div>
-          <div class="wf-item">
-            <span class="wf-icon">🏆</span>
-            <div>
-              <div class="wf-label">Level Up & Compete</div>
-              <div class="wf-desc">Build your Trading Passport and climb the leaderboard</div>
-            </div>
-          </div>
+        <div class="flow-card">
+          <div class="flow-item">CONNECT WALLET</div>
+          <div class="flow-item">SIGN MESSAGE</div>
+          <div class="flow-item">{authMode === 'login' ? 'LOG IN ACCOUNT' : 'CREATE ACCOUNT'}</div>
         </div>
 
-        <button class="primary-btn" on:click={() => openWalletFirst('signup')}>
-          🆕 SIGN UP WITH WALLET
+        <button class="btn-primary" type="button" on:click={() => startAuthFlow('signup')}>
+          CONTINUE WITH SIGN UP
         </button>
-        <button class="primary-btn secondary" on:click={() => openWalletFirst('login')}>
-          🔐 LOG IN WITH WALLET
+        <button class="btn-secondary" type="button" on:click={() => startAuthFlow('login')}>
+          CONTINUE WITH LOG IN
         </button>
-        <button class="ghost-btn" on:click={handleClose}>
-          Just Looking Around
-        </button>
+      </div>
 
-        <div class="step-hint">
-          <span class="hint-icon">💡</span>
-          Wallet connection is the default path for both login and signup.
+    {:else if step === 'wallet-select'}
+      <div class="wb">
+        <div class="step-hero">
+          <span class="hero-kicker">STEP 1</span>
+          <h3 class="hero-title">Connect your wallet</h3>
+          <p class="hero-sub">{authMode === 'login' ? 'Login requires wallet ownership verification.' : 'Signup requires wallet ownership verification.'}</p>
+        </div>
+
+        <div class="wallet-list">
+          <button class="wopt" type="button" on:click={() => handleConnect('metamask')}>
+            <span class="wo-icon">🦊</span>
+            <span class="wo-name">MetaMask</span>
+            <span class="wo-chain">EVM</span>
+          </button>
+          <button class="wopt" type="button" on:click={() => handleConnect('walletconnect')}>
+            <span class="wo-icon">🔵</span>
+            <span class="wo-name">WalletConnect</span>
+            <span class="wo-chain">EVM</span>
+          </button>
+          <button class="wopt" type="button" on:click={() => handleConnect('coinbase')}>
+            <span class="wo-icon">🔷</span>
+            <span class="wo-name">Coinbase Wallet</span>
+            <span class="wo-chain">EVM</span>
+          </button>
+          <button class="wopt" type="button" on:click={() => handleConnect('phantom')}>
+            <span class="wo-icon">👻</span>
+            <span class="wo-name">Phantom</span>
+            <span class="wo-chain">SOL/EVM</span>
+          </button>
         </div>
       </div>
 
-    <!-- ═══ STEP: SIGNUP (wallet connected) ═══ -->
+    {:else if step === 'connecting'}
+      <div class="wb">
+        <div class="connecting-anim">
+          <div class="conn-spinner"></div>
+          <div class="conn-text">Connecting {connectingProvider || 'wallet'}...</div>
+          <div class="conn-sub">Approve the connection request in wallet</div>
+        </div>
+      </div>
+
+    {:else if step === 'sign-message'}
+      <div class="wb">
+        <div class="step-hero">
+          <span class="hero-kicker">STEP 2</span>
+          <h3 class="hero-title">Sign to verify ownership</h3>
+          <p class="hero-sub">This signature is free and used only for account authentication.</p>
+        </div>
+
+        <div class="info-box">
+          <div class="info-row">
+            <span class="info-k">WALLET</span>
+            <span class="info-v">{state.shortAddr || '-'}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-k">CHAIN</span>
+            <span class="info-v">{state.chain}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-k">MODE</span>
+            <span class="info-v">{authMode === 'login' ? 'LOG IN' : 'SIGN UP'}</span>
+          </div>
+        </div>
+
+        <button class="btn-primary" type="button" on:click={handleSignMessage} disabled={signingMessage}>
+          {#if signingMessage}SIGNING...{:else}SIGN MESSAGE{/if}
+        </button>
+        <button class="btn-ghost" type="button" on:click={() => setWalletModalStep('wallet-select')}>
+          USE DIFFERENT WALLET
+        </button>
+      </div>
+
+    {:else if step === 'connected'}
+      <div class="wb">
+        <div class="step-hero">
+          <span class="hero-kicker">WALLET READY</span>
+          <h3 class="hero-title">{state.shortAddr}</h3>
+          <p class="hero-sub">{hasWalletProof() ? 'Wallet challenge completed.' : 'Sign challenge is required before authentication.'}</p>
+        </div>
+
+        <div class="info-box">
+          <div class="info-row">
+            <span class="info-k">CHAIN</span>
+            <span class="info-v">{state.chain}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-k">BALANCE</span>
+            <span class="info-v">{state.balance.toLocaleString()} USDT</span>
+          </div>
+        </div>
+
+        {#if hasWalletProof()}
+          <button class="btn-primary" type="button" on:click={() => setWalletModalStep(authMode)}>
+            CONTINUE TO {authMode === 'login' ? 'LOG IN' : 'SIGN UP'}
+          </button>
+        {:else}
+          <button class="btn-primary" type="button" on:click={() => setWalletModalStep('sign-message')}>
+            SIGN TO CONTINUE
+          </button>
+        {/if}
+
+        <button class="btn-ghost" type="button" on:click={handleDisconnect}>DISCONNECT WALLET</button>
+      </div>
+
     {:else if step === 'signup'}
-      <div class="wb step-signup">
-        <div class="signup-desc">
-          Wallet connected. Create your trader profile.<br/>
-          <span class="signup-note">Email + nickname are used as your account identity.</span>
+      <div class="wb">
+        <div class="step-hero">
+          <span class="hero-kicker">STEP 3</span>
+          <h3 class="hero-title">Create account</h3>
+          <p class="hero-sub">Use only required identity fields.</p>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="signup-email">EMAIL</label>
-          <input id="signup-email" class="form-input" type="email" bind:value={emailInput} placeholder="your@email.com" />
+          <input id="signup-email" class="form-input" type="email" bind:value={emailInput} placeholder="you@example.com" />
         </div>
 
         <div class="form-group">
           <label class="form-label" for="signup-nickname">NICKNAME</label>
-          <input id="signup-nickname" class="form-input" type="text" bind:value={nicknameInput} placeholder="DogeTrader42" maxlength="16" />
-          <div class="form-hint">{nicknameInput.length}/16 characters</div>
+          <input id="signup-nickname" class="form-input" type="text" bind:value={nicknameInput} maxlength="32" placeholder="TraderDoge" />
         </div>
 
         {#if emailError}
           <div class="form-error">{emailError}</div>
         {/if}
 
-        <button class="primary-btn" on:click={handleSignupSubmit}>
-          CREATE ACCOUNT →
+        <button class="btn-primary" type="button" on:click={handleSignupSubmit} disabled={authSubmitting}>
+          {#if authSubmitting}CREATING...{:else}CREATE ACCOUNT{/if}
         </button>
-        <button class="ghost-btn" on:click={() => openAuthStep('login')}>
-          Already have account? LOG IN →
-        </button>
-        <button class="back-btn" on:click={() => setWalletModalStep('connected')}>
-          ← Back
-        </button>
+        <button class="btn-ghost" type="button" on:click={() => setWalletModalStep('sign-message')}>BACK TO SIGN</button>
       </div>
 
-    <!-- ═══ STEP: LOGIN (wallet connected) ═══ -->
     {:else if step === 'login'}
-      <div class="wb step-login">
-        <div class="signup-desc">
-          Wallet connected. Log in with your existing account.<br/>
-          <span class="signup-note">Current login format: email + nickname pair.</span>
+      <div class="wb">
+        <div class="step-hero">
+          <span class="hero-kicker">STEP 3</span>
+          <h3 class="hero-title">Log in account</h3>
+          <p class="hero-sub">Email + wallet signature is the primary login path.</p>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="login-email">EMAIL</label>
-          <input id="login-email" class="form-input" type="email" bind:value={emailInput} placeholder="your@email.com" />
+          <input id="login-email" class="form-input" type="email" bind:value={emailInput} placeholder="you@example.com" />
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="login-nickname">NICKNAME</label>
-          <input id="login-nickname" class="form-input" type="text" bind:value={nicknameInput} placeholder="DogeTrader42" maxlength="16" />
+          <label class="form-label" for="login-nickname">NICKNAME (OPTIONAL)</label>
+          <input id="login-nickname" class="form-input" type="text" bind:value={nicknameInput} maxlength="32" placeholder="Only if duplicate email history" />
         </div>
 
         {#if emailError}
           <div class="form-error">{emailError}</div>
         {/if}
 
-        <button class="primary-btn" on:click={handleLoginSubmit}>
-          LOG IN →
+        <button class="btn-primary" type="button" on:click={handleLoginSubmit} disabled={authSubmitting}>
+          {#if authSubmitting}LOGGING IN...{:else}LOG IN{/if}
         </button>
-        <button class="ghost-btn" on:click={() => openAuthStep('signup')}>
-          New here? CREATE ACCOUNT →
-        </button>
-        <button class="back-btn" on:click={() => setWalletModalStep('connected')}>
-          ← Back
-        </button>
+        <button class="btn-ghost" type="button" on:click={() => setWalletModalStep('sign-message')}>BACK TO SIGN</button>
       </div>
 
-    <!-- ═══ STEP: DEMO INTRO ═══ -->
-    {:else if step === 'demo-intro'}
-      <div class="wb step-demo">
-        <div class="demo-hero">
-          <div class="demo-icon">🎮</div>
-          <div class="demo-title">YOUR FIRST ROUND</div>
+    {:else}
+      <div class="wb">
+        <div class="step-hero">
+          <span class="hero-kicker">ACCOUNT</span>
+          <h3 class="hero-title">{state.nickname || 'TRADER'}</h3>
+          <p class="hero-sub">Core profile information only.</p>
         </div>
 
-        <div class="demo-steps">
-          <div class="demo-step">
-            <span class="ds-num">1</span>
-            <div>
-              <div class="ds-title">Enter Your Hypothesis</div>
-              <div class="ds-desc">Pick LONG or SHORT before seeing any data</div>
-            </div>
+        <div class="info-box">
+          <div class="info-row">
+            <span class="info-k">EMAIL</span>
+            <span class="info-v">{state.email || '-'}</span>
           </div>
-          <div class="demo-step">
-            <span class="ds-num">2</span>
-            <div>
-              <div class="ds-title">Watch Agents Analyze</div>
-              <div class="ds-desc">7 agents debate — they may DISSENT from each other</div>
-            </div>
+          <div class="info-row">
+            <span class="info-k">NICKNAME</span>
+            <span class="info-v">{state.nickname || '-'}</span>
           </div>
-          <div class="demo-step">
-            <span class="ds-num">3</span>
-            <div>
-              <div class="ds-title">Compare & Learn</div>
-              <div class="ds-desc">See how your prediction matches the agents' verdict</div>
-            </div>
+          <div class="info-row">
+            <span class="info-k">TIER</span>
+            <span class="info-v">{state.tier.toUpperCase()}</span>
           </div>
-        </div>
-
-        <div class="demo-note">
-          <span class="demo-note-icon">⚡</span>
-          Agents don't always agree. Look for <strong>DISSENT</strong> — it's where the best insights hide.
-        </div>
-
-        <button class="primary-btn" on:click={completeDemoView}>
-          START DEMO ROUND 🐕
-        </button>
-      </div>
-
-    <!-- ═══ STEP: WALLET SELECT (required) ═══ -->
-    {:else if step === 'wallet-select'}
-      <div class="wb step-wallet">
-        <div class="wallet-header-note required">
-          <span class="whn-badge">REQUIRED</span>
-          <span class="whn-text">Connect wallet first to continue {preferredAuthStep === 'login' ? 'login' : 'signup'}.</span>
-        </div>
-
-        <div class="wallet-list">
-          <button class="wopt" on:click={() => handleConnect('metamask')}>
-            <span class="wo-icon">🦊</span>
-            <span class="wo-name">MetaMask</span>
-            <span class="wo-pop">Popular</span>
-          </button>
-          <button class="wopt" on:click={() => handleConnect('phantom')}>
-            <span class="wo-icon">👻</span>
-            <span class="wo-name">Phantom</span>
-            <span class="wo-chain">SOL</span>
-          </button>
-          <button class="wopt" on:click={() => handleConnect('walletconnect')}>
-            <span class="wo-icon">🔵</span>
-            <span class="wo-name">WalletConnect</span>
-            <span class="wo-chain">Multi</span>
-          </button>
-          <button class="wopt" on:click={() => handleConnect('coinbase')}>
-            <span class="wo-icon">🔷</span>
-            <span class="wo-name">Coinbase Wallet</span>
-            <span class="wo-chain">Multi</span>
-          </button>
-        </div>
-
-        <div class="wallet-note">
-          Wallet verification is the default authentication path.
-        </div>
-      </div>
-
-    <!-- ═══ STEP: CONNECTING ═══ -->
-    {:else if step === 'connecting'}
-      <div class="wb step-connecting">
-        <div class="connecting-anim">
-          <div class="conn-spinner"></div>
-          <div class="conn-text">Connecting to {connectingProvider}...</div>
-          <div class="conn-sub">Confirm in your wallet</div>
-        </div>
-      </div>
-
-    <!-- ═══ STEP: SIGN MESSAGE (verify ownership) ═══ -->
-    {:else if step === 'sign-message'}
-      <div class="wb step-sign">
-        <div class="sign-hero">
-          <div class="sign-icon">✍️</div>
-          <div class="sign-title">VERIFY OWNERSHIP</div>
-          <div class="sign-sub">Sign a message to prove you own this wallet</div>
-        </div>
-
-        <div class="sign-details">
-          <div class="sign-row">
-            <span class="sign-label">ADDRESS</span>
-            <span class="sign-val">{state.shortAddr}</span>
+          <div class="info-row">
+            <span class="info-k">PHASE</span>
+            <span class="info-v">P{state.phase}</span>
           </div>
-          <div class="sign-row">
-            <span class="sign-label">MESSAGE</span>
-            <span class="sign-msg">"STOCKCLAW verify {state.shortAddr} at {Date.now()}"</span>
-          </div>
-          <div class="sign-row">
-            <span class="sign-label">CHAIN</span>
-            <span class="sign-val">{state.chain}</span>
-          </div>
-        </div>
-
-        <div class="sign-note">
-          <span class="sign-note-icon">🔒</span>
-          This is a free signature request — no gas fees.
-        </div>
-
-        <button class="primary-btn sign-btn" on:click={handleSignMessage} disabled={signingMessage}>
-          {#if signingMessage}
-            <span class="sign-spinner"></span> SIGNING...
-          {:else}
-            ✍️ SIGN MESSAGE
-          {/if}
-        </button>
-        <button class="ghost-btn" on:click={() => setWalletModalStep('wallet-select')}>
-          ← Use Different Wallet
-        </button>
-      </div>
-
-    <!-- ═══ STEP: CONNECTED (wallet done → login/signup) ═══ -->
-    {:else if step === 'connected'}
-      <div class="wb step-connected">
-        <div class="connected-hero">
-          <div class="conn-check">✓</div>
-          <div class="conn-label">WALLET CONNECTED</div>
-          <div class="conn-addr">{state.shortAddr}</div>
-          <div class="conn-balance">{state.balance.toLocaleString()} USDT</div>
-        </div>
-
-        <div class="connected-features">
-          <div class="cf-item unlock">🔓 DeFi Copilot Orders</div>
-          <div class="cf-item unlock">🔓 On-chain Verification</div>
-          <div class="cf-item unlock">🔓 Token-gated Challenges</div>
-        </div>
-
-        {#if state.email}
-          <a class="primary-btn passport-link" href="/passport" on:click={handleClose}>
-            🐕 VIEW PASSPORT →
-          </a>
-          <button class="ghost-btn" on:click={() => setWalletModalStep('profile')}>
-            View Quick Profile
-          </button>
-        {:else}
-          {#if preferredAuthStep === 'login'}
-            <button class="primary-btn" on:click={() => openAuthStep('login')}>
-              LOG IN →
-            </button>
-            <button class="ghost-btn" on:click={() => openAuthStep('signup')}>
-              Need new account? CREATE ACCOUNT →
-            </button>
-          {:else}
-            <button class="primary-btn" on:click={() => openAuthStep('signup')}>
-              CREATE ACCOUNT →
-            </button>
-            <button class="ghost-btn" on:click={() => openAuthStep('login')}>
-              Already have account? LOG IN →
-            </button>
-          {/if}
-        {/if}
-        <button class="disconnect-btn" on:click={handleDisconnect}>
-          LOG OUT & DISCONNECT
-        </button>
-      </div>
-
-    <!-- ═══ STEP: PROFILE (connected user) ═══ -->
-    {:else if step === 'profile'}
-      <div class="wb step-profile">
-        <div class="profile-hero">
-          <div class="profile-avatar">🐕</div>
-          <div class="profile-name">{state.nickname || 'DOGE TRADER'}</div>
-          <div class="profile-email">{state.email || ''}</div>
-        </div>
-
-        <div class="profile-stats">
-          <div class="ps-item">
-            <div class="ps-lbl">PHASE</div>
-            <div class="ps-val">P{state.phase}</div>
-          </div>
-          <div class="ps-item">
-            <div class="ps-lbl">MATCHES</div>
-            <div class="ps-val">{state.matchesPlayed}</div>
-          </div>
-          <div class="ps-item">
-            <div class="ps-lbl">LP</div>
-            <div class="ps-val">{state.totalLP}</div>
-          </div>
-          <div class="ps-item">
-            <div class="ps-lbl">TIER</div>
-            <div class="ps-val tier-{state.tier}">{state.tier.toUpperCase()}</div>
+          <div class="info-row">
+            <span class="info-k">WALLET</span>
+            <span class="info-v">{state.connected ? state.shortAddr : 'NOT CONNECTED'}</span>
           </div>
         </div>
 
         {#if state.connected}
-          <div class="wallet-info">
-            <div class="wi-row">
-              <span class="wi-lbl">Wallet</span>
-              <span class="wi-val">{state.shortAddr}</span>
-            </div>
-            <div class="wi-row">
-              <span class="wi-lbl">Chain</span>
-              <span class="wi-val">{state.chain}</span>
-            </div>
-            <div class="wi-row">
-              <span class="wi-lbl">Balance</span>
-              <span class="wi-val">{state.balance.toLocaleString()} USDT</span>
-            </div>
-          </div>
-          <a class="primary-btn passport-link" href="/passport" on:click={handleClose}>
-            🐕 VIEW FULL PASSPORT →
-          </a>
-          <button class="disconnect-btn" on:click={handleDisconnect}>
-            LOG OUT & DISCONNECT
-          </button>
+          <a class="btn-primary passport-link" href="/passport" on:click={handleClose}>VIEW PASSPORT</a>
+          <button class="btn-ghost" type="button" on:click={handleDisconnect}>LOG OUT & DISCONNECT</button>
         {:else}
-          <button class="primary-btn" on:click={() => setWalletModalStep('wallet-select')}>
-            🔗 CONNECT WALLET
-          </button>
-          <a class="ghost-btn passport-link" href="/passport" on:click={handleClose}>
-            View Passport →
-          </a>
+          <button class="btn-primary" type="button" on:click={() => setWalletModalStep('wallet-select')}>CONNECT WALLET</button>
+          <a class="btn-ghost passport-link" href="/passport" on:click={handleClose}>OPEN PASSPORT</a>
         {/if}
       </div>
     {/if}
-
-    <!-- Phase indicator (wallet-first auth flow) -->
-    <div class="phase-dots">
-      {#each ['welcome', 'wallet-select', 'connected', step === 'login' ? 'login' : 'signup'] as s, i}
-        <div class="pdot" class:active={step === s} class:done={
-          (s === 'welcome' && (state.connected || state.email !== null)) ||
-          (s === 'wallet-select' && state.connected) ||
-          (s === 'connected' && state.connected) ||
-          ((s === 'signup' || s === 'login') && state.email !== null)
-        }></div>
-      {/each}
-    </div>
   </div>
 </div>
 {/if}
 
 <style>
   .modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,.75);
-    backdrop-filter: blur(6px);
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 8, 5, 0.78);
+    backdrop-filter: blur(8px);
     z-index: 200;
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 12px;
   }
+
   .wallet-panel {
-    width: 380px;
-    max-height: 85vh;
-    border: 4px solid #000; border-radius: 16px;
-    overflow: hidden; box-shadow: 8px 8px 0 #000;
-    background: #0a0a1a;
+    --wm-bg: #08180d;
+    --wm-bg-2: #0f2616;
+    --wm-card: rgba(232, 150, 125, 0.08);
+    --wm-border: rgba(232, 150, 125, 0.3);
+    --wm-accent: #e8967d;
+    --wm-text: #f0ede4;
+    --wm-muted: rgba(240, 237, 228, 0.62);
+    --wm-kicker: rgba(232, 150, 125, 0.82);
+    width: min(440px, 100%);
+    max-height: min(88vh, 780px);
+    border: 1px solid var(--wm-border);
+    border-radius: 14px;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--wm-bg-2), var(--wm-bg));
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45), 0 0 24px rgba(232, 150, 125, 0.14);
     display: flex;
     flex-direction: column;
   }
 
-  /* Header */
   .wh {
-    padding: 12px 16px;
-    background: linear-gradient(90deg, #ffe600, #ffcc00);
-    border-bottom: 4px solid #000;
-    display: flex; align-items: center; gap: 8px;
-    color: #000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(232, 150, 125, 0.2);
+    background: linear-gradient(180deg, rgba(232, 150, 125, 0.08), rgba(232, 150, 125, 0.02));
+  }
+
+  .wh-left {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .wh-tag {
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1.4px;
+    color: var(--wm-kicker);
+  }
+
+  .wht {
+    font-family: var(--fp);
+    font-size: 10px;
+    letter-spacing: 1.8px;
+    color: var(--wm-text);
+    text-shadow: 0 0 8px rgba(232, 150, 125, 0.2);
+  }
+
+  .mode-toggle {
+    margin-left: auto;
+    display: inline-flex;
+    border: 1px solid rgba(232, 150, 125, 0.35);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .mode-btn {
+    border: none;
+    background: transparent;
+    color: var(--wm-muted);
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1.2px;
+    padding: 7px 10px;
+    cursor: pointer;
+    transition: background 0.16s ease, color 0.16s ease;
+  }
+
+  .mode-btn.active {
+    background: rgba(232, 150, 125, 0.18);
+    color: var(--wm-text);
+  }
+
+  .whc {
+    border: 1px solid rgba(232, 150, 125, 0.35);
+    background: rgba(232, 150, 125, 0.05);
+    color: var(--wm-text);
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
     flex-shrink: 0;
   }
-  .whi { font-size: 18px; }
-  .wht { font-size: 11px; font-weight: 900; font-family: var(--fd); letter-spacing: 1.5px; }
-  .whc {
-    margin-left: auto; font-size: 16px; cursor: pointer;
-    background: none; border: 2px solid #000; width: 24px; height: 24px;
-    display: flex; align-items: center; justify-content: center;
-    border-radius: 6px; transition: all .15s;
-  }
-  .whc:hover { background: #000; color: #ffe600; }
 
-  /* Body */
+  .whc:hover {
+    background: rgba(232, 150, 125, 0.16);
+  }
+
+  .global-error,
+  .form-error {
+    margin: 8px 12px 0;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 89, 89, 0.45);
+    border-radius: 8px;
+    background: rgba(255, 89, 89, 0.08);
+    color: #ff9b9b;
+    font-family: var(--fv);
+    font-size: 14px;
+    line-height: 1.35;
+    letter-spacing: 0.2px;
+  }
+
+  .form-error {
+    margin: 0 0 6px;
+  }
+
+  .progress-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(232, 150, 125, 0.14);
+  }
+
+  .pstep {
+    border: 1px solid rgba(232, 150, 125, 0.18);
+    border-radius: 999px;
+    text-align: center;
+    padding: 5px 8px;
+    font-family: var(--fp);
+    font-size: 7px;
+    letter-spacing: 1px;
+    color: rgba(240, 237, 228, 0.44);
+  }
+
+  .pstep.active {
+    color: var(--wm-text);
+    border-color: rgba(232, 150, 125, 0.44);
+    background: rgba(232, 150, 125, 0.12);
+  }
+
+  .pstep.done {
+    color: #89f4be;
+    border-color: rgba(137, 244, 190, 0.45);
+    background: rgba(137, 244, 190, 0.1);
+  }
+
   .wb {
-    padding: 16px;
+    padding: 14px;
     overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .step-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .hero-kicker {
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1.5px;
+    color: var(--wm-kicker);
+  }
+
+  .hero-title {
+    font-family: var(--fp);
+    font-size: clamp(11px, 1.2vw, 13px);
+    letter-spacing: 1.2px;
+    color: var(--wm-text);
+    line-height: 1.35;
+  }
+
+  .hero-sub {
+    font-family: var(--fv);
+    font-size: 16px;
+    color: var(--wm-muted);
+    letter-spacing: 0.3px;
+    line-height: 1.32;
+  }
+
+  .flow-card,
+  .info-box {
+    border: 1px solid rgba(232, 150, 125, 0.2);
+    border-radius: 10px;
+    background: rgba(232, 150, 125, 0.05);
+    padding: 10px;
+  }
+
+  .flow-item {
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1.3px;
+    color: rgba(240, 237, 228, 0.82);
+    padding: 7px 8px;
+    border-bottom: 1px solid rgba(232, 150, 125, 0.15);
+  }
+
+  .flow-item:last-child {
+    border-bottom: none;
+  }
+
+  .wallet-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .wopt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    border: 1px solid rgba(232, 150, 125, 0.22);
+    border-radius: 10px;
+    background: rgba(232, 150, 125, 0.04);
+    color: var(--wm-text);
+    padding: 10px 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.16s ease, background 0.16s ease;
+  }
+
+  .wopt:hover {
+    border-color: rgba(232, 150, 125, 0.5);
+    background: rgba(232, 150, 125, 0.1);
+  }
+
+  .wo-icon {
+    font-size: 18px;
+  }
+
+  .wo-name {
+    font-family: var(--fp);
+    font-size: 9px;
+    letter-spacing: 1.1px;
     flex: 1;
   }
 
-  /* ═══ WELCOME STEP ═══ */
-  .welcome-hero { text-align: center; margin-bottom: 16px; }
-  .welcome-doge { font-size: 42px; margin-bottom: 4px; }
-  .welcome-title { font-family: var(--fd); font-size: 22px; letter-spacing: 3px; color: var(--yel); }
-  .welcome-sub { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.5); letter-spacing: 1px; margin-top: 4px; }
-
-  .welcome-features { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-  .wf-item {
-    display: flex; align-items: flex-start; gap: 10px;
-    padding: 10px 12px; border-radius: 8px;
-    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
-  }
-  .wf-icon { font-size: 18px; flex-shrink: 0; }
-  .wf-label { font-family: var(--fm); font-size: 10px; font-weight: 700; color: #fff; margin-bottom: 2px; }
-  .wf-desc { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.45); line-height: 1.4; }
-
-  .step-hint {
-    display: flex; align-items: center; gap: 6px;
-    padding: 8px 12px; margin-top: 10px;
-    background: rgba(255,230,0,.05); border: 1px dashed rgba(255,230,0,.2); border-radius: 8px;
-    font-family: var(--fm); font-size: 8px; color: rgba(255,230,0,.6); line-height: 1.4;
-  }
-  .hint-icon { font-size: 12px; }
-
-  /* ═══ SIGNUP STEP ═══ */
-  .signup-desc {
-    font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.6);
-    line-height: 1.5; margin-bottom: 14px; text-align: center;
-  }
-  .signup-note { color: rgba(255,230,0,.5); font-weight: 700; }
-
-  .form-group { margin-bottom: 10px; }
-  .form-label {
-    display: block; font-family: var(--fm); font-size: 8px; font-weight: 700;
-    letter-spacing: 2px; color: rgba(255,255,255,.4); margin-bottom: 4px;
-  }
-  .form-input {
-    width: 100%; padding: 10px 12px; border-radius: 8px;
-    background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.1);
-    color: #fff; font-size: 12px; font-family: var(--fm); outline: none;
-    box-sizing: border-box;
-    transition: border-color .2s;
-  }
-  .form-input:focus { border-color: var(--yel); }
-  .form-input::placeholder { color: #444; }
-  .form-hint { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.25); text-align: right; margin-top: 2px; }
-  .global-error,
-  .form-error {
-    font-family: var(--fm); font-size: 9px; color: var(--red);
-    padding: 4px 8px; background: rgba(255,45,85,.1); border-radius: 4px; margin-bottom: 8px;
-  }
-  .global-error {
-    margin: 8px 12px 0;
+  .wo-chain {
+    font-family: var(--fp);
+    font-size: 7px;
+    letter-spacing: 0.8px;
+    border: 1px solid rgba(232, 150, 125, 0.4);
+    border-radius: 999px;
+    padding: 3px 6px;
+    color: var(--wm-kicker);
   }
 
-  /* ═══ DEMO STEP ═══ */
-  .demo-hero { text-align: center; margin-bottom: 14px; }
-  .demo-icon { font-size: 32px; margin-bottom: 4px; }
-  .demo-title { font-family: var(--fd); font-size: 16px; letter-spacing: 3px; color: #fff; }
-
-  .demo-steps { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-  .demo-step {
-    display: flex; align-items: flex-start; gap: 10px;
-    padding: 10px 12px; border-radius: 8px;
-    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
-  }
-  .ds-num {
-    width: 22px; height: 22px; border-radius: 50%;
-    background: var(--yel); color: #000;
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--fd); font-size: 11px; font-weight: 900;
-    flex-shrink: 0;
-  }
-  .ds-title { font-family: var(--fm); font-size: 10px; font-weight: 700; color: #fff; }
-  .ds-desc { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.45); line-height: 1.4; }
-
-  .demo-note {
-    display: flex; align-items: center; gap: 6px;
-    padding: 8px 12px; margin-bottom: 14px;
-    background: rgba(255,45,85,.06); border: 1px solid rgba(255,45,85,.2); border-radius: 8px;
-    font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.6); line-height: 1.4;
-  }
-  .demo-note-icon { font-size: 12px; }
-  .demo-note strong { color: var(--red); letter-spacing: 1px; }
-
-  /* ═══ WALLET SELECT STEP ═══ */
-  .wallet-header-note {
-    display: flex; align-items: center; gap: 8px;
-    margin-bottom: 12px;
-  }
-  .wallet-header-note.required .whn-badge {
-    background: rgba(255,45,85,.16);
-    border-color: rgba(255,45,85,.35);
-    color: #ff8fa8;
-  }
-  .whn-badge {
-    font-family: var(--fm); font-size: 7px; font-weight: 700;
-    background: rgba(0,255,136,.15); color: var(--grn);
-    border: 1px solid rgba(0,255,136,.3); padding: 2px 6px;
-    letter-spacing: 1.5px;
-  }
-  .whn-text { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.5); }
-
-  .wallet-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-  .wopt {
-    display: flex; align-items: center; gap: 10px;
-    padding: 12px 14px; border-radius: 10px;
-    background: rgba(255,255,255,.03); border: 2px solid rgba(255,255,255,.08);
-    color: #fff; cursor: pointer; transition: all .15s;
-    font-family: var(--fm);
-  }
-  .wopt:hover { background: rgba(255,255,255,.08); border-color: var(--yel); }
-  .wo-icon { font-size: 20px; }
-  .wo-name { font-size: 11px; font-weight: 700; flex: 1; text-align: left; }
-  .wo-pop, .wo-chain {
-    font-size: 7px; padding: 2px 6px; border-radius: 4px;
-    background: rgba(255,230,0,.1); color: var(--yel);
-    font-weight: 700; letter-spacing: .5px;
+  .connecting-anim {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 24px 0;
   }
 
-  .wallet-note {
-    text-align: center; font-family: var(--fm); font-size: 7px;
-    color: rgba(255,255,255,.25); margin-top: 8px;
-  }
-
-  /* ═══ CONNECTING STEP ═══ */
-  .connecting-anim { text-align: center; padding: 30px 0; }
   .conn-spinner {
-    width: 40px; height: 40px; margin: 0 auto 12px;
-    border: 3px solid rgba(255,230,0,.2);
-    border-top-color: var(--yel);
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(232, 150, 125, 0.2);
+    border-top-color: var(--wm-accent);
     border-radius: 50%;
-    animation: spin .8s linear infinite;
+    animation: spin 0.8s linear infinite;
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .conn-text { font-family: var(--fm); font-size: 12px; font-weight: 700; color: #fff; }
-  .conn-sub { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.4); margin-top: 4px; }
 
-  /* ═══ SIGN MESSAGE STEP ═══ */
-  .sign-hero { text-align: center; margin-bottom: 14px; }
-  .sign-icon { font-size: 36px; margin-bottom: 6px; }
-  .sign-title {
-    font-family: var(--fd);
-    font-size: 16px; font-weight: 900; letter-spacing: 2px; color: #fff;
+  .conn-text {
+    font-family: var(--fp);
+    font-size: 9px;
+    letter-spacing: 1.1px;
+    color: var(--wm-text);
   }
-  .sign-sub {
-    font-family: var(--fm);
-    font-size: 9px; color: rgba(255,255,255,.5); margin-top: 4px;
+
+  .conn-sub {
+    font-family: var(--fv);
+    font-size: 15px;
+    color: var(--wm-muted);
   }
-  .sign-details {
-    background: rgba(255,255,255,.04);
-    border: 1px solid rgba(255,255,255,.08);
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 2px;
+    border-bottom: 1px solid rgba(232, 150, 125, 0.12);
+  }
+
+  .info-row:last-child {
+    border-bottom: none;
+  }
+
+  .info-k {
+    font-family: var(--fp);
+    font-size: 7px;
+    letter-spacing: 1px;
+    color: rgba(240, 237, 228, 0.55);
+  }
+
+  .info-v {
+    font-family: var(--fp);
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: var(--wm-text);
+    text-align: right;
+    word-break: break-word;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .form-label {
+    font-family: var(--fp);
+    font-size: 7px;
+    letter-spacing: 1.2px;
+    color: rgba(240, 237, 228, 0.56);
+  }
+
+  .form-input {
+    width: 100%;
+    border: 1px solid rgba(232, 150, 125, 0.24);
+    border-radius: 9px;
+    background: rgba(232, 150, 125, 0.03);
+    color: var(--wm-text);
+    padding: 10px 11px;
+    font-family: var(--fv);
+    font-size: 18px;
+    outline: none;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  }
+
+  .form-input:focus {
+    border-color: rgba(232, 150, 125, 0.56);
+    box-shadow: 0 0 0 2px rgba(232, 150, 125, 0.14);
+  }
+
+  .form-input::placeholder {
+    color: rgba(240, 237, 228, 0.34);
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    width: 100%;
     border-radius: 10px;
-    padding: 10px;
-    margin-bottom: 10px;
-  }
-  .sign-row {
-    display: flex; align-items: flex-start; gap: 8px;
-    padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.04);
-  }
-  .sign-row:last-child { border-bottom: none; }
-  .sign-label {
-    font-family: var(--fm);
-    font-size: 7px; font-weight: 900; letter-spacing: 1.5px;
-    color: rgba(255,255,255,.3); min-width: 55px;
-  }
-  .sign-val {
-    font-family: var(--fd);
-    font-size: 10px; font-weight: 900; color: var(--yel);
-  }
-  .sign-msg {
-    font-family: var(--fm);
-    font-size: 8px; color: rgba(255,255,255,.6);
-    word-break: break-all;
-  }
-  .sign-note {
-    display: flex; align-items: center; gap: 6px;
-    background: rgba(0,255,136,.06);
-    border: 1px solid rgba(0,255,136,.15);
-    border-radius: 8px; padding: 8px 10px; margin-bottom: 12px;
-    font-family: var(--fm);
-    font-size: 8px; color: rgba(255,255,255,.6);
-  }
-  .sign-note-icon { font-size: 12px; }
-  .sign-btn:disabled { opacity: .6; cursor: not-allowed; }
-  .sign-spinner {
-    display: inline-block;
-    width: 10px; height: 10px;
-    border: 2px solid rgba(255,255,255,.3);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: spin .6s linear infinite;
+    font-family: var(--fp);
+    font-size: 9px;
+    letter-spacing: 1.4px;
+    padding: 12px 12px;
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
   }
 
-  /* ═══ CONNECTED STEP ═══ */
-  .connected-hero { text-align: center; margin-bottom: 14px; }
-  .conn-check {
-    width: 48px; height: 48px; border-radius: 50%;
-    background: rgba(0,255,136,.15); border: 3px solid var(--grn);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 24px; color: var(--grn); margin: 0 auto 8px;
-    animation: checkPop .4s ease;
-  }
-  @keyframes checkPop { 0% { transform: scale(0); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
-  .conn-label { font-family: var(--fd); font-size: 14px; color: var(--grn); letter-spacing: 2px; }
-  .conn-addr { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.5); margin-top: 4px; }
-  .conn-balance { font-family: var(--fd); font-size: 16px; color: var(--yel); margin-top: 4px; }
-
-  .connected-features { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
-  .cf-item {
-    font-family: var(--fm); font-size: 9px; padding: 6px 10px;
-    background: rgba(0,255,136,.05); border: 1px solid rgba(0,255,136,.15);
-    border-radius: 6px; color: rgba(0,255,136,.7);
+  .btn-primary {
+    border: 1px solid rgba(232, 150, 125, 0.65);
+    background: rgba(232, 150, 125, 0.92);
+    color: #0a1a0d;
+    box-shadow: 0 0 18px rgba(232, 150, 125, 0.24);
   }
 
-  /* ═══ PROFILE STEP ═══ */
-  .profile-hero { text-align: center; margin-bottom: 14px; }
-  .profile-avatar {
-    font-size: 40px; width: 60px; height: 60px;
-    border-radius: 50%; background: rgba(255,230,0,.1);
-    border: 3px solid var(--yel); margin: 0 auto 6px;
-    display: flex; align-items: center; justify-content: center;
+  .btn-primary:hover {
+    background: #efab95;
   }
-  .profile-name { font-family: var(--fd); font-size: 16px; color: #fff; letter-spacing: 2px; }
-  .profile-email { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.35); margin-top: 2px; }
 
-  .profile-stats {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
-    margin-bottom: 12px;
+  .btn-primary:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
   }
-  .ps-item { text-align: center; padding: 6px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); }
-  .ps-lbl { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.35); letter-spacing: 1px; }
-  .ps-val { font-family: var(--fd); font-size: 14px; color: var(--yel); }
-  .ps-val.tier-guest { color: #888; }
-  .ps-val.tier-registered { color: #8b5cf6; }
-  .ps-val.tier-connected { color: var(--grn); }
-  .ps-val.tier-verified { color: var(--yel); }
 
-  .wallet-info {
-    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
-    border-radius: 8px; padding: 8px 10px; margin-bottom: 10px;
+  .btn-secondary {
+    border: 1px solid rgba(232, 150, 125, 0.34);
+    background: rgba(232, 150, 125, 0.08);
+    color: var(--wm-text);
   }
-  .wi-row { display: flex; justify-content: space-between; padding: 3px 0; }
-  .wi-lbl { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.35); }
-  .wi-val { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.7); font-weight: 700; }
+
+  .btn-secondary:hover {
+    background: rgba(232, 150, 125, 0.16);
+  }
+
+  .btn-ghost {
+    border: 1px solid rgba(232, 150, 125, 0.2);
+    background: transparent;
+    color: rgba(240, 237, 228, 0.72);
+  }
+
+  .btn-ghost:hover {
+    color: var(--wm-text);
+    border-color: rgba(232, 150, 125, 0.4);
+  }
 
   .passport-link {
     display: block;
-    text-align: center;
-    text-decoration: none;
     box-sizing: border-box;
   }
 
-  .disconnect-btn {
-    width: 100%; padding: 8px;
-    background: rgba(255,45,85,.1); border: 2px solid rgba(255,45,85,.3);
-    color: var(--red); font-family: var(--fm); font-size: 9px; font-weight: 700;
-    cursor: pointer; border-radius: 8px; transition: all .15s;
-    margin-top: 6px;
-  }
-  .disconnect-btn:hover { background: rgba(255,45,85,.2); }
+  @media (max-width: 520px) {
+    .modal-overlay {
+      padding: 12px;
+    }
 
-  /* ═══ SHARED BUTTONS ═══ */
-  .primary-btn {
-    width: 100%; padding: 12px;
-    background: var(--yel); color: #000;
-    border: 3px solid #000; border-radius: 10px;
-    font-family: var(--fd); font-size: 12px; font-weight: 900;
-    letter-spacing: 2px; cursor: pointer;
-    box-shadow: 3px 3px 0 #000;
-    transition: all .15s;
-    margin-top: 6px;
-  }
-  .primary-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 #000; }
-  .primary-btn.secondary {
-    background: rgba(255,255,255,.12);
-    color: #fff;
-    border-color: rgba(255,255,255,.2);
-    box-shadow: none;
-  }
-  .primary-btn.secondary:hover {
-    transform: none;
-    box-shadow: none;
-    background: rgba(255,255,255,.2);
+    .wallet-panel {
+      width: 100%;
+      max-height: 92vh;
+      border-radius: 12px;
+    }
+
+    .wh {
+      padding: 10px 10px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .mode-toggle {
+      margin-left: 0;
+    }
+
+    .whc {
+      margin-left: auto;
+    }
+
+    .wb {
+      padding: 12px;
+      gap: 10px;
+    }
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-ghost {
+      font-size: 8px;
+      letter-spacing: 1.1px;
+      padding: 11px 10px;
+    }
   }
 
-  .ghost-btn {
-    width: 100%; padding: 8px;
-    background: none; border: none;
-    color: rgba(255,255,255,.35); font-family: var(--fm); font-size: 9px;
-    cursor: pointer; margin-top: 4px;
-    transition: color .15s;
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
-  .ghost-btn:hover { color: rgba(255,255,255,.6); }
-
-  .back-btn {
-    width: 100%; padding: 6px;
-    background: none; border: none;
-    color: rgba(255,255,255,.3); font-family: var(--fm); font-size: 9px;
-    cursor: pointer; margin-top: 4px;
-    transition: color .15s;
-  }
-  .back-btn:hover { color: rgba(255,255,255,.5); }
-
-  /* ═══ PHASE DOTS ═══ */
-  .phase-dots {
-    display: flex; justify-content: center; gap: 6px;
-    padding: 8px; border-top: 1px solid rgba(255,255,255,.06);
-    flex-shrink: 0;
-  }
-  .pdot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: rgba(255,255,255,.15);
-    transition: all .2s;
-  }
-  .pdot.active { background: var(--yel); box-shadow: 0 0 6px var(--yel); }
-  .pdot.done { background: var(--grn); }
 </style>

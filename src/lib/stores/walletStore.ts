@@ -180,12 +180,12 @@ export async function hydrateAuthSession(force = false) {
 export function openWalletModal() {
   walletStore.update(w => {
     // Wallet-first flow:
-    // connected + account => profile
-    // connected only => choose login/signup from connected step
-    // account only (session restored) but no wallet => reconnect wallet first
-    const step = w.connected
-      ? (w.email ? 'profile' : 'connected')
-      : (w.email ? 'wallet-select' : 'welcome');
+    // authenticated user => profile (reconnect wallet from profile if needed)
+    // wallet-only user => connected step (choose login/signup)
+    // guest => welcome
+    const step = w.email
+      ? 'profile'
+      : (w.connected ? 'connected' : 'welcome');
     return { ...w, showWalletModal: true, walletModalStep: step };
   });
 }
@@ -244,7 +244,7 @@ export function signMessage(signatureOverride?: string) {
 
   walletStore.update(w => ({
     ...w,
-    tier: w.email ? 'connected' : 'guest',
+    tier: 'connected',
     signature,
     phase: Math.max(resolveLifecyclePhase(w.matchesPlayed, w.totalLP), 2),
     walletModalStep: 'connected'

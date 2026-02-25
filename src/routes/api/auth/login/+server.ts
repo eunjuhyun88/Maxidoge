@@ -58,11 +58,11 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
     if (email.length > 254) {
       return json({ error: 'Email is too long' }, { status: 400 });
     }
-    if (!nickname || nickname.length < 2) {
-      return json({ error: 'Nickname must be 2+ characters' }, { status: 400 });
+    if (nickname && nickname.length < 2) {
+      return json({ error: 'Nickname must be 2+ characters if provided' }, { status: 400 });
     }
     if (nickname.length > 32) {
-      return json({ error: 'Nickname must be 32 characters or less' }, { status: 400 });
+      return json({ error: 'Nickname must be 32 characters or less if provided' }, { status: 400 });
     }
     if (!isValidEthAddress(walletAddressRaw)) {
       return json({ error: 'Valid EVM wallet address required for login' }, { status: 400 });
@@ -94,7 +94,7 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
       return json({ error: 'Login challenge is expired or already used' }, { status: 401 });
     }
 
-    const user = await findAuthUserForLogin(email, nickname, walletAddress);
+    const user = await findAuthUserForLogin(email, walletAddress, nickname || null);
     if (!user) {
       return json({ error: 'Invalid login credentials or wallet mismatch' }, { status: 401 });
     }

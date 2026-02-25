@@ -181,11 +181,11 @@ export async function getAuthenticatedUser(token: string, userId: string): Promi
 
 export async function findAuthUserForLogin(
   email: string,
-  nickname: string,
-  walletAddress: string
+  walletAddress: string,
+  nickname?: string | null
 ): Promise<AuthUserRow | null> {
-  const result = await query<AuthUserRow>(
-    `
+  const trimmedNickname = typeof nickname === 'string' ? nickname.trim() : '';
+  const baseSelect = `
       SELECT
         id,
         email,
@@ -195,12 +195,25 @@ export async function findAuthUserForLogin(
         wallet_address
       FROM users
       WHERE lower(email) = lower($1)
-        AND lower(nickname) = lower($2)
-        AND lower(wallet_address) = lower($3)
-      LIMIT 1
-    `,
-    [email, nickname, walletAddress]
-  );
+        AND lower(wallet_address) = lower($2)
+  `;
+
+  const result = trimmedNickname
+    ? await query<AuthUserRow>(
+      `
+        ${baseSelect}
+          AND lower(nickname) = lower($3)
+        LIMIT 1
+      `,
+      [email, walletAddress, trimmedNickname]
+    )
+    : await query<AuthUserRow>(
+      `
+        ${baseSelect}
+        LIMIT 1
+      `,
+      [email, walletAddress]
+    );
 
   return result.rows[0] || null;
 }
