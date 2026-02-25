@@ -168,6 +168,7 @@
   let patternMarkers: ChartMarker[] = [];
   let detectedPatterns: ChartPatternDetection[] = [];
   let patternLineSeries: any[] = [];
+  const ENABLE_PATTERN_LINE_SERIES = false;
   let _patternSignature = '';
   let _patternRangeScanTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1279,6 +1280,12 @@
   }
 
   function applyPatternLineSeries() {
+    // Pattern guides are already drawn on the overlay canvas.
+    // Keep lightweight-charts line series off to prevent duplicate/double lines.
+    if (!ENABLE_PATTERN_LINE_SERIES) {
+      clearPatternLineSeries();
+      return;
+    }
     if (!chart || !lwcModule) return;
     clearPatternLineSeries();
     if (detectedPatterns.length === 0) return;
