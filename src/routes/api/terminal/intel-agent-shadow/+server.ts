@@ -1,8 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 import { normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
 import { buildShadowAgentDecision, type ShadowAgentDecision } from '$lib/server/intelShadowAgent';
 import type { IntelPolicyOutput } from '$lib/server/intelPolicyRuntime';
+import { getLLMRuntimeStatus, type LLMRuntimeStatus } from '$lib/server/llmService';
 
 const CACHE_TTL_MS = 20_000;
 
@@ -11,8 +13,12 @@ type ShadowCacheEntry = {
   payload: {
     pair: string;
     timeframe: string;
-    policy: IntelPolicyOutput['decision'];
+    policy: IntelPolicyOutput;
     shadow: ShadowAgentDecision;
+    llm: LLMRuntimeStatus;
+    execution: {
+      enabled: boolean;
+    };
   };
 };
 
@@ -42,11 +48,17 @@ async function fetchPolicy(fetchFn: typeof fetch, pair: string, timeframe: strin
 async function buildPayload(fetchFn: typeof fetch, pair: string, timeframe: string) {
   const policy = await fetchPolicy(fetchFn, pair, timeframe);
   const shadow = await buildShadowAgentDecision(policy);
+  const llm = getLLMRuntimeStatus();
+  const executionEnabled = String(env.INTEL_SHADOW_EXECUTION_ENABLED ?? '').toLowerCase() === 'true';
   return {
     pair,
     timeframe,
-    policy: policy.decision,
+    policy,
     shadow,
+    llm,
+    execution: {
+      enabled: executionEnabled,
+    },
   };
 }
 
