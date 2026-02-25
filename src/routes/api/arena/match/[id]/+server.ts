@@ -1,4 +1,4 @@
-// STOCKCLAW — Arena Match Detail
+// Stockclaw — Arena Match Detail
 // GET /api/arena/match/:id
 
 import { json } from '@sveltejs/kit';

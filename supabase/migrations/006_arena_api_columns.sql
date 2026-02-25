@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- STOCKCLAW — Arena API Column Additions (B-01)
+-- Stockclaw — Arena API Column Additions (B-01)
 -- Adds columns used by arenaService.ts
 -- ═══════════════════════════════════════════════════════════════
 BEGIN;

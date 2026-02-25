@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Polymarket Order Prepare API
+// Stockclaw — Polymarket Order Prepare API
 // ═══════════════════════════════════════════════════════════════
 // Step 1 of 2-step order flow:
 //   Frontend sends trade params → Backend validates + builds EIP-712

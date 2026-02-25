@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Unified News API (RSS + LunarCrush Social)
+// Stockclaw — Unified News API (RSS + LunarCrush Social)
 // ═══════════════════════════════════════════════════════════════
 // Merges CoinDesk/Cointelegraph RSS with LunarCrush popular posts
 // Supports pagination, importance scoring, and token filtering

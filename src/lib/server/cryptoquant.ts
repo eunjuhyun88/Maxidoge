@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — CryptoQuant API Client (server-side)
+// Stockclaw — CryptoQuant API Client (server-side)
 // ═══════════════════════════════════════════════════════════════
 // On-chain analytics for FLOW + VALUATION agents
 // Exchange reserves, MVRV, NUPL, whale metrics, miner flows

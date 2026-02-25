@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Server-side Rate Limiter (in-memory)
+// Stockclaw — Server-side Rate Limiter (in-memory)
 // ═══════════════════════════════════════════════════════════════
 // Sliding-window token bucket per IP.
 // Lightweight, no external deps, safe for 1000+ concurrent users.

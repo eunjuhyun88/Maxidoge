@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — DeFiLlama server client
+// Stockclaw — DeFiLlama server client
 // ═══════════════════════════════════════════════════════════════
 
 import { getCached, setCache } from './providers/cache';

@@ -1438,3 +1438,19 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: not executed
 - Final working tree status: pending commit
 - Status: DONE
+
+### W-20260225-2200-frontend-passport-codex (finish)
+
+- End (KST): 2026-02-25 22:05:12 +0900
+- What changed:
+  - UIUX 재적용 없이 백엔드 범위만 선별 동기화
+  - 대상 범위: `src/lib/server/**`, `src/routes/api/**`, `src/hooks.server.ts`, `db/migrations/**`, `supabase/migrations/**`
+  - 변경 내용: `STOCKCLAW` -> `Stockclaw` 표기 정리(로직 변경 없음)
+  - 변경 파일 수: 67
+- Validation results:
+  - npm run check: PASS (0 errors, 0 warnings)
+  - npm run build: PASS
+- Commit hash: pending (current branch commit)
+- Push status: not executed
+- Final working tree status: pending commit
+- Status: DONE

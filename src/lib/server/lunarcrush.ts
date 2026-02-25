@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — LunarCrush API Client (server-side)
+// Stockclaw — LunarCrush API Client (server-side)
 // ═══════════════════════════════════════════════════════════════
 // Social metrics: sentiment, social volume, interactions, dominance
 // Maps to: SENTI agent → SOCIAL_VOLUME, SOCIAL_SENTIMENT

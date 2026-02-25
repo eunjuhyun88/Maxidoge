@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Server-side Coinalyze Client (B-02)
+// Stockclaw — Server-side Coinalyze Client (B-02)
 // ═══════════════════════════════════════════════════════════════
 // Direct server-side access to Coinalyze (no proxy hop).
 // API key from env, results cached via LRU.
