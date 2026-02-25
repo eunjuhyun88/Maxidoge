@@ -50,17 +50,29 @@
   --fv:'VT323',monospace;
 
   /* ── TEXT READABILITY ── */
-  --fs-xs: 8px;
-  --fs-sm: 9px;
-  --fs-base: 10px;
-  --fs-md: 11px;
-  --fs-lg: 13px;
-  --fs-xl: 15px;
-  --fs-2xl: 18px;
-  --fs-3xl: 22px;
+  --fs-xs: 9px;
+  --fs-sm: 10px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 18px;
+  --fs-2xl: 22px;
+  --fs-3xl: 28px;
   --lh-tight: 1.25;
-  --lh-normal: 1.45;
-  --lh-relaxed: 1.6;
+  --lh-normal: 1.52;
+  --lh-relaxed: 1.7;
+
+  /* ── SPACING ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+
+  /* ── LAYOUT ── */
+  --header-h: 48px;
 }
 
 html,body{
@@ -101,7 +113,7 @@ html,body{
   font-size: var(--fs-xs);
   font-weight:900;
   letter-spacing:1.5px;
-  padding:2px 8px;
+  padding:var(--space-1) var(--space-2);
   border:2px solid #000;
   border-radius:10px;
   box-shadow:var(--shadow-sm);
@@ -111,7 +123,7 @@ html,body{
   font-size: var(--fs-sm);
   font-weight:900;
   letter-spacing:2px;
-  padding:8px 20px;
+  padding:var(--space-2) var(--space-5);
   border-radius:20px;
   border:3px solid #000;
   box-shadow:var(--shadow);

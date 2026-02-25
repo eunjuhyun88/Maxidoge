@@ -2032,8 +2032,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 5px;
-    padding: 7px 0;
+    gap: 6px;
+    padding: 8px 0;
     background: rgba(12, 29, 19, 0.95);
     border: none;
     cursor: pointer;
@@ -2049,7 +2049,7 @@
   .strip-label {
     writing-mode: vertical-rl;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1.8px;
     color: rgba(245, 196, 184, 0.62);
@@ -2083,7 +2083,7 @@
      TICKER BAR — shared across all layouts
      ═══════════════════════════════════════════ */
   .ticker-bar {
-    height: 22px;
+    height: 24px;
     background: linear-gradient(180deg, rgba(15, 40, 24, 0.95) 0%, rgba(10, 27, 17, 0.98) 100%);
     border-top: 1px solid var(--term-border);
     overflow: hidden;
@@ -2098,12 +2098,12 @@
     contain: layout style;
   }
   .ticker-text {
-    font-size: 9px;
+    font-size: 10px;
     font-family: var(--fm);
     color: var(--term-live);
     font-weight: 600;
     letter-spacing: 0.35px;
-    line-height: 22px;
+    line-height: 24px;
     padding: 0 20px;
   }
   @keyframes tickerScroll {
@@ -2129,7 +2129,7 @@
   }
   .mob-topbar {
     flex-shrink: 0;
-    padding: 8px 10px 6px;
+    padding: 10px 12px 8px;
     border-bottom: 1px solid var(--term-border);
     background:
       linear-gradient(135deg, rgba(232, 150, 125, 0.14), rgba(232, 150, 125, 0.04)),
@@ -2139,18 +2139,18 @@
   .mob-topline {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
-    margin-bottom: 6px;
+    gap: 8px;
+    margin-bottom: 8px;
   }
   .mob-title-wrap {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    gap: 1px;
+    gap: 2px;
   }
   .mob-eyebrow {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1.4px;
     color: rgba(240, 237, 228, 0.48);
@@ -2167,13 +2167,13 @@
     margin-left: auto;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 8px;
+    gap: 6px;
+    padding: 5px 10px;
     border-radius: 999px;
     border: 1px solid rgba(135, 220, 190, 0.26);
     background: rgba(135, 220, 190, 0.08);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1.3px;
     color: var(--term-live);
@@ -2182,7 +2182,7 @@
   .mob-meta {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     min-width: 0;
   }
   .mob-token {
@@ -2191,7 +2191,7 @@
   }
   .mob-meta-chip {
     flex-shrink: 0;
-    padding: 4px 8px;
+    padding: 5px 10px;
     border-radius: 8px;
     border: 1px solid rgba(240, 237, 228, 0.2);
     background: rgba(240, 237, 228, 0.08);
@@ -2206,7 +2206,7 @@
     white-space: nowrap;
   }
   .mob-desc {
-    margin-top: 6px;
+    margin-top: 8px;
     font-family: var(--fm);
     font-size: 9px;
     color: rgba(240, 237, 228, 0.56);
@@ -2221,13 +2221,13 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     touch-action: pan-y;
-    padding: 8px 8px calc(10px + var(--mob-nav-slot));
+    padding: 10px 10px calc(12px + var(--mob-nav-slot));
     scroll-padding-bottom: calc(8px + var(--mob-nav-slot));
     display: flex;
     flex-direction: column;
   }
   .mob-content.chart-only {
-    padding: 4px 6px calc(6px + var(--mob-nav-slot));
+    padding: 6px 8px calc(8px + var(--mob-nav-slot));
   }
   .mob-chart-stack {
     display: flex;
@@ -2321,10 +2321,10 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-auto-rows: minmax(44px, 44px);
     align-items: center;
-    gap: 6px;
-    padding: 7px 8px calc(5px + env(safe-area-inset-bottom));
-    min-height: calc(60px + env(safe-area-inset-bottom));
-    max-height: calc(72px + env(safe-area-inset-bottom));
+    gap: 8px;
+    padding: 8px 10px calc(6px + env(safe-area-inset-bottom));
+    min-height: calc(64px + env(safe-area-inset-bottom));
+    max-height: calc(76px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--term-border);
     background: rgba(10, 26, 16, 0.92);
     backdrop-filter: blur(8px);
@@ -2376,7 +2376,7 @@
     justify-content: center;
     padding: 0 4px;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     line-height: 1;
     color: #0b1b12;
@@ -2740,11 +2740,11 @@
 
   /* Text density tuning (desktop/tablet): denser headers, clearer body hierarchy */
   .terminal-shell {
-    --term-font-2xs: clamp(7px, 0.42vw, 8px);
-    --term-font-xs: clamp(8px, 0.5vw, 9px);
-    --term-font-sm: clamp(9px, 0.62vw, 10px);
-    --term-font-md: clamp(10px, 0.78vw, 11.5px);
-    --term-font-lg: clamp(11px, 0.9vw, 13px);
+    --term-font-2xs: clamp(8px, 0.48vw, 9px);
+    --term-font-xs: clamp(9px, 0.58vw, 10px);
+    --term-font-sm: clamp(10px, 0.72vw, 11px);
+    --term-font-md: clamp(11px, 0.85vw, 12.5px);
+    --term-font-lg: clamp(12px, 1vw, 14px);
   }
   .terminal-shell :global(.war-room .wr-title) {
     font-size: var(--term-font-md);
@@ -2907,7 +2907,7 @@
     letter-spacing: 0.9px;
   }
   .terminal-mobile :global(.war-room .token-tab-count) {
-    font-size: 8px;
+    font-size: 9px;
   }
   .terminal-mobile :global(.war-room .deriv-strip) {
     padding: 6px 8px;
@@ -2919,7 +2919,7 @@
   .terminal-mobile :global(.war-room .ticker-chip) {
     height: 18px;
     padding: 0 6px;
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: .4px;
   }
   .terminal-mobile :global(.war-room .scan-tabs),
@@ -2937,7 +2937,7 @@
   }
   .terminal-mobile :global(.war-room .scan-tab-meta),
   .terminal-mobile :global(.war-room .token-tab-count) {
-    font-size: 7px;
+    font-size: 9px;
   }
   .terminal-mobile :global(.war-room .deriv-val) {
     font-size: 12px;
@@ -2964,7 +2964,7 @@
     min-height: 34px;
   }
   .terminal-mobile :global(.war-room .wr-act-btn) {
-    font-size: 8px;
+    font-size: 9px;
     padding: 4px 7px;
   }
   .terminal-mobile :global(.war-room .ctc-text),
@@ -3069,7 +3069,7 @@
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-pair),
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-arrow) {
-    font-size: 8px;
+    font-size: 9px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .pair-slot .tdd-panel:not(.mobile)) {
     width: min(92vw, 320px);
@@ -3104,7 +3104,7 @@
     gap: 4px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-k) {
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: .25px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .market-stats .mstat-v) {
@@ -3138,7 +3138,7 @@
   .terminal-mobile :global(.chart-wrapper .chart-bar .draw-tools .draw-btn) {
     width: 20px;
     height: 20px;
-    font-size: 8px;
+    font-size: 9px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-bar .scan-btn) {
     min-height: 20px;
@@ -3179,11 +3179,11 @@
     min-height: 18px;
     height: 18px;
     padding: 0 5px;
-    font-size: 8px;
+    font-size: 9px;
   }
   .terminal-mobile :global(.chart-wrapper .chart-footer) {
     gap: 6px;
-    font-size: 8px;
+    font-size: 9px;
     padding: 4px 8px;
   }
 
@@ -3230,7 +3230,7 @@
       --mob-nav-slot: calc(64px + env(safe-area-inset-bottom));
     }
     .mob-topbar {
-      padding: 8px 10px 6px;
+      padding: 8px 10px 7px;
     }
     .mob-topline {
       margin-bottom: 6px;
@@ -3239,15 +3239,15 @@
       display: none;
     }
     .mob-content {
-      padding: 8px 8px calc(10px + var(--mob-nav-slot));
+      padding: 8px 10px calc(10px + var(--mob-nav-slot));
     }
     .mob-content.chart-only {
-      padding: 4px 6px calc(6px + var(--mob-nav-slot));
+      padding: 5px 7px calc(7px + var(--mob-nav-slot));
     }
     .mob-bottom-nav {
-      padding: 6px 8px calc(4px + env(safe-area-inset-bottom));
-      min-height: calc(54px + env(safe-area-inset-bottom));
-      max-height: calc(64px + env(safe-area-inset-bottom));
+      padding: 6px 10px calc(4px + env(safe-area-inset-bottom));
+      min-height: calc(56px + env(safe-area-inset-bottom));
+      max-height: calc(66px + env(safe-area-inset-bottom));
       grid-auto-rows: minmax(40px, 40px);
     }
     .mob-nav-btn {
@@ -3267,7 +3267,7 @@
     .mob-meta-chip {
       max-width: 36vw;
       padding: 4px 7px;
-      font-size: 8px;
+      font-size: 9px;
     }
     .mob-nav-label {
       font-size: 9px;

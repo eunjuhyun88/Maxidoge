@@ -153,13 +153,13 @@
     border-bottom: 1px solid rgba(232,150,125,0.15);
     display: flex;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 14px;
     gap: 0;
     position: fixed;
     top: 0; left: 0; right: 0;
     z-index: 110;
     flex-shrink: 0;
-    height: 42px;
+    height: var(--header-h, 48px);
     font-family: var(--fp, 'Press Start 2P', monospace);
     color: #F0EDE4;
   }
@@ -173,14 +173,14 @@
 
   .nav-back {
     font-family: var(--fp);
-    font-size: 12px;
+    font-size: 11px;
     color: #E8967D;
     background: none;
     border: 1px solid rgba(232,150,125,0.3);
     border-radius: 4px;
-    padding: 2px 8px;
+    padding: 3px 9px;
     cursor: pointer;
-    margin-right: 6px;
+    margin-right: 8px;
     transition: all .15s;
   }
   .nav-back:hover {
@@ -190,7 +190,7 @@
 
   .nav-logo {
     font-family: var(--fp);
-    font-size: 12px;
+    font-size: 11px;
     letter-spacing: 1px;
     color: #F0EDE4;
     background: none;
@@ -204,9 +204,9 @@
   .nav-logo:hover { opacity: 0.8; }
   .nav-sep {
     width: 1px;
-    height: 18px;
+    height: 20px;
     background: rgba(232,150,125,0.15);
-    margin: 0 8px;
+    margin: 0 10px;
     flex-shrink: 0;
   }
 
@@ -214,29 +214,29 @@
   .selected-ticker {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 4px;
+    gap: 8px;
+    padding: 0 6px;
     flex-shrink: 0;
   }
   .st-pair {
     font-family: var(--fp);
-    font-size: 9px;
+    font-size: 10px;
     color: rgba(240,237,228,0.4);
     letter-spacing: 1px;
   }
   .st-price {
     font-family: var(--fp);
-    font-size: 11px;
+    font-size: 12px;
     color: #F0EDE4;
   }
 
   /* ── Nav Tabs ── */
   .nav-tab {
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1px;
     color: rgba(240,237,228,0.45);
-    padding: 0 8px;
+    padding: 0 10px;
     height: 100%;
     display: flex;
     align-items: center;
@@ -272,21 +272,21 @@
 
   /* ── Right Section ── */
   .nav-right {
-    margin-left: 8px;
+    margin-left: 10px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex-shrink: 0;
   }
 
   .score-badge {
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
     background: rgba(232,150,125,0.08);
     color: #E8967D;
     border: 1px solid rgba(232,150,125,0.2);
     border-radius: 4px;
-    padding: 3px 8px;
+    padding: 4px 10px;
     letter-spacing: 1px;
     display: flex;
     align-items: center;
@@ -294,18 +294,18 @@
   }
   .score-badge b {
     font-family: var(--fp);
-    font-size: 10px;
+    font-size: 11px;
     color: #F0EDE4;
   }
   /* ── Wallet ── */
   .wallet-btn {
     font-family: var(--fp);
-    font-size: 9px;
+    font-size: 10px;
     background: #E8967D;
     color: #0a1a0d;
     border: none;
     border-radius: 4px;
-    padding: 4px 12px;
+    padding: 5px 12px;
     cursor: pointer;
     letter-spacing: 1px;
     transition: all .15s;
@@ -323,7 +323,7 @@
     color: #00cc66;
     border: 1px solid rgba(0,204,102,0.3);
     box-shadow: none;
-    font-size: 8px;
+    font-size: 9px;
   }
   .wallet-dot {
     width: 5px; height: 5px;
@@ -334,14 +334,14 @@
 
   .settings-btn {
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1px;
     color: rgba(240,237,228,0.55);
     background: none;
     border: 1px solid rgba(232,150,125,0.2);
     border-radius: 4px;
     cursor: pointer;
-    padding: 3px 7px;
+    padding: 4px 8px;
     transition: all .15s;
     line-height: 1.1;
   }
@@ -367,20 +367,20 @@
     .nav-main::-webkit-scrollbar { display: none; }
 
     .nav-back {
-      font-size: 11px;
-      padding: 2px 6px;
+      font-size: 10px;
+      padding: 3px 7px;
       margin-right: 4px;
     }
     .nav-logo {
-      font-size: 10px;
+      font-size: 9px;
       letter-spacing: 0.8px;
     }
     .nav-sep { display: none; }
     .selected-ticker { display: none; }
 
     .nav-tab {
-      font-size: 7px;
-      padding: 0 6px;
+      font-size: 9px;
+      padding: 0 8px;
       letter-spacing: 0.8px;
     }
 
@@ -388,16 +388,16 @@
     .settings-btn { display: none; }
 
     .wallet-btn {
-      font-size: 8px;
-      padding: 3px 8px;
+      font-size: 9px;
+      padding: 4px 9px;
       white-space: nowrap;
       max-width: 96px;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .wallet-btn.connected {
-      font-size: 7px;
-      padding: 3px 7px;
+      font-size: 9px;
+      padding: 4px 8px;
     }
   }
 
@@ -407,17 +407,17 @@
     }
 
     .nav-tab {
-      font-size: 6px;
+      font-size: 9px;
       min-width: max-content;
-      padding: 0 5px;
+      padding: 0 7px;
       justify-content: center;
       border-right-color: rgba(232, 150, 125, 0.03);
     }
 
     .wallet-btn {
       max-width: 76px;
-      font-size: 7px;
-      padding: 3px 6px;
+      font-size: 9px;
+      padding: 4px 7px;
     }
   }
 </style>

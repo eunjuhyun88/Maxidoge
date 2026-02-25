@@ -1327,12 +1327,12 @@
     --sp-green: #9dcdb9;
     --sp-red: #ff725d;
     --sp-gold: #f7dcd6;
-    --sp-space-1: 4px;
-    --sp-space-2: 6px;
-    --sp-space-3: 8px;
-    --sp-space-4: 10px;
-    --sp-space-5: 12px;
-    --sp-space-6: 14px;
+    --sp-space-1: 6px;
+    --sp-space-2: 8px;
+    --sp-space-3: 10px;
+    --sp-space-4: 12px;
+    --sp-space-5: 14px;
+    --sp-space-6: 18px;
     --sp-font-display: 'Orbitron', 'Space Grotesk', sans-serif;
     --sp-font-label: 'Space Grotesk', sans-serif;
     --sp-font-body: 'Space Grotesk', sans-serif;
@@ -1416,7 +1416,7 @@
     position: relative;
     z-index: 3;
     width: 100%;
-    max-width: 1080px;
+    max-width: 1120px;
     height: 100%;
     overflow-y: auto;
     padding: var(--sp-space-5) var(--sp-space-4) var(--sp-space-5);
@@ -1681,7 +1681,7 @@
     margin-top: 4px;
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 10px;
     letter-spacing: 0.18px;
   }
 
@@ -1702,12 +1702,12 @@
   }
 
   .stamp-text {
-    font-size: 6px;
+    font-size: 10px;
     letter-spacing: 1px;
   }
 
   .stamp-icon {
-    font-size: 6px;
+    font-size: 10px;
     opacity: 0.8;
   }
 
@@ -1723,7 +1723,7 @@
     margin-bottom: 8px;
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 1px;
   }
 
@@ -1769,7 +1769,7 @@
   .tab-btn {
     position: relative;
     flex: 1;
-    min-height: 48px;
+    min-height: 52px;
     border: none;
     border-bottom: 2px solid transparent;
     background: transparent;
@@ -1825,7 +1825,7 @@
 
   .control-rail {
     position: sticky;
-    top: 48px;
+    top: 52px;
     z-index: 8;
     padding: var(--sp-space-2) var(--sp-space-3);
     border-bottom: 1px solid var(--sp-soft);
@@ -1843,7 +1843,7 @@
   }
 
   .qa-btn {
-    min-height: 32px;
+    min-height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1911,7 +1911,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--sp-space-2);
-    min-height: 78px;
+    min-height: 84px;
   }
 
   .focus-item-primary {
@@ -2004,7 +2004,7 @@
     font-size: 12px;
     letter-spacing: 0.12px;
     border-left: 3px solid var(--sp-pk);
-    padding-left: 8px;
+    padding-left: 10px;
   }
 
   .metrics-grid,
@@ -2223,7 +2223,7 @@
     color: var(--sp-pk-l);
     border: 1px solid var(--sp-soft);
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 10px;
   }
 
   .apc-bar-wrap {
@@ -2779,7 +2779,7 @@
     }
 
     .uhs-lbl {
-      font-size: 8px;
+      font-size: 10px;
       margin-top: 3px;
     }
 

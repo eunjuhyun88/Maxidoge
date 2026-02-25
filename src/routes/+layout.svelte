@@ -188,7 +188,7 @@
     flex-direction: column;
     height: 100dvh;
     min-height: 100vh;
-    padding-top: 42px;
+    padding-top: var(--header-h, 48px);
     overflow: hidden;
     position: relative;
   }
