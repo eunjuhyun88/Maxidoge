@@ -1488,3 +1488,23 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)`
 - Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225`
 - Status: DONE
+
+### W-20260226-0300-backend-codex (finish)
+
+- End (KST): 2026-02-26 03:02:54 +0900
+- Agent: Codex (GPT-5)
+- Branch: `codex/intel-policy-v3-runtime-clean-20260225`
+- What changed:
+  - 운영 `.env`에 실제 `GROQ_API_KEY` 반영 (git-tracked 제외)
+  - placeholder 키를 유효 provider로 오인하지 않도록 수정
+    - `src/lib/server/llmConfig.ts`: placeholder/길이 기반 `isUsableApiKey` 추가
+    - `src/lib/server/llmService.ts`: provider availability 판정에 `is*Available()` 사용
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `GET /api/terminal/intel-agent-shadow?pair=BTC/USDT&timeframe=1h&refresh=1`: `llm.available=true`, `shadow.source=llm`, `provider=groq`
+  - direct Groq probe: HTTP 200 (`pong`)
+- Commit hash: `0c5e2db`
+- Push status: `SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)`
+- Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225`
+- Status: DONE
