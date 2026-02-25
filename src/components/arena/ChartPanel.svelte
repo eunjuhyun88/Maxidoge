@@ -87,12 +87,15 @@
   const LINE_ENTRY_DEFAULT_RR = 2;
   const LINE_ENTRY_MIN_PIXEL_RISK = 6;
   type DrawingMode = 'none' | 'hline' | 'trendline' | 'longentry' | 'shortentry';
+  type DrawingAnchorPoint = { time: number; price: number };
   type DrawingItem =
-    | { type: 'hline'; points: Array<{ x: number; y: number }>; color: string }
-    | { type: 'trendline'; points: Array<{ x: number; y: number }>; color: string }
+    | { type: 'hline'; points: Array<{ x: number; y: number }>; price?: number; color: string }
+    | { type: 'trendline'; points: Array<{ x: number; y: number }>; anchors?: [DrawingAnchorPoint, DrawingAnchorPoint]; color: string }
     | {
       type: 'tradebox';
       points: Array<{ x: number; y: number }>; // [entry-left, entry-right, sl-left, tp-left]
+      fromTime?: number;
+      toTime?: number;
       color: string;
       dir: 'LONG' | 'SHORT';
       entry: number;
@@ -168,6 +171,7 @@
   let patternMarkers: ChartMarker[] = [];
   let detectedPatterns: ChartPatternDetection[] = [];
   let patternLineSeries: any[] = [];
+  const ENABLE_PATTERN_LINE_SERIES = false;
   let _patternSignature = '';
   let _patternRangeScanTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -389,6 +393,59 @@
   function toChartY(price: number): number | null {
     if (!series) return null;
     try { return series.priceToCoordinate(price); } catch { return null; }
+  }
+
+  function normalizeChartTime(rawTime: unknown): number | null {
+    if (typeof rawTime === 'number' && Number.isFinite(rawTime)) return rawTime;
+    if (rawTime && typeof rawTime === 'object') {
+      const maybeTimestamp = (rawTime as { timestamp?: unknown }).timestamp;
+      if (typeof maybeTimestamp === 'number' && Number.isFinite(maybeTimestamp)) return maybeTimestamp;
+      const maybeDay = rawTime as { year?: unknown; month?: unknown; day?: unknown };
+      if (
+        typeof maybeDay.year === 'number'
+        && typeof maybeDay.month === 'number'
+        && typeof maybeDay.day === 'number'
+      ) {
+        return Math.floor(Date.UTC(maybeDay.year, maybeDay.month - 1, maybeDay.day) / 1000);
+      }
+    }
+    return null;
+  }
+
+  function toChartTime(x: number): number | null {
+    if (!chart || !drawingCanvas || !Number.isFinite(x)) return null;
+    try {
+      const clampedX = Math.max(0, Math.min(x, drawingCanvas.width));
+      const rawTime = chart.timeScale().coordinateToTime(clampedX as any);
+      const parsedTime = normalizeChartTime(rawTime);
+      if (parsedTime !== null) return parsedTime;
+    } catch {}
+
+    try {
+      const logical = chart.timeScale().coordinateToLogical(x as any);
+      if (logical !== null && Number.isFinite(logical) && klineCache.length > 0) {
+        const idx = Math.max(0, Math.min(klineCache.length - 1, Math.round(logical)));
+        const time = klineCache[idx]?.time;
+        if (Number.isFinite(time)) return time;
+      }
+    } catch {}
+    return null;
+  }
+
+  function toChartX(time: number): number | null {
+    if (!chart || !Number.isFinite(time)) return null;
+    try {
+      const x = chart.timeScale().timeToCoordinate(time as any);
+      if (Number.isFinite(x)) return x;
+    } catch {}
+    return null;
+  }
+
+  function toDrawingAnchor(x: number, y: number): DrawingAnchorPoint | null {
+    const time = toChartTime(x);
+    const price = toChartPrice(y);
+    if (time === null || price === null || !Number.isFinite(price)) return null;
+    return { time, price: clampRoundPrice(price) };
   }
 
   function clampRoundPrice(v: number) {
@@ -646,6 +703,10 @@
   }
 
   function makeTradeBoxDrawing(preview: NonNullable<ReturnType<typeof computeTradePreview>>): DrawingItem {
+    const leftTime = toChartTime(preview.left);
+    const rightTime = toChartTime(preview.right);
+    const fromTime = leftTime !== null && rightTime !== null ? Math.min(leftTime, rightTime) : undefined;
+    const toTime = leftTime !== null && rightTime !== null ? Math.max(leftTime, rightTime) : undefined;
     return {
       type: 'tradebox',
       points: [
@@ -654,6 +715,8 @@
         { x: preview.left, y: preview.slY },
         { x: preview.left, y: preview.tpY },
       ],
+      fromTime,
+      toTime,
       color: preview.dir === 'LONG' ? chartTheme.candleUp : chartTheme.candleDown,
       dir: preview.dir,
       entry: preview.entry,
@@ -713,6 +776,7 @@
         rsiPane.setStretchFactor(0.02);
       }
     } catch {}
+    renderDrawings();
   }
 
   function applyTimeScale() {
@@ -722,6 +786,7 @@
       minBarSpacing: 3,
       rightOffset: 6,
     });
+    renderDrawings();
   }
 
   function zoomChart(direction: 1 | -1) {
@@ -740,6 +805,7 @@
     autoScaleY = !autoScaleY;
     try { chart?.priceScale('right').applyOptions({ autoScale: autoScaleY }); } catch {}
     pushChartNotice(autoScaleY ? 'Y-AUTO ON' : 'Y-AUTO OFF');
+    renderDrawings();
   }
 
   function resetChartScale() {
@@ -749,6 +815,7 @@
     try { chart?.priceScale('right').applyOptions({ autoScale: true }); } catch {}
     chart?.timeScale().fitContent();
     pushChartNotice('스케일 초기화');
+    renderDrawings();
   }
 
   function toggleIndicator(key: IndicatorKey) {
@@ -1025,14 +1092,35 @@
     const rect = drawingCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     if (drawingMode === 'hline') {
-      drawings = [...drawings, { type: 'hline', points: [{ x: 0, y }, { x: rect.width, y }], color: chartTheme.draw }];
+      const linePrice = toChartPrice(y);
+      drawings = [
+        ...drawings,
+        {
+          type: 'hline',
+          points: [{ x: 0, y }, { x: rect.width, y }],
+          price: linePrice == null ? undefined : clampRoundPrice(linePrice),
+          color: chartTheme.draw,
+        },
+      ];
       renderDrawings(); drawingMode = 'none'; return;
     }
     if (drawingMode === 'trendline') {
       if (!isDrawing) { currentDrawing = { type: 'trendline', points: [{ x, y }] }; isDrawing = true; }
       else if (currentDrawing) {
-        currentDrawing.points.push({ x, y });
-        drawings = [...drawings, { type: 'trendline', points: [...currentDrawing.points], color: chartTheme.draw }];
+        const startPoint = currentDrawing.points[0];
+        const endPoint = { x, y };
+        const startAnchor = toDrawingAnchor(startPoint.x, startPoint.y);
+        const endAnchor = toDrawingAnchor(endPoint.x, endPoint.y);
+        currentDrawing.points.push(endPoint);
+        drawings = [
+          ...drawings,
+          {
+            type: 'trendline',
+            points: [...currentDrawing.points],
+            anchors: startAnchor && endAnchor ? [startAnchor, endAnchor] : undefined,
+            color: chartTheme.draw,
+          },
+        ];
         currentDrawing = null; isDrawing = false; drawingMode = 'none'; renderDrawings();
       }
       return;
@@ -1122,27 +1210,65 @@
     drawPatternOverlays(ctx);
     for (const d of drawings) {
       ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.5;
-      if (d.type === 'hline') { ctx.setLineDash([6, 3]); ctx.moveTo(0, d.points[0].y); ctx.lineTo(drawingCanvas.width, d.points[0].y); }
-      else if (d.type === 'trendline' && d.points.length === 2) { ctx.setLineDash([]); ctx.moveTo(d.points[0].x, d.points[0].y); ctx.lineTo(d.points[1].x, d.points[1].y); }
+      if (d.type === 'hline') {
+        const mappedY = Number.isFinite(d.price) ? toChartY(d.price as number) : null;
+        const y = mappedY ?? d.points[0]?.y;
+        if (!Number.isFinite(y)) continue;
+        ctx.setLineDash([6, 3]);
+        ctx.moveTo(0, y);
+        ctx.lineTo(drawingCanvas.width, y);
+      }
+      else if (d.type === 'trendline' && d.points.length === 2) {
+        const mappedFrom = d.anchors?.[0] ? toOverlayPoint(d.anchors[0].time, d.anchors[0].price) : null;
+        const mappedTo = d.anchors?.[1] ? toOverlayPoint(d.anchors[1].time, d.anchors[1].price) : null;
+        const from = mappedFrom ?? d.points[0];
+        const to = mappedTo ?? d.points[1];
+        if (!from || !to) continue;
+        ctx.setLineDash([]);
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+      }
       else if (d.type === 'tradebox' && d.points.length >= 4) {
-        const entryLeft = d.points[0];
-        const entryRight = d.points[1];
-        const slLeft = d.points[2];
-        const tpLeft = d.points[3];
-        const preview = {
-          mode: d.dir === 'LONG' ? 'longentry' as const : 'shortentry' as const,
-          dir: d.dir,
-          left: Math.min(entryLeft.x, entryRight.x),
-          right: Math.max(entryLeft.x, entryRight.x),
-          entryY: entryLeft.y,
-          slY: slLeft.y,
-          tpY: tpLeft.y,
-          entry: d.entry,
-          sl: d.sl,
-          tp: d.tp,
-          rr: d.rr,
-          riskPct: d.riskPct,
-        };
+        const mappedLeftX = Number.isFinite(d.fromTime) ? toChartX(d.fromTime as number) : null;
+        const mappedRightX = Number.isFinite(d.toTime) ? toChartX(d.toTime as number) : null;
+        const mappedEntryY = toChartY(d.entry);
+        const mappedSlY = toChartY(d.sl);
+        const mappedTpY = toChartY(d.tp);
+        const preview = (
+          mappedLeftX !== null
+          && mappedRightX !== null
+          && mappedEntryY !== null
+          && mappedSlY !== null
+          && mappedTpY !== null
+        )
+          ? {
+            mode: d.dir === 'LONG' ? 'longentry' as const : 'shortentry' as const,
+            dir: d.dir,
+            left: Math.min(mappedLeftX, mappedRightX),
+            right: Math.max(mappedLeftX, mappedRightX),
+            entryY: mappedEntryY,
+            slY: mappedSlY,
+            tpY: mappedTpY,
+            entry: d.entry,
+            sl: d.sl,
+            tp: d.tp,
+            rr: d.rr,
+            riskPct: d.riskPct,
+          }
+          : {
+            mode: d.dir === 'LONG' ? 'longentry' as const : 'shortentry' as const,
+            dir: d.dir,
+            left: Math.min(d.points[0].x, d.points[1].x),
+            right: Math.max(d.points[0].x, d.points[1].x),
+            entryY: d.points[0].y,
+            slY: d.points[2].y,
+            tpY: d.points[3].y,
+            entry: d.entry,
+            sl: d.sl,
+            tp: d.tp,
+            rr: d.rr,
+            riskPct: d.riskPct,
+          };
         drawTradePreview(ctx, preview);
         continue;
       }
@@ -1279,6 +1405,12 @@
   }
 
   function applyPatternLineSeries() {
+    // Pattern guides are already drawn on the overlay canvas.
+    // Keep lightweight-charts line series off to prevent duplicate/double lines.
+    if (!ENABLE_PATTERN_LINE_SERIES) {
+      clearPatternLineSeries();
+      return;
+    }
     if (!chart || !lwcModule) return;
     clearPatternLineSeries();
     if (detectedPatterns.length === 0) return;
@@ -1725,13 +1857,16 @@
       await loadKlines();
 
       // ═══ Lazy-load: detect scroll to left edge ═══
-      chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+      const onVisibleLogicalRangeChange = (range: any) => {
         if (range && range.from < 20 && !_isLoadingMore && !_noMoreHistory) {
           loadMoreHistory();
         }
         scheduleVisiblePatternScan();
         renderDrawings();
-      });
+      };
+      chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChange);
+      const onCrosshairMove = () => { renderDrawings(); };
+      chart.subscribeCrosshairMove(onCrosshairMove);
 
       const ro = new ResizeObserver(() => {
         if (chart && chartMode === 'agent') chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
@@ -1763,6 +1898,8 @@
         if (priceWsCleanup) priceWsCleanup();
         clearPositionLines();
         clearPatternLineSeries();
+        try { chart?.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChange); } catch {}
+        try { chart?.unsubscribeCrosshairMove(onCrosshairMove); } catch {}
         destroyTradingView();
         if (chart) chart.remove();
       };
