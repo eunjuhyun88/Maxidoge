@@ -1508,3 +1508,26 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)`
 - Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225`
 - Status: DONE
+
+### W-20260226-0304-backend-codex (finish)
+
+- End (KST): 2026-02-26 03:05:26 +0900
+- Agent: Codex (GPT-5)
+- Branch: `codex/intel-policy-v3-runtime-clean-20260225`
+- What changed:
+  - 운영 `.env`에 DeepSeek/Gemini 키 반영 (git-tracked 제외)
+  - Provider 실호출 검증
+    - Groq: HTTP 200
+    - DeepSeek: HTTP 402 (Insufficient Balance)
+    - Gemini: HTTP 429 (quota exceeded)
+  - Shadow API 런타임 확인
+    - `llm.available=true`
+    - providers: `groq, deepseek, gemini`
+    - `shadow.source=llm`, `provider=groq`
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `N/A` (code/file tracked changes 없음, env-only)
+- Push status: `N/A`
+- Final working tree status: `## codex/intel-policy-v3-runtime-clean-20260225...origin/codex/intel-policy-v3-runtime-clean-20260225`
+- Status: DONE
