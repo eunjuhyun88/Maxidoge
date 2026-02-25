@@ -1592,3 +1592,20 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: pending
 - Final working tree status: pending
 - Status: DONE
+
+### W-20260226-0335-backend-codex (finish)
+
+- End (KST): 2026-02-26 03:38:08 +0900
+- Agent: Codex (GPT-5)
+- Branch: codex/intel-policy-v3-runtime-clean-20260225
+- What changed:
+  - Added ORPO design spec with concrete prompt/response schema and pair builder pipeline.
+  - Mapped design to existing tables (`decision_trajectories`, `ml_preference_pairs`, `ml_dataset_versions`) and runtime modules.
+  - Included utility/margin formulas, hard-negative mining, quality gate, rollout/eval gate.
+- Validation results:
+  - npm run check: PASS
+  - npm run build: PASS
+- Commit hash: pending (same atomic commit as doc update)
+- Push status: pending
+- Final working tree status: pending
+- Status: DONE
