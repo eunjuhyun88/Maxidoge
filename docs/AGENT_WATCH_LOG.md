@@ -1274,3 +1274,30 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
 - Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121 (clean)`
 - Status: DONE
+
+### W-20260225-1704-backend-codex (finish)
+
+- End (KST): 2026-02-25 17:04
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - `src/routes/api/market/trending/+server.ts`
+    - DEX HOT 집계에 token 메타(symbol/name/price/24h change/volume/liquidity) 보강 추가
+    - boosts/profiles 합성 시 source(`boost`/`profile`)를 명시하여 근거 추적 가능화
+  - `src/routes/api/market/events/+server.ts`
+    - TAKEOVER/BOOST/ADS 이벤트 텍스트를 주소 중심에서 토큰 라벨 중심으로 개선
+    - DexScreener `/tokens` 메타 조회를 사용해 symbol/name 기반 표기 지원
+  - `src/components/terminal/IntelPanel.svelte`
+    - `🎯 PICKS / 🔥 HOT / 📈 GAINERS / 💎 DEX` 탭별 데이터 기준/출처 설명 표시
+    - DEX 체인 필터 추가 및 토큰 행에 source/가격/변동률/거래량 표시
+    - SMART MONEY FLOWS에 source 라벨 및 CMC/COINALYZE 보강 지표 추가
+  - `src/routes/terminal/+page.svelte`
+    - 하단 ticker 문자열 중복 제거
+    - `SYSTEM_STABILITY` 고정값 제거, `UPDATED: HH:MM`로 대체
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `609259e`
+- Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
+- Status: DONE
