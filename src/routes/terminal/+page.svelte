@@ -9,7 +9,7 @@
   let liveTickerStr = '';
   let tickerLoaded = false;
   $: TICKER_STR = tickerLoaded && liveTickerStr
-    ? `${liveTickerStr}  \u00a0|\u00a0  ${liveTickerStr}`
+    ? liveTickerStr
     : 'Loading market data...';
   import { gameState } from '$lib/stores/gameState';
   import { livePrices } from '$lib/stores/priceStore';
@@ -678,7 +678,7 @@
       }
 
       if (parts.length > 0) {
-        parts.push('SYSTEM_STABILITY: 99.98%');
+        parts.push(`UPDATED: ${new Date().toTimeString().slice(0, 5)}`);
         liveTickerStr = parts.join(' | ');
         tickerLoaded = true;
       }
@@ -1560,6 +1560,7 @@
     <div class="ticker-bar">
       <div class="ticker-inner">
         <span class="ticker-text">{TICKER_STR}</span>
+        <span class="ticker-text" aria-hidden="true">{TICKER_STR}</span>
       </div>
     </div>
   </div>
@@ -1720,6 +1721,7 @@
     <div class="ticker-bar">
       <div class="ticker-inner">
         <span class="ticker-text">{TICKER_STR}</span>
+        <span class="ticker-text" aria-hidden="true">{TICKER_STR}</span>
       </div>
     </div>
 
