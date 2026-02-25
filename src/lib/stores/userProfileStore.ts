@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Unified User Profile Store
+// STOCKCLAW — Unified User Profile Store
 // Wallet + Passport + Holdings 통합 프로필
 // walletStore, matchHistoryStore, quickTradeStore에서 자동 sync
 // ═══════════════════════════════════════════════════════════════

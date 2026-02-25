@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — CryptoQuant Client (client-side)
+// STOCKCLAW — CryptoQuant Client (client-side)
 // ═══════════════════════════════════════════════════════════════
 // Wraps /api/onchain/cryptoquant proxy for FLOW + VALUATION agents
 

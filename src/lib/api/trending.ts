@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Trending Client (client-side)
+// STOCKCLAW — Trending Client (client-side)
 // ═══════════════════════════════════════════════════════════════
 // Unified trending data: CMC + LunarCrush + DexScreener
 

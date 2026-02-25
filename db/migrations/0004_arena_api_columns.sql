@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- MAXI⚡DOGE — Arena API Column Additions (B-01)
+-- STOCKCLAW — Arena API Column Additions (B-01)
 -- Adds columns used by arenaService.ts
 -- ═══════════════════════════════════════════════════════════════
 BEGIN;

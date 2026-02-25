@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — PnL Tracking Store (localStorage persisted)
+// STOCKCLAW — PnL Tracking Store (localStorage persisted)
 // Tracks profit/loss from Arena battles and Polymarket predictions
 // ═══════════════════════════════════════════════════════════════
 

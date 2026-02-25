@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Polymarket Position Status API
+// STOCKCLAW — Polymarket Position Status API
 // ═══════════════════════════════════════════════════════════════
 // Poll order status from CLOB and sync to DB.
 //

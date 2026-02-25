@@ -1,7 +1,7 @@
-# MAXI-DOGE 전체 구조 설계 문서
+# STOCKCLAW 전체 구조 설계 문서
 
 Date: 2026-02-21  
-Workspace: `/Users/ej/Downloads/maxi-doge-unified`
+Workspace: `/Users/ej/Downloads/stockclaw-unified`
 
 ## 1) 목적
 

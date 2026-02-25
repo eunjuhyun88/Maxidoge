@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Agent Engine v3: 8 Agent Pool Definitions
+// STOCKCLAW — Agent Engine v3: 8 Agent Pool Definitions
 // ═══════════════════════════════════════════════════════════════
 //
 // 8개 에이전트 풀. 유저는 매 매치에서 3개를 드래프트한다.

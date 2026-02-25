@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — localStorage DB CRUD Layer
+// STOCKCLAW — localStorage DB CRUD Layer
 // Generic table-based localStorage persistence
 // ═══════════════════════════════════════════════════════════════
 
@@ -32,7 +32,7 @@ export function createTable<T extends DBRecord>(
     signals: STORAGE_KEYS.dbSignals,
     predictions: STORAGE_KEYS.dbPredictions,
   };
-  const key = keyMap[tableName] || `maxidoge_${tableName}`;
+  const key = keyMap[tableName] || `stockclaw_${tableName}`;
 
   function load(): T[] {
     if (typeof window === 'undefined') return [];

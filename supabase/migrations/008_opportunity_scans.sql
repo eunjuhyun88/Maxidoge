@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- MAXI⚡DOGE — Opportunity Scans Table
+-- STOCKCLAW — Opportunity Scans Table
 -- ═══════════════════════════════════════════════════════════════
 -- Stores multi-asset opportunity scan results for history tracking
 

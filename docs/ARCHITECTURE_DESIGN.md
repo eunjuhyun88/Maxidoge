@@ -1,4 +1,4 @@
-# MAXI⚡DOGE v3 Architecture Design
+# STOCKCLAW v3 Architecture Design
 
 Created: 2026-02-22
 Updated: 2026-02-23 (§6 미구현 모듈 설계 추가 — Agent 4 감사 기반)

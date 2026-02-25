@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Market Snapshot + Context Assembler (B-05)
+// STOCKCLAW — Market Snapshot + Context Assembler (B-05)
 // ═══════════════════════════════════════════════════════════════
 
 import type { MarketContext } from '$lib/engine/factorEngine';

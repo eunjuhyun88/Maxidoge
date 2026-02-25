@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — DeFiLlama server client
+// STOCKCLAW — DeFiLlama server client
 // ═══════════════════════════════════════════════════════════════
 
 import { getCached, setCache } from './providers/cache';

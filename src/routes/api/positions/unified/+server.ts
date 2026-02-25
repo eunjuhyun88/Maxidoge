@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Unified Positions API
+// STOCKCLAW — Unified Positions API
 // ═══════════════════════════════════════════════════════════════
 // Returns QuickTrades + Polymarket + GMX positions in unified format.
 //

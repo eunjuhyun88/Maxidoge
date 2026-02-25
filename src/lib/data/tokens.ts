@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Token Registry (Binance Supported Pairs)
+// STOCKCLAW — Token Registry (Binance Supported Pairs)
 // ═══════════════════════════════════════════════════════════════
 
 export interface TokenDef {

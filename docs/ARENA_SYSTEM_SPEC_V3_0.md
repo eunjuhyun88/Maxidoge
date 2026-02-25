@@ -1,4 +1,4 @@
-# MAXI⚡DOGE Arena System Specification v3.0
+# STOCKCLAW Arena System Specification v3.0
 
 Last updated: 2026-02-23  
 Owner: Product/FE/BE Shared  

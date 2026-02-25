@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Arena API Client (browser-side)
+// STOCKCLAW — Arena API Client (browser-side)
 // ═══════════════════════════════════════════════════════════════
 //
 // Wraps /api/arena/* endpoints for the Arena page to call.

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Wallet & User State Store
+// STOCKCLAW — Wallet & User State Store
 // Per UserJourney Lifecycle spec: P0→P5 progression
 // ═══════════════════════════════════════════════════════════════
 

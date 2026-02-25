@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — GMX Transaction Sender (Browser Wallet)
+// STOCKCLAW — GMX Transaction Sender (Browser Wallet)
 // ═══════════════════════════════════════════════════════════════
 // Sends actual on-chain transactions from the user's wallet.
 // Used for GMX V2 orders (multicall), USDC approvals, etc.

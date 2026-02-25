@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Session Check API
+// STOCKCLAW — Session Check API
 // GET /api/auth/session
 // Returns current user session status from cookie
 // ═══════════════════════════════════════════════════════════════

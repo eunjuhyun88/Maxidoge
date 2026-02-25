@@ -17,7 +17,7 @@
   }
 
   let chatMessages: ChatMsg[] = [
-    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'MAXI⚡DOGE Orchestrator v8 online.', time: '—', isUser: false, isSystem: true },
+    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'STOCKCLAW Orchestrator v8 online.', time: '—', isUser: false, isSystem: true },
   ];
   let chatInput = '';
   let chatEl: HTMLDivElement;

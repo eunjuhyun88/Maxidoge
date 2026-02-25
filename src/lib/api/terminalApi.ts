@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Terminal Scan API Client (browser-side)
+// STOCKCLAW — Terminal Scan API Client (browser-side)
 // ═══════════════════════════════════════════════════════════════
 //
 // Wraps /api/terminal/scan/* endpoints for the Terminal page.

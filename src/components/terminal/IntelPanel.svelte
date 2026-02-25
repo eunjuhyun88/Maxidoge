@@ -4,7 +4,16 @@
   import { openTrades, closeQuickTrade } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
   import { predictMarkets, loadPolymarkets } from '$lib/stores/predictStore';
-  import { unifiedPositions, polymarketPositions, gmxPositions, hydratePositions, positionsLoading } from '$lib/stores/positionStore';
+  import {
+    polymarketPositions,
+    gmxPositions,
+    pendingPositions,
+    hydratePositions,
+    pollPendingPositions,
+    positionsLoading,
+    positionsError,
+    positionsLastSyncedAt,
+  } from '$lib/stores/positionStore';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import { parseOutcomePrices } from '$lib/api/polymarket';
   import PolymarketBetPanel from './PolymarketBetPanel.svelte';
@@ -45,6 +54,14 @@
   let showGmxPanel = false;  // GmxTradePanel visibility
   let tabCollapsed = false;
   let _uiStateSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  let _positionsPollTimer: ReturnType<typeof setInterval> | null = null;
+  let _positionsRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  let _positionsLastRefreshAt = 0;
+  let _positionVisibilityListener: (() => void) | null = null;
+
+  const POSITIONS_MIN_REFRESH_MS = 8_000;
+  const POSITIONS_PENDING_POLL_MS = 6_000;
+  const POSITIONS_FULL_REFRESH_MS = 30_000;
 
   // ═══ Live data from API (replaces hardcoded) ═══
   interface HeadlineEx extends Headline {
@@ -59,19 +76,42 @@
   let headlineLoading = false;
   let headlineSortBy: 'importance' | 'time' = 'importance';
   let liveEvents: Array<{ id: string; tag: string; level: string; text: string; source: string; createdAt: number }> = [];
-  let liveFlows: Array<{ id: string; label: string; addr: string; amt: string; isBuy: boolean }> = [];
+  let liveFlows: Array<{ id: string; label: string; addr: string; amt: string; isBuy: boolean; source?: string }> = [];
   let dataLoaded = { headlines: false, events: false, flow: false, trending: false };
 
   // ═══ Trending data ═══
   interface TrendingCoin { rank: number; symbol: string; name: string; price: number; change1h: number; change24h: number; change7d: number; volume24h: number; sentiment?: number | null; socialVolume?: number | null; galaxyScore?: number | null; }
   interface GainerLoser extends TrendingCoin { direction: 'gainer' | 'loser'; }
-  interface DexHot { chainId: string; tokenAddress: string; url: string; description: string | null; icon: string | null; }
+  type TrendTab = 'hot' | 'gainers' | 'dex' | 'picks';
+  interface DexHot {
+    chainId: string;
+    tokenAddress: string;
+    url: string;
+    description: string | null;
+    icon: string | null;
+    source: 'boost' | 'profile';
+    symbol?: string | null;
+    name?: string | null;
+    priceUsd?: number | null;
+    change24h?: number | null;
+    volume24h?: number | null;
+    liquidityUsd?: number | null;
+  }
   let trendingCoins: TrendingCoin[] = [];
   let trendGainers: GainerLoser[] = [];
   let trendLosers: GainerLoser[] = [];
   let trendDexHot: DexHot[] = [];
-  let trendSubTab: 'hot' | 'gainers' | 'dex' | 'picks' = 'picks';
+  let trendSubTab: TrendTab = 'picks';
   let trendLoading = false;
+  let trendUpdatedAt = 0;
+  let dexChainFilter = 'all';
+
+  const TREND_BASIS: Record<TrendTab, string> = {
+    picks: 'Source: /api/terminal/opportunity-scan · 기준: 모멘텀/거래량/소셜/매크로/온체인 복합 점수',
+    hot: 'Source: CMC trending/latest (fallback: volume_24h desc) + LunarCrush 상위 10개 소셜 보강',
+    gainers: 'Source: CMC gainers-losers 24h (fallback: listings %24h 정렬)',
+    dex: 'Source: DexScreener boosts top + profiles latest · chain:address dedup · token market 메타 보강',
+  };
 
   // ═══ Opportunity Scanner (TOP PICKS) ═══
   interface OpScore {
@@ -123,6 +163,39 @@
     }, 260);
   }
 
+  async function syncPositions(force = false) {
+    const now = Date.now();
+    if (!force && now - _positionsLastRefreshAt < POSITIONS_MIN_REFRESH_MS) return;
+    _positionsLastRefreshAt = now;
+    await hydratePositions();
+    await pollPendingPositions();
+  }
+
+  function syncPendingIfVisible() {
+    if (activeTab !== 'positions') return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    void pollPendingPositions();
+  }
+
+  function refreshPositionsNow() {
+    void syncPositions(true);
+  }
+
+  function startPositionSyncLoop() {
+    if (_positionsPollTimer) clearInterval(_positionsPollTimer);
+    if (_positionsRefreshTimer) clearInterval(_positionsRefreshTimer);
+
+    _positionsPollTimer = setInterval(() => {
+      syncPendingIfVisible();
+    }, POSITIONS_PENDING_POLL_MS);
+
+    _positionsRefreshTimer = setInterval(() => {
+      if (activeTab !== 'positions') return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void syncPositions(true);
+    }, POSITIONS_FULL_REFRESH_MS);
+  }
+
   function handleClosePos(id: string) {
     const trade = opens.find(t => t.id === id);
     if (!trade) return;
@@ -163,6 +236,30 @@
   $: opens = $openTrades;
   $: openCount = opens.length;
   $: latestScanTime = latestScan ? new Date(latestScan.createdAt).toTimeString().slice(0, 5) : '';
+  $: positionCount = openCount + $gmxPositions.length + $polymarketPositions.length;
+  $: pendingCount = $pendingPositions.length;
+  $: positionsSyncStatus = $positionsLoading
+    ? 'SYNCING...'
+    : $positionsError
+      ? 'SYNC ERROR'
+      : $positionsLastSyncedAt
+        ? `SYNCED ${formatRelativeTime($positionsLastSyncedAt)} AGO`
+        : 'NOT SYNCED';
+  $: trendBasisText = TREND_BASIS[trendSubTab];
+  $: trendUpdatedLabel = trendUpdatedAt > 0 ? `${formatRelativeTime(trendUpdatedAt)} ago` : '';
+  $: dexChains = ['all', ...Array.from(new Set(trendDexHot.map((token) => token.chainId)))];
+  $: if (!dexChains.includes(dexChainFilter)) dexChainFilter = 'all';
+  $: filteredDexHot = dexChainFilter === 'all'
+    ? trendDexHot
+    : trendDexHot.filter((token) => token.chainId === dexChainFilter);
+
+  let _prevActiveTab = activeTab;
+  $: {
+    if (activeTab === 'positions' && _prevActiveTab !== 'positions') {
+      void syncPositions(true);
+    }
+    _prevActiveTab = activeTab;
+  }
 
   // ═══ Filter headlines by current chart ticker ═══
   $: currentToken = $gameState.pair.split('/')[0] || 'BTC';
@@ -265,7 +362,18 @@
             label: `Funding Rate ${snap.funding > 0 ? '↑' : '↓'}`,
             addr: json.data.pair,
             amt: `${(snap.funding * 100).toFixed(4)}%`,
-            isBuy: snap.funding < 0
+            isBuy: snap.funding < 0,
+            source: 'COINALYZE',
+          });
+        }
+        if (snap.lsRatio != null) {
+          flows.push({
+            id: 'ls-ratio',
+            label: 'Long / Short Ratio',
+            addr: json.data.pair,
+            amt: `${Number(snap.lsRatio).toFixed(2)}`,
+            isBuy: Number(snap.lsRatio) < 1,
+            source: 'COINALYZE',
           });
         }
         if (snap.liqLong24h || snap.liqShort24h) {
@@ -274,14 +382,16 @@
             label: '↙ Liquidations LONG 24h',
             addr: json.data.pair,
             amt: `$${Math.round(snap.liqLong24h || 0).toLocaleString()}`,
-            isBuy: false
+            isBuy: false,
+            source: 'COINALYZE',
           });
           flows.push({
             id: 'liq-short',
             label: '↗ Liquidations SHORT 24h',
             addr: json.data.pair,
             amt: `$${Math.round(snap.liqShort24h || 0).toLocaleString()}`,
-            isBuy: true
+            isBuy: true,
+            source: 'COINALYZE',
           });
         }
         if (snap.quoteVolume24h) {
@@ -290,8 +400,42 @@
             label: '↔ 24h Quote Volume',
             addr: json.data.pair,
             amt: `$${(snap.quoteVolume24h / 1e9).toFixed(2)}B`,
-            isBuy: (snap.priceChangePct || 0) >= 0
+            isBuy: (snap.priceChangePct || 0) >= 0,
+            source: 'BINANCE',
           });
+        }
+        if (snap.cmcMarketCap) {
+          flows.push({
+            id: 'cmc-mcap',
+            label: 'Global Market Cap',
+            addr: json.data.pair,
+            amt: `$${(Number(snap.cmcMarketCap) / 1e9).toFixed(1)}B`,
+            isBuy: (snap.cmcChange24hPct || 0) >= 0,
+            source: 'CMC',
+          });
+        }
+        if (snap.cmcChange24hPct != null) {
+          const chg = Number(snap.cmcChange24hPct);
+          flows.push({
+            id: 'cmc-change',
+            label: 'CMC 24h Change',
+            addr: json.data.pair,
+            amt: `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`,
+            isBuy: chg >= 0,
+            source: 'CMC',
+          });
+        }
+        if (flows.length === 0 && Array.isArray(json.data.records) && json.data.records.length > 0) {
+          for (const rec of json.data.records.slice(0, 3)) {
+            flows.push({
+              id: `record-${rec.id}`,
+              label: rec.agent || 'FLOW',
+              addr: rec.pair || json.data.pair,
+              amt: rec.text || '',
+              isBuy: rec.vote === 'LONG',
+              source: rec.source || 'UNKNOWN',
+            });
+          }
         }
         if (flows.length > 0) {
           liveFlows = flows;
@@ -315,6 +459,7 @@
         trendGainers = json.data.gainers ?? [];
         trendLosers = json.data.losers ?? [];
         trendDexHot = json.data.dexHot ?? [];
+        trendUpdatedAt = Number(json.data.updatedAt ?? Date.now());
         dataLoaded.trending = true;
         dataLoaded = dataLoaded;
       }
@@ -428,6 +573,19 @@
   onMount(() => {
     loadPolymarkets();
     hydrateCommunityPosts();
+    void syncPositions(true);
+    startPositionSyncLoop();
+
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden && activeTab === 'positions') {
+        void syncPositions(true);
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+      _positionVisibilityListener = handleVisibility;
+    }
+
     void (async () => {
       const ui = await fetchUiStateApi();
       // 채팅이 항상 최우선 — 저장된 상태보다 우선
@@ -457,6 +615,11 @@
   onDestroy(() => {
     if (_pairRefetchTimer) clearTimeout(_pairRefetchTimer);
     if (_uiStateSaveTimer) clearTimeout(_uiStateSaveTimer);
+    if (_positionsPollTimer) clearInterval(_positionsPollTimer);
+    if (_positionsRefreshTimer) clearInterval(_positionsRefreshTimer);
+    if (_positionVisibilityListener && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', _positionVisibilityListener);
+    }
   });
 </script>
 
@@ -618,6 +781,12 @@
                 <button class="trend-sub" class:active={trendSubTab === 'gainers'} on:click={() => trendSubTab = 'gainers'}>📈 GAINERS</button>
                 <button class="trend-sub" class:active={trendSubTab === 'dex'} on:click={() => trendSubTab = 'dex'}>💎 DEX</button>
               </div>
+              <div class="trend-meta">
+                <span class="trend-basis">{trendBasisText}</span>
+                {#if trendUpdatedLabel}
+                  <span class="trend-updated">updated {trendUpdatedLabel}</span>
+                {/if}
+              </div>
 
               {#if trendSubTab === 'picks'}
                 <div class="picks-panel">
@@ -762,23 +931,45 @@
               {:else if trendSubTab === 'dex'}
                 <div class="trend-list">
                   <div class="trend-section-lbl">💎 DEX HOT TOKENS</div>
-                  {#each trendDexHot as token, i (token.chainId + token.tokenAddress)}
+                  <div class="dex-chain-filters">
+                    {#each dexChains as chainId}
+                      <button class="dex-chain-btn" class:active={dexChainFilter === chainId} on:click={() => dexChainFilter = chainId}>
+                        {chainId.toUpperCase()}
+                      </button>
+                    {/each}
+                  </div>
+                  {#each filteredDexHot as token, i (token.chainId + token.tokenAddress)}
                     <a class="trend-row dex-row" href={token.url} target="_blank" rel="noopener">
                       <span class="trend-rank">#{i + 1}</span>
                       {#if token.icon}
                         <img class="dex-icon" src={token.icon} alt="" width="18" height="18" />
                       {/if}
                       <div class="trend-coin">
-                        <span class="trend-sym">{token.chainId}</span>
-                        <span class="trend-name dex-addr">{token.tokenAddress.slice(0, 6)}...{token.tokenAddress.slice(-4)}</span>
+                        <span class="trend-sym">{token.symbol || token.chainId.toUpperCase()}</span>
+                        <span class="trend-name">{token.name || `${token.tokenAddress.slice(0, 6)}...${token.tokenAddress.slice(-4)}`}</span>
+                        <span class="dex-addr">{token.chainId}:{token.tokenAddress.slice(0, 6)}...{token.tokenAddress.slice(-4)}</span>
+                      </div>
+                      <div class="dex-metrics">
+                        {#if token.priceUsd != null}
+                          <span class="dex-price">{fmtTrendPrice(Number(token.priceUsd))}</span>
+                        {/if}
+                        {#if token.change24h != null}
+                          <span class="trend-chg" class:up={Number(token.change24h) >= 0} class:dn={Number(token.change24h) < 0}>
+                            {Number(token.change24h) >= 0 ? '+' : ''}{Number(token.change24h).toFixed(1)}%
+                          </span>
+                        {/if}
+                        {#if token.volume24h != null}
+                          <span class="dex-vol">Vol {fmtTrendVol(Number(token.volume24h))}</span>
+                        {/if}
                       </div>
                       {#if token.description}
                         <span class="dex-desc">{token.description.slice(0, 40)}{token.description.length > 40 ? '...' : ''}</span>
                       {/if}
+                      <span class="dex-source">{token.source === 'boost' ? 'BOOST' : 'PROFILE'}</span>
                       <span class="dex-link">↗</span>
                     </a>
                   {/each}
-                  {#if trendDexHot.length === 0}
+                  {#if filteredDexHot.length === 0}
                     <div class="trend-empty">No DEX trending data</div>
                   {/if}
                 </div>
@@ -797,6 +988,9 @@
                   <div class="flow-info">
                     <div class="flow-lbl">{flow.label}</div>
                     <div class="flow-addr">{flow.addr}</div>
+                    {#if flow.source}
+                      <div class="flow-src">{flow.source}</div>
+                    {/if}
                   </div>
                   <div class="flow-amt" class:buy={flow.isBuy} class:sell={!flow.isBuy}>{flow.amt}</div>
                 </div>
@@ -840,6 +1034,33 @@
             <button class="pos-sub" class:active={posSubTab === 'perps'} on:click={() => posSubTab = 'perps'}>PERPS</button>
             <button class="pos-sub" class:active={posSubTab === 'markets'} on:click={() => posSubTab = 'markets'}>MARKETS</button>
           </div>
+
+          <div class="pos-sync-row">
+            <span
+              class="pos-sync-badge"
+              class:loading={$positionsLoading}
+              class:error={!!$positionsError}
+              class:ok={!$positionsLoading && !$positionsError}
+            >
+              {positionsSyncStatus}
+            </span>
+            {#if pendingCount > 0}
+              <span class="pos-sync-pending">{pendingCount} pending</span>
+            {/if}
+            <span class="pos-sync-total">{positionCount} total</span>
+            <button class="pos-sync-btn" on:click={refreshPositionsNow} disabled={$positionsLoading}>
+              REFRESH
+            </button>
+          </div>
+
+          {#if $positionsError}
+            <div class="pos-sync-error-msg">
+              {$positionsError}
+              {#if !$positionsLoading}
+                <button class="pos-sync-inline-btn" on:click={refreshPositionsNow}>retry</button>
+              {/if}
+            </div>
+          {/if}
 
           <!-- ALL / TRADES: Quick Trade Positions -->
           {#if posSubTab === 'all' || posSubTab === 'trades'}
@@ -1122,6 +1343,7 @@
   .flow-info { flex: 1; min-width: 0; }
   .flow-lbl { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.82); }
   .flow-addr { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58); }
+  .flow-src { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.38); letter-spacing: .6px; margin-top: 1px; }
   .flow-amt { font-family: var(--fm); font-size: 10px; font-weight: 700; flex-shrink: 0; }
   .flow-amt.sell { color: var(--red); } .flow-amt.buy { color: var(--grn); }
 
@@ -1213,6 +1435,95 @@
   }
   .pos-sub:hover { background: rgba(255,230,0,.05); color: rgba(255,255,255,.6); }
   .pos-sub.active { background: rgba(255,230,0,.08); color: var(--yel); border-color: rgba(255,230,0,.25); }
+
+  .pos-sync-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    min-height: 20px;
+  }
+  .pos-sync-badge {
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .7px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.16);
+    color: rgba(255,255,255,.65);
+    background: rgba(255,255,255,.04);
+    white-space: nowrap;
+  }
+  .pos-sync-badge.loading {
+    color: rgba(255,230,0,.88);
+    border-color: rgba(255,230,0,.28);
+    background: rgba(255,230,0,.1);
+  }
+  .pos-sync-badge.error {
+    color: rgba(255,95,130,.9);
+    border-color: rgba(255,95,130,.34);
+    background: rgba(255,95,130,.12);
+  }
+  .pos-sync-badge.ok {
+    color: rgba(0,230,138,.86);
+    border-color: rgba(0,230,138,.26);
+    background: rgba(0,230,138,.1);
+  }
+  .pos-sync-pending,
+  .pos-sync-total {
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .7px;
+    color: rgba(255,255,255,.56);
+    white-space: nowrap;
+  }
+  .pos-sync-total {
+    margin-right: auto;
+  }
+  .pos-sync-btn {
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .8px;
+    padding: 4px 7px;
+    color: rgba(255,230,0,.84);
+    background: rgba(255,230,0,.08);
+    border: 1px solid rgba(255,230,0,.24);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .pos-sync-btn:hover:not(:disabled) {
+    background: rgba(255,230,0,.16);
+    border-color: rgba(255,230,0,.38);
+  }
+  .pos-sync-btn:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+  }
+  .pos-sync-error-msg {
+    margin-top: -2px;
+    margin-bottom: 6px;
+    font: 400 9px/1.35 var(--fm);
+    color: rgba(255,120,120,.9);
+    border-left: 2px solid rgba(255,120,120,.45);
+    background: rgba(255,120,120,.08);
+    padding: 5px 7px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    word-break: break-word;
+  }
+  .pos-sync-inline-btn {
+    margin-left: auto;
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .6px;
+    border: 1px solid rgba(255,120,120,.34);
+    border-radius: 3px;
+    background: rgba(255,120,120,.14);
+    color: rgba(255,160,160,.95);
+    padding: 2px 6px;
+    cursor: pointer;
+  }
+  .pos-sync-inline-btn:hover {
+    background: rgba(255,120,120,.2);
+  }
 
   /* ── Polymarket position row ── */
   .poly-row .pos-entry { font-size: 9px; color: rgba(255,255,255,.35); }
@@ -1507,6 +1818,29 @@
   }
   .trend-sub:hover { background: rgba(255,255,255,.04); color: rgba(255,255,255,.8); }
   .trend-sub.active { background: rgba(255,230,0,.08); color: var(--yel); border-color: rgba(255,230,0,.25); }
+  .trend-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px 5px;
+    border-bottom: 1px solid rgba(255,255,255,.05);
+    background: rgba(255,255,255,.02);
+  }
+  .trend-basis {
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.55);
+    letter-spacing: .25px;
+    line-height: 1.35;
+    flex: 1;
+    min-width: 0;
+  }
+  .trend-updated {
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.42);
+    white-space: nowrap;
+  }
 
   .trend-list {
     flex: 1;
@@ -1553,8 +1887,55 @@
   .dex-row { text-decoration: none; color: inherit; }
   .dex-row:hover { background: rgba(255,230,0,.04); }
   .dex-icon { border-radius: 50%; flex-shrink: 0; }
-  .dex-addr { font-family: var(--fm); font-size: 8px; }
-  .dex-desc { font-size: 8px; color: rgba(255,255,255,.3); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dex-chain-filters {
+    display: flex;
+    gap: 4px;
+    margin: 2px 0 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+  .dex-chain-btn {
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.03);
+    color: rgba(255,255,255,.5);
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .6px;
+    padding: 4px 7px;
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .dex-chain-btn.active {
+    color: var(--yel);
+    border-color: rgba(255,230,0,.3);
+    background: rgba(255,230,0,.1);
+  }
+  .dex-addr {
+    font-family: var(--fm);
+    font-size: 8px;
+    color: rgba(255,255,255,.32);
+    line-height: 1.2;
+  }
+  .dex-metrics {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+    gap: 1px;
+    min-width: 58px;
+  }
+  .dex-price { font: 700 9px/1 var(--fm); color: rgba(255,255,255,.85); }
+  .dex-vol { font: 400 8px/1 var(--fm); color: rgba(255,255,255,.42); }
+  .dex-source {
+    font: 700 7px/1 var(--fm);
+    letter-spacing: .5px;
+    color: rgba(255,230,0,.55);
+    border: 1px solid rgba(255,230,0,.2);
+    border-radius: 999px;
+    padding: 2px 5px;
+    flex-shrink: 0;
+  }
+  .dex-desc { font-size: 8px; color: rgba(255,255,255,.3); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .dex-link { color: rgba(255,230,0,.5); font-size: 10px; flex-shrink: 0; }
 
   /* ── TOP PICKS (Opportunity Scanner) ── */

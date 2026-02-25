@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — War Room Data Types (Terminal View)
+// STOCKCLAW — War Room Data Types (Terminal View)
 // ═══════════════════════════════════════════════════════════════
 
 export interface WRMessage {

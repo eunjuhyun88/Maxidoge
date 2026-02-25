@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Battle Feed Store (Arena real-time feed)
+// STOCKCLAW — Battle Feed Store (Arena real-time feed)
 // Connected to BottomBar for live agent decisions
 // ═══════════════════════════════════════════════════════════════
 

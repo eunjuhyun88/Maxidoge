@@ -1,7 +1,7 @@
-# MAXI⚡DOGE 구조 정합성 감사서 (최신 기준 분리본)
+# STOCKCLAW 구조 정합성 감사서 (최신 기준 분리본)
 
 작성일: 2026-02-22  
-대상 코드베이스: `maxi-doge-unified`  
+대상 코드베이스: `stockclaw-unified`  
 목적: 최신 스펙 기준으로 현재 구현의 구조 불일치를 분리 정리
 
 ---
@@ -10,11 +10,11 @@
 
 아래 문서를 최신 기준선으로 사용했다.
 
-1. `docs/MAXIDOGE_Final_Integrated_Spec_v1.md`
-2. `docs/MAXIDOGE_FlowSpec_v2_0.md`
-3. `docs/MAXIDOGE_UserJourney_v1.md`
+1. `docs/STOCKCLAW_Final_Integrated_Spec_v1.md`
+2. `docs/STOCKCLAW_FlowSpec_v2_0.md`
+3. `docs/STOCKCLAW_UserJourney_v1.md`
 4. `docs/terminal-ia-reset-v1.md`
-5. `docs/MAXIDOGE_Implementation_Priority_v1.md`
+5. `docs/STOCKCLAW_Implementation_Priority_v1.md`
 
 ---
 

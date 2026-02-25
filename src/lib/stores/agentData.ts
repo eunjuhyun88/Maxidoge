@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Agent Persistent Data Store
+// STOCKCLAW — Agent Persistent Data Store
 // ═══════════════════════════════════════════════════════════════
 
 import { writable } from 'svelte/store';

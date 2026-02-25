@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — 8 Chart Pattern Generators
+// STOCKCLAW — 8 Chart Pattern Generators
 // ═══════════════════════════════════════════════════════════════
 
 export interface Candle {

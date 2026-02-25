@@ -1229,3 +1229,180 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Commit hash: PENDING
 - Push status: not executed
 - Status: DONE
+
+## [W-20260225-121] FINISH
+
+- End (KST): 2026-02-25 05:50
+- Agent: Codex (GPT-5)
+- Branch / merge target:
+  - source: `codex/terminal-be-gap-redesign-w121` (`5bb1ded3cc8daa1cc4d8760f5e26d876535d6dd2`)
+  - target: `main` (local merge commit `ebe5b3028ba39752d7062eb05a6d7025056c1ba5`)
+- What changed:
+  - `src/components/terminal/IntelPanel.svelte`
+    - POSITIONS 탭 진입/가시성 복귀 시 `hydratePositions()` 자동 동기화 추가
+    - pending 포지션 폴링 루프 + 주기적 전체 재동기화 루프 추가
+    - 동기화 상태 배지(`SYNCING/SYNC ERROR/SYNCED`), pending/total 카운트, 수동 `REFRESH`, retry UI 추가
+  - `src/lib/stores/positionStore.ts`
+    - `positionsLastSyncedAt` 스토어 추가
+    - `hydratePositions()` 성공 시 마지막 동기화 시간 기록
+    - `pollPendingPositions()`를 Polymarket + GMX pending 처리로 확장
+- Validation:
+  - feature(`codex/terminal-be-gap-redesign-w121`) `npm run check`: PASS
+  - feature(`codex/terminal-be-gap-redesign-w121`) `npm run build`: PASS
+  - main(`merge result`) `npm run check`: PASS
+  - main(`merge result`) `npm run build`: PASS
+- Commit hash: `5bb1ded3cc8daa1cc4d8760f5e26d876535d6dd2`
+- Merge hash: `ebe5b3028ba39752d7062eb05a6d7025056c1ba5`
+- Push status:
+  - `origin/codex/terminal-be-gap-redesign-w121`: SUCCESS
+  - `origin/main`: FAILED (protected branch policy: PR required, merge commit 금지, required checks gate)
+- Status: DONE (main push blocked by protection policy)
+
+### W-20260225-1651-backend-codex (finish)
+
+- End (KST): 2026-02-25 16:51
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - 신규 설계 문서 추가: `docs/INTEL_TRADING_DECISION_POLICY_2026-02-25.md`
+  - 실행 가능한 정책 스켈레톤 추가: `src/lib/intel/decisionPolicy.ts`
+  - Intel 데이터 표시 기준(quality gate), 도메인 가중치, no-trade 규칙, WHY 출력 표준을 문서/코드로 고정
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `6aeade7`
+- Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121 (clean)`
+- Status: DONE
+
+### W-20260225-1704-backend-codex (finish)
+
+- End (KST): 2026-02-25 17:04
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - `src/routes/api/market/trending/+server.ts`
+    - DEX HOT 집계에 token 메타(symbol/name/price/24h change/volume/liquidity) 보강 추가
+    - boosts/profiles 합성 시 source(`boost`/`profile`)를 명시하여 근거 추적 가능화
+  - `src/routes/api/market/events/+server.ts`
+    - TAKEOVER/BOOST/ADS 이벤트 텍스트를 주소 중심에서 토큰 라벨 중심으로 개선
+    - DexScreener `/tokens` 메타 조회를 사용해 symbol/name 기반 표기 지원
+  - `src/components/terminal/IntelPanel.svelte`
+    - `🎯 PICKS / 🔥 HOT / 📈 GAINERS / 💎 DEX` 탭별 데이터 기준/출처 설명 표시
+    - DEX 체인 필터 추가 및 토큰 행에 source/가격/변동률/거래량 표시
+    - SMART MONEY FLOWS에 source 라벨 및 CMC/COINALYZE 보강 지표 추가
+  - `src/routes/terminal/+page.svelte`
+    - 하단 ticker 문자열 중복 제거
+    - `SYSTEM_STABILITY` 고정값 제거, `UPDATED: HH:MM`로 대체
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `609259e`
+- Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
+- Status: DONE
+
+### W-20260225-1706-backend-codex (finish)
+
+- End (KST): 2026-02-25 17:14
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - Intel 정책 문서 v3 반영: `docs/INTEL_TRADING_DECISION_POLICY_2026-02-25.md`
+  - 임계값 분리: `config/intelThresholds.json`
+  - 신규 모듈 추가:
+    - `src/lib/intel/types.ts`
+    - `src/lib/intel/thresholds.ts`
+    - `src/lib/intel/qualityGate.ts`
+    - `src/lib/intel/helpfulnessEvaluator.ts`
+    - `src/lib/intel/decisionEngine.ts`
+    - `src/lib/intel/gateLogs.ts`
+  - SSOT wrapper 갱신: `src/lib/intel/decisionPolicy.ts`
+    - v3 gate/engine/helpfulness/threshold API 재export
+    - 기존 `evaluateQualityGate`/`computeIntelDecision` 호환 진입점 유지
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `62634f6`
+- Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
+- Status: DONE
+
+### W-20260225-1725-backend-codex (finish)
+
+- End (KST): 2026-02-25 17:25
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - `origin/main` 최신(`d9453a4`) fetch 후 작업 브랜치를 rebase
+  - rebase 중 코드 충돌 없음 (자동 완료)
+  - 이미 main에 포함된 커밋 1건(`ba29571`)은 rebase 시 skip됨
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash:
+  - branch head after rebase push: `763e64a`
+- Push status:
+  - `git push --force-with-lease origin codex/terminal-be-gap-redesign-w121`: SUCCESS
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
+- Status: DONE
+
+### W-20260225-1913-backend-codex (finish)
+
+- End (KST): 2026-02-25 19:16
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - 프로젝트 브랜드명을 `Stockclaw`로 전환 (핵심 런타임/설정/마이그레이션 범위)
+  - 주요 치환 대상:
+    - UI/문구: `MAXI⚡DOGE`, `MAXI DOGE`, `MAXI-DOGE`, `MAXIDOGE` -> `STOCKCLAW`
+    - 소문자 식별자: `maxidoge*`, `maxi-doge*` -> `stockclaw*`
+  - 대표 변경 파일:
+    - `package.json`, `package-lock.json` (`stockclaw-unified`)
+    - `src/lib/server/session.ts` (`stockclaw_session`)
+    - `src/lib/stores/storageKeys.ts` (`stockclaw_*` localStorage key)
+    - `src/lib/server/polymarketClob.ts` (`User-Agent: STOCKCLAW/1.0`)
+    - `src/routes/+page.svelte`, `src/components/layout/Header.svelte`, `src/routes/terminal/+page.svelte` (브랜드 표시)
+    - `.env.example` (`RATE_LIMIT_REDIS_PREFIX=stockclaw:rl`)
+    - `db/supabase migrations` 주석 브랜드 문자열
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `3ada61a`
+- Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
+- Status: DONE
+
+### W-20260225-1922-backend-codex (finish)
+
+- End (KST): 2026-02-25 19:22:12 +0900
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - docs 전반의 `MAXI DOGE` 계열 문자열을 `Stockclaw`로 최종 정리
+  - 리네임: `docs/MAXIDOGE_*` 문서 7개(`.md` 6 + `.pdf` 1) -> `docs/STOCKCLAW_*`
+  - AGENTS/로그 파일은 경로/히스토리 무결성 유지 목적상 제외
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `6f75f23`
+- Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
+- Status: DONE
+
+### W-20260225-1936-backend-codex (finish)
+
+- End (KST): 2026-02-25 19:38:00 +0900
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - PR [#30](https://github.com/eunjuhyun88/Maxidoge/pull/30) 머지 시도
+  - 머지 차단 원인 확인: `At least 1 approving review is required by reviewers with write access`
+  - 확인 사항: CI check/build PASS, 충돌 없음(mergeable)
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `N/A` (소스 변경 없음)
+- Push status: `N/A` (머지 차단)
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
+- Status: BLOCKED

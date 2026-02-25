@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Polymarket Positions List API
+// STOCKCLAW — Polymarket Positions List API
 // ═══════════════════════════════════════════════════════════════
 // GET /api/positions/polymarket?settled=false&limit=50&offset=0
 

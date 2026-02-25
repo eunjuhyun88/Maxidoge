@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Server-side Binance REST Client (B-02)
+// STOCKCLAW — Server-side Binance REST Client (B-02)
 // ═══════════════════════════════════════════════════════════════
 // Public endpoints — no API key. Server-side caching via LRU cache.
 

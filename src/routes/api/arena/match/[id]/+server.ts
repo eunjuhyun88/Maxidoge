@@ -1,4 +1,4 @@
-// MAXI⚡DOGE — Arena Match Detail
+// STOCKCLAW — Arena Match Detail
 // GET /api/arena/match/:id
 
 import { json } from '@sveltejs/kit';

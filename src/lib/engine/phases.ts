@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — 5-Phase Match Engine (v3)
+// STOCKCLAW — 5-Phase Match Engine (v3)
 // ═══════════════════════════════════════════════════════════════
 
 import type { Phase } from '$lib/stores/gameState';

@@ -1,7 +1,7 @@
-# MAXI-DOGE 기능명세서 (현재 구현 기준)
+# STOCKCLAW 기능명세서 (현재 구현 기준)
 
 Date: 2026-02-21  
-Workspace: `/Users/ej/Downloads/maxi-doge-unified`
+Workspace: `/Users/ej/Downloads/stockclaw-unified`
 
 ## 1) 문서 목적
 
@@ -46,7 +46,7 @@ Workspace: `/Users/ej/Downloads/maxi-doge-unified`
 - `verified`
 
 ### 3.2 인증 기준
-- 세션 쿠키(`maxidoge_session`)가 유효해야 보호 API 접근 가능
+- 세션 쿠키(`stockclaw_session`)가 유효해야 보호 API 접근 가능
 - 보호 API 미인증 시 `401 Authentication required`
 
 ## 4) 화면 기능 명세
@@ -323,20 +323,20 @@ Workspace: `/Users/ej/Downloads/maxi-doge-unified`
 ## 6) 상태 저장 명세
 
 ## 6.1 localStorage 키
-- `maxidoge_state`
-- `maxidoge_agents`
-- `maxidoge_wallet`
-- `maxidoge_match_history`
-- `maxidoge_quicktrades`
-- `maxidoge_tracked`
-- `maxidoge_predict_positions`
-- `maxidoge_community`
-- `maxidoge_profile`
-- `maxidoge_pnl`
-- `maxidoge_users`
-- `maxidoge_matches`
-- `maxidoge_signals`
-- `maxidoge_predictions`
+- `stockclaw_state`
+- `stockclaw_agents`
+- `stockclaw_wallet`
+- `stockclaw_match_history`
+- `stockclaw_quicktrades`
+- `stockclaw_tracked`
+- `stockclaw_predict_positions`
+- `stockclaw_community`
+- `stockclaw_profile`
+- `stockclaw_pnl`
+- `stockclaw_users`
+- `stockclaw_matches`
+- `stockclaw_signals`
+- `stockclaw_predictions`
 
 ## 6.2 동기화 패턴
 - 원칙: 로컬 optimistic update 후 서버 동기화

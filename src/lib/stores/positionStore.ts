@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Unified Position Store
+// STOCKCLAW — Unified Position Store
 // ═══════════════════════════════════════════════════════════════
 // Aggregates QuickTrades + Polymarket + GMX positions for the POSITION tab.
 // Hydrates from /api/positions/unified, provides derived stores.
@@ -10,12 +10,14 @@ import {
   getPolymarketPositionStatus,
   type UnifiedPosition,
 } from '$lib/api/positionsApi';
+import { fetchGmxPositions } from '$lib/api/gmxApi';
 
 // ── Store ────────────────────────────────────────────────────
 
 export const unifiedPositions = writable<UnifiedPosition[]>([]);
 export const positionsLoading = writable(false);
 export const positionsError = writable<string | null>(null);
+export const positionsLastSyncedAt = writable<number | null>(null);
 
 // ── Derived ──────────────────────────────────────────────────
 
@@ -86,6 +88,7 @@ export async function hydratePositions(type?: 'all' | 'quick_trade' | 'polymarke
     const result = await fetchUnifiedPositions({ type, limit: 100 });
     if (result?.ok) {
       unifiedPositions.set(result.positions);
+      positionsLastSyncedAt.set(Date.now());
     } else {
       positionsError.set('Failed to load positions');
     }
@@ -120,30 +123,64 @@ export function removePosition(id: string): void {
 }
 
 /**
- * Poll status for all pending Polymarket positions.
+ * Poll status for pending on-chain positions (Polymarket + GMX).
  * Called periodically from the UI.
  */
 export async function pollPendingPositions(): Promise<void> {
   const pending = get(pendingPositions);
   if (pending.length === 0) return;
 
-  for (const pos of pending) {
+  const polyPending = pending.filter((pos) => pos.type === 'polymarket');
+  const gmxPending = pending.filter((pos) => pos.type === 'gmx');
+
+  for (const pos of polyPending) {
     try {
       const result = await getPolymarketPositionStatus(pos.id);
-      if (result?.ok && result.position) {
-        const p = result.position;
+      if (!result?.ok || !result.position) continue;
+
+      const p = result.position;
+      updatePosition(pos.id, {
+        status: p.orderStatus,
+        currentPrice: p.currentPrice ?? pos.currentPrice,
+        pnlUsdc: p.pnlUsdc ?? pos.pnlUsdc,
+        pnlPercent:
+          p.currentPrice && pos.entryPrice > 0
+            ? ((p.currentPrice - pos.entryPrice) / pos.entryPrice) * 100
+            : pos.pnlPercent,
+      });
+    } catch {
+      // Silent fail on individual poll
+    }
+  }
+
+  if (gmxPending.length > 0) {
+    try {
+      const rows = await fetchGmxPositions('all');
+      if (rows.length === 0) return;
+
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      for (const pos of gmxPending) {
+        const row = byId.get(pos.id);
+        if (!row) continue;
+
+        const currentPrice = row.markPrice ?? pos.currentPrice;
+        const pnlPercent = row.pnlPercent ?? pos.pnlPercent;
         updatePosition(pos.id, {
-          status: p.orderStatus,
-          currentPrice: p.currentPrice ?? pos.currentPrice,
-          pnlUsdc: p.pnlUsdc ?? pos.pnlUsdc,
-          pnlPercent:
-            p.currentPrice && pos.entryPrice > 0
-              ? ((p.currentPrice - pos.entryPrice) / pos.entryPrice) * 100
-              : pos.pnlPercent,
+          status: row.orderStatus ?? pos.status,
+          entryPrice: row.entryPrice ?? pos.entryPrice,
+          currentPrice,
+          pnlUsdc: row.pnlUsd ?? pos.pnlUsdc,
+          pnlPercent,
+          meta: {
+            ...pos.meta,
+            txHash: row.txHash ?? pos.meta['txHash'],
+            positionKey: row.positionKey ?? pos.meta['positionKey'],
+            orderKey: row.orderKey ?? pos.meta['orderKey'],
+          },
         });
       }
     } catch {
-      // Silent fail on individual poll
+      // Silent fail on GMX poll
     }
   }
 }

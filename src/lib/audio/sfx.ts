@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Web Audio API Sound System
+// STOCKCLAW — Web Audio API Sound System
 // ═══════════════════════════════════════════════════════════════
 
 let ctx: AudioContext | null = null;

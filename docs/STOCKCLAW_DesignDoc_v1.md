@@ -1,4 +1,4 @@
-# MAXI⚡DOGE — System Design Document v1.0
+# STOCKCLAW — System Design Document v1.0
 
 > **Crypto Decision Intelligence OS**
 > 2026-02-22

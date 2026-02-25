@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Polymarket API Client
+// STOCKCLAW — Polymarket API Client
 // Fetches from local proxy to avoid CORS
 // ═══════════════════════════════════════════════════════════════
 

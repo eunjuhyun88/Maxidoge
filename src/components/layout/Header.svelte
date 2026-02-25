@@ -97,7 +97,7 @@
     {/if}
 
     <button class="nav-logo" on:click={() => nav('/')}>
-      MAXIDOGE
+      STOCKCLAW
     </button>
 
     <div class="nav-sep"></div>

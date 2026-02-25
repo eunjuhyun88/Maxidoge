@@ -1,4 +1,4 @@
-# MAXI⚡DOGE v3 Refactoring Backlog
+# STOCKCLAW v3 Refactoring Backlog
 
 Created: 2026-02-22
 Updated: 2026-02-23 (Agent 4 코드 감사 기반 상태 동기화)
