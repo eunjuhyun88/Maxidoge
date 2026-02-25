@@ -1301,3 +1301,29 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
 - Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
 - Status: DONE
+
+### W-20260225-1706-backend-codex (finish)
+
+- End (KST): 2026-02-25 17:14
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - Intel 정책 문서 v3 반영: `docs/INTEL_TRADING_DECISION_POLICY_2026-02-25.md`
+  - 임계값 분리: `config/intelThresholds.json`
+  - 신규 모듈 추가:
+    - `src/lib/intel/types.ts`
+    - `src/lib/intel/thresholds.ts`
+    - `src/lib/intel/qualityGate.ts`
+    - `src/lib/intel/helpfulnessEvaluator.ts`
+    - `src/lib/intel/decisionEngine.ts`
+    - `src/lib/intel/gateLogs.ts`
+  - SSOT wrapper 갱신: `src/lib/intel/decisionPolicy.ts`
+    - v3 gate/engine/helpfulness/threshold API 재export
+    - 기존 `evaluateQualityGate`/`computeIntelDecision` 호환 진입점 유지
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `62634f6`
+- Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
+- Status: DONE
