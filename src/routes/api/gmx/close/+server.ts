@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — GMX V2 Close Position API
+// STOCKCLAW — GMX V2 Close Position API
 // ═══════════════════════════════════════════════════════════════
 // POST /api/gmx/close
 // Builds MarketDecrease calldata for closing a GMX position.

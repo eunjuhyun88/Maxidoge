@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Server Hooks
+// STOCKCLAW — Server Hooks
 // ═══════════════════════════════════════════════════════════════
 // 1. Security headers
 // 2. Static asset cache headers

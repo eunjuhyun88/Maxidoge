@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Binance API Service (Public Market Data)
+// STOCKCLAW — Binance API Service (Public Market Data)
 // ═══════════════════════════════════════════════════════════════
 // Uses public endpoints — no API key required
 // Base: https://api.binance.com or https://data-api.binance.vision

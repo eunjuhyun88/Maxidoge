@@ -1,7 +1,7 @@
-# MAXI⚡DOGE — Claude Code Project Guide
+# STOCKCLAW — Claude Code Project Guide
 
 ## Project Overview
-**StockHoo / MAXI⚡DOGE** — Crypto Intelligence OS with gamified trading arena.
+**StockHoo / STOCKCLAW** — Crypto Intelligence OS with gamified trading arena.
 SvelteKit 2 full-stack app: prediction arena, terminal scanner, AI agents, on-chain wallet integration.
 
 ## Tech Stack
@@ -99,7 +99,7 @@ See `.env.example` for all required keys:
 - **Commit style**: `feat(B-XX): description` where B-XX is the task ID
 - **Auto-push before edits**: Always commit+push current state before starting modifications
 - **PR merge**: Use `gh pr create` + `gh pr merge` (gh at `~/.local/bin/gh`)
-- **Repo**: `eunjuhyun88/Maxidoge`
+- **Repo**: `eunjuhyun88/Stockclaw`
 
 ## Task Backlog (BE Phase)
 - [x] B-03: factorEngine + agentPipeline

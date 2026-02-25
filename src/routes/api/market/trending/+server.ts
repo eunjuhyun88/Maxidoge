@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Unified Trending API
+// STOCKCLAW — Unified Trending API
 // ═══════════════════════════════════════════════════════════════
 // Combines: CoinMarketCap (trending/gainers/most-visited)
 //           + LunarCrush (social volume/sentiment)

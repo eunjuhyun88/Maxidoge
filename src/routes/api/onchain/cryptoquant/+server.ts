@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — CryptoQuant On-chain Data API
+// STOCKCLAW — CryptoQuant On-chain Data API
 // ═══════════════════════════════════════════════════════════════
 // Exchange reserves, MVRV, NUPL, whale + miner data
 

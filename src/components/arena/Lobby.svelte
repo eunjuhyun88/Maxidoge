@@ -520,7 +520,7 @@
 
 <style>
   /* ═══════════════════════════════════════════════════════════════
-     MAXI⚡DOGE — Arena Lobby v3
+     STOCKCLAW — Arena Lobby v3
      Fighting Game Select Screen × Crypto Terminal
      ═══════════════════════════════════════════════════════════════ */
 

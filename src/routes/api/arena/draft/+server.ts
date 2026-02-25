@@ -1,4 +1,4 @@
-// MAXI⚡DOGE — Arena Draft Submit
+// STOCKCLAW — Arena Draft Submit
 // POST /api/arena/draft — Submit agent draft for a match
 
 import { json } from '@sveltejs/kit';

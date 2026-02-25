@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — GMX V2 Order Prepare API
+// STOCKCLAW — GMX V2 Order Prepare API
 // ═══════════════════════════════════════════════════════════════
 // POST /api/gmx/prepare
 // Builds multicall calldata for opening a GMX position.

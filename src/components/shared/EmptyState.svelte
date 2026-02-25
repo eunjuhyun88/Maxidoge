@@ -1,5 +1,5 @@
 <!-- ═══════════════════════════════════════════════════════════════
-     MAXI DOGE — EmptyState Component
+     STOCKCLAW — EmptyState Component
      Displays character illustration + message + CTA for empty data
 ═══════════════════════════════════════════════════════════════ -->
 <script lang="ts">

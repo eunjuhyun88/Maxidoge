@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Indicator Engine (pure functions)
+// STOCKCLAW — Indicator Engine (pure functions)
 // ═══════════════════════════════════════════════════════════════
 
 type NumArray = number[];

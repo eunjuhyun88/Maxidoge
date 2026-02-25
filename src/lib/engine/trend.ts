@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Trend Analysis Engine (pure functions)
+// STOCKCLAW — Trend Analysis Engine (pure functions)
 // ═══════════════════════════════════════════════════════════════
 
 import type {

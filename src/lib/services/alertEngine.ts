@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Background Alert Engine (client-side)
+// STOCKCLAW — Background Alert Engine (client-side)
 // ═══════════════════════════════════════════════════════════════
 // Periodically polls the opportunity scan API, detects changes,
 // and fires notifications + toasts via the notification store.

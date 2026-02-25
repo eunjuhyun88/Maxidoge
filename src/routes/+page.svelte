@@ -263,7 +263,7 @@
       {:else}
         <!-- Default hero content -->
         <div class="hero-stack">
-          <span class="htag ha" style="--ha-d:0s">//MAXI⚡DOGE</span>
+          <span class="htag ha" style="--ha-d:0s">//STOCKCLAW</span>
           <div class="ha" style="--ha-d:0.12s"><span class="hl hl-pk">ALPHA</span></div>
           <div class="hl-row ha" style="--ha-d:0.24s">
             <span class="hl hl-xl">DOGS</span>
@@ -567,7 +567,7 @@
       <span class="cta-txt cta-w sr sl" style="--d:0.1s">THE</span>
       <span class="cta-txt cta-pk sr sl" style="--d:0.2s">PACK</span>
       <div class="cta-det sr sl" style="--d:0.3s">
-        <span class="cta-brand">MAXI⚡DOGE</span>
+        <span class="cta-brand">STOCKCLAW</span>
         <span class="cta-loc">AI TRADING PLATFORM</span>
       </div>
     </div>
@@ -600,7 +600,7 @@
       </div>
     </div>
     <div class="foot-bot">
-      <span class="foot-copy">© 2025 MAXI⚡DOGE. ALL RIGHTS RESERVED.</span>
+      <span class="foot-copy">© 2025 STOCKCLAW. ALL RIGHTS RESERVED.</span>
       <span class="foot-tag">such AI. very trade. much profit. wow.</span>
     </div>
   </footer>
@@ -608,7 +608,7 @@
 
 <style>
   /* ═══════════════════════════════════════════════
-     MAXI⚡DOGE — LOOX LOST-IN-SPACE STYLE
+     STOCKCLAW — LOOX LOST-IN-SPACE STYLE
      Dark green-black + Salmon pink retro game
      ═══════════════════════════════════════════════ */
 

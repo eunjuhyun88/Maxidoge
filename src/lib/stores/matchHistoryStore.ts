@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Match History Store (localStorage persisted)
+// STOCKCLAW — Match History Store (localStorage persisted)
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';

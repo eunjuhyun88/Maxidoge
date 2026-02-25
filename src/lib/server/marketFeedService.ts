@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Market Feed Service (server)
+// STOCKCLAW — Market Feed Service (server)
 // ═══════════════════════════════════════════════════════════════
 
 import { PAIR_RE } from '$lib/server/apiValidation';

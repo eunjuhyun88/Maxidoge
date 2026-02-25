@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Portfolio API Client
+// STOCKCLAW — Portfolio API Client
 // ═══════════════════════════════════════════════════════════════
 
 export interface PortfolioHolding {

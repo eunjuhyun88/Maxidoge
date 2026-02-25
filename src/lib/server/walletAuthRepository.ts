@@ -14,7 +14,7 @@ export interface IssueWalletNonceResult {
 
 function buildNonceMessage(address: string, nonce: string, issuedAtIso: string): string {
   return [
-    'MAXI DOGE Wallet Verification',
+    'STOCKCLAW Wallet Verification',
     `Address: ${address}`,
     `Nonce: ${nonce}`,
     `Issued At: ${issuedAtIso}`,

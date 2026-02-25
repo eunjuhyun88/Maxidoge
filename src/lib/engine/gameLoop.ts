@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Game Loop (requestAnimationFrame)
+// STOCKCLAW — Game Loop (requestAnimationFrame)
 // ═══════════════════════════════════════════════════════════════
 
 import { gameState } from '$lib/stores/gameState';

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Multi-Asset Opportunity Scanner
+// STOCKCLAW — Multi-Asset Opportunity Scanner
 // ═══════════════════════════════════════════════════════════════
 // Lightweight scanning of trending coins → composite opportunity score
 // Used by: auto multi-scan, comparison mode, alert engine

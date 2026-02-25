@@ -274,7 +274,7 @@
       <span class="cta-txt cta-dk sr sl" style="--d:0.1s">THE</span>
       <span class="cta-txt cta-rd sr sl" style="--d:0.2s">PACK</span>
       <div class="cta-det sr sl" style="--d:0.3s">
-        <span class="cta-brand">MAXI⚡DOGE</span>
+        <span class="cta-brand">STOCKCLAW</span>
         <span class="cta-loc">AI TRADING PLATFORM</span>
       </div>
     </div>
@@ -313,7 +313,7 @@
       </div>
     </div>
     <div class="foot-bot">
-      <span class="foot-copy">© 2025 MAXI⚡DOGE. ALL RIGHTS RESERVED.</span>
+      <span class="foot-copy">© 2025 STOCKCLAW. ALL RIGHTS RESERVED.</span>
       <span class="foot-tag">such AI. very trade. much profit. wow.</span>
     </div>
   </footer>
@@ -321,7 +321,7 @@
 
 <style>
   /* ═══════════════════════════════════════════════
-     MAXI⚡DOGE — STIFF-STYLE RETRO PREMIUM
+     STOCKCLAW — STIFF-STYLE RETRO PREMIUM
      Complete animation system + platform flow
      ═══════════════════════════════════════════════ */
 

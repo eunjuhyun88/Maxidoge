@@ -47,7 +47,7 @@
 
   const dispatch = createEventDispatcher<WarRoomEvents>();
 
-  const SCAN_STATE_STORAGE_KEY = 'maxidoge.warroom.scanstate.v1';
+  const SCAN_STATE_STORAGE_KEY = 'stockclaw.warroom.scanstate.v1';
   const MAX_SCAN_TABS = 6;
   const MAX_SIGNALS_PER_TAB = 60;
 

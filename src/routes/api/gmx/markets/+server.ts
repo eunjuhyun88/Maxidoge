@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — GMX V2 Markets API
+// STOCKCLAW — GMX V2 Markets API
 // ═══════════════════════════════════════════════════════════════
 // GET /api/gmx/markets
 // Returns available GMX V2 markets on Arbitrum.

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Agent Engine v3: 32 Spec Definitions
+// STOCKCLAW — Agent Engine v3: 32 Spec Definitions
 // ═══════════════════════════════════════════════════════════════
 //
 // 8 에이전트 × 4 Spec = 32개 Spec.

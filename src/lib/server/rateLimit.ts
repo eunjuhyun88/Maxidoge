@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Server-side Rate Limiter (in-memory)
+// STOCKCLAW — Server-side Rate Limiter (in-memory)
 // ═══════════════════════════════════════════════════════════════
 // Sliding-window token bucket per IP.
 // Lightweight, no external deps, safe for 1000+ concurrent users.

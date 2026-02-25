@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI DOGE — Dune Analytics API Client (server-side) (B-05)
+// STOCKCLAW — Dune Analytics API Client (server-side) (B-05)
 // ═══════════════════════════════════════════════════════════════
 // Pre-built queries for on-chain metrics
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Scoring & LP Engine
+// STOCKCLAW — Scoring & LP Engine
 // ═══════════════════════════════════════════════════════════════
 
 import type { AgentDef } from '$lib/data/agents';

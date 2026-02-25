@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Chart Pattern Detector (MVP)
+// STOCKCLAW — Chart Pattern Detector (MVP)
 // ═══════════════════════════════════════════════════════════════
 
 import type { BinanceKline } from './types';

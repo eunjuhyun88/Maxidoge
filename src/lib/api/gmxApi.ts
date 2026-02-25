@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — GMX V2 Frontend API Client
+// STOCKCLAW — GMX V2 Frontend API Client
 // ═══════════════════════════════════════════════════════════════
 // All GMX interactions go through our API (Frontend → API → Backend).
 // The only exception is wallet transactions (eth_sendTransaction).

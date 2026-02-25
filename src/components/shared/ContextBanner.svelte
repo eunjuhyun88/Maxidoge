@@ -1,5 +1,5 @@
 <!-- ═══════════════════════════════════════════════════════════════
-     MAXI DOGE — Context Banner
+     STOCKCLAW — Context Banner
      Cross-page navigation strip showing relevant context info
 ═══════════════════════════════════════════════════════════════ -->
 <script lang="ts">

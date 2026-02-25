@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — CoinMarketCap server client
+// STOCKCLAW — CoinMarketCap server client
 // ═══════════════════════════════════════════════════════════════
 // Quotes + Trending (Gainers/Losers, Most Visited, Latest)
 

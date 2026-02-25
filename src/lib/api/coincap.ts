@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — CoinCap API Client (B-05)
+// STOCKCLAW — CoinCap API Client (B-05)
 // ═══════════════════════════════════════════════════════════════
 // Completely free, no key, no hard rate limit
 // https://docs.coincap.io/

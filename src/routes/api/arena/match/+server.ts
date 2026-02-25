@@ -1,4 +1,4 @@
-// MAXI⚡DOGE — Arena Match API
+// STOCKCLAW — Arena Match API
 // POST /api/arena/match — Create new match
 // GET /api/arena/match — List user matches
 

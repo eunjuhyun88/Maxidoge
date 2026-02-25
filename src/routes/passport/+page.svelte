@@ -695,7 +695,7 @@
     <div class="passport-card">
       <!-- ═══ RIBBON ═══ -->
       <div class="card-ribbon">
-        <span class="ribbon-text">MAXI⚡DOGE TRADER PASSPORT</span>
+        <span class="ribbon-text">STOCKCLAW TRADER PASSPORT</span>
       </div>
 
       <!-- ═══ UNIFIED HEADER: PROFILE + PORTFOLIO ═══ -->

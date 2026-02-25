@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Chain Switching (Polygon + Arbitrum)
+// STOCKCLAW — Chain Switching (Polygon + Arbitrum)
 // ═══════════════════════════════════════════════════════════════
 // Ensures the user's wallet is on the correct chain before
 // executing transactions. Polygon for Polymarket, Arbitrum for GMX.

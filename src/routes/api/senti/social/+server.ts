@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Social Sentiment Proxy (LunarCrush)
+// STOCKCLAW — Social Sentiment Proxy (LunarCrush)
 // ═══════════════════════════════════════════════════════════════
 
 import { json } from '@sveltejs/kit';

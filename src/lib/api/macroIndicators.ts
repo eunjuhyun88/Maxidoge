@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Macro Indicators Client
+// STOCKCLAW — Macro Indicators Client
 // ═══════════════════════════════════════════════════════════════
 // DXY, S&P500, US10Y from our Yahoo proxy
 // Maps to: MACRO agent → DXY_TREND, EQUITY_TREND, YIELD_TREND

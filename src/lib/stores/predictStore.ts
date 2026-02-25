@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Predict Store (Polymarket state)
+// STOCKCLAW — Predict Store (Polymarket state)
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Holdings Data
+// STOCKCLAW — Holdings Data
 // ═══════════════════════════════════════════════════════════════
 
 export interface HoldingAsset {

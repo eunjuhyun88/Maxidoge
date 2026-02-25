@@ -1,4 +1,4 @@
-// MAXI⚡DOGE — Arena Service (B-01)
+// STOCKCLAW — Arena Service (B-01)
 // Server-side match lifecycle management
 
 import { randomUUID } from 'node:crypto';

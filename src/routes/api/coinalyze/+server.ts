@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Coinalyze API Proxy
+// STOCKCLAW — Coinalyze API Proxy
 // Proxies to api.coinalyze.net for OI, Funding, Liquidations, L/S
 // GET /api/coinalyze?endpoint=open-interest-history&symbols=BTCUSDT_PERP.A&interval=4hour&from=...&to=...
 // ═══════════════════════════════════════════════════════════════

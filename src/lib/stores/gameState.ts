@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Game State Store
+// STOCKCLAW — Game State Store
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';

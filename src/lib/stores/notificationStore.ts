@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Notification & Toast Store
+// STOCKCLAW — Notification & Toast Store
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
@@ -271,14 +271,14 @@ export function notifySignalTracked(pair: string, dir: string) {
 
 export function seedNotifications() {
   if (typeof window === 'undefined') return;
-  const seedKey = 'maxidoge_notifications_seeded_v1';
+  const seedKey = 'stockclaw_notifications_seeded_v1';
   if (sessionStorage.getItem(seedKey) === '1') return;
   sessionStorage.setItem(seedKey, '1');
 
   notifications.addNotification({
     type: 'info',
     title: 'SESSION STARTED',
-    body: 'MAXI DOGE arena is live. Good luck, trader.',
+    body: 'STOCKCLAW arena is live. Good luck, trader.',
     dismissable: true,
   });
   notifications.addNotification({

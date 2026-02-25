@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Match Replay Engine
+// STOCKCLAW — Match Replay Engine
 // Replays recorded match data through the phase system
 // ═══════════════════════════════════════════════════════════════
 

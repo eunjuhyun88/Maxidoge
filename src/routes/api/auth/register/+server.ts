@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — User Registration API (PostgreSQL backed)
+// STOCKCLAW — User Registration API (PostgreSQL backed)
 // POST /api/auth/register
 // Body: { email, nickname, walletAddress?, walletMessage?, walletSignature? }
 // ═══════════════════════════════════════════════════════════════

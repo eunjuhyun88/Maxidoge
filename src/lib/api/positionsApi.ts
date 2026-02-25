@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Positions API Client (Frontend)
+// STOCKCLAW — Positions API Client (Frontend)
 // ═══════════════════════════════════════════════════════════════
 // All Polymarket + unified position API calls.
 // Frontend → Our API → Backend (never calls Polymarket directly).

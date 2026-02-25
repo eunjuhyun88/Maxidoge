@@ -1,4 +1,4 @@
-// MAXI⚡DOGE — Arena Hypothesis Submit
+// STOCKCLAW — Arena Hypothesis Submit
 // POST /api/arena/hypothesis — Submit user direction + confidence
 
 import { json } from '@sveltejs/kit';

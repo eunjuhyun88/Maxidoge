@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Polymarket Order Submit API
+// STOCKCLAW — Polymarket Order Submit API
 // ═══════════════════════════════════════════════════════════════
 // Step 2 of 2-step order flow:
 //   Frontend sends positionId + wallet signature →

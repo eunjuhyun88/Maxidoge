@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI⚡DOGE — Agent Engine v3 Constants
+// STOCKCLAW — Agent Engine v3 Constants
 // ═══════════════════════════════════════════════════════════════
 
 import type { Tier, TierInfo, LPReason } from './types';

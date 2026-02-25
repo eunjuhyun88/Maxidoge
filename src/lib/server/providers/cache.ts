@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// MAXI DOGE — Bounded LRU In-Memory Cache (B-05)
+// STOCKCLAW — Bounded LRU In-Memory Cache (B-05)
 // ═══════════════════════════════════════════════════════════════
 // - Max entries capped to prevent unbounded memory growth
 // - LRU eviction when cache is full
