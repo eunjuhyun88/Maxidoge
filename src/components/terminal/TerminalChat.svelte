@@ -15,7 +15,7 @@
   }
 
   let messages: ChatMsg[] = [
-    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'STOCKCLAW Orchestrator v8 online. 7 agents standing by.', time: '14:00', isUser: false, isSystem: true },
+    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'Stockclaw Orchestrator v8 online. 7 agents standing by.', time: '14:00', isUser: false, isSystem: true },
   ];
 
   let inputText = '';

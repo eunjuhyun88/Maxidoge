@@ -1406,3 +1406,35 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `N/A` (머지 차단)
 - Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
 - Status: BLOCKED
+
+### W-20260225-2145-frontend-passport-codex (finish)
+
+- End (KST): 2026-02-25 21:46:40 +0900
+- What changed:
+  - 대규모 충돌 상태(`codex/stockclaw-reapply-on-main-20260225`)에서 `git cherry-pick --abort` 수행
+  - `main` 복귀 및 원격 동기화 상태 확인 (`main == origin/main == 5fef7ed`)
+  - 보존 브랜치/커밋 유지 확인:
+    - `codex/stockclaw-preserve-before-main-sync-20260225` @ `53ee99b`
+- Validation results:
+  - npm run check: PASS
+  - npm run build: PASS
+- Commit hash: not executed (analysis/cleanup only)
+- Push status: not executed
+- Final working tree status: ## main...origin/main (clean)
+- Status: DONE
+
+### W-20260225-2154-frontend-passport-codex (finish)
+
+- End (KST): 2026-02-25 22:00:12 +0900
+- What changed:
+  - `main` 최신(5fef7ed) 기준으로 최소 브랜치 생성: `codex/stockclaw-minimal-brand-fix-20260225`
+  - 대규모 리네임/삭제를 재적용하지 않고, 사용자 노출 브랜드 표기 16개 파일만 `Stockclaw`로 통일
+  - footer 로고 텍스트 `MAXI⚡DOGE` -> `Stockclaw` 반영(2개 페이지)
+  - 표기 변경 후 미사용 CSS `.foot-bolt` 셀렉터 2곳 제거
+- Validation results:
+  - npm run check: PASS (0 errors, 0 warnings)
+  - npm run build: PASS
+- Commit hash: this commit (HEAD of current branch)
+- Push status: not executed
+- Final working tree status: pending commit
+- Status: DONE
