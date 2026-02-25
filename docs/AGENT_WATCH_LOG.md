@@ -1372,3 +1372,20 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
 - Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
 - Status: DONE
+
+### W-20260225-1922-backend-codex (finish)
+
+- End (KST): 2026-02-25 19:22:12 +0900
+- Agent: Codex (GPT-5)
+- Branch: `codex/terminal-be-gap-redesign-w121`
+- What changed:
+  - docs 전반의 `MAXI DOGE` 계열 문자열을 `Stockclaw`로 최종 정리
+  - 리네임: `docs/MAXIDOGE_*` 문서 7개(`.md` 6 + `.pdf` 1) -> `docs/STOCKCLAW_*`
+  - AGENTS/로그 파일은 경로/히스토리 무결성 유지 목적상 제외
+- Validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Commit hash: `6f75f23`
+- Push status: `SUCCESS (origin/codex/terminal-be-gap-redesign-w121)`
+- Final working tree status: `## codex/terminal-be-gap-redesign-w121...origin/codex/terminal-be-gap-redesign-w121`
+- Status: DONE
