@@ -132,6 +132,63 @@
   let picksScanTime = 0;
   let picksLoaded = false;
 
+  // ═══ Intel Policy v3 (server-evaluated) ═══
+  type PolicyPanel = 'headlines' | 'events' | 'flow' | 'trending' | 'picks';
+  interface PolicyScores {
+    actionability: number;
+    timeliness: number;
+    reliability: number;
+    relevance: number;
+    helpfulness: number;
+  }
+  interface PolicyGate {
+    weightedScore: number;
+    pass: boolean;
+    visibility: 'full' | 'low_impact' | 'hidden';
+    blockers: string[];
+    scores: PolicyScores;
+  }
+  interface PolicyCard {
+    id: string;
+    panel: PolicyPanel;
+    title: string;
+    source: string;
+    createdAt: number;
+    bias: 'long' | 'short' | 'wait';
+    confidence: number;
+    what: string;
+    soWhat: string;
+    nowWhat: string;
+    why: string;
+    helpfulnessWhy: string;
+    visualAid: string | null;
+    gate: PolicyGate;
+  }
+  interface PolicyDecision {
+    bias: 'long' | 'short' | 'wait';
+    confidence: number;
+    edgePct: number;
+    qualityGateScore: number;
+    coveragePct: number;
+    reasons: string[];
+    blockers: string[];
+    shouldTrade: boolean;
+  }
+
+  let policyDecision: PolicyDecision | null = null;
+  let policyPanels: Record<PolicyPanel, PolicyCard[]> = {
+    headlines: [],
+    events: [],
+    flow: [],
+    trending: [],
+    picks: [],
+  };
+  let policyLoading = false;
+  let policyLoaded = false;
+  let policyUpdatedAt = 0;
+  let policySummary: { pair: string; timeframe: string; domainsUsed: string[]; avgHelpfulness: number } | null = null;
+  let policyCardsForTab: PolicyCard[] = [];
+
   // Chat input (local)
   let chatInput = '';
   let chatEl: HTMLDivElement;
@@ -252,6 +309,17 @@
   $: filteredDexHot = dexChainFilter === 'all'
     ? trendDexHot
     : trendDexHot.filter((token) => token.chainId === dexChainFilter);
+  $: policyCardsForTab = innerTab === 'headlines'
+    ? policyPanels.headlines
+    : innerTab === 'events'
+      ? policyPanels.events
+      : innerTab === 'flow'
+        ? policyPanels.flow
+        : innerTab === 'trending'
+          ? trendSubTab === 'picks'
+            ? policyPanels.picks
+            : policyPanels.trending
+          : [];
 
   let _prevActiveTab = activeTab;
   $: {
@@ -330,6 +398,38 @@
     const el = e.target as HTMLElement;
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 60) {
       loadMoreHeadlines();
+    }
+  }
+
+  async function fetchIntelPolicy() {
+    if (policyLoading) return;
+    policyLoading = true;
+    try {
+      const pair = $gameState.pair || 'BTC/USDT';
+      const timeframe = $gameState.timeframe || '4h';
+      const res = await fetch(
+        `/api/terminal/intel-policy?pair=${encodeURIComponent(pair)}&timeframe=${encodeURIComponent(timeframe)}`,
+        { signal: AbortSignal.timeout(12000) },
+      );
+      const json = await res.json();
+      if (json?.ok && json?.data) {
+        const panels = json.data.panels ?? {};
+        policyPanels = {
+          headlines: Array.isArray(panels.headlines) ? panels.headlines : [],
+          events: Array.isArray(panels.events) ? panels.events : [],
+          flow: Array.isArray(panels.flow) ? panels.flow : [],
+          trending: Array.isArray(panels.trending) ? panels.trending : [],
+          picks: Array.isArray(panels.picks) ? panels.picks : [],
+        };
+        policyDecision = json.data.decision ?? null;
+        policySummary = json.data.summary ?? null;
+        policyUpdatedAt = Number(json.data.generatedAt ?? Date.now());
+        policyLoaded = true;
+      }
+    } catch (error) {
+      console.warn('[IntelPanel] Intel policy API unavailable');
+    } finally {
+      policyLoading = false;
     }
   }
 
@@ -509,6 +609,22 @@
     return '#ffeb3b';
   }
 
+  function policyBiasLabel(bias: PolicyCard['bias'] | PolicyDecision['bias']): string {
+    if (bias === 'long') return 'LONG';
+    if (bias === 'short') return 'SHORT';
+    return 'WAIT';
+  }
+
+  function policyBiasClass(bias: PolicyCard['bias'] | PolicyDecision['bias']): string {
+    if (bias === 'long') return 'long';
+    if (bias === 'short') return 'short';
+    return 'wait';
+  }
+
+  function scoreBreakdownText(scores: PolicyScores): string {
+    return `A ${Math.round(scores.actionability)} · T ${Math.round(scores.timeliness)} · R ${Math.round(scores.reliability)} · Re ${Math.round(scores.relevance)} · H ${Math.round(scores.helpfulness)}`;
+  }
+
   function fmtTrendPrice(p: number): string {
     if (!Number.isFinite(p)) return '$0';
     if (p >= 1000) return '$' + p.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -555,6 +671,7 @@
         headlineOffset = 0;
         headlineHasMore = true;
         void Promise.allSettled([
+          fetchIntelPolicy(),
           fetchLiveHeadlines(false),
           fetchLiveEvents(),
           fetchLiveFlow(),
@@ -606,6 +723,7 @@
 
     // ── Load live market data (parallel) ──
     void Promise.allSettled([
+      fetchIntelPolicy(),
       fetchLiveHeadlines(),
       fetchLiveEvents(),
       fetchLiveFlow(),
@@ -651,6 +769,34 @@
             </button>
           {/each}
         </div>
+
+        {#if policyDecision}
+          <div class="policy-decision-banner">
+            <div class="policy-decision-head">
+              <span class="policy-decision-title">INTEL DECISION v3</span>
+              <span class="policy-decision-bias {policyBiasClass(policyDecision.bias)}">
+                {policyBiasLabel(policyDecision.bias)}
+              </span>
+            </div>
+            <div class="policy-decision-meta">
+              <span>Edge {policyDecision.edgePct.toFixed(1)}%</span>
+              <span>Conf {policyDecision.confidence.toFixed(0)}%</span>
+              <span>Gate {policyDecision.qualityGateScore.toFixed(1)}</span>
+              <span>Coverage {policyDecision.coveragePct.toFixed(0)}%</span>
+              {#if policySummary}
+                <span>{policySummary.pair} · {policySummary.timeframe.toUpperCase()} · Domains {policySummary.domainsUsed.length}</span>
+              {/if}
+              {#if policyUpdatedAt > 0}
+                <span>Updated {formatRelativeTime(policyUpdatedAt)} ago</span>
+              {/if}
+            </div>
+            {#if policyDecision.reasons?.length}
+              <div class="policy-decision-reason">{policyDecision.reasons[0]}</div>
+            {/if}
+          </div>
+        {:else if policyLoading}
+          <div class="policy-loading">INTEL DECISION v3 계산 중...</div>
+        {/if}
 
         <div class="rp-body" class:chat-mode={innerTab === 'chat'}>
           {#if innerTab === 'chat'}
@@ -702,6 +848,27 @@
             </div>
 
           {:else if innerTab === 'headlines'}
+            {#if policyCardsForTab.length > 0}
+              <div class="policy-cards-wrap">
+                {#each policyCardsForTab as card (card.id)}
+                  <div class="policy-card">
+                    <div class="policy-card-head">
+                      <span class="policy-card-title">{card.title}</span>
+                      <span class="policy-card-bias {policyBiasClass(card.bias)}">{policyBiasLabel(card.bias)}</span>
+                    </div>
+                    <div class="policy-card-row"><strong>What:</strong> {card.what}</div>
+                    <div class="policy-card-row"><strong>So What:</strong> {card.soWhat}</div>
+                    <div class="policy-card-row"><strong>Now What:</strong> {card.nowWhat}</div>
+                    <div class="policy-card-row"><strong>Why:</strong> {card.why}</div>
+                    <div class="policy-card-row"><strong>Help WHY:</strong> {card.helpfulnessWhy}</div>
+                    <div class="policy-card-score">
+                      <span>Gate {card.gate.weightedScore.toFixed(1)}</span>
+                      <span>{scoreBreakdownText(card.gate.scores)}</span>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
             <div class="hl-header-bar">
               <span class="hl-ticker-badge">{currentToken} NEWS</span>
               <button class="hl-sort-btn" on:click={toggleHeadlineSort} title="Toggle sort">
@@ -757,6 +924,27 @@
             </div>
 
           {:else if innerTab === 'events'}
+            {#if policyCardsForTab.length > 0}
+              <div class="policy-cards-wrap">
+                {#each policyCardsForTab as card (card.id)}
+                  <div class="policy-card">
+                    <div class="policy-card-head">
+                      <span class="policy-card-title">{card.title}</span>
+                      <span class="policy-card-bias {policyBiasClass(card.bias)}">{policyBiasLabel(card.bias)}</span>
+                    </div>
+                    <div class="policy-card-row"><strong>What:</strong> {card.what}</div>
+                    <div class="policy-card-row"><strong>So What:</strong> {card.soWhat}</div>
+                    <div class="policy-card-row"><strong>Now What:</strong> {card.nowWhat}</div>
+                    <div class="policy-card-row"><strong>Why:</strong> {card.why}</div>
+                    <div class="policy-card-row"><strong>Help WHY:</strong> {card.helpfulnessWhy}</div>
+                    <div class="policy-card-score">
+                      <span>Gate {card.gate.weightedScore.toFixed(1)}</span>
+                      <span>{scoreBreakdownText(card.gate.scores)}</span>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
             <div class="ev-list">
               {#if liveEvents.length === 0}
                 <div class="flow-empty">Loading events...</div>
@@ -774,6 +962,27 @@
             </div>
 
           {:else if innerTab === 'trending'}
+            {#if policyCardsForTab.length > 0}
+              <div class="policy-cards-wrap">
+                {#each policyCardsForTab as card (card.id)}
+                  <div class="policy-card">
+                    <div class="policy-card-head">
+                      <span class="policy-card-title">{card.title}</span>
+                      <span class="policy-card-bias {policyBiasClass(card.bias)}">{policyBiasLabel(card.bias)}</span>
+                    </div>
+                    <div class="policy-card-row"><strong>What:</strong> {card.what}</div>
+                    <div class="policy-card-row"><strong>So What:</strong> {card.soWhat}</div>
+                    <div class="policy-card-row"><strong>Now What:</strong> {card.nowWhat}</div>
+                    <div class="policy-card-row"><strong>Why:</strong> {card.why}</div>
+                    <div class="policy-card-row"><strong>Help WHY:</strong> {card.helpfulnessWhy}</div>
+                    <div class="policy-card-score">
+                      <span>Gate {card.gate.weightedScore.toFixed(1)}</span>
+                      <span>{scoreBreakdownText(card.gate.scores)}</span>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
             <div class="trend-panel">
               <div class="trend-sub-tabs">
                 <button class="trend-sub" class:active={trendSubTab === 'picks'} on:click={() => { trendSubTab = 'picks'; fetchTopPicks(); }}>🎯 PICKS</button>
@@ -977,6 +1186,27 @@
             </div>
 
           {:else if innerTab === 'flow'}
+            {#if policyCardsForTab.length > 0}
+              <div class="policy-cards-wrap">
+                {#each policyCardsForTab as card (card.id)}
+                  <div class="policy-card">
+                    <div class="policy-card-head">
+                      <span class="policy-card-title">{card.title}</span>
+                      <span class="policy-card-bias {policyBiasClass(card.bias)}">{policyBiasLabel(card.bias)}</span>
+                    </div>
+                    <div class="policy-card-row"><strong>What:</strong> {card.what}</div>
+                    <div class="policy-card-row"><strong>So What:</strong> {card.soWhat}</div>
+                    <div class="policy-card-row"><strong>Now What:</strong> {card.nowWhat}</div>
+                    <div class="policy-card-row"><strong>Why:</strong> {card.why}</div>
+                    <div class="policy-card-row"><strong>Help WHY:</strong> {card.helpfulnessWhy}</div>
+                    <div class="policy-card-score">
+                      <span>Gate {card.gate.weightedScore.toFixed(1)}</span>
+                      <span>{scoreBreakdownText(card.gate.scores)}</span>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
             <div class="flow-list">
               <div class="flow-section-lbl">SMART MONEY FLOWS (24H)</div>
               {#if liveFlows.length === 0}
@@ -1212,6 +1442,116 @@
 
 <style>
   .intel-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--blk); overflow: hidden; }
+
+  .policy-decision-banner {
+    border-bottom: 1px solid rgba(255, 230, 0, 0.2);
+    background: rgba(255, 230, 0, 0.06);
+    padding: 8px 10px;
+    font-family: var(--fm);
+  }
+  .policy-loading {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 6px 10px;
+    font-family: var(--fm);
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: rgba(255, 255, 255, 0.66);
+  }
+  .policy-decision-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .policy-decision-title {
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 10px;
+    letter-spacing: 1.1px;
+    font-weight: 700;
+  }
+  .policy-decision-bias {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .policy-decision-bias.long { color: #00e676; border-color: rgba(0, 230, 118, 0.38); }
+  .policy-decision-bias.short { color: #ff5252; border-color: rgba(255, 82, 82, 0.38); }
+  .policy-decision-bias.wait { color: #ffd54f; border-color: rgba(255, 213, 79, 0.38); }
+  .policy-decision-meta {
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+  .policy-decision-reason {
+    margin-top: 5px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.82);
+  }
+  .policy-cards-wrap {
+    display: grid;
+    gap: 6px;
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+    max-height: 240px;
+    overflow: auto;
+  }
+  .policy-card {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    padding: 7px 8px;
+    display: grid;
+    gap: 4px;
+  }
+  .policy-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+  }
+  .policy-card-title {
+    font-size: 10px;
+    letter-spacing: 0.9px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.86);
+  }
+  .policy-card-bias {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  .policy-card-bias.long { color: #00e676; border-color: rgba(0, 230, 118, 0.4); }
+  .policy-card-bias.short { color: #ff5252; border-color: rgba(255, 82, 82, 0.4); }
+  .policy-card-bias.wait { color: #ffd54f; border-color: rgba(255, 213, 79, 0.4); }
+  .policy-card-row {
+    font-size: 11px;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.82);
+  }
+  .policy-card-row strong {
+    color: rgba(255, 230, 0, 0.84);
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  .policy-card-score {
+    margin-top: 2px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.68);
+  }
 
   /* ── Tabs ── */
   .rp-tabs { display: flex; border-bottom: 3px solid var(--yel); flex-shrink: 0; }
