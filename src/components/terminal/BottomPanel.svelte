@@ -2,33 +2,6 @@
   import { quickTradeStore, openTrades, closedTrades, totalQuickPnL, closeQuickTrade, clearClosedTrades } from '$lib/stores/quickTradeStore';
   import { trackedSignalStore, activeSignals, activeSignalCount, convertToTrade, removeTracked, clearExpired } from '$lib/stores/trackedSignalStore';
   import { gameState } from '$lib/stores/gameState';
-  import { AGDEFS } from '$lib/data/agents';
-  import { onMount } from 'svelte';
-
-  // ── Chat state (migrated from TerminalChat) ──
-  interface ChatMsg {
-    from: string;
-    icon: string;
-    color: string;
-    text: string;
-    time: string;
-    isUser: boolean;
-    isSystem?: boolean;
-  }
-
-  let chatMessages: ChatMsg[] = [
-    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'Stockclaw Orchestrator v8 online.', time: '—', isUser: false, isSystem: true },
-  ];
-  let chatInput = '';
-  let chatEl: HTMLDivElement;
-  let isTyping = false;
-
-  const agentResponses: Record<string, string[]> = {
-    ORCHESTRATOR: ['Analyzing across 7 agents...', 'Running backtest... 68% win rate detected.', 'Consensus updated.'],
-    STRUCTURE: ['CHoCH on 4H confirmed. OB zone at $95,400.', 'BOS above $97,800. Bullish intact.'],
-    FLOW: ['Net flow: -$128M accumulation. Whales increasing.', 'Exchange outflows rising.'],
-    DERIV: ['OI +4.2% with positive delta.', 'FR at +0.082% — extreme. Liq near $96.8K.'],
-  };
 
   // ── Activity log ──
   interface Activity {
@@ -46,7 +19,7 @@
   }
 
   // ── Tab state ──
-  type Tab = 'positions' | 'tracked' | 'chat' | 'activity';
+  type Tab = 'positions' | 'tracked' | 'activity';
   let activeTab: Tab = 'positions';
   let collapsed = false;
 
@@ -84,37 +57,6 @@
     activeTab = 'positions';
   }
 
-  // ── Chat ──
-  function sendChat() {
-    if (!chatInput.trim()) return;
-    const now = new Date();
-    const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
-    chatMessages = [...chatMessages, { from: 'YOU', icon: '🐕', color: '#ffe600', text: chatInput, time, isUser: true }];
-    const q = chatInput;
-    chatInput = '';
-    scrollChat();
-    isTyping = true;
-
-    const agent = AGDEFS.find(ag => q.toLowerCase().includes(`@${ag.name.toLowerCase()}`));
-    setTimeout(() => {
-      isTyping = false;
-      const pool = agent ? (agentResponses[agent.name] || agentResponses.ORCHESTRATOR) : agentResponses.ORCHESTRATOR;
-      const resp = pool[Math.floor(Math.random() * pool.length)];
-      chatMessages = [...chatMessages, {
-        from: agent?.name || 'ORCHESTRATOR',
-        icon: agent?.icon || '🧠',
-        color: agent?.color || '#ff2d9b',
-        text: resp, time, isUser: false
-      }];
-      scrollChat();
-    }, 800 + Math.random() * 600);
-  }
-
-  function scrollChat() {
-    setTimeout(() => { if (chatEl) chatEl.scrollTop = chatEl.scrollHeight; }, 50);
-  }
-  function chatKey(e: KeyboardEvent) { if (e.key === 'Enter') sendChat(); }
-
   // ── Helpers ──
   function pnlColor(n: number) { return n >= 0 ? 'var(--grn)' : 'var(--red)'; }
   function pnlPfx(n: number) { return n >= 0 ? '+' : ''; }
@@ -132,7 +74,6 @@
     return `${h}h ${m}m`;
   }
 
-  onMount(() => scrollChat());
 </script>
 
 <div class="bp" class:collapsed>
@@ -145,9 +86,6 @@
     <button class="bp-tab" class:active={activeTab === 'tracked'} on:click={() => { activeTab = 'tracked'; collapsed = false; }}>
       TRACKED
       {#if trackedCount > 0}<span class="bp-badge bp-badge-cyan">{trackedCount}</span>{/if}
-    </button>
-    <button class="bp-tab" class:active={activeTab === 'chat'} on:click={() => { activeTab = 'chat'; collapsed = false; }}>
-      CHAT
     </button>
     <button class="bp-tab" class:active={activeTab === 'activity'} on:click={() => { activeTab = 'activity'; collapsed = false; }}>
       ACTIVITY
@@ -212,44 +150,6 @@
         {#if $trackedSignalStore.signals.filter(s => s.status === 'expired').length > 0}
           <button class="bp-clear" on:click={clearExpired}>CLEAR EXPIRED</button>
         {/if}
-      </div>
-
-    <!-- CHAT -->
-    {:else if activeTab === 'chat'}
-      <div class="bp-chat">
-        <div class="bp-chat-msgs" bind:this={chatEl}>
-          {#each chatMessages as msg}
-            {#if msg.isSystem}
-              <div class="cm-sys"><span>{msg.icon}</span> <span>{msg.text}</span></div>
-            {:else if msg.isUser}
-              <div class="cm-row cm-right">
-                <div class="cm-bub cm-bub-user">
-                  <span class="cm-txt">{msg.text}</span>
-                  <span class="cm-time">{msg.time}</span>
-                </div>
-              </div>
-            {:else}
-              <div class="cm-row cm-left">
-                <span class="cm-av" style="border-color:{msg.color}">{msg.icon}</span>
-                <div class="cm-bub cm-bub-agent">
-                  <span class="cm-name" style="color:{msg.color}">{msg.from}</span>
-                  <span class="cm-txt">{msg.text}</span>
-                  <span class="cm-time">{msg.time}</span>
-                </div>
-              </div>
-            {/if}
-          {/each}
-          {#if isTyping}
-            <div class="cm-row cm-left">
-              <span class="cm-av" style="border-color:#ff2d9b">🧠</span>
-              <div class="cm-bub cm-bub-agent"><span class="cm-dots"><span></span><span></span><span></span></span></div>
-            </div>
-          {/if}
-        </div>
-        <div class="bp-chat-input">
-          <input type="text" bind:value={chatInput} on:keydown={chatKey} placeholder="Ask agents... (@STRUCTURE, @FLOW...)" />
-          <button class="bp-send" on:click={sendChat} disabled={!chatInput.trim()}>⚡</button>
-        </div>
       </div>
 
     <!-- ACTIVITY (includes closed trades + all events) -->
@@ -502,117 +402,4 @@
   .bp-act-icon { font-size: 11px; }
   .bp-act-text { font-size: 8px; flex: 1; }
 
-  /* Chat */
-  .bp-chat {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-  .bp-chat-msgs {
-    flex: 1;
-    overflow-y: auto;
-    padding: 6px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-height: 0;
-  }
-  .bp-chat-msgs::-webkit-scrollbar { width: 3px; }
-  .bp-chat-msgs::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-
-  .cm-sys {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    font-size: 7px;
-    color: rgba(255,230,0,.5);
-    font-family: var(--fm);
-    padding: 2px 8px;
-    border: 1px dashed rgba(255,230,0,.1);
-    border-radius: 12px;
-    margin: 0 20px;
-  }
-  .cm-row { display: flex; align-items: flex-end; gap: 4px; max-width: 90%; }
-  .cm-right { align-self: flex-end; }
-  .cm-left { align-self: flex-start; }
-  .cm-av {
-    width: 20px; height: 20px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    flex-shrink: 0;
-    border: 1.5px solid;
-    background: rgba(255,255,255,.05);
-  }
-  .cm-bub {
-    padding: 4px 8px;
-    border-radius: 8px;
-    min-width: 40px;
-  }
-  .cm-bub-user {
-    background: rgba(255,230,0,.1);
-    border: 1px solid rgba(255,230,0,.2);
-    border-bottom-right-radius: 2px;
-  }
-  .cm-bub-agent {
-    background: rgba(255,255,255,.03);
-    border: 1px solid rgba(255,255,255,.06);
-    border-bottom-left-radius: 2px;
-  }
-  .cm-name { font-size: 7px; font-weight: 900; font-family: var(--fd); letter-spacing: .5px; display: block; }
-  .cm-txt { font-size: 8px; color: #ccc; font-family: var(--fm); line-height: 1.4; display: block; }
-  .cm-bub-user .cm-txt { color: rgba(255,255,255,.9); }
-  .cm-time { font-size: 6px; color: rgba(255,255,255,.2); font-family: var(--fm); display: block; text-align: right; }
-
-  .cm-dots { display: flex; gap: 3px; padding: 2px 0; }
-  .cm-dots span {
-    width: 4px; height: 4px; border-radius: 50%;
-    background: rgba(255,255,255,.3);
-    animation: dotBounce 1.2s infinite;
-  }
-  .cm-dots span:nth-child(2) { animation-delay: .2s; }
-  .cm-dots span:nth-child(3) { animation-delay: .4s; }
-  @keyframes dotBounce {
-    0%,60%,100% { transform: translateY(0); opacity: .3; }
-    30% { transform: translateY(-3px); opacity: 1; }
-  }
-
-  .bp-chat-input {
-    flex-shrink: 0;
-    display: flex;
-    gap: 4px;
-    padding: 4px 8px 6px;
-    border-top: 1px solid rgba(255,255,255,.06);
-  }
-  .bp-chat-input input {
-    flex: 1;
-    padding: 5px 8px;
-    border-radius: 8px;
-    background: rgba(255,255,255,.06);
-    border: 1px solid rgba(255,255,255,.1);
-    color: #fff;
-    font-size: 8px;
-    font-family: var(--fm);
-    outline: none;
-  }
-  .bp-chat-input input::placeholder { color: #444; }
-  .bp-chat-input input:focus { border-color: rgba(255,230,0,.3); }
-  .bp-send {
-    width: 28px;
-    border-radius: 8px;
-    background: var(--yel);
-    border: 2px solid #000;
-    color: #000;
-    font-size: 11px;
-    cursor: pointer;
-    box-shadow: 2px 2px 0 #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .bp-send:hover:not(:disabled) { background: #ffcc00; }
-  .bp-send:disabled { opacity: .3; cursor: default; }
 </style>

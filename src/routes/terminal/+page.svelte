@@ -935,13 +935,46 @@
     return 'ORCHESTRATOR';
   }
 
-  function buildOfflineAgentReply(userText: string, statusLabel: string): { sender: string; text: string; tradeDir: ChatTradeDirection | null } {
+  type ChatErrorKind = 'network' | 'timeout' | 'llm_unavailable' | 'server_error' | 'unknown';
+
+  function classifyError(statusLabel: string, err?: unknown): ChatErrorKind {
+    const label = statusLabel.toLowerCase();
+    if (err instanceof DOMException && err.name === 'TimeoutError') return 'timeout';
+    if (label === 'network' || label.includes('failed to fetch') || label.includes('networkerror')) return 'network';
+    if (label.startsWith('503') || label.includes('llm') || label.includes('provider')) return 'llm_unavailable';
+    if (label.startsWith('5')) return 'server_error';
+    if (label === 'timeout' || label.includes('timeout') || label.includes('abort')) return 'timeout';
+    return 'unknown';
+  }
+
+  const ERROR_MESSAGES: Record<ChatErrorKind, string> = {
+    network: '네트워크 연결이 끊어졌습니다. Wi-Fi/인터넷 상태를 확인해주세요.',
+    timeout: 'LLM 응답이 20초를 초과했습니다. 서버 부하가 높거나 프롬프트가 길 수 있습니다. 잠시 후 다시 시도해주세요.',
+    llm_unavailable: 'LLM 프로바이더에 연결할 수 없습니다. Settings에서 API 키(Groq/Gemini/DeepSeek)가 설정되어 있는지 확인해주세요.',
+    server_error: '서버 내부 오류가 발생했습니다. 잠시 후 재시도해주세요.',
+    unknown: '알 수 없는 오류가 발생했습니다.',
+  };
+
+  // Chat connection status for UI dot indicator
+  let chatConnectionStatus: 'connected' | 'degraded' | 'disconnected' = 'connected';
+  let lastChatSuccess = 0;
+
+  function buildOfflineAgentReply(userText: string, statusLabel: string, err?: unknown): { sender: string; text: string; tradeDir: ChatTradeDirection | null } {
     const sender = detectMentionedAgentLocal(userText) || inferAgentFromIntentLocal(userText);
     const pair = $gameState.pair || 'BTC/USDT';
     const timeframe = ($gameState.timeframe || '4h').toUpperCase();
+    const errorKind = classifyError(statusLabel, err);
+
+    // Update connection status
+    if (errorKind === 'network' || errorKind === 'llm_unavailable') {
+      chatConnectionStatus = 'disconnected';
+    } else {
+      chatConnectionStatus = 'degraded';
+    }
+
     const scanSummary = latestScan
       ? `최근 스캔: ${latestScan.pair} ${latestScan.timeframe.toUpperCase()} ${String(latestScan.consensus).toUpperCase()} ${Math.round(latestScan.avgConfidence)}%`
-      : '최근 스캔 데이터가 없어 즉시 컨텍스트는 제한됩니다.';
+      : '';
     const tradeDirFromQuestion = inferSuggestedDirection(userText);
     const tradeDirFromScan = latestScan?.consensus === 'long'
       ? 'LONG'
@@ -950,16 +983,17 @@
         : null;
     const tradeDir = tradeDirFromQuestion || tradeDirFromScan;
     const tradeHint = tradeDir
-      ? `\n실행 힌트: ${tradeDir} 관점으로 보고, 필요하면 START ${tradeDir}로 드래그 진입을 시작하세요.`
+      ? `\n💡 ${tradeDir} 관점 참고. START ${tradeDir}로 드래그 진입 가능.`
       : '';
 
     return {
       sender,
       tradeDir,
       text:
-        `서버 채팅 연결이 불안정해 로컬 폴백으로 응답합니다 (${statusLabel}).\n` +
-        `${pair} ${timeframe} 기준으로 우선 판단을 이어갑니다.\n` +
-        `${scanSummary}${tradeHint}`,
+        `⚠️ ${ERROR_MESSAGES[errorKind]}\n` +
+        `${pair} ${timeframe} 기준 로컬 폴백 응답입니다.` +
+        (scanSummary ? `\n${scanSummary}` : '') +
+        tradeHint,
     };
   }
 
@@ -1191,12 +1225,14 @@
             livePrices: { ...$livePrices },
           },
         }),
-        signal: AbortSignal.timeout(15000), // 15s timeout for LLM responses
+        signal: AbortSignal.timeout(20000), // 20s timeout for LLM responses
       });
 
       isTyping = false;
 
       if (res.ok) {
+        chatConnectionStatus = 'connected';
+        lastChatSuccess = Date.now();
         const data = await res.json();
         if (data.agentResponse) {
           const r = data.agentResponse;
@@ -1256,7 +1292,8 @@
       }
     } catch (err) {
       isTyping = false;
-      const offline = buildOfflineAgentReply(text, 'network');
+      const errorLabel = err instanceof DOMException && err.name === 'TimeoutError' ? 'timeout' : 'network';
+      const offline = buildOfflineAgentReply(text, errorLabel, err);
       const fallbackMeta = AGENT_META[offline.sender] || AGENT_META.ORCHESTRATOR;
       if (offline.tradeDir) {
         chatSuggestedDir = offline.tradeDir;
@@ -1389,6 +1426,7 @@
             prioritizeChat
             {chatTradeReady}
             {chatFocusKey}
+            {chatConnectionStatus}
             on:sendchat={handleSendChat}
             on:gototrade={handleIntelGoTrade}
           />
@@ -1532,6 +1570,7 @@
             {latestScan}
             {chatTradeReady}
             {chatFocusKey}
+            {chatConnectionStatus}
             on:sendchat={handleSendChat}
             on:gototrade={handleIntelGoTrade}
           />

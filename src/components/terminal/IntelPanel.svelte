@@ -28,6 +28,7 @@
   export let prioritizeChat = false;
   export let chatFocusKey = 0;
   export let chatTradeReady = false;
+  export let chatConnectionStatus: 'connected' | 'degraded' | 'disconnected' = 'connected';
   type ScanHighlight = {
     agent: string;
     vote: 'long' | 'short' | 'neutral';
@@ -997,7 +998,7 @@
           {#if innerTab === 'chat'}
             <div class="ac-section ac-embedded">
               <div class="ac-header">
-                <span class="ac-title">🤖 AGENT CHAT</span>
+                <span class="ac-title">🤖 AGENT CHAT <span class="ac-status-dot ac-status-{chatConnectionStatus}" title="{chatConnectionStatus === 'connected' ? 'Connected' : chatConnectionStatus === 'degraded' ? 'Degraded' : 'Disconnected'}"></span></span>
                 <button
                   class="ac-trade-btn"
                   class:ready={chatTradeReady}
@@ -2271,6 +2272,18 @@
     background: rgba(0,0,0,.3);
   }
   .ac-section.ac-embedded { border-top: 0; }
+  .ac-status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .ac-status-connected { background: #00ff88; box-shadow: 0 0 4px #00ff88; }
+  .ac-status-degraded { background: #ffaa00; box-shadow: 0 0 4px #ffaa00; animation: pulse-dot 2s infinite; }
+  .ac-status-disconnected { background: #ff2d55; box-shadow: 0 0 4px #ff2d55; animation: pulse-dot 1.5s infinite; }
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
   .ac-header {
     display: flex; align-items: center; gap: 6px;
     justify-content: space-between;
