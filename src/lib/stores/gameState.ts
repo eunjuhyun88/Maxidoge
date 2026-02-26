@@ -4,6 +4,7 @@
 
 import { writable, derived } from 'svelte/store';
 import type { CanonicalTimeframe } from '$lib/utils/timeframe';
+import type { OrpoOutput, CtxBelief, CommanderVerdict, GuardianCheck, FBScore } from '$lib/engine/types';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
 import { getLivePriceSnapshot } from './priceStore';
@@ -89,6 +90,13 @@ export interface GameState {
     agents: string[];
   } | null;
 
+  // C02 Architecture outputs
+  orpoOutput: OrpoOutput | null;
+  ctxBeliefs: CtxBelief[];
+  commanderVerdict: CommanderVerdict | null;
+  guardianCheck: GuardianCheck | null;
+  fbScore: FBScore | null;
+
   // Squad config (v2: team-wide parameters)
   squadConfig: SquadConfig;
 
@@ -130,6 +138,11 @@ const defaultState: GameState = {
   battleCandlesSinceEntry: 0,
   chartPattern: null,
   opponent: null,
+  orpoOutput: null,
+  ctxBeliefs: [],
+  commanderVerdict: null,
+  guardianCheck: null,
+  fbScore: null,
   squadConfig: { riskLevel: 'mid', timeframe: '4h', leverageBias: 5, confidenceWeight: 5 },
   pendingAction: null,
   prices: { BTC: 97420, ETH: 3481, SOL: 198.46 },

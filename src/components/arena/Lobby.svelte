@@ -17,53 +17,52 @@
   const TOURNAMENT_UNLOCK_LP = 500;
   const TOURNAMENT_UNLOCK_PVP_WINS = 5;
 
-  let selectedMode: 'pve' | 'pvp' | 'tournament' = 'pve';
-  let tournaments: TournamentActiveRecord[] = [];
-  let tournamentsLoading = false;
-  let tournamentsError: string | null = null;
-  let selectedTournamentId: string | null = null;
-  let bracketLoading = false;
-  let bracketError: string | null = null;
-  let bracketRound = 1;
-  let bracketMatches: TournamentBracketMatch[] = [];
-  let registerLoading = false;
-  let registerMessage: string | null = null;
-  let selectedTournament: TournamentActiveRecord | null = null;
-  let canRegisterTournament = false;
+  let selectedMode: 'pve' | 'pvp' | 'tournament' = $state('pve');
+  let tournaments: TournamentActiveRecord[] = $state([]);
+  let tournamentsLoading = $state(false);
+  let tournamentsError: string | null = $state(null);
+  let selectedTournamentId: string | null = $state(null);
+  let bracketLoading = $state(false);
+  let bracketError: string | null = $state(null);
+  let bracketRound = $state(1);
+  let bracketMatches: TournamentBracketMatch[] = $state([]);
+  let registerLoading = $state(false);
+  let registerMessage: string | null = $state(null);
 
-  let mounted = false;
-  let hoveredMode: string | null = null;
-  let glitchText = 'ARENA LOBBY';
-  let glitchActive = false;
-  let killFeedVisible: boolean[] = [];
-  let typewriterText = '';
+  let mounted = $state(false);
+  let hoveredMode: string | null = $state(null);
+  let glitchText = $state('ARENA LOBBY');
+  let glitchActive = $state(false);
+  let killFeedVisible: boolean[] = $state([]);
+  let typewriterText = $state('');
   const fullTypewriterText = 'INITIALIZING PREDICTION ENGINE...';
-  let scannerAngle = 0;
+  let scannerAngle = $state(0);
 
-  $: walletLabel = $gameState.lp >= 2200 ? 'MASTER' : $gameState.lp >= 1200 ? 'DIAMOND' : $gameState.lp >= 600 ? 'GOLD' : $gameState.lp >= 200 ? 'SILVER' : 'BRONZE';
-  $: tierColor = walletLabel === 'MASTER' ? '#ff3366' : walletLabel === 'DIAMOND' ? '#66cce6' : walletLabel === 'GOLD' ? '#ffd060' : walletLabel === 'SILVER' ? '#c0c0c0' : '#cd7f32';
-  $: pveRecord = `${$gameState.wins}W-${$gameState.losses}L`;
-  $: winRate = $gameState.matchN > 0 ? Math.round(($gameState.wins / $gameState.matchN) * 100) : 0;
-  $: pvpWins = Math.max(0, Math.floor($gameState.wins * 0.65));
-  $: pvpLosses = Math.max(0, Math.floor($gameState.losses * 0.35));
-  $: pvpRecord = `${pvpWins}W-${pvpLosses}L`;
-  $: pvpUnlocked = $gameState.matchN >= PVP_UNLOCK_MATCHES;
-  $: tournamentUnlocked = $gameState.lp >= TOURNAMENT_UNLOCK_LP && pvpWins >= TOURNAMENT_UNLOCK_PVP_WINS;
-  $: activeCount = Math.min(5, Math.max(1, ($gameState.matchN % 5) + 1));
-  $: selectedTournament = tournaments.find((t) => t.tournamentId === selectedTournamentId) ?? tournaments[0] ?? null;
-  $: canRegisterTournament =
+  let walletLabel = $derived($gameState.lp >= 2200 ? 'MASTER' : $gameState.lp >= 1200 ? 'DIAMOND' : $gameState.lp >= 600 ? 'GOLD' : $gameState.lp >= 200 ? 'SILVER' : 'BRONZE');
+  let tierColor = $derived(walletLabel === 'MASTER' ? '#ff3366' : walletLabel === 'DIAMOND' ? '#66cce6' : walletLabel === 'GOLD' ? '#ffd060' : walletLabel === 'SILVER' ? '#c0c0c0' : '#cd7f32');
+  let pveRecord = $derived(`${$gameState.wins}W-${$gameState.losses}L`);
+  let winRate = $derived($gameState.matchN > 0 ? Math.round(($gameState.wins / $gameState.matchN) * 100) : 0);
+  let pvpWins = $derived(Math.max(0, Math.floor($gameState.wins * 0.65)));
+  let pvpLosses = $derived(Math.max(0, Math.floor($gameState.losses * 0.35)));
+  let pvpRecord = $derived(`${pvpWins}W-${pvpLosses}L`);
+  let pvpUnlocked = $derived($gameState.matchN >= PVP_UNLOCK_MATCHES);
+  let tournamentUnlocked = $derived($gameState.lp >= TOURNAMENT_UNLOCK_LP && pvpWins >= TOURNAMENT_UNLOCK_PVP_WINS);
+  let activeCount = $derived(Math.min(5, Math.max(1, ($gameState.matchN % 5) + 1)));
+  let selectedTournament = $derived(tournaments.find((t) => t.tournamentId === selectedTournamentId) ?? tournaments[0] ?? null);
+  let canRegisterTournament = $derived(
     !!selectedTournament &&
     selectedTournament.status === 'REG_OPEN' &&
-    selectedTournament.registeredPlayers < selectedTournament.maxPlayers;
+    selectedTournament.registeredPlayers < selectedTournament.maxPlayers
+  );
 
-  $: lpBarWidth = Math.min(100, ($gameState.lp / 3000) * 100);
-  $: streakEmoji = $gameState.streak >= 5 ? '🔥' : $gameState.streak >= 3 ? '⚡' : '';
+  let lpBarWidth = $derived(Math.min(100, ($gameState.lp / 3000) * 100));
+  let streakEmoji = $derived($gameState.streak >= 5 ? '🔥' : $gameState.streak >= 3 ? '⚡' : '');
 
-  $: recent = [
+  let recent = $derived([
     { id: `#${Math.max(1, $gameState.matchN)}`, result: $gameState.wins >= $gameState.losses ? 'WIN' : 'LOSS', lp: $gameState.wins >= $gameState.losses ? 16 : -3, pair: $gameState.pair.split('/')[0], dir: $gameState.score >= 60 ? 'LONG' : 'SHORT', tag: 'DISSENT', fbs: Math.max(40, Math.min(99, Math.round($gameState.score + 8))), age: '2h' },
     { id: `#${Math.max(1, $gameState.matchN - 1)}`, result: 'WIN', lp: 12, pair: 'ETH', dir: 'LONG', tag: 'UNANIMOUS', fbs: 87, age: '5h' },
     { id: `#${Math.max(1, $gameState.matchN - 2)}`, result: 'LOSS', lp: -8, pair: 'SOL', dir: 'SHORT', tag: 'DISSENT', fbs: 52, age: '8h' },
-  ];
+  ]);
 
   function modeStart(mode: 'pve' | 'pvp' | 'tournament', tournament: TournamentActiveRecord | null = null) {
     sfx.enter();
@@ -307,9 +306,9 @@
         <button
           class="portal portal-pve"
           class:hovered={hoveredMode === 'pve'}
-          on:mouseenter={() => { hoveredMode = 'pve'; sfx.step(); }}
-          on:mouseleave={() => hoveredMode = null}
-          on:click={() => enterMode('pve')}
+          onmouseenter={() => { hoveredMode = 'pve'; sfx.step(); }}
+          onmouseleave={() => hoveredMode = null}
+          onclick={() => enterMode('pve')}
         >
           <div class="portal-bg">
             <div class="portal-scanner" style="--angle: {scannerAngle}deg"></div>
@@ -335,9 +334,9 @@
           class="portal portal-pvp"
           class:hovered={hoveredMode === 'pvp'}
           class:locked={!pvpUnlocked}
-          on:mouseenter={() => { hoveredMode = 'pvp'; if(pvpUnlocked) sfx.step(); }}
-          on:mouseleave={() => hoveredMode = null}
-          on:click={() => enterMode('pvp')}
+          onmouseenter={() => { hoveredMode = 'pvp'; if(pvpUnlocked) sfx.step(); }}
+          onmouseleave={() => hoveredMode = null}
+          onclick={() => enterMode('pvp')}
         >
           <div class="portal-bg pvp-bg">
             {#if pvpUnlocked}
@@ -376,9 +375,9 @@
           class="portal portal-tour"
           class:hovered={hoveredMode === 'tournament'}
           class:locked={!tournamentUnlocked}
-          on:mouseenter={() => { hoveredMode = 'tournament'; if(tournamentUnlocked) sfx.step(); }}
-          on:mouseleave={() => hoveredMode = null}
-          on:click={() => enterMode('tournament')}
+          onmouseenter={() => { hoveredMode = 'tournament'; if(tournamentUnlocked) sfx.step(); }}
+          onmouseleave={() => hoveredMode = null}
+          onclick={() => enterMode('tournament')}
         >
           <div class="portal-bg tour-bg">
             {#if tournamentUnlocked}
@@ -421,8 +420,8 @@
         <div class="panel-head">
           <span class="panel-title tour-text">👑 WEEKLY TOURNAMENT</span>
           <div class="panel-actions">
-            <button class="btn-sm" on:click={loadTournaments} disabled={tournamentsLoading}>새로고침</button>
-            <button class="btn-sm btn-primary" on:click={startTournamentRound} disabled={!selectedTournamentId}>라운드 시작 →</button>
+            <button class="btn-sm" onclick={loadTournaments} disabled={tournamentsLoading}>새로고침</button>
+            <button class="btn-sm btn-primary" onclick={startTournamentRound} disabled={!selectedTournamentId}>라운드 시작 →</button>
           </div>
         </div>
 
@@ -436,7 +435,7 @@
           <div class="tour-layout">
             <div class="tour-list">
               {#each tournaments as t}
-                <button class="tour-item" class:active={selectedTournamentId === t.tournamentId} on:click={() => chooseTournament(t.tournamentId)}>
+                <button class="tour-item" class:active={selectedTournamentId === t.tournamentId} onclick={() => chooseTournament(t.tournamentId)}>
                   <div class="ti-row"><span class="ti-type">{formatTournamentType(t.type)}</span><span class="ti-status">{t.status}</span></div>
                   <div class="ti-row"><span class="ti-pair">{t.pair}</span><span class="ti-time">{formatStartAt(t.startAt)}</span></div>
                   <div class="ti-row"><span>{t.registeredPlayers}/{t.maxPlayers}명</span><span>Entry {t.entryFeeLp} LP</span></div>
@@ -449,7 +448,7 @@
                   <div class="tb-title">{selectedTournament ? selectedTournament.pair : '-'}</div>
                   <div class="tb-sub">Round {bracketRound} · Bracket</div>
                 </div>
-                <button class="btn-sm btn-gold" on:click={onTournamentRegister} disabled={!canRegisterTournament || registerLoading}>
+                <button class="btn-sm btn-gold" onclick={onTournamentRegister} disabled={!canRegisterTournament || registerLoading}>
                   {registerLoading ? '등록 중...' : canRegisterTournament ? '등록하기' : '등록 마감'}
                 </button>
               </div>

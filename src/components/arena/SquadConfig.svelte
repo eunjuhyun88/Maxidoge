@@ -1,23 +1,26 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import { AGDEFS } from '$lib/data/agents';
   import type { SquadConfig, RiskLevel, SquadTimeframe } from '$lib/stores/gameState';
   import { CORE_TIMEFRAME_OPTIONS } from '$lib/utils/timeframe';
 
-  const dispatch = createEventDispatcher<{
-    deploy: { config: SquadConfig };
-    back: void;
-  }>();
-
-  export let selectedAgents: string[] = [];
+  interface Props {
+    selectedAgents?: string[];
+    ondeploy?: (config: { config: SquadConfig }) => void;
+    onback?: () => void;
+  }
+  let {
+    selectedAgents = [],
+    ondeploy,
+    onback,
+  }: Props = $props();
 
   // Squad-wide config (v2 parameters)
-  let riskLevel: RiskLevel = 'mid';
-  let timeframe: SquadTimeframe = '4h';
-  let leverageBias = 5;
-  let confidenceWeight = 5;
+  let riskLevel: RiskLevel = $state('mid');
+  let timeframe: SquadTimeframe = $state('4h');
+  let leverageBias = $state(5);
+  let confidenceWeight = $state(5);
 
-  $: activeAgents = AGDEFS.filter(a => selectedAgents.includes(a.id));
+  let activeAgents = $derived(AGDEFS.filter(a => selectedAgents.includes(a.id)));
 
   const RISK_OPTIONS: { value: RiskLevel; label: string; emoji: string; desc: string; color: string }[] = [
     { value: 'low', label: 'LOW', emoji: '🛡', desc: 'Conservative. Tight SL, low leverage.', color: '#00cc66' },
@@ -43,19 +46,19 @@
   }));
 
   function handleDeploy() {
-    dispatch('deploy', {
+    ondeploy?.({
       config: { riskLevel, timeframe, leverageBias, confidenceWeight }
     });
   }
 
   function handleBack() {
-    dispatch('back');
+    onback?.();
   }
 </script>
 
 <div class="squad-config">
   <div class="sc-header">
-    <button class="sc-back" on:click={handleBack}>← BACK</button>
+    <button class="sc-back" onclick={handleBack}>← BACK</button>
     <h2 class="sc-title">CONFIGURE SQUAD</h2>
     <div class="sc-count">{activeAgents.length} AGENTS</div>
   </div>
@@ -84,7 +87,7 @@
             class="pill"
             class:sel={riskLevel === opt.value}
             style="--pill-color:{opt.color}"
-            on:click={() => riskLevel = opt.value}
+            onclick={() => riskLevel = opt.value}
           >
             <span class="pill-emoji">{opt.emoji}</span>
             <span class="pill-label">{opt.label}</span>
@@ -107,7 +110,7 @@
           <button
             class="pill tf-pill"
             class:sel={timeframe === opt.value}
-            on:click={() => timeframe = opt.value}
+            onclick={() => timeframe = opt.value}
           >
             <span class="pill-label">{opt.label}</span>
             <span class="pill-sub">{opt.desc}</span>
@@ -184,7 +187,7 @@
     </div>
   </div>
 
-  <button class="sc-deploy-btn" on:click={handleDeploy}>
+  <button class="sc-deploy-btn" onclick={handleDeploy}>
     🚀 DEPLOY SQUAD 🚀
   </button>
 </div>
@@ -194,8 +197,10 @@
     position: absolute;
     inset: 0;
     z-index: 45;
-    background: #E8967D;
-    background-image: repeating-conic-gradient(#d07a64 0deg 10deg, #E8967D 10deg 20deg);
+    background: #08130d;
+    background-image:
+      radial-gradient(ellipse 600px 400px at 70% 10%, rgba(232,150,125,.08) 0%, transparent 70%),
+      radial-gradient(ellipse 400px 400px at 20% 80%, rgba(0,212,255,.04) 0%, transparent 70%);
     overflow-y: auto;
     padding: 16px;
     display: flex;
@@ -216,28 +221,32 @@
     font-size: 9px;
     font-weight: 700;
     padding: 4px 10px;
-    border: 2px solid #000;
-    border-radius: 8px;
-    background: #fff;
+    border: 1px solid rgba(232,150,125,.4);
+    border-radius: 4px;
+    background: rgba(232,150,125,.06);
+    color: #e8967d;
     cursor: pointer;
-    box-shadow: 2px 2px 0 #000;
+    transition: background .2s;
+    letter-spacing: .5px;
   }
-  .sc-back:hover { background: #f0f0f0; }
+  .sc-back:hover { background: rgba(232,150,125,.15); }
   .sc-title {
     font-family: var(--fc);
     font-size: 22px;
-    color: #000;
-    -webkit-text-stroke: 1.5px #000;
+    color: #f0ede4;
+    -webkit-text-stroke: 0;
     letter-spacing: 3px;
     flex: 1;
     text-align: center;
     margin: 0;
+    text-shadow: 0 0 20px rgba(232,150,125,.2);
   }
   .sc-count {
     font-family: var(--fd);
     font-size: 12px;
-    color: #fff;
-    background: #000;
+    color: #e8967d;
+    background: rgba(232,150,125,.1);
+    border: 1px solid rgba(232,150,125,.3);
     padding: 3px 10px;
     border-radius: 10px;
     letter-spacing: 2px;
@@ -256,19 +265,20 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    background: #fff;
-    border: 2.5px solid #000;
+    background: rgba(10,26,18,.9);
+    border: 1px solid rgba(232,150,125,.25);
     border-radius: 20px;
     padding: 4px 10px 4px 6px;
-    box-shadow: 2px 2px 0 #000;
+    transition: border-color .2s;
   }
+  .roster-chip:hover { border-color: var(--agent-color); }
   .rc-icon { font-size: 14px; }
   .rc-name {
     font-family: var(--fd);
     font-size: 8px;
     font-weight: 900;
     letter-spacing: 1px;
-    color: #000;
+    color: #f0ede4;
   }
   .rc-role {
     font-family: var(--fm);
@@ -289,11 +299,10 @@
   }
 
   .param-section {
-    background: #fff;
-    border: 3px solid #000;
-    border-radius: 14px;
+    background: rgba(10,26,18,.92);
+    border: 1px solid rgba(232,150,125,.2);
+    border-radius: 10px;
     padding: 12px 14px;
-    box-shadow: 4px 4px 0 #000;
   }
 
   .param-label {
@@ -308,17 +317,17 @@
     font-size: 10px;
     font-weight: 900;
     letter-spacing: 2px;
-    color: #000;
+    color: #e8967d;
   }
   .pl-val {
     margin-left: auto;
     font-family: var(--fd);
     font-size: 16px;
     font-weight: 900;
-    color: #000;
-    background: #E8967D;
-    border: 2px solid #000;
-    border-radius: 8px;
+    color: #f0ede4;
+    background: rgba(232,150,125,.12);
+    border: 1px solid rgba(232,150,125,.4);
+    border-radius: 6px;
     padding: 1px 10px;
     min-width: 32px;
     text-align: center;
@@ -327,7 +336,7 @@
   .param-desc {
     font-family: var(--fm);
     font-size: 8px;
-    color: #888;
+    color: rgba(240,237,228,.45);
     margin-top: 6px;
     text-align: center;
     letter-spacing: .5px;
@@ -345,20 +354,21 @@
     align-items: center;
     gap: 2px;
     padding: 8px 4px;
-    border: 3px solid #ddd;
-    border-radius: 12px;
-    background: #fafafa;
+    border: 1px solid rgba(240,237,228,.12);
+    border-radius: 8px;
+    background: rgba(240,237,228,.03);
     cursor: pointer;
     transition: all .15s;
     position: relative;
     overflow: hidden;
+    color: #f0ede4;
   }
-  .pill:hover:not(.sel) { border-color: #999; background: #f5f5f5; }
+  .pill:hover:not(.sel) { border-color: rgba(232,150,125,.4); background: rgba(232,150,125,.06); }
   .pill.sel {
-    border-color: #000;
-    background: var(--pill-color, #E8967D);
-    box-shadow: 0 0 0 2px var(--pill-color, #E8967D), 3px 3px 0 #000;
-    transform: scale(1.05);
+    border-color: var(--pill-color, #e8967d);
+    background: color-mix(in srgb, var(--pill-color, #e8967d) 18%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--pill-color, #e8967d) 25%, transparent);
+    transform: scale(1.03);
   }
   .pill-emoji { font-size: 16px; }
   .pill-label {
@@ -366,15 +376,15 @@
     font-size: 10px;
     font-weight: 900;
     letter-spacing: 2px;
-    color: #000;
+    color: #f0ede4;
   }
   .pill-sub {
     font-family: var(--fm);
     font-size: 7px;
-    color: #888;
+    color: rgba(240,237,228,.4);
     letter-spacing: .5px;
   }
-  .pill.sel .pill-sub { color: rgba(0,0,0,.5); }
+  .pill.sel .pill-sub { color: rgba(240,237,228,.7); }
 
   .tf-pill { padding: 10px 4px; }
 
@@ -388,7 +398,7 @@
     font-family: var(--fd);
     font-size: 9px;
     font-weight: 900;
-    color: #aaa;
+    color: rgba(240,237,228,.35);
     width: 16px;
     text-align: center;
   }
@@ -396,33 +406,34 @@
     flex: 1;
     -webkit-appearance: none;
     appearance: none;
-    height: 8px;
-    border-radius: 4px;
-    background: linear-gradient(90deg, #ddd, #ddd);
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(232,150,125,.15);
     outline: none;
-    border: 2px solid #000;
+    border: none;
   }
   .sc-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    background: #E8967D;
-    border: 3px solid #000;
+    background: #e8967d;
+    border: 2px solid rgba(10,26,18,.8);
     cursor: pointer;
-    box-shadow: 2px 2px 0 #000;
+    box-shadow: 0 0 10px rgba(232,150,125,.4);
     transition: transform .1s;
   }
   .sc-slider::-webkit-slider-thumb:hover {
     transform: scale(1.15);
+    box-shadow: 0 0 16px rgba(232,150,125,.6);
   }
   .sc-slider::-webkit-slider-thumb:active {
     transform: scale(.95);
-    box-shadow: 1px 1px 0 #000;
   }
   .sc-slider.conf::-webkit-slider-thumb {
-    background: #00ccff;
+    background: #66cce6;
+    box-shadow: 0 0 10px rgba(102,204,230,.4);
   }
 
   .slider-ticks {
@@ -433,25 +444,25 @@
   }
   .tick {
     flex: 1;
-    height: 4px;
+    height: 3px;
     border-radius: 2px;
-    background: #eee;
+    background: rgba(240,237,228,.08);
     transition: background .15s;
   }
-  .tick.active { background: #000; }
+  .tick.active { background: #e8967d; }
 
   /* Summary Bar */
   .sc-summary {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: #000;
-    border-radius: 12px;
+    background: rgba(10,26,18,.95);
+    border: 1px solid rgba(232,150,125,.2);
+    border-radius: 8px;
     padding: 8px 16px;
     margin-bottom: 14px;
     max-width: 520px;
     width: 100%;
-    box-shadow: 4px 4px 0 rgba(0,0,0,.3);
   }
   .sum-row {
     display: flex;
@@ -465,19 +476,19 @@
     font-size: 6px;
     font-weight: 900;
     letter-spacing: 2px;
-    color: #888;
+    color: rgba(240,237,228,.4);
   }
   .sum-val {
     font-family: var(--fd);
     font-size: 12px;
     font-weight: 900;
-    color: #E8967D;
+    color: #e8967d;
     letter-spacing: 1px;
   }
   .sum-divider {
     width: 1px;
     height: 24px;
-    background: rgba(255,255,255,.15);
+    background: rgba(232,150,125,.15);
   }
 
   /* Deploy Button */
@@ -485,24 +496,23 @@
     font-family: var(--fc);
     font-size: 22px;
     letter-spacing: 3px;
-    color: #fff;
-    background: linear-gradient(180deg, #00cc66, #00aa44);
-    border: 4px solid #000;
+    color: #f0ede4;
+    background: linear-gradient(180deg, #00cc88, #00aa66);
+    border: 1px solid rgba(0,204,136,.5);
     border-radius: 30px;
     padding: 12px 50px;
     cursor: pointer;
-    box-shadow: 4px 4px 0 #000;
+    box-shadow: 0 0 20px rgba(0,204,136,.25);
     transition: all .2s;
-    -webkit-text-stroke: 1px #000;
-    text-shadow: 2px 2px 0 rgba(0,0,0,.3);
+    text-shadow: 0 1px 4px rgba(0,0,0,.4);
   }
   .sc-deploy-btn:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: 6px 6px 0 #000;
-    background: linear-gradient(180deg, #00dd77, #00bb55);
+    transform: translateY(-2px);
+    box-shadow: 0 0 32px rgba(0,204,136,.4);
+    background: linear-gradient(180deg, #00dd99, #00bb77);
   }
   .sc-deploy-btn:active {
-    transform: translate(2px, 2px);
-    box-shadow: 1px 1px 0 #000;
+    transform: translateY(1px);
+    box-shadow: 0 0 8px rgba(0,204,136,.2);
   }
 </style>
