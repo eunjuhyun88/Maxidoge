@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Headline } from '$lib/data/warroom';
+  import VerdictCard from './VerdictCard.svelte';
   import { communityPosts, hydrateCommunityPosts, likeCommunityPost } from '$lib/stores/communityStore';
   import { openTrades, closeQuickTrade, hydrateQuickTrades } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
@@ -28,6 +29,7 @@
   export let prioritizeChat = false;
   export let chatFocusKey = 0;
   export let chatTradeReady = false;
+  export let chatConnectionStatus: 'connected' | 'degraded' | 'disconnected' = 'connected';
   type ScanHighlight = {
     agent: string;
     vote: 'long' | 'short' | 'neutral';
@@ -47,9 +49,9 @@
   };
   export let latestScan: ScanBrief | null = null;
 
-  let activeTab = 'intel';
-  let innerTab = 'chat';
-  let posSubTab: 'all' | 'trades' | 'perps' | 'markets' = 'all';
+  let activeTab: 'chat' | 'feed' | 'positions' = 'chat';
+  let feedFilter: 'all' | 'news' | 'events' | 'flow' | 'trending' | 'community' = 'all';
+  let posView: 'mine' | 'markets' = 'mine';
   let betMarket: any = null; // market to open in BetPanel
   let showGmxPanel = false;  // GmxTradePanel visibility
   let tabCollapsed = false;
@@ -234,23 +236,19 @@
   let chatEl: HTMLDivElement;
   let _lastChatFocusKey = 0;
 
-  function setTab(tab: string) {
+  function setTab(tab: 'chat' | 'feed' | 'positions') {
     if (activeTab === tab) {
       tabCollapsed = !tabCollapsed;
     } else {
       activeTab = tab;
       tabCollapsed = false;
-      if (tab === 'intel') {
-        innerTab = 'chat';
-        queueUiStateSave({ terminalInnerTab: innerTab });
-      }
       queueUiStateSave({ terminalActiveTab: activeTab });
     }
   }
-  function setInnerTab(tab: string) {
-    innerTab = tab;
-    queueUiStateSave({ terminalInnerTab: innerTab });
-    if (tab === 'trending') { fetchTopPicks(); fetchTrendingData(); }
+  function setFeedFilter(f: typeof feedFilter) {
+    feedFilter = f;
+    queueUiStateSave({ terminalFeedFilter: feedFilter });
+    if (f === 'trending') { fetchTopPicks(); fetchTrendingData(); }
   }
 
   function queueUiStateSave(partial: Record<string, unknown>) {
@@ -325,8 +323,7 @@
 
   $: if (chatFocusKey !== _lastChatFocusKey) {
     _lastChatFocusKey = chatFocusKey;
-    activeTab = 'intel';
-    innerTab = 'chat';
+    activeTab = 'chat';
     tabCollapsed = false;
   }
 
@@ -349,19 +346,19 @@
   $: filteredDexHot = dexChainFilter === 'all'
     ? trendDexHot
     : trendDexHot.filter((token) => token.chainId === dexChainFilter);
-  $: policyCardsForTab = innerTab === 'headlines'
+  $: policyCardsForTab = feedFilter === 'news'
     ? policyPanels.headlines
-    : innerTab === 'events'
+    : feedFilter === 'events'
       ? policyPanels.events
-      : innerTab === 'flow'
+      : feedFilter === 'flow'
         ? policyPanels.flow
-        : innerTab === 'trending'
+        : feedFilter === 'trending'
           ? trendSubTab === 'picks'
             ? policyPanels.picks
             : policyPanels.trending
           : [];
 
-  let _prevActiveTab = activeTab;
+  let _prevActiveTab: 'chat' | 'feed' | 'positions' = activeTab;
   $: {
     if (activeTab === 'positions' && _prevActiveTab !== 'positions') {
       void syncPositions(true);
@@ -846,18 +843,16 @@
     void (async () => {
       const ui = await fetchUiStateApi();
       // 채팅이 항상 최우선 — 저장된 상태보다 우선
-      // 사용자가 다른 탭을 명시적으로 선택하면 그때 저장됨
       if (prioritizeChat) {
-        activeTab = 'intel';
-        innerTab = 'chat';
+        activeTab = 'chat';
         tabCollapsed = false;
       } else {
-        // 저장 상태 복원하되, 항상 chat을 기본 innerTab으로
-        if (ui?.terminalActiveTab && ['intel', 'community', 'positions'].includes(ui.terminalActiveTab)) {
-          activeTab = ui.terminalActiveTab;
+        // 저장 상태 복원
+        if (ui?.terminalActiveTab && ['chat', 'feed', 'positions'].includes(ui.terminalActiveTab)) {
+          activeTab = ui.terminalActiveTab as typeof activeTab;
         }
-        // innerTab은 항상 chat으로 시작 (headlines/events/flow는 사용자가 직접 선택)
-        innerTab = 'chat';
+        // legacy 'intel' → 'chat' 마이그레이션
+        if ((activeTab as string) === 'intel') activeTab = 'chat';
       }
     })();
 
@@ -884,8 +879,8 @@
 <div class="intel-panel">
   <!-- Main Tabs with collapse toggle -->
   <div class="rp-tabs">
-    <button class="rp-tab" class:active={activeTab === 'intel'} on:click={() => setTab('intel')}>INTEL</button>
-    <button class="rp-tab" class:active={activeTab === 'community'} on:click={() => setTab('community')}>COMMUNITY</button>
+    <button class="rp-tab" class:active={activeTab === 'chat'} on:click={() => setTab('chat')}>CHAT</button>
+    <button class="rp-tab" class:active={activeTab === 'feed'} on:click={() => setTab('feed')}>FEED</button>
     <button class="rp-tab" class:active={activeTab === 'positions'} on:click={() => setTab('positions')}>POSITIONS</button>
     <button class="rp-collapse" on:click={() => tabCollapsed = !tabCollapsed} title={tabCollapsed ? 'Expand' : 'Collapse'}>
       {tabCollapsed ? '▲' : '▼'}
@@ -901,103 +896,26 @@
   <!-- Tab Content (collapsible) -->
   {#if !tabCollapsed}
     <div class="rp-body-wrap">
-      {#if activeTab === 'intel'}
-        <div class="rp-inner-tabs">
-          {#each ['chat', 'headlines', 'trending', 'events', 'flow'] as tab}
-            <button class="rp-inner-tab" class:active={innerTab === tab} on:click={() => setInnerTab(tab)}>
-              {tab.toUpperCase()}
-            </button>
-          {/each}
-        </div>
+      {#if activeTab === 'chat'}
+        <VerdictCard
+          bias={shadowDecision?.enforced.bias ?? policyDecision?.bias ?? 'wait'}
+          confidence={shadowDecision?.proposal.confidence ?? policyDecision?.confidence ?? 0}
+          pair={$gameState.pair || 'BTC/USDT'}
+          timeframe={$gameState.timeframe || '4h'}
+          reason={shadowDecision?.proposal.nowWhat ?? policyDecision?.reasons?.[0] ?? ''}
+          edgePct={policyDecision?.edgePct ?? null}
+          gateScore={policyDecision?.qualityGateScore ?? null}
+          shouldExecute={shadowDecision?.enforced.shouldExecute ?? false}
+          model={shadowDecision ? shadowSourceLabel(shadowDecision) : null}
+          loading={policyLoading || shadowLoading}
+          executionEnabled={shadowExecutionEnabled}
+          on:execute={executeShadowTrade}
+        />
 
-        {#if policyDecision}
-          <div class="policy-decision-banner">
-            <div class="policy-decision-head">
-              <span class="policy-decision-title">INTEL DECISION v3</span>
-              <span class="policy-decision-bias {policyBiasClass(policyDecision.bias)}">
-                {policyBiasLabel(policyDecision.bias)}
-              </span>
-            </div>
-            <div class="policy-decision-meta">
-              <span>Edge {policyDecision.edgePct.toFixed(1)}%</span>
-              <span>Conf {policyDecision.confidence.toFixed(0)}%</span>
-              <span>Gate {policyDecision.qualityGateScore.toFixed(1)}</span>
-              <span>Coverage {policyDecision.coveragePct.toFixed(0)}%</span>
-              {#if policySummary}
-                <span>{policySummary.pair} · {policySummary.timeframe.toUpperCase()} · Domains {policySummary.domainsUsed.length}</span>
-              {/if}
-              {#if policyUpdatedAt > 0}
-                <span>Updated {formatRelativeTime(policyUpdatedAt)} ago</span>
-              {/if}
-            </div>
-            {#if policyDecision.reasons?.length}
-              <div class="policy-decision-reason">{policyDecision.reasons[0]}</div>
-            {/if}
-          </div>
-        {:else if policyLoading}
-          <div class="policy-loading">INTEL DECISION v3 계산 중...</div>
-        {/if}
-
-        {#if shadowDecision}
-          <div class="shadow-decision-banner">
-            <div class="shadow-decision-head">
-              <span class="shadow-decision-title">SHADOW AGENT</span>
-              <span class="policy-decision-bias {policyBiasClass(shadowDecision.enforced.bias)}">
-                {policyBiasLabel(shadowDecision.enforced.bias)}
-              </span>
-            </div>
-            <div class="shadow-decision-meta">
-              <span>{shadowSourceLabel(shadowDecision)}</span>
-              <span>Proposal {policyBiasLabel(shadowDecision.proposal.bias)} {shadowDecision.proposal.confidence.toFixed(0)}%</span>
-              <span>{shadowExecuteLabel(shadowDecision)}</span>
-              <span>LLM {shadowRuntime?.available ? 'ON' : 'OFF'}</span>
-              {#if shadowRuntime?.providers?.length}
-                <span>Providers {shadowRuntime.providers.map((provider) => provider.toUpperCase()).join(', ')}</span>
-              {/if}
-              {#if shadowDecision.generatedAt > 0}
-                <span>Updated {formatRelativeTime(shadowDecision.generatedAt)} ago</span>
-              {/if}
-            </div>
-            <div class="shadow-decision-line">
-              <strong>Now:</strong> {shadowDecision.proposal.nowWhat}
-            </div>
-            {#if shadowDecision.enforced.reasons?.length}
-              <div class="shadow-decision-line">
-                <strong>Guard:</strong> {shadowDecision.enforced.reasons.slice(0, 4).join(' · ')}
-              </div>
-            {/if}
-
-            {#if shadowExecutionEnabled}
-              <button
-                class="shadow-exec-btn"
-                class:ready={shadowDecision.enforced.shouldExecute}
-                on:click={executeShadowTrade}
-                disabled={!shadowDecision.enforced.shouldExecute || shadowExecLoading}
-              >
-                {shadowExecLoading ? 'EXECUTING...' : 'EXECUTE SHADOW TRADE'}
-              </button>
-            {:else}
-              <div class="shadow-exec-disabled">
-                Execution disabled (INTEL_SHADOW_EXECUTION_ENABLED=false)
-              </div>
-            {/if}
-
-            {#if shadowExecMessage}
-              <div class="shadow-exec-msg success">{shadowExecMessage}</div>
-            {/if}
-            {#if shadowExecError}
-              <div class="shadow-exec-msg error">{shadowExecError}</div>
-            {/if}
-          </div>
-        {:else if shadowLoading && !policyLoading}
-          <div class="policy-loading">SHADOW AGENT 계산 중...</div>
-        {/if}
-
-        <div class="rp-body" class:chat-mode={innerTab === 'chat'}>
-          {#if innerTab === 'chat'}
+        <div class="rp-body chat-mode">
             <div class="ac-section ac-embedded">
               <div class="ac-header">
-                <span class="ac-title">🤖 AGENT CHAT</span>
+                <span class="ac-title">🤖 AGENT CHAT <span class="ac-status-dot ac-status-{chatConnectionStatus}" title="{chatConnectionStatus === 'connected' ? 'Connected' : chatConnectionStatus === 'degraded' ? 'Degraded' : 'Disconnected'}"></span></span>
                 <button
                   class="ac-trade-btn"
                   class:ready={chatTradeReady}
@@ -1041,8 +959,18 @@
                 <button class="ac-send" on:click={sendChat} disabled={!chatInput.trim()}>⚡</button>
               </div>
             </div>
+        </div>
 
-          {:else if innerTab === 'headlines'}
+      {:else if activeTab === 'feed'}
+        <!-- Feed filter chips -->
+        <div class="feed-chips">
+          {#each [['all','ALL'],['flow','FLOW'],['events','EVENTS'],['trending','TRENDING'],['news','NEWS'],['community','COMMUNITY']] as [key, label] (key)}
+            <button class="feed-chip" class:active={feedFilter === key} on:click={() => setFeedFilter(key as typeof feedFilter)}>{label}</button>
+          {/each}
+        </div>
+
+        <div class="rp-body">
+          {#if feedFilter === 'all' || feedFilter === 'news'}
             {#if policyCardsForTab.length > 0}
               <div class="policy-cards-wrap">
                 {#each policyCardsForTab as card (card.id)}
@@ -1117,29 +1045,9 @@
                 <div class="hl-end">— end of headlines —</div>
               {/if}
             </div>
+          {/if}
 
-          {:else if innerTab === 'events'}
-            {#if policyCardsForTab.length > 0}
-              <div class="policy-cards-wrap">
-                {#each policyCardsForTab as card (card.id)}
-                  <div class="policy-card">
-                    <div class="policy-card-head">
-                      <span class="policy-card-title">{card.title}</span>
-                      <span class="policy-card-bias {policyBiasClass(card.bias)}">{policyBiasLabel(card.bias)}</span>
-                    </div>
-                    <div class="policy-card-row"><strong>What:</strong> {card.what}</div>
-                    <div class="policy-card-row"><strong>So What:</strong> {card.soWhat}</div>
-                    <div class="policy-card-row"><strong>Now What:</strong> {card.nowWhat}</div>
-                    <div class="policy-card-row"><strong>Why:</strong> {card.why}</div>
-                    <div class="policy-card-row"><strong>Help WHY:</strong> {card.helpfulnessWhy}</div>
-                    <div class="policy-card-score">
-                      <span>Gate {card.gate.weightedScore.toFixed(1)}</span>
-                      <span>{scoreBreakdownText(card.gate.scores)}</span>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+          {#if feedFilter === 'all' || feedFilter === 'events'}
             <div class="ev-list">
               {#if liveEvents.length === 0}
                 <div class="flow-empty">Loading events...</div>
@@ -1155,29 +1063,9 @@
                 </div>
               {/each}
             </div>
+          {/if}
 
-          {:else if innerTab === 'trending'}
-            {#if policyCardsForTab.length > 0}
-              <div class="policy-cards-wrap">
-                {#each policyCardsForTab as card (card.id)}
-                  <div class="policy-card">
-                    <div class="policy-card-head">
-                      <span class="policy-card-title">{card.title}</span>
-                      <span class="policy-card-bias {policyBiasClass(card.bias)}">{policyBiasLabel(card.bias)}</span>
-                    </div>
-                    <div class="policy-card-row"><strong>What:</strong> {card.what}</div>
-                    <div class="policy-card-row"><strong>So What:</strong> {card.soWhat}</div>
-                    <div class="policy-card-row"><strong>Now What:</strong> {card.nowWhat}</div>
-                    <div class="policy-card-row"><strong>Why:</strong> {card.why}</div>
-                    <div class="policy-card-row"><strong>Help WHY:</strong> {card.helpfulnessWhy}</div>
-                    <div class="policy-card-score">
-                      <span>Gate {card.gate.weightedScore.toFixed(1)}</span>
-                      <span>{scoreBreakdownText(card.gate.scores)}</span>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+          {#if feedFilter === 'all' || feedFilter === 'trending'}
             <div class="trend-panel">
               <div class="trend-sub-tabs">
                 <button class="trend-sub" class:active={trendSubTab === 'picks'} on:click={() => { trendSubTab = 'picks'; fetchTopPicks(); }}>🎯 PICKS</button>
@@ -1379,29 +1267,9 @@
                 </div>
               {/if}
             </div>
+          {/if}
 
-          {:else if innerTab === 'flow'}
-            {#if policyCardsForTab.length > 0}
-              <div class="policy-cards-wrap">
-                {#each policyCardsForTab as card (card.id)}
-                  <div class="policy-card">
-                    <div class="policy-card-head">
-                      <span class="policy-card-title">{card.title}</span>
-                      <span class="policy-card-bias {policyBiasClass(card.bias)}">{policyBiasLabel(card.bias)}</span>
-                    </div>
-                    <div class="policy-card-row"><strong>What:</strong> {card.what}</div>
-                    <div class="policy-card-row"><strong>So What:</strong> {card.soWhat}</div>
-                    <div class="policy-card-row"><strong>Now What:</strong> {card.nowWhat}</div>
-                    <div class="policy-card-row"><strong>Why:</strong> {card.why}</div>
-                    <div class="policy-card-row"><strong>Help WHY:</strong> {card.helpfulnessWhy}</div>
-                    <div class="policy-card-score">
-                      <span>Gate {card.gate.weightedScore.toFixed(1)}</span>
-                      <span>{scoreBreakdownText(card.gate.scores)}</span>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+          {#if feedFilter === 'all' || feedFilter === 'flow'}
             <div class="flow-list">
               <div class="flow-section-lbl">SMART MONEY FLOWS (24H)</div>
               {#if liveFlows.length === 0}
@@ -1422,73 +1290,74 @@
               {/each}
             </div>
           {/if}
-        </div>
 
-      {:else if activeTab === 'community'}
-        <div class="rp-body community-body">
-          <!-- User posts (from store) -->
-          {#each $communityPosts as post (post.id)}
-            <div class="comm-post user-post">
-              <div class="comm-head">
-                <div class="comm-avatar" style="background:{post.avatarColor}20;color:{post.avatarColor}">{post.avatar}</div>
-                <span class="comm-name">{post.author}</span>
-                <span class="comm-time">now</span>
+          <!-- COMMUNITY (inside feed) -->
+          {#if feedFilter === 'all' || feedFilter === 'community'}
+            {#each $communityPosts as post (post.id)}
+              <div class="comm-post user-post">
+                <div class="comm-head">
+                  <div class="comm-avatar" style="background:{post.avatarColor}20;color:{post.avatarColor}">{post.avatar}</div>
+                  <span class="comm-name">{post.author}</span>
+                  <span class="comm-time">now</span>
+                </div>
+                <div class="comm-txt">{post.text}</div>
+                <div class="comm-actions">
+                  {#if post.signal}
+                    <span class="comm-sig {post.signal}">{post.signal.toUpperCase()}</span>
+                  {/if}
+                  <button class="comm-react" on:click={() => likeCommunityPost(post.id)}>👍</button>
+                  <button class="comm-react" on:click={() => likeCommunityPost(post.id)}>🔥</button>
+                </div>
               </div>
-              <div class="comm-txt">{post.text}</div>
-              <div class="comm-actions">
-                {#if post.signal}
-                  <span class="comm-sig {post.signal}">{post.signal.toUpperCase()}</span>
-                {/if}
-                <button class="comm-react" on:click={() => likeCommunityPost(post.id)}>👍</button>
-                <button class="comm-react" on:click={() => likeCommunityPost(post.id)}>🔥</button>
-              </div>
-            </div>
-          {/each}
-
-          {#if $communityPosts.length === 0}
-            <div class="flow-empty">No community posts yet. Be the first to share your analysis!</div>
+            {/each}
+            {#if $communityPosts.length === 0 && feedFilter === 'community'}
+              <div class="flow-empty">No community posts yet.</div>
+            {/if}
           {/if}
         </div>
 
       {:else if activeTab === 'positions'}
+        <!-- Position sub-tabs -->
+        <div class="pos-view-tabs">
+          <button class="pos-view-tab" class:active={posView === 'mine'} on:click={() => posView = 'mine'}>
+            MY POSITIONS
+            {#if positionCount > 0}<span class="pos-view-cnt">{positionCount}</span>{/if}
+          </button>
+          <button class="pos-view-tab" class:active={posView === 'markets'} on:click={() => posView = 'markets'}>
+            MARKETS
+          </button>
+        </div>
+
         <div class="rp-body">
-          <!-- Position sub-tabs: ALL / TRADES / PERPS / MARKETS -->
-          <div class="pos-sub-tabs">
-            <button class="pos-sub" class:active={posSubTab === 'all'} on:click={() => posSubTab = 'all'}>ALL</button>
-            <button class="pos-sub" class:active={posSubTab === 'trades'} on:click={() => posSubTab = 'trades'}>TRADES</button>
-            <button class="pos-sub" class:active={posSubTab === 'perps'} on:click={() => posSubTab = 'perps'}>PERPS</button>
-            <button class="pos-sub" class:active={posSubTab === 'markets'} on:click={() => posSubTab = 'markets'}>MARKETS</button>
-          </div>
-
-          <div class="pos-sync-row">
-            <span
-              class="pos-sync-badge"
-              class:loading={$positionsLoading}
-              class:error={!!$positionsError}
-              class:ok={!$positionsLoading && !$positionsError}
-            >
-              {positionsSyncStatus}
-            </span>
-            {#if pendingCount > 0}
-              <span class="pos-sync-pending">{pendingCount} pending</span>
-            {/if}
-            <span class="pos-sync-total">{positionCount} total</span>
-            <button class="pos-sync-btn" on:click={refreshPositionsNow} disabled={$positionsLoading}>
-              REFRESH
-            </button>
-          </div>
-
-          {#if $positionsError}
-            <div class="pos-sync-error-msg">
-              {$positionsError}
-              {#if !$positionsLoading}
-                <button class="pos-sync-inline-btn" on:click={refreshPositionsNow}>retry</button>
+          {#if posView === 'mine'}
+            <div class="pos-sync-row">
+              <span
+                class="pos-sync-badge"
+                class:loading={$positionsLoading}
+                class:error={!!$positionsError}
+                class:ok={!$positionsLoading && !$positionsError}
+              >
+                {positionsSyncStatus}
+              </span>
+              {#if pendingCount > 0}
+                <span class="pos-sync-pending">{pendingCount} pending</span>
               {/if}
+              <span class="pos-sync-total">{positionCount} total</span>
+              <button class="pos-sync-btn" on:click={refreshPositionsNow} disabled={$positionsLoading}>
+                REFRESH
+              </button>
             </div>
-          {/if}
 
-          <!-- ALL / TRADES: Quick Trade Positions -->
-          {#if posSubTab === 'all' || posSubTab === 'trades'}
+            {#if $positionsError}
+              <div class="pos-sync-error-msg">
+                {$positionsError}
+                {#if !$positionsLoading}
+                  <button class="pos-sync-inline-btn" on:click={refreshPositionsNow}>retry</button>
+                {/if}
+              </div>
+            {/if}
+
+            <!-- TRADES -->
             {#if openCount > 0}
               <div class="pos-header">
                 <span class="pos-title">📊 TRADES</span>
@@ -1509,16 +1378,9 @@
                   <button class="pos-close" on:click={() => handleClosePos(trade.id)}>CLOSE</button>
                 </div>
               {/each}
-            {:else if posSubTab === 'trades'}
-              <div class="pos-empty-mini">
-                <span class="pos-empty-icon">📊</span>
-                <span class="pos-empty-txt">NO OPEN TRADES</span>
-              </div>
             {/if}
-          {/if}
 
-          <!-- ALL / PERPS: GMX On-chain Positions -->
-          {#if posSubTab === 'all' || posSubTab === 'perps'}
+            <!-- PERPS -->
             {#if $gmxPositions.length > 0}
               <div class="pos-header">
                 <span class="pos-title">⚡ PERPS</span>
@@ -1549,23 +1411,11 @@
                 </div>
               {/each}
             {/if}
+            <button class="gmx-open-btn" on:click={() => showGmxPanel = true}>
+              ⚡ OPEN PERP POSITION
+            </button>
 
-            <!-- Open Perp button -->
-            {#if posSubTab === 'perps'}
-              <button class="gmx-open-btn" on:click={() => showGmxPanel = true}>
-                ⚡ OPEN PERP POSITION
-              </button>
-              {#if $gmxPositions.length === 0}
-                <div class="pos-empty-mini">
-                  <span class="pos-empty-icon">⚡</span>
-                  <span class="pos-empty-txt">NO PERP POSITIONS</span>
-                </div>
-              {/if}
-            {/if}
-          {/if}
-
-          <!-- ALL / MARKETS: Polymarket Positions -->
-          {#if posSubTab === 'all' || posSubTab === 'markets'}
+            <!-- MARKET BETS -->
             {#if $polymarketPositions.length > 0}
               <div class="pos-header">
                 <span class="pos-title">🔮 MARKET BETS</span>
@@ -1588,38 +1438,34 @@
               {/each}
             {/if}
 
-            <!-- Browse Markets -->
-            {#if posSubTab === 'markets'}
-              <div class="pos-header" style="margin-top:8px">
-                <span class="pos-title">🌐 BROWSE MARKETS</span>
+            <!-- Empty state -->
+            {#if openCount === 0 && $polymarketPositions.length === 0 && $gmxPositions.length === 0}
+              <div class="pos-empty-mini">
+                <span class="pos-empty-icon">📊</span>
+                <span class="pos-empty-txt">NO OPEN POSITIONS</span>
               </div>
-              {#if cryptoMarkets.length > 0}
-                {#each cryptoMarkets.slice(0, 6) as market}
-                  {@const outcome = parseOutcomePrices(market.outcomePrices)}
-                  <div class="market-browse-card">
-                    <div class="mb-q">{market.question.length > 60 ? market.question.slice(0, 60) + '…' : market.question}</div>
-                    <div class="mb-odds">
-                      <span class="mb-yes">YES {outcome.yes}¢</span>
-                      <span class="mb-no">NO {outcome.no}¢</span>
-                    </div>
-                    <div class="mb-actions">
-                      <button class="mb-bet" on:click={() => { betMarket = market; }}>BET USDC</button>
-                      <a class="mb-link" href="https://polymarket.com/event/{market.slug}" target="_blank" rel="noopener noreferrer">↗</a>
-                    </div>
-                  </div>
-                {/each}
-              {:else}
-                <div class="pp-empty">Loading markets...</div>
-              {/if}
             {/if}
-          {/if}
 
-          <!-- Empty state for ALL tab -->
-          {#if posSubTab === 'all' && openCount === 0 && $polymarketPositions.length === 0 && $gmxPositions.length === 0}
-            <div class="pos-empty-mini">
-              <span class="pos-empty-icon">📊</span>
-              <span class="pos-empty-txt">NO OPEN POSITIONS</span>
-            </div>
+          {:else}
+            <!-- BROWSE MARKETS -->
+            {#if cryptoMarkets.length > 0}
+              {#each cryptoMarkets.slice(0, 6) as market}
+                {@const outcome = parseOutcomePrices(market.outcomePrices)}
+                <div class="market-browse-card">
+                  <div class="mb-q">{market.question.length > 60 ? market.question.slice(0, 60) + '…' : market.question}</div>
+                  <div class="mb-odds">
+                    <span class="mb-yes">YES {outcome.yes}¢</span>
+                    <span class="mb-no">NO {outcome.no}¢</span>
+                  </div>
+                  <div class="mb-actions">
+                    <button class="mb-bet" on:click={() => { betMarket = market; }}>BET USDC</button>
+                    <a class="mb-link" href="https://polymarket.com/event/{market.slug}" target="_blank" rel="noopener noreferrer">↗</a>
+                  </div>
+                </div>
+              {/each}
+            {:else}
+              <div class="pp-empty">Loading markets...</div>
+            {/if}
           {/if}
         </div>
 
@@ -1638,139 +1484,12 @@
 <style>
   .intel-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--blk); overflow: hidden; }
 
-  .policy-decision-banner {
-    border-bottom: 1px solid rgba(255, 230, 0, 0.2);
-    background: rgba(255, 230, 0, 0.06);
-    padding: 8px 10px;
-    font-family: var(--fm);
-  }
-  .policy-loading {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.04);
-    padding: 6px 10px;
-    font-family: var(--fm);
-    font-size: 10px;
-    letter-spacing: 1px;
-    color: rgba(255, 255, 255, 0.66);
-  }
-  .policy-decision-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .policy-decision-title {
-    color: rgba(255, 255, 255, 0.86);
-    font-size: 10px;
-    letter-spacing: 1.1px;
-    font-weight: 700;
-  }
-  .policy-decision-bias {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.06);
-  }
-  .policy-decision-bias.long { color: #00e676; border-color: rgba(0, 230, 118, 0.38); }
-  .policy-decision-bias.short { color: #ff5252; border-color: rgba(255, 82, 82, 0.38); }
-  .policy-decision-bias.wait { color: #ffd54f; border-color: rgba(255, 213, 79, 0.38); }
-  .policy-decision-meta {
-    margin-top: 4px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.7);
-  }
-  .policy-decision-reason {
-    margin-top: 5px;
-    font-size: 11px;
-    line-height: 1.35;
-    color: rgba(255, 255, 255, 0.82);
-  }
-  .shadow-decision-banner {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.03);
-    padding: 8px 10px;
-    font-family: var(--fm);
-    display: grid;
-    gap: 5px;
-  }
-  .shadow-decision-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .shadow-decision-title {
-    color: rgba(255, 255, 255, 0.82);
-    font-size: 10px;
-    letter-spacing: 1px;
-    font-weight: 700;
-  }
-  .shadow-decision-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.66);
-  }
-  .shadow-decision-line {
-    font-size: 11px;
-    line-height: 1.35;
-    color: rgba(255, 255, 255, 0.84);
-  }
-  .shadow-decision-line strong {
-    color: rgba(255, 255, 255, 0.95);
-    margin-right: 4px;
-  }
-  .shadow-exec-btn {
-    margin-top: 2px;
-    height: 28px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.54);
-    font-family: var(--fm);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.8px;
-    cursor: not-allowed;
-  }
-  .shadow-exec-btn.ready {
-    background: rgba(0, 230, 118, 0.16);
-    border-color: rgba(0, 230, 118, 0.42);
-    color: #00e676;
-    cursor: pointer;
-  }
-  .shadow-exec-btn.ready:hover:not(:disabled) {
-    background: rgba(0, 230, 118, 0.24);
-  }
-  .shadow-exec-btn:disabled {
-    opacity: 0.88;
-  }
-  .shadow-exec-disabled {
-    margin-top: 2px;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.58);
-  }
-  .shadow-exec-msg {
-    font-size: 10px;
-    padding: 4px 6px;
-    border-radius: 4px;
-  }
-  .shadow-exec-msg.success {
-    color: #00e676;
-    background: rgba(0, 230, 118, 0.08);
-    border: 1px solid rgba(0, 230, 118, 0.24);
-  }
-  .shadow-exec-msg.error {
-    color: #ff8a80;
-    background: rgba(255, 82, 82, 0.08);
-    border: 1px solid rgba(255, 82, 82, 0.24);
-  }
+  /* Global thin scrollbar for all scrollable children */
+  .intel-panel :global(::-webkit-scrollbar) { width: 3px; height: 3px; }
+  .intel-panel :global(::-webkit-scrollbar-thumb) { background: rgba(255,255,255,.1); border-radius: 3px; }
+  .intel-panel :global(::-webkit-scrollbar-track) { background: transparent; }
+
+  /* Removed: policy-decision-banner, shadow-decision-banner — replaced by VerdictCard */
   .policy-cards-wrap {
     display: grid;
     gap: 6px;
@@ -1816,7 +1535,7 @@
     color: rgba(255, 255, 255, 0.82);
   }
   .policy-card-row strong {
-    color: rgba(255, 230, 0, 0.84);
+    color: rgba(232,150,125, 0.84);
     font-weight: 700;
     margin-right: 4px;
   }
@@ -1833,37 +1552,65 @@
   .rp-tabs { display: flex; border-bottom: 3px solid var(--yel); flex-shrink: 0; }
   .rp-tab {
     flex: 1; padding: 8px 3px;
-    font-family: var(--fm); font-size: 10px; font-weight: 700; letter-spacing: 1.8px; text-align: center;
+    font-family: var(--fm); font-size: 11px; font-weight: 800; letter-spacing: 1.8px; text-align: center;
     background: none; border: none; cursor: pointer; transition: all .15s;
   }
-  .rp-tab.active { background: var(--yel); color: var(--blk); }
-  .rp-tab:not(.active) { color: rgba(255,255,255,.62); }
+  .rp-tab.active { background: rgba(232,150,125,0.15); color: #E8967D; }
+  .rp-tab:not(.active) { color: rgba(255,255,255,.6); }
   .rp-tab:not(.active):hover { color: var(--yel); }
   .rp-collapse {
     width: 28px; flex-shrink: 0;
-    background: rgba(255,230,0,.08); border: none; border-left: 1px solid rgba(255,230,0,.15);
+    background: rgba(232,150,125,.08); border: none; border-left: 1px solid rgba(232,150,125,.15);
     color: var(--yel); font-size: 10px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: background .12s;
   }
-  .rp-collapse:hover { background: rgba(255,230,0,.2); }
+  .rp-collapse:hover { background: rgba(232,150,125,.2); }
   .rp-panel-collapse {
     width: 24px; flex-shrink: 0;
-    background: rgba(255,255,255,.03); border: none; border-left: 1px solid rgba(255,230,0,.1);
-    color: rgba(255,230,0,.68); cursor: pointer;
+    background: rgba(255,255,255,.03); border: none; border-left: 1px solid rgba(232,150,125,.1);
+    color: rgba(232,150,125,.68); cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: all .12s; padding: 0;
   }
-  .rp-panel-collapse:hover { background: rgba(255,230,0,.15); color: var(--yel); }
+  .rp-panel-collapse:hover { background: rgba(232,150,125,.15); color: var(--yel); }
 
-  .rp-inner-tabs { display: flex; border-bottom: 2px solid rgba(255,230,0,.15); flex-shrink: 0; }
-  .rp-inner-tab {
-    flex: 1; padding: 5px 2px;
-    font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: 1px; text-align: center;
-    background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer;
-    color: rgba(255,255,255,.62); transition: all .15s;
+  /* Feed filter chips */
+  .feed-chips {
+    display: flex; gap: 4px; padding: 6px 8px; flex-shrink: 0;
+    border-bottom: 1px solid rgba(232,150,125,.1);
+    overflow-x: auto; scrollbar-width: none;
   }
-  .rp-inner-tab.active { color: var(--yel); border-bottom-color: var(--pk); }
+  .feed-chips::-webkit-scrollbar { display: none; }
+  .feed-chip {
+    padding: 3px 10px; border-radius: 12px;
+    font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: 0.8px;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+    color: rgba(255,255,255,.5); cursor: pointer; white-space: nowrap;
+    transition: all .15s;
+  }
+  .feed-chip:hover { background: rgba(232,150,125,.06); color: rgba(255,255,255,.7); }
+  .feed-chip.active { background: rgba(232,150,125,.12); color: var(--yel); border-color: rgba(232,150,125,.3); }
+
+  /* ── Position View Tabs ── */
+  .pos-view-tabs {
+    display: flex; gap: 0; flex-shrink: 0;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .pos-view-tab {
+    flex: 1; padding: 7px 0; text-align: center;
+    font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: 0.8px;
+    color: rgba(255,255,255,.4); background: none; border: none; cursor: pointer;
+    border-bottom: 2px solid transparent; transition: all .12s;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .pos-view-tab:hover { color: rgba(255,255,255,.6); background: rgba(255,255,255,.02); }
+  .pos-view-tab.active { color: #fff; border-bottom-color: var(--yel, #E8967D); }
+  .pos-view-cnt {
+    font-size: 8px; font-weight: 800;
+    background: rgba(232,150,125,.15); color: var(--yel, #E8967D);
+    padding: 1px 5px; border-radius: 8px; min-width: 16px;
+  }
 
   /* ── Tab Content Wrapper ── */
   .rp-body-wrap { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; min-height: 72px; }
@@ -1878,15 +1625,20 @@
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,.08) transparent;
   }
+  .rp-body::-webkit-scrollbar { width: 3px; }
+  .rp-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 3px; }
+  .rp-body::-webkit-scrollbar-track { background: transparent; }
   .rp-body.chat-mode { padding: 0; overflow: hidden; }
 
   /* ── Headlines ── */
   .hl-header-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 4px 8px;
-    background: rgba(255,230,0,.06);
-    border-bottom: 1px solid rgba(255,230,0,.1);
+    background: rgba(232,150,125,.06);
+    border-bottom: 1px solid rgba(232,150,125,.1);
   }
   .hl-ticker-badge {
     font-family: var(--fm); font-size: 8px; font-weight: 900;
@@ -1895,11 +1647,11 @@
   .hl-sort-btn {
     font-family: var(--fm); font-size: 7px; font-weight: 800;
     letter-spacing: .5px; padding: 2px 6px;
-    background: rgba(255,255,255,.05); border: 1px solid rgba(255,230,0,.2);
-    border-radius: 3px; color: rgba(255,230,0,.7); cursor: pointer;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(232,150,125,.2);
+    border-radius: 3px; color: rgba(232,150,125,.7); cursor: pointer;
     transition: all .12s;
   }
-  .hl-sort-btn:hover { background: rgba(255,230,0,.12); color: var(--yel); }
+  .hl-sort-btn:hover { background: rgba(232,150,125,.12); color: var(--yel); }
   .hl-list { display: flex; flex-direction: column; }
   .hl-scrollable {
     overflow-y: auto;
@@ -1910,14 +1662,14 @@
   }
   .hl-scrollable::-webkit-scrollbar { width: 2px; }
   .hl-scrollable::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
-  .hl-row { display: flex; gap: 6px; padding: 7px 8px; border-bottom: 1px solid rgba(255,230,0,.08); cursor: pointer; align-items: flex-start; }
-  .hl-row:hover { background: rgba(255,230,0,.03); }
+  .hl-row { display: flex; gap: 6px; padding: 7px 8px; border-bottom: 1px solid rgba(232,150,125,.08); cursor: pointer; align-items: flex-start; }
+  .hl-row:hover { background: rgba(232,150,125,.03); }
   .hl-icon { font-size: 10px; flex-shrink: 0; width: 16px; padding-top: 1px; }
   .hl-main { flex: 1; min-width: 0; }
-  .hl-txt { font-family: var(--fm); font-size: 10px; line-height: 1.45; color: rgba(255,255,255,.82); display: block; }
+  .hl-txt { font-family: var(--fm); font-size: 11px; line-height: 1.45; color: rgba(255,255,255,.8); display: block; }
   .hl-txt.bull { color: var(--grn); }
   .hl-meta { display: flex; gap: 6px; align-items: center; margin-top: 2px; flex-wrap: wrap; }
-  .hl-time { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.42); }
+  .hl-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); }
   .hl-net {
     font-family: var(--fm); font-size: 7px; font-weight: 700; letter-spacing: .5px;
     color: rgba(139,92,246,.7); background: rgba(139,92,246,.1);
@@ -1933,7 +1685,7 @@
   }
   a.hl-linked { text-decoration: none; color: inherit; }
   .hl-linked:hover .hl-txt { text-decoration: underline; }
-  .hl-ext { font-size: 10px; opacity: 0; transition: opacity .15s; flex-shrink: 0; color: rgba(255,230,0,.6); padding-top: 1px; }
+  .hl-ext { font-size: 10px; opacity: 0; transition: opacity .15s; flex-shrink: 0; color: rgba(232,150,125,.6); padding-top: 1px; }
   .hl-linked:hover .hl-ext { opacity: 1; }
   .hl-loading, .hl-end {
     font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.3);
@@ -1945,9 +1697,9 @@
   .ev-card { border-left: 2px solid; padding: 6px 8px; background: rgba(255,255,255,.03); }
   .ev-head { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; }
   .ev-tag { font-family: var(--fm); font-size: 9px; font-weight: 700; padding: 2px 5px; }
-  .ev-etime { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58); }
-  .ev-body { font-family: var(--fm); font-size: 10px; line-height: 1.45; color: rgba(255,255,255,.8); }
-  .ev-src { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.52); display: block; margin-top: 3px; }
+  .ev-etime { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.6); }
+  .ev-body { font-family: var(--fm); font-size: 11px; line-height: 1.45; color: rgba(255,255,255,.8); }
+  .ev-src { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); display: block; margin-top: 3px; }
 
   /* ── Flow ── */
   .flow-list { display: flex; flex-direction: column; gap: 4px; }
@@ -1957,8 +1709,8 @@
   .flow-dir { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
   .flow-dir.sell { color: var(--red); } .flow-dir.buy { color: var(--grn); }
   .flow-info { flex: 1; min-width: 0; }
-  .flow-lbl { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.82); }
-  .flow-addr { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58); }
+  .flow-lbl { font-family: var(--fm); font-size: 11px; color: rgba(255,255,255,.8); }
+  .flow-addr { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.6); }
   .flow-src { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.38); letter-spacing: .6px; margin-top: 1px; }
   .flow-amt { font-family: var(--fm); font-size: 10px; font-weight: 700; flex-shrink: 0; }
   .flow-amt.sell { color: var(--red); } .flow-amt.buy { color: var(--grn); }
@@ -1968,9 +1720,9 @@
   .comm-post { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
   .comm-head { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
   .comm-avatar { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; border: 1px solid rgba(255,255,255,.2); }
-  .comm-name { font-family: var(--fm); font-size: 10px; font-weight: 700; color: #fff; }
-  .comm-time { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.56); margin-left: auto; }
-  .comm-txt { font-family: var(--fm); font-size: 10px; line-height: 1.45; color: rgba(255,255,255,.82); }
+  .comm-name { font-family: var(--fm); font-size: 11px; font-weight: 700; color: #fff; }
+  .comm-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); margin-left: auto; }
+  .comm-txt { font-family: var(--fm); font-size: 11px; line-height: 1.45; color: rgba(255,255,255,.8); }
   .comm-sig { display: inline-block; font-family: var(--fm); font-size: 9px; font-weight: 700; padding: 2px 7px; border: 1px solid; margin-top: 3px; }
   .comm-sig.long { color: var(--grn); border-color: rgba(0,255,136,.3); }
   .comm-sig.short { color: var(--red); border-color: rgba(255,45,85,.3); }
@@ -1985,7 +1737,7 @@
     border: 1px solid rgba(255,255,255,.14); border-radius: 4px;
     padding: 2px 6px; cursor: pointer; transition: all .12s;
   }
-  .comm-react:hover { background: rgba(255,230,0,.1); border-color: rgba(255,230,0,.25); }
+  .comm-react:hover { background: rgba(232,150,125,.1); border-color: rgba(232,150,125,.25); }
 
   /* ── Positions ── */
   .pos-header {
@@ -2015,7 +1767,7 @@
   .pos-dir.short { color: var(--red); }
   .pos-info { flex: 1; display: flex; flex-direction: column; gap: 1px; }
   .pos-pair { font-family: var(--fd); font-size: 11px; font-weight: 900; color: #fff; letter-spacing: .5px; }
-  .pos-entry { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58); }
+  .pos-entry { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.6); }
   .pos-pnl {
     font-family: var(--fd); font-size: 13px; font-weight: 900;
     letter-spacing: .5px; min-width: 50px; text-align: right;
@@ -2032,7 +1784,7 @@
   .pos-empty-mini {
     display: flex; align-items: center; gap: 6px;
     padding: 12px 8px;
-    color: rgba(255,255,255,.56);
+    color: rgba(255,255,255,.3);
   }
   .pos-empty-icon { font-size: 14px; opacity: .5; }
   .pos-empty-txt {
@@ -2040,17 +1792,7 @@
     letter-spacing: 1.5px;
   }
 
-  /* ── Position Sub-tabs ── */
-  .pos-sub-tabs { display: flex; gap: 2px; margin-bottom: 6px; }
-  .pos-sub {
-    flex: 1; padding: 5px 2px;
-    font: 700 9px/1 var(--fm); letter-spacing: 1.5px; text-align: center;
-    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
-    border-radius: 4px; color: rgba(255,255,255,.4); cursor: pointer;
-    transition: all .15s;
-  }
-  .pos-sub:hover { background: rgba(255,230,0,.05); color: rgba(255,255,255,.6); }
-  .pos-sub.active { background: rgba(255,230,0,.08); color: var(--yel); border-color: rgba(255,230,0,.25); }
+  /* Removed: pos-sub-tabs (positions flattened — no sub-tabs) */
 
   .pos-sync-row {
     display: flex;
@@ -2070,9 +1812,9 @@
     white-space: nowrap;
   }
   .pos-sync-badge.loading {
-    color: rgba(255,230,0,.88);
-    border-color: rgba(255,230,0,.28);
-    background: rgba(255,230,0,.1);
+    color: rgba(232,150,125,.88);
+    border-color: rgba(232,150,125,.28);
+    background: rgba(232,150,125,.1);
   }
   .pos-sync-badge.error {
     color: rgba(255,95,130,.9);
@@ -2098,16 +1840,16 @@
     font: 700 8px/1 var(--fm);
     letter-spacing: .8px;
     padding: 4px 7px;
-    color: rgba(255,230,0,.84);
-    background: rgba(255,230,0,.08);
-    border: 1px solid rgba(255,230,0,.24);
+    color: rgba(232,150,125,.84);
+    background: rgba(232,150,125,.08);
+    border: 1px solid rgba(232,150,125,.24);
     border-radius: 4px;
     cursor: pointer;
     transition: all .12s;
   }
   .pos-sync-btn:hover:not(:disabled) {
-    background: rgba(255,230,0,.16);
-    border-color: rgba(255,230,0,.38);
+    background: rgba(232,150,125,.16);
+    border-color: rgba(232,150,125,.38);
   }
   .pos-sync-btn:disabled {
     opacity: .55;
@@ -2146,7 +1888,7 @@
   .pos-market-q { font-size: 10px; line-height: 1.2; }
   .pos-status-badge {
     font: 700 8px/1 var(--fm); padding: 2px 5px; border-radius: 3px;
-    background: rgba(255,230,0,.1); color: rgba(255,230,0,.7); letter-spacing: .5px;
+    background: rgba(232,150,125,.1); color: rgba(232,150,125,.7); letter-spacing: .5px;
     text-transform: uppercase; flex-shrink: 0;
   }
 
@@ -2163,12 +1905,12 @@
   .mb-no { color: #FF5E7A; }
   .mb-actions { display: flex; gap: 6px; align-items: center; }
   .mb-bet {
-    flex: 1; padding: 5px 8px; border: 1px solid rgba(255,230,0,.3);
-    border-radius: 4px; background: rgba(255,230,0,.08);
+    flex: 1; padding: 5px 8px; border: 1px solid rgba(232,150,125,.3);
+    border-radius: 4px; background: rgba(232,150,125,.08);
     color: var(--yel); font: 700 9px/1 var(--fm); cursor: pointer;
     letter-spacing: 1px; transition: all .15s;
   }
-  .mb-bet:hover { background: rgba(255,230,0,.15); }
+  .mb-bet:hover { background: rgba(232,150,125,.15); }
   .mb-link {
     padding: 4px 8px; font: 400 12px/1 var(--fm); color: rgba(255,255,255,.3);
     text-decoration: none; border-radius: 4px;
@@ -2264,69 +2006,32 @@
 
   /* ═══ AGENT CHAT (inside INTEL tab) ═══ */
   .ac-section {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0%;
     min-height: 0;
-    height: 100%;
     background: rgba(0,0,0,.3);
   }
   .ac-section.ac-embedded { border-top: 0; }
+  .ac-status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .ac-status-connected { background: #00ff88; box-shadow: 0 0 4px #00ff88; }
+  .ac-status-degraded { background: #ffaa00; box-shadow: 0 0 4px #ffaa00; animation: pulse-dot 2s infinite; }
+  .ac-status-disconnected { background: #ff2d55; box-shadow: 0 0 4px #ff2d55; animation: pulse-dot 1.5s infinite; }
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
   .ac-header {
     display: flex; align-items: center; gap: 6px;
     justify-content: space-between;
     padding: 5px 8px 3px;
     flex-shrink: 0;
   }
-  .scan-brief {
-    margin: 2px 8px 4px;
-    padding: 6px 7px;
-    border-radius: 6px;
-    border: 1px solid rgba(255,230,0,.26);
-    background: rgba(255,230,0,.08);
-  }
-  .scan-brief-head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
-  .scan-brief-badge {
-    font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 1.1px;
-    color: #000; background: var(--yel); padding: 1px 5px; border-radius: 999px;
-  }
-  .scan-brief-market {
-    font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: .5px; color: rgba(255,255,255,.92);
-  }
-  .scan-brief-time {
-    margin-left: auto; font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.72);
-  }
-  .scan-brief-summary {
-    font-family: var(--fm); font-size: 10px; line-height: 1.5; color: rgba(255,255,255,.9);
-  }
-  .scan-brief-tags {
-    display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 4px;
-  }
-  .scan-brief-tag {
-    font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: .4px;
-    border-radius: 8px; border: 1px solid rgba(255,255,255,.16); padding: 1px 6px;
-    color: rgba(255,255,255,.88); background: rgba(255,255,255,.05);
-  }
-  .scan-brief-tag.long { color: var(--grn); border-color: rgba(0,255,136,.36); background: rgba(0,255,136,.1); }
-  .scan-brief-tag.short { color: var(--red); border-color: rgba(255,45,85,.36); background: rgba(255,45,85,.1); }
-  .scan-brief-tag.neutral { color: rgba(255,255,255,.75); border-color: rgba(255,255,255,.22); }
-  .scan-brief-notes {
-    margin-top: 5px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .scan-brief-note {
-    font-family: var(--fm);
-    font-size: 9px;
-    line-height: 1.35;
-    color: rgba(255,255,255,.82);
-    word-break: break-word;
-  }
-  .scan-brief-note :global(span) {
-    color: rgba(255,230,0,.86);
-    font-weight: 700;
-    letter-spacing: .3px;
-  }
+  /* Removed: scan-brief CSS (scan data now in chat messages) */
   .ac-title {
     font-family: var(--fm); font-size: 10px; font-weight: 900;
     letter-spacing: 2px; color: var(--yel);
@@ -2364,8 +2069,8 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 4px 8px;
+    gap: 8px;
+    padding: 8px;
     min-height: 0;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
@@ -2374,9 +2079,9 @@
   .ac-msgs::-webkit-scrollbar { width: 2px; }
   .ac-msgs::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
   .ac-sys {
-    font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58);
-    padding: 4px 6px; background: rgba(255,230,0,.04);
-    border-left: 2px solid rgba(255,230,0,.2);
+    font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.58);
+    padding: 5px 8px; background: rgba(232,150,125,.04);
+    border-left: 2px solid rgba(232,150,125,.2);
   }
   .ac-row { display: flex; gap: 5px; }
   .ac-right { justify-content: flex-end; }
@@ -2388,10 +2093,10 @@
     background: rgba(255,255,255,.03);
   }
   .ac-bub { max-width: 85%; padding: 6px 9px; border-radius: 6px; }
-  .ac-bub-user { background: rgba(255,230,0,.12); border: 1px solid rgba(255,230,0,.2); margin-left: auto; }
+  .ac-bub-user { background: rgba(232,150,125,.12); border: 1px solid rgba(232,150,125,.2); margin-left: auto; }
   .ac-bub-agent { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
-  .ac-name { font-family: var(--fm); font-size: 8px; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 1px; }
-  .ac-txt { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.84); line-height: 1.45; white-space: pre-line; }
+  .ac-name { font-family: var(--fm); font-size: 10px; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 2px; }
+  .ac-txt { font-family: var(--fm); font-size: 11px; color: rgba(255,255,255,.84); line-height: 1.5; white-space: pre-line; }
   .ac-dots { display: flex; gap: 3px; padding: 4px 0; }
   .ac-dots span { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,.3); animation: dotBounce .6s infinite; }
   .ac-dots span:nth-child(2) { animation-delay: .15s; }
@@ -2399,28 +2104,29 @@
   @keyframes dotBounce { 0%,100%{opacity:.3} 50%{opacity:1} }
 
   .ac-input {
-    display: flex; gap: 4px; padding: 6px 8px 8px;
-    border-top: 1px solid rgba(255,255,255,.06);
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px;
+    border-top: 1px solid rgba(255,255,255,.08);
     flex-shrink: 0;
-    background: rgba(5, 9, 7, .6);
-    backdrop-filter: blur(4px);
+    background: rgba(5, 9, 7, .85);
   }
   .ac-input input {
-    flex: 1; background: rgba(255,255,255,.04);
-    border: 1px solid rgba(255,255,255,.1);
-    border-radius: 6px; padding: 8px 10px;
-    font-family: var(--fm); font-size: 10px;
+    flex: 1; height: 34px; background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 6px; padding: 0 10px;
+    font-family: var(--fm); font-size: 11px;
     color: #fff; outline: none;
   }
-  .ac-input input::placeholder { color: rgba(255,255,255,.45); }
-  .ac-input input:focus { border-color: rgba(255,230,0,.4); }
+  .ac-input input::placeholder { color: rgba(255,255,255,.3); }
+  .ac-input input:focus { border-color: rgba(232,150,125,.5); background: rgba(255,255,255,.07); }
   .ac-send {
-    width: 36px; background: var(--yel); color: #000;
-    border: 1.5px solid #000; border-radius: 6px;
+    width: 34px; height: 34px; background: var(--yel); color: #000;
+    border: none; border-radius: 6px;
     font-size: 13px; cursor: pointer; display: flex;
     align-items: center; justify-content: center;
+    flex-shrink: 0; transition: opacity .12s;
   }
-  .ac-send:disabled { opacity: .3; cursor: not-allowed; }
+  .ac-send:hover { opacity: .85; }
+  .ac-send:disabled { opacity: .25; cursor: not-allowed; }
 
   /* ── Trending Panel ── */
   .trend-panel { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
@@ -2433,7 +2139,7 @@
     letter-spacing: .5px; padding: 4px 0; cursor: pointer; transition: all .15s;
   }
   .trend-sub:hover { background: rgba(255,255,255,.04); color: rgba(255,255,255,.8); }
-  .trend-sub.active { background: rgba(255,230,0,.08); color: var(--yel); border-color: rgba(255,230,0,.25); }
+  .trend-sub.active { background: rgba(232,150,125,.08); color: var(--yel); border-color: rgba(232,150,125,.25); }
   .trend-meta {
     display: flex;
     align-items: center;
@@ -2501,7 +2207,7 @@
 
   /* DEX trending */
   .dex-row { text-decoration: none; color: inherit; }
-  .dex-row:hover { background: rgba(255,230,0,.04); }
+  .dex-row:hover { background: rgba(232,150,125,.04); }
   .dex-icon { border-radius: 50%; flex-shrink: 0; }
   .dex-chain-filters {
     display: flex;
@@ -2523,8 +2229,8 @@
   }
   .dex-chain-btn.active {
     color: var(--yel);
-    border-color: rgba(255,230,0,.3);
-    background: rgba(255,230,0,.1);
+    border-color: rgba(232,150,125,.3);
+    background: rgba(232,150,125,.1);
   }
   .dex-addr {
     font-family: var(--fm);
@@ -2545,14 +2251,14 @@
   .dex-source {
     font: 700 7px/1 var(--fm);
     letter-spacing: .5px;
-    color: rgba(255,230,0,.55);
-    border: 1px solid rgba(255,230,0,.2);
+    color: rgba(232,150,125,.55);
+    border: 1px solid rgba(232,150,125,.2);
     border-radius: 999px;
     padding: 2px 5px;
     flex-shrink: 0;
   }
   .dex-desc { font-size: 8px; color: rgba(255,255,255,.3); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .dex-link { color: rgba(255,230,0,.5); font-size: 10px; flex-shrink: 0; }
+  .dex-link { color: rgba(232,150,125,.5); font-size: 10px; flex-shrink: 0; }
 
   /* ── TOP PICKS (Opportunity Scanner) ── */
   .picks-panel {
@@ -2620,7 +2326,7 @@
 
   .picks-section-lbl {
     font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: 1.2px;
-    color: rgba(255,230,0,.65); padding: 2px 0;
+    color: rgba(232,150,125,.65); padding: 2px 0;
   }
 
   .pick-card {
@@ -2628,7 +2334,7 @@
     background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.06);
     transition: background .12s, border-color .12s;
   }
-  .pick-card:hover { background: rgba(255,230,0,.04); border-color: rgba(255,230,0,.15); }
+  .pick-card:hover { background: rgba(232,150,125,.04); border-color: rgba(232,150,125,.15); }
 
   .pick-head {
     display: flex; align-items: center; gap: 6px; margin-bottom: 3px;
@@ -2673,11 +2379,11 @@
   .picks-rescan {
     width: 100%; padding: 6px; margin-top: 2px;
     font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: .8px;
-    background: rgba(255,230,0,.06); border: 1px solid rgba(255,230,0,.15);
-    border-radius: 4px; color: rgba(255,230,0,.7); cursor: pointer;
+    background: rgba(232,150,125,.06); border: 1px solid rgba(232,150,125,.15);
+    border-radius: 4px; color: rgba(232,150,125,.7); cursor: pointer;
     transition: all .15s;
   }
-  .picks-rescan:hover { background: rgba(255,230,0,.12); color: var(--yel); border-color: rgba(255,230,0,.3); }
+  .picks-rescan:hover { background: rgba(232,150,125,.12); color: var(--yel); border-color: rgba(232,150,125,.3); }
 
   /* ── GMX Perps ── */
   .gmx-row { border-left: 2px solid rgba(255,140,0,.25); }

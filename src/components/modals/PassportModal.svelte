@@ -141,7 +141,7 @@
     display: inline-block; margin-top: 8px;
     padding: 3px 12px; border-radius: 20px;
     background: rgba(0,0,0,.3); border: 2px solid rgba(255,255,255,.3);
-    font-size: 10px; font-weight: 900; font-family: var(--fd); color: #ffe600; letter-spacing: 2px;
+    font-size: 10px; font-weight: 900; font-family: var(--fd); color: #E8967D; letter-spacing: 2px;
   }
 
   .pass-body { padding: 14px; overflow-y: auto; max-height: calc(85vh - 140px); }
@@ -149,7 +149,7 @@
   .xp-section { margin-bottom: 14px; }
   .xp-label { font-size: 7px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 4px; }
   .xp-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.1); }
-  .xp-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #ffe600, #ffaa00); transition: width .5s; }
+  .xp-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #E8967D, #ffaa00); transition: width .5s; }
   .xp-text { font-size: 7px; color: #666; font-family: var(--fm); text-align: right; margin-top: 2px; }
 
   .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
@@ -183,5 +183,5 @@
   .rc-r { font-weight: 700; }
   .rc-row.win .rc-r { color: #00ff88; }
   .rc-row.lose .rc-r { color: #ff2d55; }
-  .rc-lp { margin-left: auto; font-weight: 700; color: #ffe600; }
+  .rc-lp { margin-left: auto; font-weight: 700; color: #E8967D; }
 </style>

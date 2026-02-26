@@ -2121,7 +2121,7 @@
     box-shadow: 2px 2px 0 #000;
     transition: all .15s;
   }
-  .mh-toggle:hover { background: #ffe600; }
+  .mh-toggle:hover { background: #e8967d; }
   .chart-side { display: flex; flex-direction: column; background: #07130d; overflow: hidden; border-right: 1px solid rgba(232,150,125,.15); position: relative; }
   .arena-side {
     position: relative;
@@ -2194,8 +2194,8 @@
   .hypo-badge.short { background: rgba(255,45,85,.15); border-color: #ff2d55; color: #ff2d55; }
   .hypo-badge.neutral { background: rgba(255,170,0,.15); border-color: #ffaa00; color: #ffaa00; }
 
-  .mbtn { padding: 6px 16px; border-radius: 16px; background: #ffe600; border: 3px solid #000; color: #000; font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
-  .mbtn:hover { background: #ffcc00; }
+  .mbtn { padding: 6px 16px; border-radius: 16px; background: #E8967D; border: 3px solid #000; color: #000; font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
+  .mbtn:hover { background: #d07a64; }
 
   /* Arena Background — Retro Space + Collage */
   .arena-texture {
@@ -2350,7 +2350,7 @@
 
   /* ── Alert: pulse glow ── */
   .ag.alert .wr { animation: aA .4s ease infinite; }
-  .ag.alert .agent-sprite { box-shadow: 0 0 20px var(--ag-color, #ffe600) !important; }
+  .ag.alert .agent-sprite { box-shadow: 0 0 20px var(--ag-color, #E8967D) !important; }
   @keyframes aA {
     0%,100% { transform: scale(1) }
     50% { transform: scale(1.08) }
@@ -2421,7 +2421,7 @@
   .tp {
     position: absolute;
     font-size: 8px;
-    color: var(--ag-color, #ffe600);
+    color: var(--ag-color, #E8967D);
     opacity: 0;
     animation: tpFade .8s ease-out infinite;
     animation-delay: var(--tp-d, 0s);
@@ -2600,7 +2600,7 @@
     flex: 1; text-align: center; padding: 8px;
     border: 2px solid #eee; border-radius: 10px;
   }
-  .compare-side.user { background: rgba(255,230,0,.05); }
+  .compare-side.user { background: rgba(232,150,125,.05); }
   .compare-side.agents { background: rgba(0,200,255,.05); }
   .compare-label {
     font-size: 7px; font-weight: 900; font-family: var(--fd);
@@ -2648,7 +2648,7 @@
     box-shadow: 2px 2px 0 #000; text-align: center;
   }
   .compare-consensus-badge.consensus { background: #00ff88; color: #000; }
-  .compare-consensus-badge.partial { background: #ffe600; color: #000; }
+  .compare-consensus-badge.partial { background: #E8967D; color: #000; }
   .compare-consensus-badge.dissent { background: #ff2d55; color: #fff; }
   .compare-consensus-badge.override { background: #c840ff; color: #fff; }
   .compare-vs-icon {
@@ -2727,7 +2727,7 @@
   .pvp-btns { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
   .pvp-btn { padding: 8px 20px; border-radius: 12px; border: 3px solid #000; font-family: var(--fd); font-size: 9px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
   .pvp-btn.lobby { background: #eee; color: #000; }
-  .pvp-btn.again { background: #ffe600; color: #000; }
+  .pvp-btn.again { background: #E8967D; color: #000; }
   .pvp-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 #000; }
 
   /* Doge Float */
@@ -2951,7 +2951,7 @@
     margin-bottom: 6px;
     display: inline-block;
   }
-  .prev-rr-val { font-size: 14px; color: #ffe600; }
+  .prev-rr-val { font-size: 14px; color: #E8967D; }
   .preview-config {
     font-family: var(--fm);
     font-size: 8px;
@@ -3308,7 +3308,7 @@
     background: #111;
     border: 4px solid var(--yel);
     border-radius: 16px;
-    box-shadow: 0 0 40px rgba(255,230,0,.15), 8px 8px 0 #000;
+    box-shadow: 0 0 40px rgba(232,150,125,.15), 8px 8px 0 #000;
     padding: 40px 48px;
     text-align: center;
     max-width: 400px;
@@ -3319,7 +3319,7 @@
     content: '';
     position: absolute;
     inset: -50%;
-    background: repeating-conic-gradient(transparent 0deg 8deg, rgba(255,230,0,.04) 8deg 16deg);
+    background: repeating-conic-gradient(transparent 0deg 8deg, rgba(232,150,125,.04) 8deg 16deg);
     animation: spin 60s linear infinite;
     z-index: 0;
   }

@@ -55,14 +55,6 @@
     goto(path);
   }
 
-  function handleBack() {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-    goto('/');
-  }
-
   function isActive(path: string): boolean {
     if (path === '/arena') return activePath.startsWith('/arena');
     return activePath.startsWith(path);
@@ -91,15 +83,10 @@
 </script>
 
 <nav id="nav">
-  <div class="nav-top">
-    <div class="nav-main">
-      {#if activePath !== '/'}
-        <button class="nav-back" on:click={handleBack}>BACK</button>
-      {/if}
-
-      <button class="nav-logo" on:click={() => nav('/')}>
-        Stockclaw
-      </button>
+  <div class="nav-main">
+    <button class="nav-logo" on:click={() => nav('/')}>
+      Stockclaw
+    </button>
 
       <div class="nav-sep"></div>
 
@@ -129,6 +116,8 @@
         SCORE <b>{Math.round(state.score)}</b>
       </div>
 
+      <button class="settings-btn" title="SETTINGS" aria-label="SETTINGS" on:click={() => nav('/settings')}>SET</button>
+
       {#if connected}
         <button class="wallet-btn connected" on:click={openWalletModal}>
           <span class="wallet-dot"></span>
@@ -139,10 +128,7 @@
           CONNECT
         </button>
       {/if}
-
-      <button class="settings-btn" title="SETTINGS" aria-label="SETTINGS" on:click={() => nav('/settings')}>SET</button>
     </div>
-  </div>
 
   <!-- Mobile bottom tab bar -->
   <div class="nav-tabs-mobile">
@@ -169,17 +155,13 @@
     position: fixed;
     top: 0; left: 0; right: 0;
     z-index: 110;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    height: 36px;
+    padding: 0 12px;
     font-family: var(--fp, 'Press Start 2P', monospace);
     color: #F0EDE4;
-  }
-
-  /* Desktop: single row */
-  .nav-top {
-    display: flex;
-    align-items: center;
-    height: 42px;
-    padding: 0 12px;
-    gap: 0;
   }
 
   .nav-main {
@@ -191,23 +173,7 @@
     height: 100%;
   }
 
-  .nav-back {
-    font-family: var(--fp);
-    font-size: 12px;
-    color: #E8967D;
-    background: none;
-    border: 1px solid rgba(232,150,125,0.3);
-    border-radius: 4px;
-    padding: 2px 8px;
-    cursor: pointer;
-    margin-right: 6px;
-    transition: all .15s;
-  }
-  .nav-back:hover {
-    background: rgba(232,150,125,0.1);
-    border-color: #E8967D;
-  }
-
+  /* Removed: .nav-back (BACK button removed) */
   .nav-logo {
     font-family: var(--fp);
     font-size: 12px;
@@ -254,7 +220,7 @@
   /* ── Desktop Nav Tabs ── */
   .nav-tab-desktop {
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1px;
     color: rgba(240,237,228,0.45);
     padding: 0 8px;
@@ -295,7 +261,7 @@
     margin-left: 8px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex-shrink: 0;
   }
 
@@ -379,9 +345,12 @@
 
   /* ═══ MOBILE ═══ */
   @media (max-width: 900px) {
-    .nav-top {
-      height: 44px;
-      padding: 0 14px;
+    #nav {
+      height: auto;
+    }
+
+    .nav-main {
+      height: 36px;
     }
 
     /* Hide desktop elements */
@@ -391,11 +360,6 @@
     .score-badge { display: none; }
     .settings-btn { display: none; }
 
-    .nav-back {
-      font-size: 10px;
-      padding: 3px 8px;
-      margin-right: 8px;
-    }
     .nav-logo {
       font-size: 11px;
       letter-spacing: 1.5px;
@@ -403,6 +367,9 @@
 
     .nav-right {
       margin-left: auto;
+      height: 36px;
+      display: flex;
+      align-items: center;
     }
     .wallet-btn {
       font-size: 9px;
@@ -414,10 +381,11 @@
       padding: 5px 10px;
     }
 
-    /* Show mobile tab bar */
+    /* Show mobile tab bar — full width second row */
     .nav-tabs-mobile {
       display: flex;
       align-items: stretch;
+      width: 100%;
       border-top: 1px solid rgba(232,150,125,0.08);
       height: 36px;
     }
@@ -456,10 +424,6 @@
   }
 
   @media (max-width: 640px) {
-    .nav-top {
-      height: 40px;
-      padding: 0 12px;
-    }
     .nav-logo {
       font-size: 10px;
       letter-spacing: 1.2px;

@@ -50,7 +50,7 @@
           <span class="sum-label">AVG LP</span>
         </div>
         <div class="sum-stat">
-          <span class="sum-val" style="color:#ffe600">{$bestStreak}</span>
+          <span class="sum-val" style="color:#e8967d">{$bestStreak}</span>
           <span class="sum-label">BEST STREAK</span>
         </div>
       </div>

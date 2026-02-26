@@ -152,7 +152,7 @@
     gap: 3px;
     flex-wrap: wrap;
     padding-bottom: 4px;
-    border-bottom: 1px solid rgba(255,230,0,.1);
+    border-bottom: 1px solid rgba(232,150,125,.1);
   }
   .pm-filter-btn {
     font-family: var(--fm);
@@ -169,11 +169,11 @@
   }
   .pm-filter-btn:hover {
     color: var(--yel);
-    border-color: rgba(255,230,0,.3);
+    border-color: rgba(232,150,125,.3);
   }
   .pm-filter-btn.active {
-    background: rgba(255,230,0,.12);
-    border-color: rgba(255,230,0,.4);
+    background: rgba(232,150,125,.12);
+    border-color: rgba(232,150,125,.4);
     color: var(--yel);
   }
 
@@ -189,7 +189,7 @@
   .pm-spinner {
     width: 24px;
     height: 24px;
-    border: 2px solid rgba(255,230,0,.15);
+    border: 2px solid rgba(232,150,125,.15);
     border-top-color: var(--yel);
     border-radius: 50%;
     animation: pm-spin .8s linear infinite;
@@ -232,7 +232,7 @@
     opacity: .4;
   }
   .pm-card:hover {
-    border-color: rgba(255,230,0,.2);
+    border-color: rgba(232,150,125,.2);
   }
   .pm-linked {
     display: block;
@@ -265,8 +265,8 @@
     font-weight: 800;
     letter-spacing: 1px;
     color: var(--yel);
-    background: rgba(255,230,0,.1);
-    border: 1px solid rgba(255,230,0,.2);
+    background: rgba(232,150,125,.1);
+    border: 1px solid rgba(232,150,125,.2);
     padding: 1px 5px;
   }
   .pm-end {
@@ -399,14 +399,14 @@
     font-weight: 800;
     letter-spacing: 1px;
     padding: 5px 14px;
-    background: rgba(255,230,0,.1);
+    background: rgba(232,150,125,.1);
     color: var(--yel);
-    border: 1.5px solid rgba(255,230,0,.3);
+    border: 1.5px solid rgba(232,150,125,.3);
     cursor: pointer;
     transition: all .15s;
   }
   .pm-retry-btn:hover {
-    background: rgba(255,230,0,.2);
+    background: rgba(232,150,125,.2);
     border-color: var(--yel);
   }
 </style>

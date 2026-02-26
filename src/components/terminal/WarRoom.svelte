@@ -15,7 +15,7 @@
     formatOI,
     formatFunding
   } from '$lib/api/coinalyze';
-  import { runTerminalScan, getScanHistory } from '$lib/api/terminalApi';
+  import { runTerminalScan, getScanHistory, getScanDetail } from '$lib/api/terminalApi';
   import { AGENT_POOL } from '$lib/engine/agents';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
@@ -23,6 +23,7 @@
   import WarRoomHeaderSection from './warroom/WarRoomHeaderSection.svelte';
   import WarRoomSignalFeed from './warroom/WarRoomSignalFeed.svelte';
   import WarRoomFooterSection from './warroom/WarRoomFooterSection.svelte';
+  // C02 카드 → 채팅으로 통합됨 (VerdictCard + handleScanComplete)
   import type { TokenFilter, ScanTab, SignalDiff, ScanHighlight } from './warroom/types';
   import './warroom/warroom.css';
 
@@ -85,6 +86,74 @@
   const _derivCache = new Map<string, { ts: number; data: any }>();
   const DERIV_CACHE_TTL = 60_000;
   let _derivDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  // ── Server History Hydration Helpers ──
+  import type { TerminalScanSummary, TerminalScanSignal } from '$lib/services/scanService';
+
+  function serverSignalToAgent(sig: TerminalScanSignal, pair: string, token: string): AgentSignal {
+    const pool = AGENT_POOL[sig.agentId as keyof typeof AGENT_POOL];
+    return {
+      id: sig.id,
+      agentId: sig.agentId,
+      icon: pool?.icon ?? '🤖',
+      name: sig.name || sig.agentId,
+      color: pool?.color ?? '#888',
+      token,
+      pair,
+      vote: sig.vote as AgentSignal['vote'],
+      conf: sig.conf,
+      text: sig.text,
+      src: sig.src,
+      time: sig.time,
+      entry: sig.entry,
+      tp: sig.tp,
+      sl: sig.sl,
+    };
+  }
+
+  function summaryToStubTab(rec: TerminalScanSummary): ScanTab {
+    return {
+      id: `server-${rec.scanId}`,
+      pair: rec.pair,
+      timeframe: rec.timeframe,
+      token: rec.token,
+      createdAt: rec.createdAt,
+      label: rec.label,
+      signals: [], // lazy-loaded on activation
+    };
+  }
+
+  /** Merge server records into existing local tabs. Local tabs win on conflict. */
+  function mergeServerTabs(localTabs: ScanTab[], serverRecords: TerminalScanSummary[]): ScanTab[] {
+    const localKeys = new Set(localTabs.map(t => `${t.pair}|${t.timeframe}|${t.createdAt}`));
+    const newTabs = serverRecords
+      .filter(rec => !localKeys.has(`${rec.pair}|${rec.timeframe}|${rec.createdAt}`))
+      .map(summaryToStubTab);
+    return [...localTabs, ...newTabs].slice(0, MAX_SCAN_TABS);
+  }
+
+  // Track which server tabs are being loaded
+  let _loadingServerTabs = new Set<string>();
+
+  async function hydrateServerTab(tabId: string) {
+    const tab = scanTabs.find(t => t.id === tabId);
+    if (!tab || tab.signals.length > 0 || _loadingServerTabs.has(tabId)) return;
+    const scanId = tabId.replace('server-', '');
+    _loadingServerTabs.add(tabId);
+    try {
+      const res = await getScanDetail(scanId);
+      if (res.record?.signals && res.record.signals.length > 0) {
+        const signals = res.record.signals.map(s =>
+          serverSignalToAgent(s, tab.pair, tab.token)
+        );
+        scanTabs = scanTabs.map(t => t.id === tabId ? { ...t, signals } : t);
+      }
+    } catch (err) {
+      console.warn('[WarRoom] Failed to load server scan detail:', err);
+    } finally {
+      _loadingServerTabs.delete(tabId);
+    }
+  }
 
   let currentPair = $derived($gameState.pair);
   let currentTF = $derived($gameState.timeframe);
@@ -182,6 +251,8 @@
   });
   let trackedCount = $derived($activeSignalCount);
 
+  // C02 카드 제거됨 — 분석 결과는 채팅에 표시 (handleScanComplete)
+
   function roundPrice(value: number): number {
     if (!Number.isFinite(value)) return 0;
     if (Math.abs(value) >= 1000) return Math.round(value);
@@ -200,6 +271,10 @@
     activeScanId = id;
     selectedIds = new Set();
     activeToken = 'ALL';
+    // Lazy-load signals for server-only tabs
+    if (id.startsWith('server-')) {
+      hydrateServerTab(id);
+    }
   }
 
   function toggleSelect(id: string) {
@@ -482,9 +557,7 @@
     }
   });
 
-  // ── Volatility alert ──
-  let volatilityAlert = $state(false);
-  let volatilityInterval: ReturnType<typeof setInterval> | null = null;
+  // Volatility alert removed (low-value demo feature)
 
   function handleTrack(sig: AgentSignal) {
     trackSignalStore(sig.pair, sig.vote === 'long' ? 'LONG' : sig.vote === 'short' ? 'SHORT' : 'LONG', sig.entry, sig.name, sig.conf);
@@ -525,14 +598,6 @@
     restoreScanState();
     scanStateHydrated = true;
 
-    volatilityInterval = setInterval(() => {
-      if (!isDocumentVisible()) return;
-      if (Math.random() < 0.2) {
-        volatilityAlert = true;
-        setTimeout(() => { volatilityAlert = false; }, 8000);
-      }
-    }, 30000);
-
     fetchDerivativesData();
     derivRefreshTimer = setInterval(() => {
       if (!isDocumentVisible()) return;
@@ -544,20 +609,21 @@
       document.addEventListener('visibilitychange', _visibilityHandler);
     }
 
-    // Load scan history from server
-    getScanHistory({ limit: 5 })
+    // Load scan history from server and merge with local tabs
+    getScanHistory({ pair: currentPair, limit: MAX_SCAN_TABS })
       .then(res => {
         if (res.records.length > 0) {
-          console.log(`[WarRoom] Loaded ${res.records.length} scan records from server`);
+          scanTabs = mergeServerTabs(scanTabs, res.records);
+          serverScanSynced = true;
+          console.log(`[WarRoom] Merged ${res.records.length} server scan records`);
         }
       })
       .catch(() => {
-        // Server history unavailable - that's fine, local scans still work
+        // Server history unavailable — localStorage fallback already active
       });
   });
 
   onDestroy(() => {
-    if (volatilityInterval) clearInterval(volatilityInterval);
     if (derivRefreshTimer) clearInterval(derivRefreshTimer);
     if (_derivDebounce) clearTimeout(_derivDebounce);
     if (typeof document !== 'undefined' && _visibilityHandler) {
@@ -569,7 +635,6 @@
 
 <div class="war-room">
   <WarRoomHeaderSection
-    {volatilityAlert}
     {currentPair}
     currentTF={String(currentTF)}
     {activeScanTab}
@@ -591,9 +656,8 @@
     {formatOI}
     {formatFunding}
     onWheel={scrollXOnWheel}
-    onGoSignals={goSignals}
-    onGoArena={goArena}
     onCollapse={() => dispatch('collapse')}
+    onRunScan={runAgentScan}
     onActivateScanTab={activateScanTab}
     onSetActiveToken={(tok) => { activeToken = tok; selectedIds = new Set(); }}
   />

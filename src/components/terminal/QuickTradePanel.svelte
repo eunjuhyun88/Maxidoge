@@ -113,7 +113,7 @@
     background: #0c0c18;
     border: 3px solid var(--yel);
     border-radius: 10px;
-    box-shadow: 0 -4px 20px rgba(255,230,0,.15), 4px 4px 0 #000;
+    box-shadow: 0 -4px 20px rgba(232,150,125,.15), 4px 4px 0 #000;
     z-index: 50;
     max-height: 320px;
     overflow-y: auto;
@@ -129,8 +129,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 12px;
-    border-bottom: 2px solid rgba(255,230,0,.15);
-    background: rgba(255,230,0,.04);
+    border-bottom: 2px solid rgba(232,150,125,.15);
+    background: rgba(232,150,125,.04);
   }
   .qtp-title {
     font-family: var(--fd);

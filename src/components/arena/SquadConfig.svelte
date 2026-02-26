@@ -24,7 +24,7 @@
 
   const RISK_OPTIONS: { value: RiskLevel; label: string; emoji: string; desc: string; color: string }[] = [
     { value: 'low', label: 'LOW', emoji: '🛡', desc: 'Conservative. Tight SL, low leverage.', color: '#00cc66' },
-    { value: 'mid', label: 'MID', emoji: '⚖️', desc: 'Balanced risk/reward.', color: '#ffe600' },
+    { value: 'mid', label: 'MID', emoji: '⚖️', desc: 'Balanced risk/reward.', color: '#E8967D' },
     { value: 'aggro', label: 'AGGRO', emoji: '🔥', desc: 'High risk, high reward. Wide SL.', color: '#ff2d55' }
   ];
 

@@ -23,7 +23,7 @@
   }
 
   const variantColors: Record<string, { accent: string; glow: string }> = {
-    default: { accent: '#ffe600', glow: 'rgba(255,230,0,.15)' },
+    default: { accent: '#E8967D', glow: 'rgba(232,150,125,.15)' },
     purple: { accent: '#8b5cf6', glow: 'rgba(139,92,246,.15)' },
     cyan: { accent: '#00d4ff', glow: 'rgba(0,212,255,.15)' },
     pink: { accent: '#ff2d9b', glow: 'rgba(255,45,155,.15)' },

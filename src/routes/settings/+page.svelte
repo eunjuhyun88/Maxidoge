@@ -248,13 +248,13 @@
   .settings-page {
     height: 100%;
     overflow-y: auto;
-    background: linear-gradient(180deg, #ffe600, #ffcc00);
+    background: linear-gradient(180deg, #E8967D, #d07a64);
   }
 
   .settings-header {
     padding: 24px 30px;
     border-bottom: 4px solid #000;
-    background: linear-gradient(135deg, #ffe600, #ffaa00);
+    background: linear-gradient(135deg, #E8967D, #ffaa00);
   }
   .settings-title {
     font-family: var(--fc);
