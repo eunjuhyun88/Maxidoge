@@ -1925,6 +1925,17 @@
     z-index: 1;
   }
 
+  /* Global thin scrollbar for all terminal panels */
+  .terminal-page :global(*::-webkit-scrollbar),
+  .terminal-mobile :global(*::-webkit-scrollbar),
+  .terminal-tablet :global(*::-webkit-scrollbar) { width: 3px; height: 3px; }
+  .terminal-page :global(*::-webkit-scrollbar-thumb),
+  .terminal-mobile :global(*::-webkit-scrollbar-thumb),
+  .terminal-tablet :global(*::-webkit-scrollbar-thumb) { background: rgba(255,255,255,.1); border-radius: 3px; }
+  .terminal-page :global(*::-webkit-scrollbar-track),
+  .terminal-mobile :global(*::-webkit-scrollbar-track),
+  .terminal-tablet :global(*::-webkit-scrollbar-track) { background: transparent; }
+
   /* ═══════════════════════════════════════════
      DESKTOP — Full 5-column grid with resizers
      ═══════════════════════════════════════════ */

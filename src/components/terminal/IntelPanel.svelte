@@ -1484,6 +1484,11 @@
 <style>
   .intel-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--blk); overflow: hidden; }
 
+  /* Global thin scrollbar for all scrollable children */
+  .intel-panel :global(::-webkit-scrollbar) { width: 3px; height: 3px; }
+  .intel-panel :global(::-webkit-scrollbar-thumb) { background: rgba(255,255,255,.1); border-radius: 3px; }
+  .intel-panel :global(::-webkit-scrollbar-track) { background: transparent; }
+
   /* Removed: policy-decision-banner, shadow-decision-banner — replaced by VerdictCard */
   .policy-cards-wrap {
     display: grid;
@@ -1620,7 +1625,12 @@
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,.08) transparent;
   }
+  .rp-body::-webkit-scrollbar { width: 3px; }
+  .rp-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 3px; }
+  .rp-body::-webkit-scrollbar-track { background: transparent; }
   .rp-body.chat-mode { padding: 0; overflow: hidden; }
 
   /* ── Headlines ── */
@@ -2094,29 +2104,29 @@
   @keyframes dotBounce { 0%,100%{opacity:.3} 50%{opacity:1} }
 
   .ac-input {
-    display: flex; gap: 6px; padding: 8px 10px 10px;
-    border-top: 1px solid rgba(255,255,255,.06);
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px;
+    border-top: 1px solid rgba(255,255,255,.08);
     flex-shrink: 0;
-    background: rgba(5, 9, 7, .6);
-    backdrop-filter: blur(4px);
+    background: rgba(5, 9, 7, .85);
   }
   .ac-input input {
-    flex: 1; min-height: 44px; background: rgba(255,255,255,.04);
-    border: 1px solid rgba(255,255,255,.1);
-    border-radius: 6px; padding: 10px 12px;
+    flex: 1; height: 34px; background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 6px; padding: 0 10px;
     font-family: var(--fm); font-size: 11px;
     color: #fff; outline: none;
   }
-  .ac-input input::placeholder { color: rgba(255,255,255,.45); }
-  .ac-input input:focus { border-color: rgba(255,230,0,.4); }
+  .ac-input input::placeholder { color: rgba(255,255,255,.3); }
+  .ac-input input:focus { border-color: rgba(255,230,0,.5); background: rgba(255,255,255,.07); }
   .ac-send {
-    width: 44px; min-height: 44px; background: var(--yel); color: #000;
-    border: 1.5px solid #000; border-radius: 6px;
-    font-size: 14px; cursor: pointer; display: flex;
+    width: 34px; height: 34px; background: var(--yel); color: #000;
+    border: none; border-radius: 6px;
+    font-size: 13px; cursor: pointer; display: flex;
     align-items: center; justify-content: center;
-    flex-shrink: 0;
+    flex-shrink: 0; transition: opacity .12s;
   }
-  .ac-send:disabled { opacity: .3; cursor: not-allowed; }
+  .ac-send:hover { opacity: .85; }
+  .ac-send:disabled { opacity: .25; cursor: not-allowed; }
 
   /* ── Trending Panel ── */
   .trend-panel { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
