@@ -40,6 +40,14 @@
   }
   .wr-scan-error { color: var(--red); }
   .wr-spacer { flex: 1; }
+  .wr-scan-btn {
+    flex-shrink: 0; padding: 2px 8px; margin-right: 4px;
+    font-family: var(--fm, monospace); font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
+    background: rgba(255, 230, 0, 0.12); border: 1px solid rgba(255, 230, 0, 0.3);
+    border-radius: 4px; color: var(--yel, #ffe600); cursor: pointer; transition: all .12s;
+  }
+  .wr-scan-btn:hover { background: rgba(255, 230, 0, 0.2); border-color: var(--yel, #ffe600); }
+  .wr-scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .wr-collapse-btn {
     flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
     height: 24px; width: 24px; padding: 0;

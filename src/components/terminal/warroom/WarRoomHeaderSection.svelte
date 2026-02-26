@@ -25,6 +25,7 @@
   export let formatFunding: (value: number) => string;
   export let onWheel: (event: WheelEvent) => void;
   export let onCollapse: () => void;
+  export let onRunScan: () => void;
   export let onActivateScanTab: (id: string) => void;
   export let onSetActiveToken: (token: TokenFilter) => void;
 </script>
@@ -44,6 +45,9 @@
     <span class="wr-scan-label">{activeScanTab.label}</span>
   {/if}
   <span class="wr-spacer"></span>
+  <button class="wr-scan-btn" on:click={onRunScan} disabled={scanRunning} title="Run scan">
+    ⚡ {scanRunning ? 'SCANNING' : 'SCAN'}
+  </button>
   <button class="wr-collapse-btn" on:click={onCollapse} title="Collapse panel" aria-label="Collapse panel">
     <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
       <rect x="1" y="2" width="14" height="12" rx="1.5"/>

@@ -657,6 +657,7 @@
     {formatFunding}
     onWheel={scrollXOnWheel}
     onCollapse={() => dispatch('collapse')}
+    onRunScan={runAgentScan}
     onActivateScanTab={activateScanTab}
     onSetActiveToken={(tok) => { activeToken = tok; selectedIds = new Set(); }}
   />
