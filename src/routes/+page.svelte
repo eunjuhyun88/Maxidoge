@@ -99,38 +99,6 @@
     }
   }
 
-  /** Scroll hijacking: right panel scrolls first, then page.
-   *  Captured on window so we intercept BEFORE native scroll. */
-  function onWheel(e: WheelEvent) {
-    if (!heroRightEl || window.innerWidth <= 900 || prefersReducedMotion) return;
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
-
-    // Only when hero section occupies viewport
-    const heroSection = document.querySelector('.hero');
-    if (!heroSection) return;
-    const rect = heroSection.getBoundingClientRect();
-    // Hero must be mostly visible (top half still on screen)
-    if (rect.bottom <= 100 || rect.top >= window.innerHeight - 100) return;
-
-    const el = heroRightEl;
-    const maxScroll = el.scrollHeight - el.clientHeight;
-    if (maxScroll <= 0) return; // nothing to scroll
-
-    const canScrollDown = el.scrollTop < maxScroll - 2;
-    const canScrollUp = el.scrollTop > 2;
-
-    if (e.deltaY > 0 && canScrollDown) {
-      e.preventDefault();
-      e.stopPropagation();
-      el.scrollTop = Math.min(el.scrollTop + e.deltaY, maxScroll);
-    } else if (e.deltaY < 0 && canScrollUp) {
-      e.preventDefault();
-      e.stopPropagation();
-      el.scrollTop = Math.max(el.scrollTop + e.deltaY, 0);
-    }
-    // At boundary → don't prevent → page scrolls naturally
-  }
-
   function onHeroKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && selectedFeature !== null) {
       selectedFeature = null;
@@ -193,19 +161,8 @@
 
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     window.addEventListener('keydown', onHeroKeydown);
-    let wheelBound = false;
-    const setWheelCapture = (enabled: boolean) => {
-      if (enabled && !wheelBound) {
-        window.addEventListener('wheel', onWheel, { passive: false, capture: true });
-        wheelBound = true;
-      } else if (!enabled && wheelBound) {
-        window.removeEventListener('wheel', onWheel, { capture: true });
-        wheelBound = false;
-      }
-    };
     const syncMotionPreference = () => {
       prefersReducedMotion = motionQuery.matches;
-      setWheelCapture(!prefersReducedMotion);
     };
     syncMotionPreference();
 
@@ -240,7 +197,6 @@
     return () => {
       if (heroIntroTimer) clearTimeout(heroIntroTimer);
       window.removeEventListener('keydown', onHeroKeydown);
-      setWheelCapture(false);
       if (homeEl) homeEl.removeEventListener('scroll', onScroll);
       obs?.disconnect();
       if (typeof motionQuery.removeEventListener === 'function') {
@@ -693,6 +649,11 @@
     --fx-title-pink-glow: 0 0 4px rgba(232,150,125,0.36), 0 0 10px rgba(232,150,125,0.12);
     --fx-title-pink-glow-squad: 0 0 3px rgba(232,150,125,0.28), 0 0 7px rgba(232,150,125,0.08);
     --fx-title-pink-glow-hero: 0 0 8px rgba(232,150,125,0.52), 0 0 20px rgba(232,150,125,0.2), 0 0 34px rgba(232,150,125,0.08);
+    --fx-title-pink-fill: repeating-linear-gradient(
+      0deg,
+      var(--sp-pk) 0px, var(--sp-pk) 3px,
+      rgba(232,150,125,0.15) 3px, rgba(232,150,125,0.15) 5px
+    );
     --space-sec-x: clamp(16px, 3.8vw, 64px);
     --space-sec-y-lg: clamp(58px, 7.2vw, 94px);
     --space-hero-x: clamp(14px, 2.2vw, 34px);
@@ -1028,9 +989,8 @@
     max-width: min(100%, clamp(560px, 62vw, 860px));
     display: flex; flex-direction: column; align-items: flex-start; justify-content: safe center;
     padding: var(--space-hero-y-top) var(--space-hero-x) var(--space-hero-y-bottom);
-    position: sticky; top: var(--header-h, 48px); /* stick below header */
-    height: calc(100vh - var(--header-h, 48px));
-    overflow-y: auto;
+    position: relative;
+    overflow: visible;
     z-index: 3;
   }
 
@@ -1070,13 +1030,9 @@
     color: var(--sp-pk);
     text-shadow: var(--fx-title-pink-glow-hero);
   }
-  @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  @supports ((-webkit-background-clip: text) and (-webkit-text-fill-color: transparent)) {
     .hl-pk {
-      background: repeating-linear-gradient(
-        0deg,
-        var(--sp-pk) 0px, var(--sp-pk) 3px,
-        rgba(232,150,125,0.15) 3px, rgba(232,150,125,0.15) 5px
-      );
+      background: var(--fx-title-pink-fill);
       -webkit-background-clip: text; background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -1204,20 +1160,18 @@
     outline-offset: 2px;
   }
 
-  /* Feature cards (right column) — sticky panel with internal scroll */
+  /* Feature cards (right column) */
   .hero-right {
     min-width: 0;
     width: 100%;
     background: var(--sp-bg2);
-    border-left: 1px solid rgba(232,150,125,0.1);
+    border-left: none;
     display: flex; flex-direction: column;
-    position: sticky; top: var(--header-h, 48px);
-    height: calc(100vh - var(--header-h, 48px));
-    overflow-y: auto;
+    position: relative;
+    height: auto;
+    overflow: visible;
     z-index: 3;
   }
-  .hero-right::-webkit-scrollbar { width: 3px; }
-  .hero-right::-webkit-scrollbar-thumb { background: var(--sp-pk); border-radius: 3px; }
 
   .fc {
     display: flex; flex-direction: column; background: transparent;
@@ -1395,6 +1349,19 @@
   .feed-l .fd-pk,
   .cta-l .cta-pk {
     margin-inline: 0;
+  }
+  @supports ((-webkit-background-clip: text) and (-webkit-text-fill-color: transparent)) {
+    .ft-pk,
+    .sq-pk,
+    .dt-pk,
+    .fd-pk,
+    .cta-pk,
+    .feat-detail-title {
+      background: var(--fx-title-pink-fill);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
   }
   .ft-pk {
     font-size: clamp(28px, 6vw, 56px);
@@ -1940,10 +1907,6 @@
   @media (min-width: 901px) {
     .home {
       scroll-padding-top: var(--header-h, 48px);
-    }
-    .hero-left,
-    .hero-right {
-      scrollbar-gutter: stable;
     }
     .fc-img .ht { width: min(62%, 220px); }
 
