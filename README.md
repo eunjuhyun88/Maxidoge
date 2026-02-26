@@ -98,6 +98,10 @@ npm run preview
 - `npm run safe:hooks`: 로컬 pre-push/post-merge 훅 설치 (`.githooks/*`)
 - `npm run safe:sync`: 브랜치 동기화 (`main`은 `pull --ff-only`, 작업 브랜치는 `origin/main` rebase + check)
 - `npm run safe:sync:gate`: 동기화 후 `check + build`까지 실행
+- `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`: 현재 작업 컨텍스트 스냅샷 저장
+- `npm run ctx:compact`: 스냅샷을 핵심 요약본으로 압축
+- `npm run ctx:pin -- --add "<durable fact>"`: 리셋 시 유실되면 안 되는 고정 사실 저장
+- `npm run ctx:restore -- --mode context|files`: 복구(세션 컨텍스트/파일 복구 의도 분리)
 
 ### Solo Safety Routine (Recommended)
 
@@ -123,6 +127,32 @@ npm run preview
 - pre-push는 기본적으로 `npm run check` + `npm run build`를 자동 실행합니다.
 - post-merge는 pull/merge 직후 `npm run check`를 자동 실행합니다.
 - 긴급 상황에서만 `SKIP_PREPUSH=1 git push`로 일시 우회하세요.
+
+### Context Compaction Routine (Token/Cost Control)
+
+긴 대화/작업에서 토큰 비용과 컨텍스트 오염을 줄이기 위한 표준 루틴입니다.
+
+1. 작업 시작 직후(초기 상태 저장):
+   ```bash
+   npm run ctx:save -- --title "task start" --work-id "W-YYYYMMDD-HHMM-<repo>-<agent>" --agent "codex"
+   ```
+2. 핵심 결정사항 고정:
+   ```bash
+   npm run ctx:pin -- --add "Do not merge without required write-access approval"
+   ```
+3. 핸드오프/푸시 직전 압축:
+   ```bash
+   npm run ctx:save -- --title "pre-handoff" --work-id "W-..." --agent "codex"
+   npm run ctx:compact
+   ```
+4. 리셋 후 복구:
+   ```bash
+   npm run ctx:restore -- --mode context
+   ```
+5. 모호한 `복구` 요청 방지:
+   - 세션/대화 복구: `--mode context`
+   - 파일 상태 복구: `--mode files`
+   - mode 없이 실행하면 실패하도록 설계되어 혼선 방지
 
 ### Multi-Agent Parallel Routine (Conflict-Avoidance)
 

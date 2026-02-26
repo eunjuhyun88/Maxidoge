@@ -13,7 +13,10 @@ This file defines mandatory execution rules for all coding agents in this reposi
    - Working tree status
    - Task summary
    - Overlap/conflict check result
-5. Do not start edits on `main`. Work must run on `codex/<task-name>` branch.
+5. Run `npm run safe:status` and include the result in the start log.
+6. Save an initial context snapshot:
+   - `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`
+7. Do not start edits on `main`. Work must run on `codex/<task-name>` branch.
 
 ## Mandatory Branch/Sync Policy
 1. `main` is always protected:
@@ -32,11 +35,23 @@ This file defines mandatory execution rules for all coding agents in this reposi
    - `git fetch origin --prune`
    - Personal branch: rebase or merge allowed
    - Shared branch: merge only
+5. Run `npm run safe:sync` before first edit and again before push.
+6. Keep pre-push hook active via `npm run safe:hooks`.
 
 ## Mandatory Verification Gate (No Exceptions)
 1. Run `npm run check` on the working branch.
 2. Run `npm run build` on the working branch.
 3. If either command fails, stop push/merge and fix errors first.
+
+## Mandatory Context Budgeting (Multi-Agent)
+1. Before handoff/push, save snapshot:
+   - `npm run ctx:save -- --title "<handoff>" --work-id "<W-ID>" --agent "<agent>"`
+2. Compact before PR/push:
+   - `npm run ctx:compact`
+3. Restore command must always disambiguate mode:
+   - `npm run ctx:restore -- --mode context`
+   - `npm run ctx:restore -- --mode files`
+4. Keep `.agent-context/` local-only (gitignored). Never commit runtime snapshots or secret notes.
 
 ## Mandatory Finish Sequence
 1. Commit and push only after passing check/build.
@@ -46,8 +61,10 @@ This file defines mandatory execution rules for all coding agents in this reposi
    - Commit hash
    - Push status
    - Final working tree status
-3. If this task is merged into `main`, run `npm run check` and `npm run build` again on `main`.
-4. If this task is merged into `main`, append an integration summary in `/Users/ej/Downloads/maxi-doge-unified/docs/AGENT_WATCH_LOG.md`:
+3. Run final context compaction for next agent handoff:
+   - `npm run ctx:compact`
+4. If this task is merged into `main`, run `npm run check` and `npm run build` again on `main`.
+5. If this task is merged into `main`, append an integration summary in `/Users/ej/Downloads/maxi-doge-unified/docs/AGENT_WATCH_LOG.md`:
    - What changed (summary)
    - Validation results on `main`
    - Merge hash
