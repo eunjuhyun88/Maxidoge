@@ -19,6 +19,36 @@
   $: ethPrice = state.prices.ETH;
   $: solPrice = state.prices.SOL;
 
+  type HomeFunnelStep = 'hero_view' | 'hero_feature_select' | 'hero_cta_click';
+  type HomeFunnelStatus = 'view' | 'click';
+
+  interface GTMWindow extends Window {
+    dataLayer?: Array<Record<string, unknown>>;
+  }
+
+  function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
+    if (typeof window === 'undefined') return;
+    const w = window as GTMWindow;
+    if (!Array.isArray(w.dataLayer)) return;
+    w.dataLayer.push({
+      event,
+      area: 'home',
+      ...payload,
+    });
+  }
+
+  function trackHomeFunnel(
+    step: HomeFunnelStep,
+    status: HomeFunnelStatus,
+    payload: Record<string, unknown> = {}
+  ) {
+    gtmEvent('home_funnel', {
+      step,
+      status,
+      ...payload,
+    });
+  }
+
   function enterArena() { goto('/arena'); }
   function enterTerminal() { goto('/terminal'); }
 
@@ -53,7 +83,13 @@
   let prefersReducedMotion = false;
 
   function selectFeature(i: number) {
-    selectedFeature = selectedFeature === i ? null : i;
+    const next = selectedFeature === i ? null : i;
+    if (next !== null) {
+      trackHomeFunnel('hero_feature_select', 'click', {
+        feature: FEATURES[i].sub,
+      });
+    }
+    selectedFeature = next;
     // Reset left panel scroll to top when switching views
     if (heroLeftEl) {
       heroLeftEl.scrollTo({
@@ -107,6 +143,24 @@
     }
   }
 
+  function handleHeroPrimaryCta() {
+    trackHomeFunnel('hero_cta_click', 'click', {
+      cta: 'enter_war_room',
+      connected,
+    });
+    goto('/terminal');
+  }
+
+  function handleHeroSecondaryCta() {
+    const cta = connected ? 'enter_arena' : 'connect_wallet';
+    trackHomeFunnel('hero_cta_click', 'click', { cta, connected });
+    if (connected) {
+      goto('/arena');
+      return;
+    }
+    openWalletModal();
+  }
+
   const FLOW_STEPS = [
     { num: '01', title: 'CONNECT', desc: 'LINK WALLET IN 30 SECONDS. NO KYC. START FREE.', img: '/blockparty/f5-doge-excited.png', pct: 100 },
     { num: '02', title: 'SET CONDITIONS', desc: 'TYPE "OI COMPRESSION" OR "WHALE DEPOSIT" — SCANNER DOES THE REST.', img: '/blockparty/f5-doge-chart.png', pct: 85 },
@@ -134,6 +188,7 @@
   onMount(() => {
     heroIntroTimer = setTimeout(() => {
       heroReady = true;
+      trackHomeFunnel('hero_view', 'view', { connected });
     }, 280);
 
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -293,11 +348,11 @@
           </div>
         </div>
         <div class="hero-ctas ha" style="--ha-d:0.6s">
-          <button type="button" class="hero-btn hero-btn-primary" on:click={enterTerminal}>ENTER WAR ROOM →</button>
+          <button type="button" class="hero-btn hero-btn-primary" on:click={handleHeroPrimaryCta}>ENTER WAR ROOM →</button>
           {#if !connected}
-            <button type="button" class="hero-btn hero-btn-secondary" on:click={openWalletModal}>CONNECT WALLET</button>
+            <button type="button" class="hero-btn hero-btn-secondary" on:click={handleHeroSecondaryCta}>CONNECT WALLET</button>
           {:else}
-            <button type="button" class="hero-btn hero-btn-secondary" on:click={enterArena}>ENTER ARENA →</button>
+            <button type="button" class="hero-btn hero-btn-secondary" on:click={handleHeroSecondaryCta}>ENTER ARENA →</button>
           {/if}
         </div>
         <div class="rbadges ha" style="--ha-d:0.7s">
@@ -620,24 +675,24 @@
     --sp-pk-l: #F5C4B8;
     --sp-w: #F0EDE4;
     --sp-dim: rgba(240,237,228,0.4);
-    --sp-glow: rgba(232,150,125,0.5);
+    --sp-glow: rgba(232,150,125,0.34);
     --sp-grid: rgba(232,150,125,0.12);
   }
 
   /* ── BASE ── */
   .home {
-    --fx-orb-blur: 62px;
-    --fx-floor-glow: 0 0 10px var(--sp-pk), 0 0 24px var(--sp-glow), 0 0 44px rgba(232,150,125,0.16);
-    --fx-card-hover-glow: inset 0 0 14px rgba(232,150,125,0.05), 0 0 10px rgba(232,150,125,0.06);
-    --fx-btn-glow: 0 0 10px var(--sp-glow);
-    --fx-btn-glow-hover: 0 0 16px var(--sp-pk);
-    --fx-cta-glow: 0 0 14px var(--sp-glow), 0 4px 12px rgba(0,0,0,0.26);
-    --fx-cta-glow-hover: 0 0 20px var(--sp-pk), 0 6px 14px rgba(0,0,0,0.32);
+    --fx-orb-blur: 54px;
+    --fx-floor-glow: 0 0 5px rgba(232,150,125,0.56), 0 0 14px rgba(232,150,125,0.24), 0 0 24px rgba(232,150,125,0.1);
+    --fx-card-hover-glow: inset 0 0 10px rgba(232,150,125,0.04), 0 0 8px rgba(232,150,125,0.05);
+    --fx-btn-glow: 0 0 7px rgba(232,150,125,0.28);
+    --fx-btn-glow-hover: 0 0 11px rgba(232,150,125,0.4);
+    --fx-cta-glow: 0 0 10px rgba(232,150,125,0.24), 0 4px 10px rgba(0,0,0,0.24);
+    --fx-cta-glow-hover: 0 0 14px rgba(232,150,125,0.34), 0 6px 12px rgba(0,0,0,0.28);
     --fx-live-dot-glow: 0 0 5px #00cc66;
-    --fx-title-tag-glow: 0 0 6px rgba(232,150,125,0.26);
-    --fx-title-pink-glow: 0 0 6px rgba(232,150,125,0.48), 0 0 13px rgba(232,150,125,0.16);
-    --fx-title-pink-glow-squad: 0 0 4px rgba(232,150,125,0.34), 0 0 9px rgba(232,150,125,0.1);
-    --fx-title-pink-glow-hero: 0 0 12px rgba(232,150,125,0.68), 0 0 30px rgba(232,150,125,0.28), 0 0 48px rgba(232,150,125,0.1);
+    --fx-title-tag-glow: 0 0 4px rgba(232,150,125,0.2);
+    --fx-title-pink-glow: 0 0 4px rgba(232,150,125,0.36), 0 0 10px rgba(232,150,125,0.12);
+    --fx-title-pink-glow-squad: 0 0 3px rgba(232,150,125,0.28), 0 0 7px rgba(232,150,125,0.08);
+    --fx-title-pink-glow-hero: 0 0 8px rgba(232,150,125,0.52), 0 0 20px rgba(232,150,125,0.2), 0 0 34px rgba(232,150,125,0.08);
     --space-sec-x: clamp(16px, 3.8vw, 64px);
     --space-sec-y-lg: clamp(58px, 7.2vw, 94px);
     --space-hero-x: clamp(14px, 2.2vw, 34px);
@@ -903,7 +958,7 @@
   /* ── PERSPECTIVE GRID FLOOR ── */
   .grid-floor {
     position: absolute; bottom: 0; left: -20%; right: -20%;
-    height: 35%; z-index: 1; pointer-events: none;
+    height: 31%; z-index: 1; pointer-events: none;
     background:
       linear-gradient(90deg, var(--sp-grid) 1px, transparent 1px),
       linear-gradient(0deg, var(--sp-grid) 1px, transparent 1px);
@@ -913,9 +968,10 @@
   }
   .grid-floor::before {
     content: '';
-    position: absolute; top: 0; left: 0; right: 0; height: 3px;
-    background: var(--sp-pk);
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: rgba(232,150,125,0.78);
     box-shadow: var(--fx-floor-glow);
+    opacity: 0.82;
   }
 
   /* ════════════════════════════════════════════
@@ -962,7 +1018,7 @@
     content: '';
     position: absolute; top: 10%; left: 2%;
     width: 58%; height: 62%;
-    background: radial-gradient(ellipse, rgba(232,150,125,0.06) 0%, transparent 70%);
+    background: radial-gradient(ellipse, rgba(232,150,125,0.04) 0%, transparent 70%);
     pointer-events: none; z-index: 0;
   }
 
@@ -987,14 +1043,14 @@
     font-family: var(--fp); font-size: var(--fs-kicker);
     color: var(--sp-pk); letter-spacing: var(--ls-kicker);
     margin-bottom: clamp(10px, 1.5vw, 18px);
-    text-shadow: 0 0 8px var(--sp-glow);
+    text-shadow: 0 0 6px var(--sp-glow);
     text-wrap: balance;
   }
   .hl {
     font-family: var(--fp); font-weight: 400;
     display: inline-block;
     color: var(--sp-w);
-    text-shadow: 0 0 12px rgba(240,237,228,0.5), 0 0 30px rgba(240,237,228,0.15);
+    text-shadow: 0 0 8px rgba(240,237,228,0.42), 0 0 20px rgba(240,237,228,0.1);
   }
   @supports ((-webkit-background-clip: text) or (background-clip: text)) {
     .hl {
@@ -1056,7 +1112,7 @@
   .rbdg-label {
     font-family: var(--fp); font-size: var(--fs-meta);
     color: var(--sp-pk); letter-spacing: clamp(0.8px, 0.2vw, 1.4px);
-    text-shadow: 0 0 10px var(--sp-glow);
+    text-shadow: 0 0 6px var(--sp-glow);
   }
   .rbdg-src {
     font-family: var(--fp); font-size: var(--fs-meta);
@@ -1067,7 +1123,7 @@
   .hero-sub {
     font-family: var(--fp); font-size: var(--fs-copy);
     color: var(--sp-pk); letter-spacing: var(--ls-copy); margin-top: clamp(12px, 1.7vw, 20px);
-    text-shadow: 0 0 12px var(--sp-glow);
+    text-shadow: 0 0 8px var(--sp-glow);
     max-width: 52ch;
     line-height: 1.55;
     text-wrap: balance;
@@ -1221,7 +1277,7 @@
   .fc-lbl {
     font-family: var(--fp); font-size: clamp(11px, 1.2vw, 13px);
     color: var(--sp-pk); letter-spacing: clamp(0.8px, 0.18vw, 1.2px); line-height: 1.4; margin-top: 4px;
-    text-shadow: 0 0 10px var(--sp-glow);
+    text-shadow: 0 0 6px var(--sp-glow);
   }
   .fc-brief {
     font-family: var(--fv); font-size: 11px;
@@ -1240,7 +1296,7 @@
 
   /* Active card highlight */
   .fc-active { background: rgba(232,150,125,0.08); border-left: 3px solid var(--sp-pk); }
-  .fc-active .fc-lbl { text-shadow: 0 0 15px var(--sp-pk), 0 0 40px var(--sp-glow); }
+  .fc-active .fc-lbl { text-shadow: 0 0 8px var(--sp-pk), 0 0 20px var(--sp-glow); }
 
   /* ═══ FEATURE DETAIL (left panel) ═══ */
   .feat-detail {
@@ -1265,7 +1321,7 @@
   .feat-detail-title {
     font-family: var(--fp); font-size: clamp(28px, 5vw, 52px);
     color: var(--sp-pk); letter-spacing: 4px; line-height: 1;
-    text-shadow: 0 0 20px var(--sp-pk), 0 0 60px var(--sp-glow);
+    text-shadow: 0 0 10px var(--sp-pk), 0 0 28px var(--sp-glow);
   }
   .feat-detail-desc {
     font-family: var(--fv); font-size: 14px;
@@ -1325,24 +1381,20 @@
   .fd-pk,
   .cta-pk {
     display: block;
+    width: fit-content;
+    max-width: 100%;
     color: var(--sp-pk);
     text-shadow: var(--fx-title-pink-glow);
+    line-height: 1.08;
   }
-  @supports ((-webkit-background-clip: text) or (background-clip: text)) {
-    .ft-pk,
-    .sq-pk,
-    .dt-pk,
-    .fd-pk,
-    .cta-pk {
-      background: repeating-linear-gradient(0deg, var(--sp-pk) 0px, var(--sp-pk) 3px, rgba(232,150,125,0.15) 3px, rgba(232,150,125,0.15) 4.5px);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .fd-pk,
-    .cta-pk {
-      background: repeating-linear-gradient(0deg, var(--sp-pk) 0px, var(--sp-pk) 4px, rgba(232,150,125,0.15) 4px, rgba(232,150,125,0.15) 5.5px);
-    }
+  .flow-title .ft-pk,
+  .sq-title .sq-pk,
+  .detect-title .dt-pk {
+    margin-inline: auto;
+  }
+  .feed-l .fd-pk,
+  .cta-l .cta-pk {
+    margin-inline: 0;
   }
   .ft-pk {
     font-size: clamp(28px, 6vw, 56px);
@@ -1440,8 +1492,8 @@
   .ai { font-style: italic; font-weight: 400; font-family: Georgia, serif; font-size: .85em; color: var(--sp-pk-l); }
   .ar { font-weight: 700; font-size: .7em; letter-spacing: 2px; text-transform: uppercase; color: var(--sp-dim); }
   .as { font-weight: 700; font-size: .55em; letter-spacing: 3px; text-transform: uppercase; color: var(--sp-dim); }
-  .abg { font-size: 1.15em; color: var(--sp-pk); text-shadow: 0 0 10px var(--sp-glow); }
-  .abx { font-size: 1.4em; color: var(--sp-pk); text-shadow: 0 0 15px var(--sp-glow); }
+  .abg { font-size: 1.15em; color: var(--sp-pk); text-shadow: 0 0 6px var(--sp-glow); }
+  .abx { font-size: 1.4em; color: var(--sp-pk); text-shadow: 0 0 8px var(--sp-glow); }
 
   .about-tag {
     font-family: var(--fp); font-size: var(--fs-meta);
@@ -1639,7 +1691,7 @@
   .dtl-label {
     font-family: var(--fp); font-size: var(--fs-copy);
     color: var(--sp-pk); letter-spacing: 1px;
-    text-shadow: 0 0 8px var(--sp-glow);
+    text-shadow: 0 0 5px var(--sp-glow);
   }
   .dtl-count {
     font-family: var(--fp); font-size: var(--fs-meta);
@@ -1746,7 +1798,7 @@
   .arena-name {
     font-family: var(--fp); font-size: clamp(14px, 2vw, 20px); letter-spacing: clamp(1.6px, 0.34vw, 3.6px);
     color: var(--sp-pk); line-height: 1.4;
-    text-shadow: 0 0 15px var(--sp-pk), 0 0 40px var(--sp-glow);
+    text-shadow: 0 0 8px var(--sp-pk), 0 0 20px var(--sp-glow);
   }
   .arena-sub { font-family: var(--fp); font-size: 9px; color: var(--sp-dim); margin-top: 4px; }
   .arena-ft { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
@@ -1938,11 +1990,11 @@
     .hl-xl { font-size: clamp(28px, 5.6vw, 58px); }
     .hero-sub { max-width: 46ch; }
     .hero-status {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      width: min(100%, 760px);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: min(100%, 860px);
     }
     .hs-chip:first-child {
-      grid-column: 1 / -1;
+      grid-column: auto;
     }
     .hero-btn { min-width: 168px; }
     .fc { min-height: clamp(200px, 34vh, 300px); }
@@ -1973,7 +2025,13 @@
       border-left: none;
       border-top: 1px solid rgba(232,150,125,0.12);
     }
-    .hero-status { width: 100%; }
+    .hero-status {
+      width: 100%;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .hs-chip:first-child {
+      grid-column: 1 / -1;
+    }
     .hero-sub,
     .hero-props,
     .hero-ctas,
