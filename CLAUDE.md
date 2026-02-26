@@ -181,6 +181,30 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 
 ---
 
+## UIUX Optimization (Loox Reference)
+
+**디자인 레퍼런스:** Loox "Lost in Space" (https://loox.app/lost-in-space)
+- 배경: `#00120a` (다크 포레스트 그린-블랙)
+- 액센트: `#E8967D` (살몬 핑크) — 기존 `#FFE600` 노란색 대체
+- 텍스트: `#F0EDE4` (크림 화이트)
+- 톤: 레트로-퓨처리스틱, 어둡고 깔끔
+
+### 완료된 페이지
+| 페이지 | PR | 작업 내용 |
+|--------|-----|---------|
+| Terminal (`/terminal`) | #43 | 노란색→살몬 31파일, 헤더 36px, 리사이즈 핸들, 타이포 |
+| Community (`/signals`) | #45 | Community Hub 라이트→다크 전환, sig-header/카드/칩 |
+
+### 미완료 페이지
+- Arena (`/arena`) — C02 다크 아레나 일부 적용됨, UIUX 리뷰 필요
+- Home (`/`) — ORPO GTM 구조, UIUX 리뷰 필요
+- Passport (`/passport`) — 미착수
+- Settings (`/settings`) — 미착수
+- Holdings (`/holdings`) — 미착수
+- Oracle (`/oracle`) — 미착수
+
+---
+
 ## Task Backlog (BE Phase)
 - [x] B-03: factorEngine + agentPipeline
 - [x] B-09: Terminal Scan endpoints
