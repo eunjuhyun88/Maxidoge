@@ -2412,26 +2412,27 @@
   @keyframes dotBounce { 0%,100%{opacity:.3} 50%{opacity:1} }
 
   .ac-input {
-    display: flex; gap: 4px; padding: 6px 8px 8px;
+    display: flex; gap: 6px; padding: 8px 10px 10px;
     border-top: 1px solid rgba(255,255,255,.06);
     flex-shrink: 0;
     background: rgba(5, 9, 7, .6);
     backdrop-filter: blur(4px);
   }
   .ac-input input {
-    flex: 1; background: rgba(255,255,255,.04);
+    flex: 1; min-height: 44px; background: rgba(255,255,255,.04);
     border: 1px solid rgba(255,255,255,.1);
-    border-radius: 6px; padding: 8px 10px;
-    font-family: var(--fm); font-size: 10px;
+    border-radius: 6px; padding: 10px 12px;
+    font-family: var(--fm); font-size: 11px;
     color: #fff; outline: none;
   }
   .ac-input input::placeholder { color: rgba(255,255,255,.45); }
   .ac-input input:focus { border-color: rgba(255,230,0,.4); }
   .ac-send {
-    width: 36px; background: var(--yel); color: #000;
+    width: 44px; min-height: 44px; background: var(--yel); color: #000;
     border: 1.5px solid #000; border-radius: 6px;
-    font-size: 13px; cursor: pointer; display: flex;
+    font-size: 14px; cursor: pointer; display: flex;
     align-items: center; justify-content: center;
+    flex-shrink: 0;
   }
   .ac-send:disabled { opacity: .3; cursor: not-allowed; }
 

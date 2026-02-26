@@ -128,8 +128,8 @@
   type TabletPanelSize = { widthPct: number; heightPct: number };
   const TABLET_LEFT_MIN = 188;
   const TABLET_LEFT_MAX = 360;
-  const TABLET_BOTTOM_MIN = 164;
-  const TABLET_BOTTOM_MAX = 320;
+  const TABLET_BOTTOM_MIN = 200;
+  const TABLET_BOTTOM_MAX = 360;
   const TABLET_SPLIT_STEP = 12;
   let tabletPanelSizes: Record<TabletPanelKey, TabletPanelSize> = {
     left: { widthPct: 100, heightPct: 100 },
@@ -137,7 +137,7 @@
     bottom: { widthPct: 100, heightPct: 100 },
   };
   let tabletLeftWidth = 232;
-  let tabletBottomHeight = 208;
+  let tabletBottomHeight = 260;
   $: tabletLayoutStyle = `--tab-left-width: ${tabletLeftWidth}px; --tab-bottom-height: ${tabletBottomHeight}px;`;
   type TabletSplitResizeAxis = 'x' | 'y';
   type TabletSplitResizeState = {
@@ -204,8 +204,8 @@
   }
 
   function getDefaultTabletBottomHeight() {
-    if (typeof window === 'undefined') return 208;
-    return Math.round(Math.min(230, Math.max(176, window.innerHeight * 0.24)));
+    if (typeof window === 'undefined') return 260;
+    return Math.round(Math.min(280, Math.max(200, window.innerHeight * 0.28)));
   }
 
   function clampTabletLeftWidth(next: number) {
@@ -2428,7 +2428,7 @@
      ═══════════════════════════════════════════ */
   .terminal-tablet {
     --tab-left-width: clamp(196px, 23vw, 232px);
-    --tab-bottom-height: clamp(176px, 24vh, 230px);
+    --tab-bottom-height: clamp(200px, 28vh, 280px);
     display: grid;
     grid-template-rows: minmax(0, 1fr) 6px var(--tab-bottom-height) auto;
     height: 100%;
@@ -2514,7 +2514,7 @@
   .tab-resize-handle-x {
     top: 10px;
     right: 0;
-    width: 12px;
+    width: 20px;
     height: calc(100% - 20px);
     cursor: ew-resize;
   }
@@ -2526,7 +2526,7 @@
     left: 10px;
     bottom: 0;
     width: calc(100% - 20px);
-    height: 12px;
+    height: 20px;
     cursor: ns-resize;
   }
   .tab-resize-handle-y::before {
