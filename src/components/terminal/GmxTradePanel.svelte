@@ -340,7 +340,7 @@
   }
   .gmx-panel {
     width: 100%; max-width: 420px;
-    background: #111; border-top: 2px solid var(--yel, #ffe600);
+    background: #111; border-top: 2px solid var(--yel, #E8967D);
     border-radius: 16px 16px 0 0;
     padding: 16px; display: flex; flex-direction: column; gap: 12px;
     animation: slideUp .25s ease-out;
@@ -358,11 +358,11 @@
 
   .gmx-markets { display: flex; gap: 6px; }
   .market-btn {
-    flex: 1; padding: 8px; border: 1px solid rgba(255,230,0,.15); border-radius: 8px;
-    background: rgba(255,230,0,.04); color: rgba(255,230,0,.5);
+    flex: 1; padding: 8px; border: 1px solid rgba(232,150,125,.15); border-radius: 8px;
+    background: rgba(232,150,125,.04); color: rgba(232,150,125,.5);
     font: 700 12px/1 var(--fm); cursor: pointer; transition: all .15s;
   }
-  .market-btn.active { background: rgba(255,230,0,.12); color: var(--yel); border-color: rgba(255,230,0,.4); }
+  .market-btn.active { background: rgba(232,150,125,.12); color: var(--yel); border-color: rgba(232,150,125,.4); }
 
   .gmx-direction { display: flex; gap: 8px; }
   .dir-btn {
@@ -382,7 +382,7 @@
     letter-spacing: 1px;
   }
   .gmx-field input {
-    background: rgba(255,255,255,.06); border: 1px solid rgba(255,230,0,.15); border-radius: 6px;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(232,150,125,.15); border-radius: 6px;
     padding: 10px 12px; color: #fff; font: 400 14px/1 var(--fm); outline: none;
   }
   .gmx-field input:focus { border-color: var(--yel); }
@@ -390,22 +390,22 @@
 
   .quick-amounts { display: flex; gap: 4px; margin-top: 4px; }
   .qa-btn {
-    flex: 1; padding: 5px; border: 1px solid rgba(255,230,0,.12); border-radius: 4px;
-    background: rgba(255,230,0,.04); color: rgba(255,230,0,.6);
+    flex: 1; padding: 5px; border: 1px solid rgba(232,150,125,.12); border-radius: 4px;
+    background: rgba(232,150,125,.04); color: rgba(232,150,125,.6);
     font: 400 10px/1 var(--fm); cursor: pointer; transition: all .15s;
   }
-  .qa-btn:hover { background: rgba(255,230,0,.1); color: var(--yel); }
+  .qa-btn:hover { background: rgba(232,150,125,.1); color: var(--yel); }
 
   .balance-hint { font: 400 10px/1 var(--fm); color: rgba(255,255,255,.3); margin-top: 2px; }
 
   .leverage-btns { display: flex; gap: 4px; }
   .lev-btn {
-    flex: 1; padding: 7px 4px; border: 1px solid rgba(255,230,0,.12); border-radius: 6px;
-    background: rgba(255,230,0,.04); color: rgba(255,230,0,.5);
+    flex: 1; padding: 7px 4px; border: 1px solid rgba(232,150,125,.12); border-radius: 6px;
+    background: rgba(232,150,125,.04); color: rgba(232,150,125,.5);
     font: 700 11px/1 var(--fm); cursor: pointer; transition: all .15s;
   }
-  .lev-btn.active { background: rgba(255,230,0,.15); color: var(--yel); border-color: rgba(255,230,0,.4); }
-  .lev-btn:hover { background: rgba(255,230,0,.08); }
+  .lev-btn.active { background: rgba(232,150,125,.15); color: var(--yel); border-color: rgba(232,150,125,.4); }
+  .lev-btn:hover { background: rgba(232,150,125,.08); }
 
   .gmx-summary {
     display: flex; flex-direction: column; gap: 6px;
@@ -435,14 +435,14 @@
   .gmx-status.error .status-icon { color: #FF5E7A; }
 
   .status-spinner {
-    width: 28px; height: 28px; border: 2px solid rgba(255,230,0,.2);
+    width: 28px; height: 28px; border: 2px solid rgba(232,150,125,.2);
     border-top-color: var(--yel); border-radius: 50%;
     animation: spin .7s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .tx-link {
-    font: 400 11px/1 var(--fm); color: rgba(255,230,0,.7);
+    font: 400 11px/1 var(--fm); color: rgba(232,150,125,.7);
     text-decoration: none; margin-top: 4px;
   }
   .tx-link:hover { color: var(--yel); text-decoration: underline; }

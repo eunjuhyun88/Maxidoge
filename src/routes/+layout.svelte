@@ -188,7 +188,7 @@
     flex-direction: column;
     height: 100dvh;
     min-height: 100vh;
-    padding-top: 42px;
+    padding-top: 36px;
     overflow: hidden;
     position: relative;
   }
@@ -202,6 +202,7 @@
     #app {
       height: 100svh;
       min-height: 100svh;
+      padding-top: 72px;
     }
     #main-content {
       overflow: auto;

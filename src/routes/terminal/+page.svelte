@@ -881,7 +881,7 @@
   };
 
   let chatMessages: ChatMsg[] = [
-    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'Stockclaw Orchestrator v8 online. 8 agents standing by. Scan first, then ask questions about the results.', time: '—', isUser: false, isSystem: true },
+    { from: 'SYSTEM', icon: '🤖', color: '#E8967D', text: 'Stockclaw Orchestrator v8 online. 8 agents standing by. Scan first, then ask questions about the results.', time: '—', isUser: false, isSystem: true },
     { from: 'ORCHESTRATOR', icon: '🧠', color: '#ff2d9b',
       text: '💡 Try these:\n• "BTC 전망 분석해줘" — I\'ll route to the right agents\n• "차트패턴 찾아봐" — 보이는 구간 패턴을 차트에 바로 표시\n• "@STRUCTURE MA, RSI 분석" — Direct to Structure agent\n• "@DERIV 펀딩 + OI 어때?" — Derivatives analysis\n• "@FLOW 고래 움직임?" — On-chain + whale flow\n• "@SENTI 소셜 센티먼트" — F&G + LunarCrush social\n• "@MACRO DXY, 금리 영향?" — Macro regime check',
       time: '—', isUser: false },
@@ -1185,7 +1185,7 @@
     const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     // 유저 메시지 즉시 표시
-    chatMessages = [...chatMessages, { from: 'YOU', icon: '🐕', color: '#ffe600', text, time, isUser: true }];
+    chatMessages = [...chatMessages, { from: 'YOU', icon: '🐕', color: '#E8967D', text, time, isUser: true }];
     isTyping = true;
 
     // 멘션된 에이전트 감지 (없으면 서버에서 ORCHESTRATOR로 기본 처리)
@@ -1328,7 +1328,7 @@
 
     // 1) 스캔 시작 시스템 메시지
     chatMessages = [...chatMessages, {
-      from: 'SYSTEM', icon: '⚡', color: '#ffe600',
+      from: 'SYSTEM', icon: '⚡', color: '#E8967D',
       text: `SCAN COMPLETE — ${d.pair} ${d.timeframe.toUpperCase()} (${d.label})`,
       time, isUser: false, isSystem: true,
     }];
@@ -2026,8 +2026,8 @@
     background: transparent;
     padding: 0;
     margin: 0;
-    opacity: 0.42;
-    transition: opacity .12s ease;
+    opacity: 0;
+    transition: opacity .2s ease;
   }
   .desk-resize-handle::before {
     content: '';
@@ -2035,33 +2035,33 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     border-radius: 999px;
-    background: rgba(245, 196, 184, 0.45);
+    background: rgba(232, 150, 125, 0.5);
   }
   .desk-resize-handle:hover,
   .desk-resize-handle:focus-visible {
-    opacity: 0.92;
+    opacity: 0.7;
     outline: none;
   }
   .desk-resize-handle-x {
     top: 12px;
     right: 0;
-    width: 12px;
+    width: 8px;
     height: calc(100% - 24px);
     cursor: ew-resize;
   }
   .desk-resize-handle-x::before {
     width: 2px;
-    height: 46%;
+    height: 36%;
   }
   .desk-resize-handle-y {
     left: 12px;
     bottom: 0;
     width: calc(100% - 24px);
-    height: 12px;
+    height: 8px;
     cursor: ns-resize;
   }
   .desk-resize-handle-y::before {
-    width: 46%;
+    width: 36%;
     height: 2px;
   }
 
@@ -2105,7 +2105,7 @@
     transition: background .15s;
   }
   .resizer-h:hover {
-    background: rgba(255, 230, 0, 0.15);
+    background: rgba(232, 150, 125, 0.15);
   }
   .resizer-spacer {
     width: 1px;
@@ -2353,8 +2353,8 @@
     background: transparent;
     padding: 0;
     margin: 0;
-    opacity: 0.45;
-    transition: opacity .12s ease;
+    opacity: 0;
+    transition: opacity .2s ease;
     touch-action: none;
     user-select: none;
   }
@@ -2364,11 +2364,11 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     border-radius: 999px;
-    background: rgba(245, 196, 184, 0.44);
+    background: rgba(232, 150, 125, 0.5);
   }
   .mob-resize-handle:hover,
   .mob-resize-handle:focus-visible {
-    opacity: 0.95;
+    opacity: 0.7;
     outline: none;
   }
   .mob-resize-handle-x {
@@ -2541,8 +2541,8 @@
     background: transparent;
     padding: 0;
     margin: 0;
-    opacity: 0.42;
-    transition: opacity .12s ease;
+    opacity: 0;
+    transition: opacity .2s ease;
   }
   .tab-resize-handle::before {
     content: '';
@@ -2550,11 +2550,11 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     border-radius: 999px;
-    background: rgba(245, 196, 184, 0.45);
+    background: rgba(232, 150, 125, 0.5);
   }
   .tab-resize-handle:hover,
   .tab-resize-handle:focus-visible {
-    opacity: 0.92;
+    opacity: 0.7;
     outline: none;
   }
   .tab-resize-handle-x {

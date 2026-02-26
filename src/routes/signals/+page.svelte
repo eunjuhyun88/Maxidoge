@@ -85,7 +85,7 @@
   }
 
   function priorityColor(p: string): string {
-    return p === 'CRITICAL' ? '#ff2d55' : p === 'HIGH' ? '#ff8c3b' : p === 'MEDIUM' ? '#ffe600' : '#00ff88';
+    return p === 'CRITICAL' ? '#ff2d55' : p === 'HIGH' ? '#ff8c3b' : p === 'MEDIUM' ? '#E8967D' : '#00ff88';
   }
 
   function sourceLabel(s: string): string {

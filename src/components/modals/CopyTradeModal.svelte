@@ -288,7 +288,7 @@
     background: #0c0c1e;
     border: 3px solid var(--yel);
     border-radius: 16px;
-    box-shadow: 0 0 40px rgba(255,230,0,.15), 8px 8px 0 #000;
+    box-shadow: 0 0 40px rgba(232,150,125,.15), 8px 8px 0 #000;
     display: flex; flex-direction: column;
     overflow: hidden;
   }
@@ -312,8 +312,8 @@
   .ct-steps {
     display: flex; align-items: center; justify-content: center; gap: 4px;
     padding: 8px 16px;
-    border-bottom: 2px solid rgba(255,230,0,.1);
-    background: rgba(255,230,0,.02);
+    border-bottom: 2px solid rgba(232,150,125,.1);
+    background: rgba(232,150,125,.02);
   }
   .ct-step {
     font-family: var(--fm); font-size: 7px; font-weight: 900;
@@ -321,7 +321,7 @@
     padding: 2px 8px; border-radius: 4px;
     border: 1px solid rgba(255,255,255,.06);
   }
-  .ct-step.active { color: rgba(255,255,255,.5); border-color: rgba(255,230,0,.2); }
+  .ct-step.active { color: rgba(255,255,255,.5); border-color: rgba(232,150,125,.2); }
   .ct-step.current { color: #000; background: var(--yel); border-color: var(--yel); }
   .ct-step-arrow { font-size: 8px; color: rgba(255,255,255,.15); }
 
@@ -358,7 +358,7 @@
   .ct-consensus {
     display: flex; align-items: center; gap: 6px;
     padding: 8px 10px; border-radius: 6px;
-    background: rgba(255,230,0,.04); border: 1.5px solid rgba(255,230,0,.15);
+    background: rgba(232,150,125,.04); border: 1.5px solid rgba(232,150,125,.15);
   }
   .ct-cons-label { font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.4); }
   .ct-cons-dir {
@@ -449,7 +449,7 @@
   .ct-rr {
     display: flex; align-items: center; justify-content: center; gap: 8px;
     padding: 8px; border-radius: 6px;
-    background: rgba(255,230,0,.04); border: 1px solid rgba(255,230,0,.15);
+    background: rgba(232,150,125,.04); border: 1px solid rgba(232,150,125,.15);
   }
   .ct-rr-label { font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.4); }
   .ct-rr-val { font-family: var(--fd); font-size: 20px; font-weight: 900; color: var(--yel); }

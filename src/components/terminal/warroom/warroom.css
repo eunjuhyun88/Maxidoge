@@ -2,7 +2,7 @@
 
   .war-room {
     background: #0A0908; display: flex; flex-direction: column; overflow: hidden;
-    height: 100%; border-right: 3px solid var(--yel); position: relative;
+    height: 100%; border-right: 1px solid rgba(232,150,125,0.2); position: relative;
     scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.08) transparent;
   }
   .war-room *::-webkit-scrollbar { width: 3px; height: 3px; }
@@ -13,27 +13,27 @@
   /* ═══ Compact Header (Row 1: Pair + TF + Scan status) ═══ */
   .wr-header-compact {
     height: 36px; padding: 0 12px; flex-shrink: 0;
-    background: var(--yel); border-bottom: 2px solid #000;
+    background: #0d2316; border-bottom: 1px solid rgba(232,150,125,0.2);
     display: flex; align-items: center; gap: 8px; position: relative; z-index: 2;
   }
   .wr-pair {
     font-family: var(--fm); font-size: 12px; font-weight: 900;
-    letter-spacing: 0.5px; color: #000;
+    letter-spacing: 0.5px; color: #F0EDE4;
   }
   .wr-tf {
     font-family: var(--fm); font-size: 10px; font-weight: 800;
     padding: 1px 6px; border-radius: 4px;
-    background: rgba(0,0,0,.12); color: rgba(0,0,0,.7);
+    background: rgba(232,150,125,.1); color: rgba(232,150,125,.7);
   }
   .wr-scan-dot {
-    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
   }
-  .wr-scan-dot.scanning { background: #000; animation: wr-blink .8s infinite; }
+  .wr-scan-dot.scanning { background: #E8967D; animation: wr-blink .8s infinite; }
   .wr-scan-dot.error { background: var(--red); }
-  .wr-scan-dot.done { background: rgba(0,0,0,.3); }
+  .wr-scan-dot.done { background: rgba(240,237,228,.3); }
   .wr-scan-label {
     font-family: var(--fm); font-size: 9px; font-weight: 700;
-    color: rgba(0,0,0,.55); letter-spacing: 0.3px;
+    color: rgba(240,237,228,.55); letter-spacing: 0.3px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     max-width: 120px;
   }
@@ -42,22 +42,22 @@
   .wr-scan-btn {
     flex-shrink: 0; padding: 3px 10px; margin-right: 4px;
     font-family: var(--fm, monospace); font-size: 9px; font-weight: 900; letter-spacing: 0.5px;
-    background: rgba(0,0,0,.15); border: 1px solid rgba(0,0,0,.3);
-    border-radius: 4px; color: #000; cursor: pointer; transition: all .12s;
+    background: rgba(232,150,125,.1); border: 1px solid rgba(232,150,125,.25);
+    border-radius: 4px; color: #E8967D; cursor: pointer; transition: all .12s;
   }
-  .wr-scan-btn:hover { background: rgba(0,0,0,.25); border-color: rgba(0,0,0,.5); }
+  .wr-scan-btn:hover { background: rgba(232,150,125,.2); border-color: rgba(232,150,125,.45); }
   .wr-scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .wr-collapse-btn {
     flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
     height: 24px; width: 24px; padding: 0;
-    background: rgba(0,0,0,.1); border: 1px solid rgba(0,0,0,.25);
-    border-radius: 4px; cursor: pointer; color: #111; transition: all .12s;
+    background: rgba(232,150,125,.06); border: 1px solid rgba(232,150,125,.15);
+    border-radius: 4px; cursor: pointer; color: rgba(240,237,228,.5); transition: all .12s;
   }
-  .wr-collapse-btn:hover { background: #000; border-color: #000; color: var(--yel); }
+  .wr-collapse-btn:hover { background: rgba(232,150,125,.12); border-color: rgba(232,150,125,.3); color: #E8967D; }
 
   /* ═══ Compact Derivatives (Row 2: single line) ═══ */
   .wr-deriv-compact {
-    display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
     padding: 4px 12px; position: relative; z-index: 2;
     background: rgba(0,0,0,.45); border-bottom: 1px solid rgba(255,255,255,.05);
     overflow-x: auto; overflow-y: hidden;
@@ -76,11 +76,11 @@
     background: rgba(255,255,255,.03);
   }
   .wr-dc-lbl {
-    font-family: var(--fm); font-size: 8px; font-weight: 700;
+    font-family: var(--fm); font-size: 9px; font-weight: 700;
     letter-spacing: 0.5px; color: rgba(255,255,255,.3);
   }
   .wr-dc-val {
-    font-family: var(--fd); font-size: 10px; font-weight: 800;
+    font-family: var(--fd); font-size: 11px; font-weight: 800;
     color: rgba(255,255,255,.7);
   }
   .wr-dc-val.pos { color: var(--grn); }
@@ -101,14 +101,14 @@
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
-    scrollbar-color: rgba(255,230,0,.35) transparent;
+    scrollbar-color: rgba(232,150,125,.35) transparent;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x;
     scroll-behavior: smooth;
     overscroll-behavior-x: contain;
   }
   .scan-tabs::-webkit-scrollbar { height: 3px; }
-  .scan-tabs::-webkit-scrollbar-thumb { background: rgba(255,230,0,.35); border-radius: 999px; }
+  .scan-tabs::-webkit-scrollbar-thumb { background: rgba(232,150,125,.35); border-radius: 999px; }
   .scan-tabs::-webkit-scrollbar-track { background: transparent; }
   .scan-tab {
     display: flex;
@@ -129,16 +129,16 @@
   }
   .scan-tab:hover { color: rgba(255,255,255,.8); border-color: rgba(255,255,255,.15); }
   .scan-tab.active {
-    color: var(--yel);
-    border-color: rgba(255,230,0,.4);
-    background: rgba(255,230,0,.08);
+    color: #E8967D;
+    border-color: rgba(232,150,125,.4);
+    background: rgba(232,150,125,.08);
   }
   .scan-tab-token {
     color: rgba(255,255,255,.85);
     font-weight: 900;
   }
   .scan-tab-meta {
-    color: rgba(255,230,0,.65);
+    color: rgba(232,150,125,.65);
     font-weight: 700;
   }
   .scan-tab-history {
@@ -161,14 +161,14 @@
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
-    scrollbar-color: rgba(255,230,0,.35) transparent;
+    scrollbar-color: rgba(232,150,125,.35) transparent;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x;
     scroll-behavior: smooth;
     overscroll-behavior-x: contain;
   }
   .token-tabs::-webkit-scrollbar { height: 3px; }
-  .token-tabs::-webkit-scrollbar-thumb { background: rgba(255,230,0,.35); border-radius: 999px; }
+  .token-tabs::-webkit-scrollbar-thumb { background: rgba(232,150,125,.35); border-radius: 999px; }
   .token-tabs::-webkit-scrollbar-track { background: transparent; }
   .token-tab {
     flex: 0 0 auto;
@@ -190,7 +190,7 @@
     cursor: pointer; transition: color .15s, border-color .15s;
   }
   .token-tab:hover { color: rgba(255,255,255,.75); border-color: rgba(255,255,255,.15); }
-  .token-tab.active { color: var(--yel); border-color: rgba(255,230,0,.4); background: rgba(255,230,0,.08); }
+  .token-tab.active { color: #E8967D; border-color: rgba(232,150,125,.4); background: rgba(232,150,125,.08); }
   .token-tab.active.btc { color: #f7931a; border-color: rgba(247,147,26,.5); background: rgba(247,147,26,.08); }
   .token-tab.active.eth { color: #8ea0ff; border-color: rgba(98,126,234,.5); background: rgba(98,126,234,.08); }
   .token-tab.active.sol { color: #b57bff; border-color: rgba(153,69,255,.5); background: rgba(153,69,255,.08); }
@@ -198,14 +198,14 @@
     font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
     background: rgba(255,255,255,.08); color: rgba(255,255,255,.5);
   }
-  .token-tab.active .token-tab-count { background: rgba(255,230,0,.15); color: var(--yel); }
+  .token-tab.active .token-tab-count { background: rgba(232,150,125,.15); color: #E8967D; }
 
   /* Old deriv-strip, scan-status removed — replaced by wr-deriv-compact and header scan dot */
 
   /* ═══ Select All Bar ═══ */
   .select-bar {
     display: flex; align-items: center; gap: 8px; padding: 5px 12px;
-    background: rgba(255,230,0,.02); border-bottom: 1px solid rgba(255,255,255,.04);
+    background: rgba(232,150,125,.02); border-bottom: 1px solid rgba(255,255,255,.04);
     flex-shrink: 0; position: relative; z-index: 1;
   }
   .select-all-btn {
@@ -216,10 +216,10 @@
   }
   .select-all-btn:hover { color: rgba(255,255,255,.7); }
   .sa-check { font-size: 13px; color: rgba(255,255,255,.2); line-height: 1; }
-  .sa-check.checked { color: var(--yel); }
+  .sa-check.checked { color: #E8967D; }
   .select-count {
     font-family: var(--fm); font-size: 9px; font-weight: 700;
-    color: var(--yel); background: rgba(255,230,0,.08); padding: 2px 8px; border-radius: 8px;
+    color: #E8967D; background: rgba(232,150,125,.08); padding: 2px 8px; border-radius: 8px;
   }
 
   /* ═══ Signal Feed ═══ */
@@ -241,7 +241,7 @@
     transition: background .1s; cursor: pointer;
   }
   .wr-msg:hover { background: rgba(255,255,255,.02); }
-  .wr-msg.selected { background: rgba(255,230,0,.03); border-left: 2px solid var(--yel); }
+  .wr-msg.selected { background: rgba(232,150,125,.03); border-left: 2px solid #E8967D; }
 
   @supports (animation-timeline: view()) {
     .wr-msg {
@@ -268,7 +268,7 @@
   .wr-msg.selected .wr-msg-strip { width: 0; }
   .wr-msg-checkbox { display: flex; align-items: flex-start; padding: 10px 3px 0 8px; flex-shrink: 0; }
   .msg-check { font-size: 13px; color: rgba(255,255,255,.15); line-height: 1; }
-  .msg-check.checked { color: var(--yel); }
+  .msg-check.checked { color: #E8967D; }
   .wr-msg-body { flex: 1; padding: 10px 12px 10px 6px; }
   .wr-msg-head { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; flex-wrap: wrap; }
   .wr-msg-icon {
@@ -293,13 +293,13 @@
     padding: 2px 5px; border-radius: 3px; background: rgba(255,255,255,.05); color: rgba(255,255,255,.6);
   }
   .wr-msg-vote {
-    font-family: var(--fm); font-size: 13px; font-weight: 900;
+    font-family: var(--fm); font-size: 11px; font-weight: 900;
     padding: 2px 8px; border: 1px solid; border-radius: 4px; letter-spacing: .8px;
   }
   .wr-msg-vote.short { color: var(--red); border-color: rgba(255,45,85,.3); background: rgba(255,45,85,.08); }
   .wr-msg-vote.long { color: var(--grn); border-color: rgba(0,230,118,.3); background: rgba(0,230,118,.08); }
   .wr-msg-vote.neutral { color: rgba(255,255,255,.3); border-color: rgba(255,255,255,.08); }
-  .wr-msg-conf { font-family: var(--fd); font-size: 16px; font-weight: 900; color: #fff; }
+  .wr-msg-conf { font-family: var(--fd); font-size: 14px; font-weight: 900; color: #fff; }
   .wr-msg-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); margin-left: auto; }
   .wr-msg-text {
     font-family: var(--fm); font-size: 11px; line-height: 1.5; color: rgba(255,255,255,.6);
@@ -314,7 +314,7 @@
   .wr-msg-arrow-price { color: rgba(255,255,255,.3); font-size: 9px; }
   .wr-msg-tp { color: var(--grn); }
   .wr-msg-sl { color: var(--red); }
-  .wr-msg-src { font-family: var(--fm); font-size: 9px; color: rgba(255,230,0,.6); }
+  .wr-msg-src { font-family: var(--fm); font-size: 9px; color: rgba(232,150,125,.6); }
   .wr-msg-actions { display: flex; align-items: center; gap: 5px; margin-top: 6px; }
   .wr-act-btn {
     font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: .5px;
@@ -342,7 +342,7 @@
     font-family: var(--fd);
     font-size: 12px;
     letter-spacing: 2px;
-    color: rgba(255,230,0,.6);
+    color: rgba(232,150,125,.6);
   }
   .wr-empty-text {
     font-family: var(--fm);
@@ -361,9 +361,9 @@
     margin-top: 12px;
     padding: 8px 20px;
     border-radius: 6px;
-    border: 1.5px solid rgba(255,230,0,.4);
-    background: rgba(255,230,0,.08);
-    color: var(--yel);
+    border: 1.5px solid rgba(232,150,125,.4);
+    background: rgba(232,150,125,.08);
+    color: #E8967D;
     font-family: var(--fm);
     font-size: 10px;
     font-weight: 900;
@@ -372,27 +372,27 @@
     transition: all .15s;
   }
   .wr-empty-scan-btn:hover {
-    background: rgba(255,230,0,.18);
-    border-color: var(--yel);
-    box-shadow: 0 0 12px rgba(255,230,0,.15);
+    background: rgba(232,150,125,.18);
+    border-color: #E8967D;
+    box-shadow: 0 0 12px rgba(232,150,125,.15);
   }
 
   /* ═══ Copy Trade CTA ═══ */
   .copy-trade-cta {
     width: 100%; display: flex; align-items: center; gap: 8px;
     padding: 10px 14px;
-    background: linear-gradient(90deg, rgba(255,230,0,.1), rgba(255,230,0,.03));
-    border: none; border-top: 2px solid var(--yel);
+    background: linear-gradient(90deg, rgba(232,150,125,.1), rgba(232,150,125,.03));
+    border: none; border-top: 2px solid #E8967D;
     cursor: pointer; transition: background .15s;
     flex-shrink: 0; position: relative; z-index: 2;
   }
-  .copy-trade-cta:hover { background: linear-gradient(90deg, rgba(255,230,0,.18), rgba(255,230,0,.06)); }
-  .ctc-text { font-family: var(--fd); font-size: 11px; font-weight: 900; letter-spacing: 2px; color: var(--yel); }
+  .copy-trade-cta:hover { background: linear-gradient(90deg, rgba(232,150,125,.18), rgba(232,150,125,.06)); }
+  .ctc-text { font-family: var(--fd); font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #E8967D; }
   .ctc-count {
     font-family: var(--fm); font-size: 9px; font-weight: 700;
-    color: #000; background: var(--yel); padding: 2px 7px; border-radius: 8px;
+    color: #000; background: #E8967D; padding: 2px 7px; border-radius: 8px;
   }
-  .ctc-arrow { margin-left: auto; font-family: var(--fm); font-size: 12px; color: var(--yel); }
+  .ctc-arrow { margin-left: auto; font-family: var(--fm); font-size: 12px; color: #E8967D; }
 
   /* ═══ Signal Link / Signal Room CTA ═══ */
   .signal-link {
@@ -416,13 +416,13 @@
 
   /* ═══ Stats Footer ═══ */
   .wr-stats {
-    border-top: 3px solid var(--yel); display: grid; grid-template-columns: repeat(4, 1fr);
-    flex-shrink: 0; position: relative; z-index: 1; background: rgba(255,230,0,.02);
+    border-top: 1px solid rgba(232,150,125,0.2); display: grid; grid-template-columns: repeat(4, 1fr);
+    flex-shrink: 0; position: relative; z-index: 1; background: rgba(232,150,125,.02);
   }
   .stat-cell { padding: 6px 4px; text-align: center; border-right: 1px solid rgba(255,255,255,.05); }
   .stat-cell:last-child { border-right: none; }
-  .stat-lbl { font-family: var(--fm); font-size: 9px; color: rgba(255,230,0,.5); letter-spacing: 1.2px; margin-bottom: 1px; }
-  .stat-val { font-family: var(--fdisplay); font-size: 16px; letter-spacing: 1px; line-height: 1.1; }
+  .stat-lbl { font-family: var(--fm); font-size: 9px; color: rgba(232,150,125,.5); letter-spacing: 1.2px; margin-bottom: 1px; }
+  .stat-val { font-family: var(--fdisplay); font-size: 14px; letter-spacing: 1px; line-height: 1.1; }
 
   /* ═══ Scan Diff Visualization ═══ */
   .wr-msg-new {
@@ -470,8 +470,8 @@
   .wr-diff-delta.neg { color: var(--red); background: rgba(255,45,85,.08); }
 
   .wr-conf-bar {
-    height: 3px; width: 100%; border-radius: 2px;
-    background: rgba(255,255,255,.04); margin: 4px 0 3px;
+    height: 4px; width: 100%; border-radius: 2px;
+    background: rgba(255,255,255,.04); margin: 4px 0 4px;
     overflow: hidden;
   }
   .wr-conf-fill {

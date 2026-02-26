@@ -159,9 +159,9 @@
     letter-spacing: 1.2px;
     padding: 1px 5px;
     border-radius: 3px;
-    background: rgba(255,230,0,.15);
-    color: var(--yel, #ffe600);
-    border: 1px solid rgba(255,230,0,.3);
+    background: rgba(232,150,125,.15);
+    color: var(--yel, #E8967D);
+    border: 1px solid rgba(232,150,125,.3);
   }
   .badge-cmd {
     background: rgba(255,45,155,.15);
@@ -215,8 +215,8 @@
 
   /* ORPO Card */
   .card-orpo {
-    border-color: rgba(255,230,0,.2);
-    background: rgba(255,230,0,.04);
+    border-color: rgba(232,150,125,.2);
+    background: rgba(232,150,125,.04);
   }
   .orpo-pattern {
     font-size: 9px;

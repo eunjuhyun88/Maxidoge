@@ -21,7 +21,7 @@
 
   const RISK_OPTIONS: { value: RiskLevel; label: string; emoji: string; desc: string; color: string }[] = [
     { value: 'low', label: 'LOW', emoji: '🛡', desc: 'Conservative. Tight SL, low leverage.', color: '#00cc66' },
-    { value: 'mid', label: 'MID', emoji: '⚖️', desc: 'Balanced risk/reward.', color: '#ffe600' },
+    { value: 'mid', label: 'MID', emoji: '⚖️', desc: 'Balanced risk/reward.', color: '#E8967D' },
     { value: 'aggro', label: 'AGGRO', emoji: '🔥', desc: 'High risk, high reward. Wide SL.', color: '#ff2d55' }
   ];
 
@@ -194,8 +194,8 @@
     position: absolute;
     inset: 0;
     z-index: 45;
-    background: #ffe600;
-    background-image: repeating-conic-gradient(#ffcc00 0deg 10deg, #ffe600 10deg 20deg);
+    background: #E8967D;
+    background-image: repeating-conic-gradient(#d07a64 0deg 10deg, #E8967D 10deg 20deg);
     overflow-y: auto;
     padding: 16px;
     display: flex;
@@ -316,7 +316,7 @@
     font-size: 16px;
     font-weight: 900;
     color: #000;
-    background: #ffe600;
+    background: #E8967D;
     border: 2px solid #000;
     border-radius: 8px;
     padding: 1px 10px;
@@ -356,8 +356,8 @@
   .pill:hover:not(.sel) { border-color: #999; background: #f5f5f5; }
   .pill.sel {
     border-color: #000;
-    background: var(--pill-color, #ffe600);
-    box-shadow: 0 0 0 2px var(--pill-color, #ffe600), 3px 3px 0 #000;
+    background: var(--pill-color, #E8967D);
+    box-shadow: 0 0 0 2px var(--pill-color, #E8967D), 3px 3px 0 #000;
     transform: scale(1.05);
   }
   .pill-emoji { font-size: 16px; }
@@ -408,7 +408,7 @@
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: #ffe600;
+    background: #E8967D;
     border: 3px solid #000;
     cursor: pointer;
     box-shadow: 2px 2px 0 #000;
@@ -471,7 +471,7 @@
     font-family: var(--fd);
     font-size: 12px;
     font-weight: 900;
-    color: #ffe600;
+    color: #E8967D;
     letter-spacing: 1px;
   }
   .sum-divider {

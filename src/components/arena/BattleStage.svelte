@@ -86,8 +86,8 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #ffe600;
-    background-image: repeating-conic-gradient(#ffcc00 0deg 10deg, #ffe600 10deg 20deg);
+    background: #E8967D;
+    background-image: repeating-conic-gradient(#d07a64 0deg 10deg, #E8967D 10deg 20deg);
     border-left: 4px solid #000;
   }
   .sunburst {

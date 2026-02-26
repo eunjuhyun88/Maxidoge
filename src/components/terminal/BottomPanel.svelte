@@ -213,7 +213,7 @@
     gap: 0;
     flex-shrink: 0;
     background: linear-gradient(90deg, #0f0f28, #1a0f28);
-    border-bottom: 1px solid rgba(255,230,0,.1);
+    border-bottom: 1px solid rgba(232,150,125,.1);
   }
   .bp-tab {
     padding: 6px 12px;
@@ -235,7 +235,7 @@
   .bp-tab.active {
     color: var(--yel);
     border-bottom-color: var(--yel);
-    background: rgba(255,230,0,.04);
+    background: rgba(232,150,125,.04);
   }
   .bp-badge {
     font-size: 7px;

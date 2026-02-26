@@ -16,11 +16,11 @@
   export let executionEnabled: boolean = false;
 
   $: biasLabel = bias === 'long' ? 'LONG' : bias === 'short' ? 'SHORT' : 'WAIT';
-  $: biasColor = bias === 'long' ? '#00e676' : bias === 'short' ? '#ff2d55' : '#ffe600';
+  $: biasColor = bias === 'long' ? '#00e676' : bias === 'short' ? '#ff2d55' : '#E8967D';
 </script>
 
 {#if loading}
-  <div class="vc" style="--bc:rgba(255,230,0,.15)">
+  <div class="vc" style="--bc:rgba(232,150,125,.15)">
     <div class="vc-skel"></div>
   </div>
 {:else if bias !== 'wait' || confidence > 0}
@@ -45,7 +45,7 @@
     display: flex; align-items: center; gap: 6px;
     padding: 5px 10px;
     background: rgba(255,255,255,.02);
-    border-bottom: 2px solid var(--bc, #ffe600);
+    border-bottom: 2px solid var(--bc, #E8967D);
     font-family: var(--fm, 'SF Mono', monospace);
     flex-shrink: 0; min-height: 0;
     overflow: hidden;
@@ -63,7 +63,7 @@
   }
   .vc-dir.long  { background: rgba(0,230,118,.15); color: #00e676; }
   .vc-dir.short { background: rgba(255,45,85,.15);  color: #ff2d55; }
-  .vc-dir.wait  { background: rgba(255,230,0,.1);   color: #ffe600; }
+  .vc-dir.wait  { background: rgba(232,150,125,.1);   color: #E8967D; }
 
   .vc-conf {
     font-size: 15px; font-weight: 900; color: #fff;

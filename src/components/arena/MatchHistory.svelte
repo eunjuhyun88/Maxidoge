@@ -54,7 +54,7 @@
           <span class="sum-label">AVG LP</span>
         </div>
         <div class="sum-stat">
-          <span class="sum-val" style="color:#ffe600">{bs}</span>
+          <span class="sum-val" style="color:#E8967D">{bs}</span>
           <span class="sum-label">BEST STREAK</span>
         </div>
       </div>
@@ -150,7 +150,7 @@
     width: 340px;
     height: 100%;
     background: #0a0a1a;
-    border-left: 4px solid #ffe600;
+    border-left: 4px solid #E8967D;
     display: flex;
     flex-direction: column;
     animation: mhSlideIn .25s ease;
@@ -165,7 +165,7 @@
     align-items: center;
     gap: 8px;
     padding: 12px 14px;
-    background: linear-gradient(90deg, #ffe600, #ffcc00);
+    background: linear-gradient(90deg, #E8967D, #d07a64);
     border-bottom: 3px solid #000;
     color: #000;
     flex-shrink: 0;
@@ -200,7 +200,7 @@
     display: flex;
     padding: 10px 14px;
     gap: 8px;
-    border-bottom: 2px solid rgba(255,230,0,.1);
+    border-bottom: 2px solid rgba(232,150,125,.1);
     flex-shrink: 0;
   }
   .sum-stat {
@@ -329,7 +329,7 @@
     font-family: var(--fd);
     font-size: 7px;
     font-weight: 900;
-    color: #ffe600;
+    color: #E8967D;
     background: #000;
     padding: 1px 5px;
     border-radius: 4px;
@@ -377,14 +377,14 @@
     letter-spacing: 1px;
   }
   .mhd-cons-badge.consensus { background: #00ff88; color: #000; }
-  .mhd-cons-badge.partial { background: #ffe600; color: #000; }
+  .mhd-cons-badge.partial { background: #E8967D; color: #000; }
   .mhd-cons-badge.dissent { background: #ff2d55; color: #fff; }
   .mhd-cons-badge.override { background: #c840ff; color: #fff; }
   .mhd-cons-mult {
     font-family: var(--fd);
     font-size: 8px;
     font-weight: 900;
-    color: #ffe600;
+    color: #E8967D;
   }
 
   .mhd-result-tag {
@@ -398,7 +398,7 @@
 
   .mh-footer {
     padding: 8px 14px;
-    border-top: 2px solid rgba(255,230,0,.2);
+    border-top: 2px solid rgba(232,150,125,.2);
     display: flex;
     gap: 16px;
     font-family: var(--fm);
@@ -406,5 +406,5 @@
     color: #888;
     flex-shrink: 0;
   }
-  .mh-footer b { color: #ffe600; }
+  .mh-footer b { color: #E8967D; }
 </style>
