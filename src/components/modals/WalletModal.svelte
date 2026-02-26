@@ -269,7 +269,7 @@
     try {
       const res = await loginAuth({
         email: payload.email,
-        nickname: payload.nickname,
+        nickname: payload.nickname ?? '',
         walletAddress: state.address,
         walletMessage: walletProof.walletMessage,
         walletSignature: walletProof.walletSignature,
