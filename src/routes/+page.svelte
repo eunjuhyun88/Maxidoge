@@ -369,12 +369,16 @@
       bind:this={heroRightEl}
       aria-label="Feature explorer"
     >
+      <div class="hero-right-head ha ha-r" style="--ha-d:0.14s">
+        <span class="fr-k">//OUR FEATURES</span>
+        <span class="fr-hint">SCROLL TO EXPLORE</span>
+      </div>
       {#each FEATURES as feat, i}
         <button
           type="button"
           class="fc ha ha-r"
           class:fc-active={selectedFeature === i}
-          style="--ha-d:{0.2 + i * 0.12}s"
+          style="--ha-d:{0.24 + i * 0.12}s"
           aria-controls="hero-feature-detail"
           aria-expanded={selectedFeature === i}
           aria-pressed={selectedFeature === i}
@@ -701,7 +705,11 @@
     --space-hero-y-bottom: clamp(24px, 3vw, 40px);
     --fs-kicker: clamp(8px, 0.95vw, 11px);
     --fs-meta: clamp(8px, 0.95vw, 10.5px);
-    --fs-copy: clamp(11px, 1.14vw, 14px);
+    --fs-copy: clamp(10.5px, 1.05vw, 13px);
+    --fs-subhead: clamp(14px, 1.6vw, 22px);
+    --fs-prop: clamp(10px, 1vw, 12px);
+    --fs-chip-k: clamp(7.5px, 0.82vw, 9.5px);
+    --fs-chip-v: clamp(11px, 1.12vw, 14px);
     --fs-hero-white: clamp(30px, 5.4vw, 74px);
     --fs-hero-pink: clamp(34px, 6vw, 84px);
     --ls-kicker: clamp(1px, 0.24vw, 2.2px);
@@ -1131,27 +1139,31 @@
 
   /* Hero subtitle + value props + CTAs */
   .hero-sub {
-    font-family: var(--fp); font-size: var(--fs-copy);
+    font-family: var(--fp); font-size: var(--fs-subhead);
     color: var(--sp-pk); letter-spacing: var(--ls-copy); margin-top: clamp(12px, 1.7vw, 20px);
     text-shadow: 0 0 8px var(--sp-glow);
-    max-width: 56ch;
-    line-height: 1.58;
+    max-width: 42ch;
+    line-height: 1.46;
     text-wrap: balance;
   }
-  .hero-props { display: flex; flex-direction: column; gap: clamp(8px, 1vw, 12px); margin-top: clamp(12px, 1.7vw, 20px); width: min(100%, 76ch); }
+  .hero-props { display: flex; flex-direction: column; gap: clamp(7px, 0.9vw, 11px); margin-top: clamp(12px, 1.7vw, 20px); width: min(100%, 76ch); }
   .hp { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
   .hp-icon { font-size: clamp(12px, 1.4vw, 14px); flex-shrink: 0; line-height: 1.3; }
   .hp-txt {
-    font-family: var(--fp); font-size: var(--fs-copy);
-    color: var(--sp-w); letter-spacing: clamp(0.8px, 0.22vw, 1.6px); opacity: 0.88; line-height: 1.58;
+    font-family: var(--fp); font-size: var(--fs-prop);
+    color: var(--sp-w); letter-spacing: clamp(0.7px, 0.2vw, 1.35px); opacity: 0.76; line-height: 1.48;
     text-wrap: pretty;
+  }
+  .hero-props .hp:first-child .hp-txt {
+    opacity: 0.95;
+    color: rgba(240,237,228,0.95);
   }
   .hero-status {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: clamp(8px, 1vw, 12px);
     margin-top: clamp(12px, 1.7vw, 20px);
-    width: min(100%, 920px);
+    width: min(100%, 880px);
   }
   .hs-chip {
     display: flex;
@@ -1166,14 +1178,15 @@
   }
   .hs-k {
     font-family: var(--fp);
-    font-size: var(--fs-meta);
+    font-size: var(--fs-chip-k);
     letter-spacing: clamp(0.8px, 0.2vw, 1.4px);
     color: var(--sp-dim);
     white-space: nowrap;
   }
   .hs-v {
     font-family: var(--fp);
-    font-size: var(--fs-copy);
+    font-size: var(--fs-chip-v);
+    font-weight: 700;
     color: var(--sp-w);
     letter-spacing: clamp(0.5px, 0.14vw, 0.9px);
     text-align: right;
@@ -1185,8 +1198,8 @@
   }
   .hero-ctas { display: flex; gap: 12px; margin-top: clamp(16px, 2vw, 24px); flex-wrap: wrap; width: min(100%, 760px); }
   .hero-btn {
-    font-family: var(--fp); font-size: clamp(9.5px, 1.02vw, 11.5px); letter-spacing: clamp(1.1px, 0.22vw, 1.8px);
-    border: none; border-radius: 6px; padding: 14px 24px;
+    font-family: var(--fp); font-size: clamp(10px, 1.08vw, 12px); letter-spacing: clamp(1.1px, 0.22vw, 1.8px);
+    border: none; border-radius: 6px; padding: 15px 24px;
     cursor: pointer; transition: all .2s;
     min-width: 192px;
   }
@@ -1226,6 +1239,32 @@
     height: calc(100vh - var(--header-h, 48px));
     overflow-y: auto;
     z-index: 3;
+  }
+  .hero-right-head {
+    position: sticky;
+    top: 0;
+    z-index: 7;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(232,150,125,0.14);
+    background: linear-gradient(180deg, rgba(15,38,20,0.96) 0%, rgba(15,38,20,0.88) 100%);
+    backdrop-filter: blur(3px);
+  }
+  .fr-k {
+    font-family: var(--fp);
+    font-size: clamp(10px, 1.02vw, 12px);
+    color: var(--sp-pk);
+    letter-spacing: clamp(1.2px, 0.22vw, 1.9px);
+    text-shadow: 0 0 6px var(--sp-glow);
+  }
+  .fr-hint {
+    font-family: var(--fp);
+    font-size: clamp(8px, 0.82vw, 9px);
+    color: var(--sp-dim);
+    letter-spacing: clamp(1px, 0.22vw, 1.6px);
   }
   .hero-right::-webkit-scrollbar { width: 4px; }
   .hero-right::-webkit-scrollbar-thumb {
@@ -1287,18 +1326,18 @@
   .fc:hover .fc-img img { transform: scale(1.1) rotate(-2deg); }
   .fc-txt { padding: clamp(12px, 1.4vw, 18px) clamp(14px, 1.8vw, 22px) clamp(14px, 2vw, 22px); }
   .fc-sub {
-    font-family: var(--fp); font-size: var(--fs-meta);
+    font-family: var(--fp); font-size: clamp(8px, 0.86vw, 9px);
     color: var(--sp-dim); letter-spacing: clamp(1px, 0.2vw, 2px);
   }
   .fc-lbl {
-    font-family: var(--fp); font-size: clamp(11px, 1.2vw, 13px);
+    font-family: var(--fp); font-size: clamp(12px, 1.28vw, 15px);
     color: var(--sp-pk); letter-spacing: clamp(0.8px, 0.18vw, 1.2px); line-height: 1.4; margin-top: 4px;
     text-shadow: 0 0 6px var(--sp-glow);
   }
   .fc-brief {
-    font-family: var(--fv); font-size: 11px;
+    font-family: var(--fv); font-size: clamp(10px, 0.96vw, 11px);
     color: var(--sp-w); letter-spacing: 0.5px; line-height: 1.5; margin-top: 6px;
-    opacity: 0.7;
+    opacity: 0.74;
   }
   .fc-all {
     display: flex; align-items: center; justify-content: space-between;
@@ -2050,6 +2089,10 @@
       border-left: none;
       border-top: 1px solid rgba(232,150,125,0.12);
     }
+    .hero-right-head {
+      position: static;
+      padding: 10px var(--space-sec-x);
+    }
     .hero-status {
       width: 100%;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2073,7 +2116,11 @@
 
   @media (max-width: 900px) {
     .hero-left { padding: 22px var(--space-sec-x) 30px; }
-    .hero-sub { letter-spacing: clamp(1px, 0.24vw, 1.8px); }
+    .hero-sub {
+      font-size: clamp(13px, 2.8vw, 16px);
+      letter-spacing: clamp(1px, 0.24vw, 1.8px);
+      max-width: none;
+    }
     .hero-status {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
@@ -2114,6 +2161,16 @@
       letter-spacing: clamp(1.4px, 0.46vw, 2.4px);
     }
     .hero-doge { width: clamp(52px, 13vw, 68px); }
+    .hero-sub {
+      font-size: clamp(12px, 3.8vw, 15px);
+      line-height: 1.44;
+    }
+    .hp-icon { font-size: 11px; }
+    .hp-txt {
+      font-size: clamp(9px, 2.8vw, 10px);
+      line-height: 1.42;
+      letter-spacing: clamp(0.6px, 0.2vw, 1px);
+    }
     .hero-status {
       grid-template-columns: 1fr;
       gap: 8px;
