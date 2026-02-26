@@ -22,6 +22,8 @@
   } from '$lib/wallet/providers';
 
   type AuthMode = 'signup' | 'login';
+  type WalletFunnelStep = 'modal_open' | 'connect' | 'sign' | 'auth' | 'disconnect';
+  type WalletFunnelStatus = 'view' | 'success' | 'error';
 
   const STEP_TITLE: Record<WalletState['walletModalStep'], string> = {
     welcome: 'WALLET ACCESS',
@@ -51,6 +53,7 @@
   let authSubmitting = false;
   let signedWalletMessage = '';
   let signedWalletSignature = '';
+  let trackedModalOpen = false;
 
   $: headerTitle = STEP_TITLE[step] ?? 'WALLET ACCESS';
 
@@ -67,6 +70,31 @@
       area: 'wallet_modal',
       ...payload,
     });
+  }
+
+  function trackWalletFunnel(
+    stepName: WalletFunnelStep,
+    status: WalletFunnelStatus,
+    payload: Record<string, unknown> = {}
+  ) {
+    gtmEvent('wallet_funnel', {
+      step: stepName,
+      status,
+      mode: authMode,
+      ...payload,
+    });
+  }
+
+  function toErrorReason(error: unknown): string {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    if (!message) return 'unknown';
+    if (message.includes('reject') || message.includes('denied')) return 'user_rejected';
+    if (message.includes('timeout')) return 'timeout';
+    if (message.includes('network')) return 'network';
+    if (message.includes('wallet')) return 'wallet';
+    if (message.includes('signature') || message.includes('sign')) return 'signature';
+    if (message.includes('email') || message.includes('nickname')) return 'form_validation';
+    return 'unexpected';
   }
 
   function isWalletProviderKey(value: string): value is WalletProviderKey {
@@ -94,17 +122,16 @@
     return Boolean(signedWalletMessage && WALLET_SIGNATURE_RE.test(signedWalletSignature));
   }
 
-  function setAuthMode(mode: AuthMode, source: 'toggle' | 'welcome' | 'auto' = 'toggle') {
+  function setAuthMode(mode: AuthMode) {
     authMode = mode;
     clearErrors();
-    gtmEvent('wallet_auth_mode_select', { mode, source, step });
     if (step === 'signup' || step === 'login') {
       setWalletModalStep(mode);
     }
   }
 
   function startAuthFlow(mode: AuthMode) {
-    setAuthMode(mode, 'welcome');
+    setAuthMode(mode);
 
     if (state.connected && state.address) {
       if (hasWalletProof()) {
@@ -213,10 +240,16 @@
         walletSignature: walletProof.walletSignature,
       });
       applyAuthenticatedUser(res.user);
-      gtmEvent('wallet_signup_success', { mode: authMode, chain: state.chain });
+      trackWalletFunnel('auth', 'success', {
+        auth_mode: 'signup',
+        chain: state.chain,
+      });
     } catch (error) {
       emailError = error instanceof Error ? error.message : 'Failed to create account';
-      gtmEvent('wallet_signup_error', { message: emailError });
+      trackWalletFunnel('auth', 'error', {
+        auth_mode: 'signup',
+        reason: toErrorReason(error),
+      });
     } finally {
       authSubmitting = false;
     }
@@ -240,10 +273,16 @@
         walletSignature: walletProof.walletSignature,
       });
       applyAuthenticatedUser(res.user);
-      gtmEvent('wallet_login_success', { mode: authMode, chain: state.chain });
+      trackWalletFunnel('auth', 'success', {
+        auth_mode: 'login',
+        chain: state.chain,
+      });
     } catch (error) {
       emailError = error instanceof Error ? error.message : 'Failed to log in';
-      gtmEvent('wallet_login_error', { message: emailError });
+      trackWalletFunnel('auth', 'error', {
+        auth_mode: 'login',
+        reason: toErrorReason(error),
+      });
     } finally {
       authSubmitting = false;
     }
@@ -259,7 +298,6 @@
     }
 
     connectingProvider = WALLET_PROVIDER_LABEL[provider];
-    gtmEvent('wallet_connect_start', { provider, mode: authMode });
     setWalletModalStep('connecting');
 
     try {
@@ -275,12 +313,15 @@
         const walletAddress = await requestInjectedEvmAccount(provider);
         connectWallet(provider, walletAddress, preferredEvmChain);
       }
-      gtmEvent('wallet_connect_success', { provider });
+      trackWalletFunnel('connect', 'success', {
+        provider,
+        chain: preferredEvmChain,
+      });
     } catch (error) {
       actionError = error instanceof Error ? error.message : 'Failed to connect wallet';
-      gtmEvent('wallet_connect_error', {
+      trackWalletFunnel('connect', 'error', {
         provider,
-        message: actionError,
+        reason: toErrorReason(error),
       });
       setWalletModalStep('wallet-select');
     } finally {
@@ -329,7 +370,7 @@
       signedWalletSignature = signature;
       signMessage(signature);
 
-      gtmEvent('wallet_sign_success', { mode: authMode, provider, chain: state.chain });
+      trackWalletFunnel('sign', 'success', { provider, chain: state.chain });
 
       if (state.email) {
         setWalletModalStep('profile');
@@ -339,7 +380,7 @@
     } catch (error) {
       clearWalletProof();
       actionError = error instanceof Error ? error.message : 'Failed to sign wallet message';
-      gtmEvent('wallet_sign_error', { message: actionError, mode: authMode });
+      trackWalletFunnel('sign', 'error', { reason: toErrorReason(error) });
     } finally {
       signingMessage = false;
     }
@@ -355,7 +396,9 @@
     clearWalletProof();
     disconnectWallet();
     clearAuthenticatedUser();
-    gtmEvent('wallet_disconnect', { hadSession: Boolean(state.email) });
+    trackWalletFunnel('disconnect', 'success', {
+      had_session: Boolean(state.email),
+    });
     closeWalletModal();
   }
 
@@ -382,10 +425,16 @@
     return 'idle';
   }
 
+  $: if (state.showWalletModal && !trackedModalOpen) {
+    trackWalletFunnel('modal_open', 'view', { entry_step: step });
+    trackedModalOpen = true;
+  }
+
   $: if (!state.showWalletModal) {
     authSubmitting = false;
     signingMessage = false;
     connectingProvider = '';
+    trackedModalOpen = false;
   }
 </script>
 
