@@ -1690,8 +1690,8 @@
     <!-- Left Resizer (drag only, no toggle) -->
     {#if !leftCollapsed}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="resizer resizer-h resizer-left" on:wheel={(e) => resizePanelByWheel('left', e, { force: true })} title="스크롤/드래그로 WAR ROOM 너비 조절">
-        <div class="resizer-drag" on:mousedown={(e) => startDrag('left', e)}></div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="resizer resizer-h resizer-left" on:mousedown={(e) => startDrag('left', e)}>
       </div>
     {:else}
       <div class="resizer-spacer"></div>
@@ -2088,16 +2088,13 @@
   .resizer-left { grid-column: 2; }
   .resizer-right { grid-column: 4; }
   .resizer-h {
-    width: 4px;
-    background: rgba(10, 24, 16, 0.82);
-    border-left: 1px solid rgba(232, 150, 125, 0.1);
-    border-right: 1px solid rgba(232, 150, 125, 0.1);
-    transition: background .15s, border-color .15s;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: col-resize;
+    transition: background .15s;
   }
   .resizer-h:hover {
-    background: rgba(232, 150, 125, 0.1);
-    border-left-color: var(--term-border);
-    border-right-color: var(--term-border);
+    background: rgba(255, 230, 0, 0.15);
   }
   .resizer-spacer {
     width: 1px;

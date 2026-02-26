@@ -55,14 +55,6 @@
     goto(path);
   }
 
-  function handleBack() {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-    goto('/');
-  }
-
   function isActive(path: string): boolean {
     if (path === '/arena') return activePath.startsWith('/arena');
     return activePath.startsWith(path);
@@ -91,15 +83,10 @@
 </script>
 
 <nav id="nav">
-  <div class="nav-top">
-    <div class="nav-main">
-      {#if activePath !== '/'}
-        <button class="nav-back" on:click={handleBack}>BACK</button>
-      {/if}
-
-      <button class="nav-logo" on:click={() => nav('/')}>
-        Stockclaw
-      </button>
+  <div class="nav-main">
+    <button class="nav-logo" on:click={() => nav('/')}>
+      Stockclaw
+    </button>
 
       <div class="nav-sep"></div>
 
@@ -191,23 +178,7 @@
     height: 100%;
   }
 
-  .nav-back {
-    font-family: var(--fp);
-    font-size: 12px;
-    color: #E8967D;
-    background: none;
-    border: 1px solid rgba(232,150,125,0.3);
-    border-radius: 4px;
-    padding: 2px 8px;
-    cursor: pointer;
-    margin-right: 6px;
-    transition: all .15s;
-  }
-  .nav-back:hover {
-    background: rgba(232,150,125,0.1);
-    border-color: #E8967D;
-  }
-
+  /* Removed: .nav-back (BACK button removed) */
   .nav-logo {
     font-family: var(--fp);
     font-size: 12px;
@@ -379,9 +350,9 @@
 
   /* ═══ MOBILE ═══ */
   @media (max-width: 900px) {
-    .nav-top {
-      height: 44px;
-      padding: 0 14px;
+    .nav-logo {
+      font-size: 10px;
+      letter-spacing: 0.8px;
     }
 
     /* Hide desktop elements */

@@ -963,7 +963,7 @@
       {:else if activeTab === 'feed'}
         <!-- Feed filter chips -->
         <div class="feed-chips">
-          {#each [['all','ALL'],['news','NEWS'],['events','EVENTS'],['flow','FLOW'],['trending','TRENDING'],['community','COMMUNITY']] as [key, label] (key)}
+          {#each [['all','ALL'],['flow','FLOW'],['events','EVENTS'],['trending','TRENDING'],['news','NEWS'],['community','COMMUNITY']] as [key, label] (key)}
             <button class="feed-chip" class:active={feedFilter === key} on:click={() => setFeedFilter(key as typeof feedFilter)}>{label}</button>
           {/each}
         </div>
