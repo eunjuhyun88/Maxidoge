@@ -99,6 +99,34 @@
     }
   }
 
+  /** Desktop hero behavior: scroll right feature rail first, then let page continue. */
+  function onWheel(e: WheelEvent) {
+    if (!heroRightEl || window.innerWidth <= 900 || prefersReducedMotion) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const heroSection = document.querySelector('.hero');
+    if (!heroSection) return;
+    const rect = heroSection.getBoundingClientRect();
+    if (rect.bottom <= 100 || rect.top >= window.innerHeight - 100) return;
+
+    const el = heroRightEl;
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    if (maxScroll <= 0) return;
+
+    const canScrollDown = el.scrollTop < maxScroll - 2;
+    const canScrollUp = el.scrollTop > 2;
+
+    if (e.deltaY > 0 && canScrollDown) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.scrollTop = Math.min(el.scrollTop + e.deltaY, maxScroll);
+    } else if (e.deltaY < 0 && canScrollUp) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.scrollTop = Math.max(el.scrollTop + e.deltaY, 0);
+    }
+  }
+
   function onHeroKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && selectedFeature !== null) {
       selectedFeature = null;
@@ -161,8 +189,19 @@
 
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     window.addEventListener('keydown', onHeroKeydown);
+    let wheelBound = false;
+    const setWheelCapture = (enabled: boolean) => {
+      if (enabled && !wheelBound) {
+        window.addEventListener('wheel', onWheel, { passive: false, capture: true });
+        wheelBound = true;
+      } else if (!enabled && wheelBound) {
+        window.removeEventListener('wheel', onWheel, { capture: true });
+        wheelBound = false;
+      }
+    };
     const syncMotionPreference = () => {
       prefersReducedMotion = motionQuery.matches;
+      setWheelCapture(!prefersReducedMotion);
     };
     syncMotionPreference();
 
@@ -197,6 +236,7 @@
     return () => {
       if (heroIntroTimer) clearTimeout(heroIntroTimer);
       window.removeEventListener('keydown', onHeroKeydown);
+      setWheelCapture(false);
       if (homeEl) homeEl.removeEventListener('scroll', onScroll);
       obs?.disconnect();
       if (typeof motionQuery.removeEventListener === 'function') {
@@ -660,8 +700,8 @@
     --space-hero-y-top: clamp(20px, 2.6vw, 36px);
     --space-hero-y-bottom: clamp(24px, 3vw, 40px);
     --fs-kicker: clamp(8px, 0.95vw, 11px);
-    --fs-meta: clamp(8px, 0.95vw, 10px);
-    --fs-copy: clamp(10px, 1.08vw, 13px);
+    --fs-meta: clamp(8px, 0.95vw, 10.5px);
+    --fs-copy: clamp(11px, 1.14vw, 14px);
     --fs-hero-white: clamp(30px, 5.4vw, 74px);
     --fs-hero-pink: clamp(34px, 6vw, 84px);
     --ls-kicker: clamp(1px, 0.24vw, 2.2px);
@@ -674,8 +714,15 @@
     position: relative;
   }
   .home > * { flex-shrink: 0; }
-  .home::-webkit-scrollbar { width: 4px; }
-  .home::-webkit-scrollbar-thumb { background: var(--sp-pk); border-radius: 4px; }
+  .home {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .home::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
 
   /* ── STARS ── */
   .stars, .stars2 {
@@ -989,10 +1036,17 @@
     max-width: min(100%, clamp(560px, 62vw, 860px));
     display: flex; flex-direction: column; align-items: flex-start; justify-content: safe center;
     padding: var(--space-hero-y-top) var(--space-hero-x) var(--space-hero-y-bottom);
-    position: relative;
-    overflow: visible;
+    position: sticky;
+    top: var(--header-h, 48px);
+    height: calc(100vh - var(--header-h, 48px));
+    overflow-y: auto;
     z-index: 3;
   }
+  .hero-left {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .hero-left::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
   .hero-stack {
     display: flex; flex-direction: column; line-height: 0.95;
@@ -1080,8 +1134,8 @@
     font-family: var(--fp); font-size: var(--fs-copy);
     color: var(--sp-pk); letter-spacing: var(--ls-copy); margin-top: clamp(12px, 1.7vw, 20px);
     text-shadow: 0 0 8px var(--sp-glow);
-    max-width: 52ch;
-    line-height: 1.55;
+    max-width: 56ch;
+    line-height: 1.58;
     text-wrap: balance;
   }
   .hero-props { display: flex; flex-direction: column; gap: clamp(8px, 1vw, 12px); margin-top: clamp(12px, 1.7vw, 20px); width: min(100%, 76ch); }
@@ -1089,7 +1143,7 @@
   .hp-icon { font-size: clamp(12px, 1.4vw, 14px); flex-shrink: 0; line-height: 1.3; }
   .hp-txt {
     font-family: var(--fp); font-size: var(--fs-copy);
-    color: var(--sp-w); letter-spacing: clamp(0.8px, 0.22vw, 1.6px); opacity: 0.85; line-height: 1.62;
+    color: var(--sp-w); letter-spacing: clamp(0.8px, 0.22vw, 1.6px); opacity: 0.88; line-height: 1.58;
     text-wrap: pretty;
   }
   .hero-status {
@@ -1131,7 +1185,7 @@
   }
   .hero-ctas { display: flex; gap: 12px; margin-top: clamp(16px, 2vw, 24px); flex-wrap: wrap; width: min(100%, 760px); }
   .hero-btn {
-    font-family: var(--fp); font-size: clamp(9px, 1vw, 11px); letter-spacing: clamp(1.2px, 0.24vw, 2px);
+    font-family: var(--fp); font-size: clamp(9.5px, 1.02vw, 11.5px); letter-spacing: clamp(1.1px, 0.22vw, 1.8px);
     border: none; border-radius: 6px; padding: 14px 24px;
     cursor: pointer; transition: all .2s;
     min-width: 192px;
@@ -1160,18 +1214,26 @@
     outline-offset: 2px;
   }
 
-  /* Feature cards (right column) */
+  /* Feature cards (right column): this is the only visible scrollbar in hero on desktop */
   .hero-right {
     min-width: 0;
     width: 100%;
     background: var(--sp-bg2);
     border-left: none;
     display: flex; flex-direction: column;
-    position: relative;
-    height: auto;
-    overflow: visible;
+    position: sticky;
+    top: var(--header-h, 48px);
+    height: calc(100vh - var(--header-h, 48px));
+    overflow-y: auto;
     z-index: 3;
   }
+  .hero-right::-webkit-scrollbar { width: 4px; }
+  .hero-right::-webkit-scrollbar-thumb {
+    background: rgba(232,150,125,0.9);
+    border-radius: 4px;
+  }
+  .hero-right::-webkit-scrollbar-track { background: rgba(232,150,125,0.06); }
+  .hero-right { scrollbar-color: rgba(232,150,125,0.9) rgba(232,150,125,0.06); scrollbar-width: thin; }
 
   .fc {
     display: flex; flex-direction: column; background: transparent;
