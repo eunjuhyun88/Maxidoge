@@ -5,6 +5,7 @@
 <div class="orbs" aria-hidden="true">
   <div class="orb orb-1"></div>
   <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
 </div>
 
 <style>
@@ -50,8 +51,8 @@
   .orb {
     position: absolute;
     border-radius: 50%;
-    filter: blur(var(--fx-orb-blur, 24px));
-    opacity: 0.07;
+    filter: blur(80px);
+    opacity: 0.10;
   }
   .orb-1 {
     width: 500px; height: 500px;
@@ -65,6 +66,12 @@
     top: 50%; right: -8%;
     animation: orbFloat2 25s ease-in-out infinite alternate;
   }
+  .orb-3 {
+    width: 450px; height: 450px;
+    background: radial-gradient(circle, rgba(135,220,190,0.5), transparent 70%);
+    bottom: 15%; left: 40%;
+    animation: orbFloat3 22s ease-in-out infinite alternate;
+  }
   @keyframes orbFloat1 {
     0% { transform: translate(0, 0) scale(1); }
     50% { transform: translate(80px, 60px) scale(1.15); }
@@ -74,6 +81,11 @@
     0% { transform: translate(0, 0) scale(1); }
     50% { transform: translate(-60px, -80px) scale(1.1); }
     100% { transform: translate(40px, -40px) scale(0.95); }
+  }
+  @keyframes orbFloat3 {
+    0% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-50px, 40px) scale(1.1); }
+    100% { transform: translate(30px, -60px) scale(0.95); }
   }
 
   @media (prefers-reduced-motion: reduce) {

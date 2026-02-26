@@ -91,55 +91,70 @@
 </script>
 
 <nav id="nav">
-  <div class="nav-main">
-    {#if activePath !== '/'}
-      <button class="nav-back" on:click={handleBack}>BACK</button>
-    {/if}
+  <div class="nav-top">
+    <div class="nav-main">
+      {#if activePath !== '/'}
+        <button class="nav-back" on:click={handleBack}>BACK</button>
+      {/if}
 
-    <button class="nav-logo" on:click={() => nav('/')}>
-      Stockclaw
-    </button>
+      <button class="nav-logo" on:click={() => nav('/')}>
+        Stockclaw
+      </button>
 
-    <div class="nav-sep"></div>
+      <div class="nav-sep"></div>
 
-    <div class="selected-ticker">
-      <span class="st-pair">{state.pair}</span>
-      <span class="st-price">${selectedPriceText}</span>
+      <div class="selected-ticker">
+        <span class="st-pair">{state.pair}</span>
+        <span class="st-price">${selectedPriceText}</span>
+      </div>
+
+      <div class="nav-sep"></div>
+
+      {#each NAV_ITEMS as item}
+        <button
+          class="nav-tab nav-tab-desktop"
+          class:active={isActive(item.path)}
+          class:arena-accent={item.accent}
+          title={`${item.label} · ${item.desc}`}
+          aria-label={`${item.label}: ${item.desc}`}
+          on:click={() => nav(item.path)}
+        >
+          {item.label}
+        </button>
+      {/each}
     </div>
 
-    <div class="nav-sep"></div>
+    <div class="nav-right">
+      <div class="score-badge">
+        SCORE <b>{Math.round(state.score)}</b>
+      </div>
 
+      {#if connected}
+        <button class="wallet-btn connected" on:click={openWalletModal}>
+          <span class="wallet-dot"></span>
+          {wallet.shortAddr}
+        </button>
+      {:else}
+        <button class="wallet-btn" on:click={openWalletModal}>
+          CONNECT
+        </button>
+      {/if}
+
+      <button class="settings-btn" title="SETTINGS" aria-label="SETTINGS" on:click={() => nav('/settings')}>SET</button>
+    </div>
+  </div>
+
+  <!-- Mobile bottom tab bar -->
+  <div class="nav-tabs-mobile">
     {#each NAV_ITEMS as item}
       <button
-        class="nav-tab"
+        class="nav-tab-m"
         class:active={isActive(item.path)}
-        class:arena-accent={item.accent}
-        title={`${item.label} · ${item.desc}`}
-        aria-label={`${item.label}: ${item.desc}`}
         on:click={() => nav(item.path)}
       >
         {item.label}
       </button>
     {/each}
-  </div>
-
-  <div class="nav-right">
-    <div class="score-badge">
-      SCORE <b>{Math.round(state.score)}</b>
-    </div>
-
-    {#if connected}
-      <button class="wallet-btn connected" on:click={openWalletModal}>
-        <span class="wallet-dot"></span>
-        {wallet.shortAddr}
-      </button>
-    {:else}
-      <button class="wallet-btn" on:click={openWalletModal}>
-        CONNECT
-      </button>
-    {/if}
-
-    <button class="settings-btn" title="SETTINGS" aria-label="SETTINGS" on:click={() => nav('/settings')}>SET</button>
   </div>
 </nav>
 
@@ -151,24 +166,29 @@
   #nav {
     background: #0a1a0d;
     border-bottom: 1px solid rgba(232,150,125,0.15);
-    display: flex;
-    align-items: center;
-    padding: 0 12px;
-    gap: 0;
     position: fixed;
     top: 0; left: 0; right: 0;
     z-index: 110;
-    flex-shrink: 0;
-    height: 42px;
     font-family: var(--fp, 'Press Start 2P', monospace);
     color: #F0EDE4;
   }
+
+  /* Desktop: single row */
+  .nav-top {
+    display: flex;
+    align-items: center;
+    height: 42px;
+    padding: 0 12px;
+    gap: 0;
+  }
+
   .nav-main {
     display: flex;
     align-items: center;
     min-width: 0;
     flex: 1 1 auto;
     overflow: hidden;
+    height: 100%;
   }
 
   .nav-back {
@@ -202,6 +222,7 @@
     transition: opacity .15s;
   }
   .nav-logo:hover { opacity: 0.8; }
+
   .nav-sep {
     width: 1px;
     height: 18px;
@@ -230,8 +251,8 @@
     color: #F0EDE4;
   }
 
-  /* ── Nav Tabs ── */
-  .nav-tab {
+  /* ── Desktop Nav Tabs ── */
+  .nav-tab-desktop {
     font-family: var(--fp);
     font-size: 8px;
     letter-spacing: 1px;
@@ -248,14 +269,14 @@
     white-space: nowrap;
     position: relative;
   }
-  .nav-tab:last-of-type { border-right: none; }
-  .nav-tab:hover { color: #F0EDE4; background: rgba(232,150,125,0.04); }
-  .nav-tab.active {
+  .nav-tab-desktop:last-of-type { border-right: none; }
+  .nav-tab-desktop:hover { color: #F0EDE4; background: rgba(232,150,125,0.04); }
+  .nav-tab-desktop.active {
     color: #E8967D;
     background: rgba(232,150,125,0.08);
     text-shadow: 0 0 8px rgba(232,150,125,0.4);
   }
-  .nav-tab.active::after {
+  .nav-tab-desktop.active::after {
     content: '';
     position: absolute;
     bottom: 0; left: 0; right: 0;
@@ -263,9 +284,8 @@
     background: #E8967D;
     box-shadow: 0 0 8px rgba(232,150,125,0.5);
   }
-
-  .nav-tab.arena-accent { letter-spacing: 1.5px; }
-  .nav-tab.arena-accent.active {
+  .nav-tab-desktop.arena-accent { letter-spacing: 1.5px; }
+  .nav-tab-desktop.arena-accent.active {
     color: #E8967D;
     background: rgba(232,150,125,0.12);
   }
@@ -297,6 +317,7 @@
     font-size: 10px;
     color: #F0EDE4;
   }
+
   /* ── Wallet ── */
   .wallet-btn {
     font-family: var(--fp);
@@ -351,73 +372,112 @@
     background: rgba(232,150,125,0.08);
   }
 
-  /* Mobile/tablet: prevent header information from clipping */
-  @media (max-width: 900px) {
-    #nav {
-      padding: 0 8px;
-    }
-    .nav-main {
-      overflow-x: auto;
-      overflow-y: hidden;
-      -webkit-overflow-scrolling: touch;
-      touch-action: pan-x;
-      overscroll-behavior-x: contain;
-      scrollbar-width: none;
-    }
-    .nav-main::-webkit-scrollbar { display: none; }
+  /* ── Mobile tab bar: hidden on desktop ── */
+  .nav-tabs-mobile {
+    display: none;
+  }
 
-    .nav-back {
-      font-size: 11px;
-      padding: 2px 6px;
-      margin-right: 4px;
+  /* ═══ MOBILE ═══ */
+  @media (max-width: 900px) {
+    .nav-top {
+      height: 44px;
+      padding: 0 14px;
     }
-    .nav-logo {
-      font-size: 10px;
-      letter-spacing: 0.8px;
-    }
+
+    /* Hide desktop elements */
     .nav-sep { display: none; }
     .selected-ticker { display: none; }
-
-    .nav-tab {
-      font-size: 7px;
-      padding: 0 6px;
-      letter-spacing: 0.8px;
-    }
-
+    .nav-tab-desktop { display: none; }
     .score-badge { display: none; }
     .settings-btn { display: none; }
 
-    .wallet-btn {
-      font-size: 8px;
+    .nav-back {
+      font-size: 10px;
       padding: 3px 8px;
-      white-space: nowrap;
-      max-width: 96px;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      margin-right: 8px;
+    }
+    .nav-logo {
+      font-size: 11px;
+      letter-spacing: 1.5px;
+    }
+
+    .nav-right {
+      margin-left: auto;
+    }
+    .wallet-btn {
+      font-size: 9px;
+      padding: 5px 14px;
+      border-radius: 6px;
     }
     .wallet-btn.connected {
-      font-size: 7px;
-      padding: 3px 7px;
+      font-size: 8px;
+      padding: 5px 10px;
+    }
+
+    /* Show mobile tab bar */
+    .nav-tabs-mobile {
+      display: flex;
+      align-items: stretch;
+      border-top: 1px solid rgba(232,150,125,0.08);
+      height: 36px;
+    }
+    .nav-tab-m {
+      flex: 1;
+      font-family: var(--fp, 'Press Start 2P', monospace);
+      font-size: 8px;
+      letter-spacing: 1px;
+      color: rgba(240,237,228,0.4);
+      background: none;
+      border: none;
+      border-right: 1px solid rgba(232,150,125,0.06);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color .15s, background .15s;
+      position: relative;
+    }
+    .nav-tab-m:last-child { border-right: none; }
+    .nav-tab-m:active { background: rgba(232,150,125,0.06); }
+    .nav-tab-m.active {
+      color: #E8967D;
+      background: rgba(232,150,125,0.06);
+      text-shadow: 0 0 6px rgba(232,150,125,0.3);
+    }
+    .nav-tab-m.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 20%; right: 20%;
+      height: 2px;
+      background: #E8967D;
+      box-shadow: 0 0 6px rgba(232,150,125,0.4);
+      border-radius: 1px;
     }
   }
 
-  @media (max-width: 768px) {
-    #nav {
-      padding: 0 6px;
+  @media (max-width: 640px) {
+    .nav-top {
+      height: 40px;
+      padding: 0 12px;
     }
-
-    .nav-tab {
-      font-size: 6px;
-      min-width: max-content;
-      padding: 0 5px;
-      justify-content: center;
-      border-right-color: rgba(232, 150, 125, 0.03);
+    .nav-logo {
+      font-size: 10px;
+      letter-spacing: 1.2px;
     }
-
-    .wallet-btn {
-      max-width: 76px;
+    .nav-tabs-mobile {
+      height: 34px;
+    }
+    .nav-tab-m {
       font-size: 7px;
-      padding: 3px 6px;
+      letter-spacing: 0.8px;
+    }
+    .wallet-btn {
+      font-size: 8px;
+      padding: 4px 10px;
+    }
+    .wallet-btn.connected {
+      font-size: 7px;
+      padding: 4px 8px;
     }
   }
 </style>

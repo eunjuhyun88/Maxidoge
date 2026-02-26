@@ -1,24 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { gameState } from '$lib/stores/gameState';
-  import { AGDEFS } from '$lib/data/agents';
   import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
   import { userProfileStore } from '$lib/stores/userProfileStore';
-  import { openTradeCount } from '$lib/stores/quickTradeStore';
-  import { activeSignalCount } from '$lib/stores/trackedSignalStore';
   import HomeBackground from '../components/home/HomeBackground.svelte';
 
-  const gs = $derived($gameState);
   const connected = $derived($isWalletConnected);
   const wallet = $derived($walletStore);
   const profile = $derived($userProfileStore);
-  const trackedSigs = $derived($activeSignalCount);
-  const openPos = $derived($openTradeCount);
-
-  const btcPrice = $derived(gs.prices.BTC);
-  const ethPrice = $derived(gs.prices.ETH);
-  const solPrice = $derived(gs.prices.SOL);
 
   type HomeFunnelStep = 'hero_view' | 'hero_feature_select' | 'hero_cta_click';
   type HomeFunnelStatus = 'view' | 'click';
@@ -54,37 +43,57 @@
   function enterTerminal() { goto('/terminal'); }
 
   const FEATURES = [
-    { label: 'WAR ROOM', sub: 'TERMINAL', brief: 'YOU MISSED THE PUMP BECAUSE YOU WERE SLEEPING. NEVER AGAIN.', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
-      detail: '8 AI AGENTS SCAN 200+ PAIRS 24/7. BEFORE YOU OPEN A CHART, THE SIGNAL, CONTEXT, AND RISK SNAPSHOT ARE READY.',
-      stats: [{ k: 'AI AGENTS', v: '8' }, { k: 'PAIRS', v: '200+' }, { k: 'SCAN PATTERNS', v: '28' }] },
-    { label: 'AI vs YOU', sub: 'ARENA', brief: 'SUBMIT YOUR CALL. 8 AI AGENTS CHALLENGE EVERY ANGLE.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
-      detail: 'PUT YOUR THESIS INTO A 5-PHASE STRESS TEST. ENTRY, TP, SL, AND R:R GET CHALLENGED BY 8 SPECIALIZED AI AGENTS.',
-      stats: [{ k: 'PHASES', v: '5' }, { k: 'AI JUDGES', v: '8' }, { k: 'REWARDS', v: 'XP+RANK' }] },
-    { label: 'AI SCANNER', sub: 'SIGNALS', brief: 'THE MARKET WHISPERS BEFORE IT SCREAMS. WE HEAR IT FIRST.', img: '/blockparty/f5-doge-fire.png', path: '/signals',
-      detail: '28 ANOMALY PATTERNS CATCH EARLY BREAKOUT OR LIQUIDATION SETUPS. SCORES 70+ TRIGGER ACTIONABLE ALERTS.',
-      stats: [{ k: 'PATTERNS', v: '28' }, { k: 'SCAN CYCLE', v: '15 MIN' }, { k: 'ALERTS', v: 'REAL-TIME' }] },
-    { label: 'COPY TRADE', sub: 'COMMUNITY', brief: 'STOP WATCHING. START COPYING. ONE CLICK.', img: '/blockparty/f5-doge-excited.png', path: '/signals',
-      detail: 'WHEN A SIGNAL FITS YOUR STYLE, COPY FLOW BUILDS THE ORDER DRAFT FOR YOU. YOU REVIEW, APPROVE, AND EXECUTE.',
-      stats: [{ k: 'COPY WIZARD', v: '4-STEP' }, { k: 'R:R CALC', v: 'AUTO' }, { k: 'APPROVAL', v: 'YOU' }] },
+    { label: 'TERMINAL', sub: 'WAR ROOM', brief: 'ORPO READS THE CHART. CONTEXT AGENTS WATCH BEYOND IT.', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
+      detail: 'ORPO PROCESSES 90 INDICATORS PER PAIR. DERIV, FLOW, MACRO & SENTI FEED REAL-TIME CONTEXT. COMMANDER RESOLVES ALL CONFLICTS INTO ONE ENTRY SCORE.',
+      stats: [{ k: 'INDICATORS', v: '90' }, { k: 'CONTEXT AGENTS', v: '4' }, { k: 'ENTRY SCORE', v: 'LIVE' }] },
+    { label: 'ARENA', sub: 'AI VS YOU', brief: 'YOUR CALL FIRST. THEN ORPO CHALLENGES EVERY ANGLE.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
+      detail: '5-PHASE STRESS TEST: SKILL SELECT → DRAFT → HYPOTHESIS → BATTLE → PASSPORT RECORD. INDEPENDENT JUDGMENT WINS.',
+      stats: [{ k: 'PHASES', v: '5' }, { k: 'SKILLS', v: '6' }, { k: 'REWARDS', v: 'XP+RANK' }] },
+    { label: 'SCANNER', sub: 'ANOMALY DETECTION', brief: '28 PATTERNS DETECT WHAT HUMANS MISS. REAL-TIME PUSH.', img: '/blockparty/f5-doge-fire.png', path: '/signals',
+      detail: 'FR EXTREMES, WHALE $50M+ DEPOSITS, DXY SPIKES, LIQUIDATION CLUSTERS — 4 CONTEXT AGENTS CONVERGE INTO ACTIONABLE SIGNALS.',
+      stats: [{ k: 'PATTERNS', v: '28' }, { k: 'CYCLE', v: '15 MIN' }, { k: 'ALERTS', v: 'PUSH' }] },
+    { label: 'PASSPORT', sub: 'SKILL = DATA', brief: 'YOUR TRACK RECORD. IMMUTABLE. ON-CHAIN PROOF.', img: '/blockparty/f5-doge-excited.png', path: '/passport',
+      detail: 'WIN RATE · LP SCORE · TIER · BEST SKILL · IDS (INDEPENDENT DECISION SCORE) — EVERY ARENA BATTLE BUILDS YOUR PASSPORT.',
+      stats: [{ k: 'METRICS', v: '5+' }, { k: 'HISTORY', v: 'ALL' }, { k: 'PROOF', v: 'ON-CHAIN' }] },
+    { label: 'ORACLE', sub: 'META INTELLIGENCE', brief: 'WHICH COMBOS ACTUALLY HIT? THE LEADERBOARD REVEALS ALL.', img: '/blockparty/f5-doge-bull.png', path: '/oracle',
+      detail: 'ORPO SKILL × CONTEXT SPEC ACCURACY LEADERBOARD. SEE WHAT STRATEGIES TOP TRADERS USE AND WHERE ALPHA LIVES.',
+      stats: [{ k: 'SKILLS', v: '6' }, { k: 'SPECS', v: '4' }, { k: 'RANKING', v: 'LIVE' }] },
   ];
 
   const SCAN_CATS = [
-    { id: 'A', icon: '📊', label: 'OI + PRICE', desc: 'OI COMPRESSION, SHORT SQUEEZE, LONG LIQUIDATION TRAPS', count: 5 },
-    { id: 'B', icon: '📈', label: 'VOLUME', desc: 'VOLUME SPIKES ON FLAT PRICE, PANIC SELLS, DEAD VOLUME', count: 4 },
-    { id: 'C', icon: '⚡', label: 'FUNDING + LIQ', desc: 'EXTREME FUNDING RATES, LIQUIDATION CLUSTERS, L/S RATIOS', count: 4 },
-    { id: 'D', icon: '🐋', label: 'ON-CHAIN', desc: 'WHALE EXCHANGE DEPOSITS, WITHDRAWALS, BLOCK ACCUMULATION', count: 4 },
-    { id: 'E', icon: '💬', label: 'SOCIAL', desc: 'SOCIAL EXPLOSIONS, SENTIMENT DEPARTURE, FEAR & GREED', count: 3 },
-    { id: 'F', icon: '🔗', label: 'COMPOSITE', desc: 'MULTI-WARNING CONVERGENCE, BOTTOM CONFIRMATION, BTC DECOUPLING', count: 4 },
-    { id: 'G', icon: '🎯', label: 'DIRECT QUERY', desc: '"IS ETH SAFE TO BUY?" — ASK IN PLAIN ENGLISH, GET AI ANALYSIS', count: 4 },
+    { id: 'D', icon: '📊', label: 'DERIV', desc: 'FR / OI / LIQUIDATION CLUSTERS — DERIVATIVES OVERHEATING', count: 7 },
+    { id: 'F', icon: '🐋', label: 'FLOW', desc: 'WHALE DEPOSITS $50M+, EXCHANGE FLOWS — SMART MONEY TRACKING', count: 6 },
+    { id: 'M', icon: '🌍', label: 'MACRO', desc: 'DXY / RATES / VIX — MACRO HEADWIND & TAILWIND DETECTION', count: 5 },
+    { id: 'S', icon: '💬', label: 'SENTI', desc: 'FEAR & GREED INDEX, SOCIAL EXPLOSIONS — CROWD SENTIMENT', count: 5 },
+  ];
+
+  /** Squad display — v7 architecture mapping (ORPO + 4 Context + COMMANDER) */
+  const SQUAD_DISPLAY = [
+    { name: 'ORPO', role: 'CHART PROFESSOR', color: '#e8967d', conf: 92, desc: '90 indicators × thousands of charts. Reads only the chart.' },
+    { name: 'DERIV', role: 'DERIVATIVES CONTEXT', color: '#ff6b4a', conf: 75, desc: 'FR, OI, liquidation clusters — derivatives overheating.' },
+    { name: 'FLOW', role: 'WHALE TRACKER', color: '#4acfff', conf: 71, desc: 'Exchange flows, whale deposits — smart money signals.' },
+    { name: 'MACRO', role: 'MACRO WATCHDOG', color: '#ffd060', conf: 72, desc: 'DXY, rates, VIX — macro headwind & tailwind.' },
+    { name: 'SENTI', role: 'CROWD READER', color: '#c840ff', conf: 68, desc: 'Fear & Greed, social data — crowd sentiment gauge.' },
+    { name: 'COMMANDER', role: 'CONFLICT RESOLVER', color: '#00ff88', conf: 88, desc: 'ORPO vs Context conflict → Entry Score. Your edge.' },
   ];
 
   let selectedFeature: number | null = $state(null);
+  let mobileSheet: number | null = $state(null);
+  let isMobile = $state(false);
   let heroRightEl: HTMLDivElement;
   let heroLeftEl: HTMLDivElement;
   let prefersReducedMotion = false;
   const activeFeatureIndex = $derived(selectedFeature === null ? 0 : selectedFeature);
 
   function selectFeature(i: number) {
+    if (isMobile) {
+      // Mobile: open bottom sheet instead of swapping hero-left
+      mobileSheet = mobileSheet === i ? null : i;
+      if (mobileSheet !== null) {
+        trackHomeFunnel('hero_feature_select', 'click', { feature: FEATURES[i].sub });
+      }
+      return;
+    }
     const next = selectedFeature === i ? null : i;
     if (next !== null) {
       trackHomeFunnel('hero_feature_select', 'click', {
@@ -92,6 +101,10 @@
       });
     }
     selectedFeature = next;
+  }
+
+  function closeMobileSheet() {
+    mobileSheet = null;
   }
 
   /** Desktop hero behavior: scroll right feature rail first, then let page continue. */
@@ -123,8 +136,9 @@
   }
 
   function onHeroKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && selectedFeature !== null) {
-      selectedFeature = null;
+    if (e.key === 'Escape') {
+      if (mobileSheet !== null) { mobileSheet = null; return; }
+      if (selectedFeature !== null) { selectedFeature = null; }
     }
   }
 
@@ -148,9 +162,9 @@
 
   const FLOW_STEPS = [
     { num: '01', title: 'CONNECT', desc: 'LINK WALLET IN 30 SECONDS. NO KYC. START FREE.', img: '/blockparty/f5-doge-excited.png', pct: 100 },
-    { num: '02', title: 'SET CONDITIONS', desc: 'TYPE "OI COMPRESSION" OR "WHALE DEPOSIT" — SCANNER DOES THE REST.', img: '/blockparty/f5-doge-chart.png', pct: 85 },
-    { num: '03', title: 'GET ALERTS', desc: 'SCORE 70+ = TOAST ALERT. SCORE 85+ = CRITICAL. AUTO DRAFT ORDERS.', img: '/blockparty/f5-doge-fire.png', pct: 90 },
-    { num: '04', title: 'ACT', desc: 'APPROVE THE AI\'S DRAFT ORDER, BATTLE IN THE ARENA, OR COPY TRADE.', img: '/blockparty/f5-doge-muscle.png', pct: 95 },
+    { num: '02', title: 'SCAN', desc: 'ORPO READS THE CHART. 4 CONTEXT AGENTS WATCH THE WORLD BEYOND IT.', img: '/blockparty/f5-doge-chart.png', pct: 85 },
+    { num: '03', title: 'DECIDE', desc: 'YOUR JUDGMENT FIRST. THEN COMPARE WITH ORPO. INDEPENDENT THINKING WINS.', img: '/blockparty/f5-doge-fire.png', pct: 90 },
+    { num: '04', title: 'EARN', desc: 'ARENA BATTLES → PASSPORT STATS → LP REWARDS. SKILL COMPOUNDS.', img: '/blockparty/f5-doge-muscle.png', pct: 95 },
   ];
 
   /* ── Animation system ── */
@@ -175,6 +189,20 @@
       heroReady = true;
       trackHomeFunnel('hero_view', 'view', { connected });
     }, 280);
+
+    /* ── Mobile breakpoint tracking ── */
+    const mobileQuery = window.matchMedia('(max-width: 1080px)');
+    isMobile = mobileQuery.matches;
+    const onMobileChange = (e: MediaQueryListEvent) => {
+      isMobile = e.matches;
+      if (!e.matches) { mobileSheet = null; }        // close sheet when switching to desktop
+      if (e.matches) { selectedFeature = null; }      // reset desktop detail when switching to mobile
+    };
+    if (typeof mobileQuery.addEventListener === 'function') {
+      mobileQuery.addEventListener('change', onMobileChange);
+    } else {
+      mobileQuery.addListener(onMobileChange);
+    }
 
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     window.addEventListener('keydown', onHeroKeydown);
@@ -238,6 +266,11 @@
       } else {
         motionQuery.removeListener(onMotionPreferenceChange);
       }
+      if (typeof mobileQuery.removeEventListener === 'function') {
+        mobileQuery.removeEventListener('change', onMobileChange);
+      } else {
+        mobileQuery.removeListener(onMobileChange);
+      }
     };
   });
 </script>
@@ -254,7 +287,7 @@
         <!-- Feature detail view -->
         <div class="feat-detail" id="hero-feature-detail" tabindex="-1">
           <button type="button" class="feat-back" onclick={() => selectFeature(selectedFeature ?? 0)}>← BACK</button>
-          <span class="htag">//{FEATURES[selectedFeature].sub}</span>
+          <span class="htag">{FEATURES[selectedFeature].sub}</span>
           <div class="ht feat-detail-img" style="--ht-img:url({FEATURES[selectedFeature].img})">
             <img src={FEATURES[selectedFeature].img} alt={FEATURES[selectedFeature].label} />
           </div>
@@ -273,46 +306,38 @@
           </button>
         </div>
       {:else}
-        <!-- Default hero content -->
+        <!-- Default hero content — ORPO-centric -->
         <h1 class="hero-stack">
-          <span class="htag ha" style="--ha-d:0s">//STOCKCLAW</span>
-          <span class="ha" style="--ha-d:0.12s"><span class="hl hl-pk">ALPHA</span></span>
-          <span class="hl-row ha" style="--ha-d:0.24s">
+          <span class="htag ha" style="--ha-d:0s">Stockclaw</span>
+          <span class="ha" style="--ha-d:0.1s"><span class="hl hl-pk">ALPHA</span></span>
+          <span class="hl-row ha" style="--ha-d:0.2s">
             <span class="hl hl-xl">DOGS</span>
             <span class="ht hero-doge-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)">
               <img src="/blockparty/f5-doge-bull.png" alt="doge" class="hero-doge" />
             </span>
           </span>
         </h1>
-        <p class="hero-sub ha" style="--ha-d:0.44s">
-          <span class="hero-sub-v">AI AGENTS THAT WATCH THE MARKET WHILE YOU SLEEP</span>
+        <p class="hero-sub ha" style="--ha-d:0.3s">
+          <span class="hero-sub-v">MEET ORPO — AI CHART PROFESSOR THAT READS THE MARKET</span>
         </p>
-        <div class="hero-props ha" style="--ha-d:0.52s">
-          <div class="hp hp-prime"><span class="hp-icon">🔍</span><span class="hp-txt">28 PATTERNS · 200+ PAIRS · EVERY 15 MIN</span></div>
-          <div class="hp hp-note"><span class="hp-icon">🐋</span><span class="hp-txt">WHALE / OI / LIQUIDATION SPIKES AUTO-DETECTED</span></div>
-          <div class="hp hp-note"><span class="hp-icon">📋</span><span class="hp-txt">AI DRAFTS TP/SL/R:R WHEN SCORE ≥ 70</span></div>
+        <div class="hero-props ha" style="--ha-d:0.36s">
+          <div class="hp hp-prime"><span class="hp-icon">◉</span><span class="hp-txt">90 INDICATORS × THOUSANDS OF CHARTS TRAINED · 4 CONTEXT AGENTS ON WATCH · REAL-TIME ENTRY SCORE</span></div>
         </div>
-        <div class="hero-status ha" style="--ha-d:0.56s" role="status" aria-live="polite">
-          <div class="hs-chip">
-            <span class="hs-k">WALLET</span>
-            <span class="hs-v {connected ? 'hs-v-live' : ''}">{connected ? wallet.shortAddr : 'NOT CONNECTED'}</span>
-          </div>
-          <div class="hs-chip">
-            <span class="hs-k">OPEN TRADES</span>
-            <span class="hs-v">{openPos}</span>
-          </div>
-          <div class="hs-chip">
-            <span class="hs-k">TRACKED SIGNALS</span>
-            <span class="hs-v">{trackedSigs}</span>
-          </div>
-        </div>
-        <div class="hero-ctas ha" style="--ha-d:0.6s">
+        <div class="hero-ctas ha" style="--ha-d:0.42s">
           <button type="button" class="hero-btn hero-btn-primary" onclick={handleHeroPrimaryCta}>ENTER WAR ROOM →</button>
           {#if !connected}
             <button type="button" class="hero-btn hero-btn-secondary" onclick={handleHeroSecondaryCta}>CONNECT WALLET</button>
           {:else}
             <button type="button" class="hero-btn hero-btn-secondary" onclick={handleHeroSecondaryCta}>ENTER ARENA →</button>
           {/if}
+        </div>
+        <div class="hero-social ha" style="--ha-d:0.48s">
+          <span class="hs-stars">★★★★★</span>
+          <div class="hs-quote">
+            <span class="hs-quote-txt">BEST AI DOGS</span>
+            <span class="hs-quote-src">— DEGENS</span>
+            <span class="hs-quote-src">— CRYPTO TWITTER</span>
+          </div>
         </div>
       {/if}
     </div>
@@ -323,7 +348,7 @@
       aria-label="Feature explorer"
     >
       <div class="hero-right-head ha ha-r" style="--ha-d:0.14s">
-        <span class="fr-k">//OUR FEATURES</span>
+        <span class="fr-k">OUR FEATURES</span>
         <span class="fr-hint">{activeFeatureIndex + 1}/{FEATURES.length} · {FEATURES[activeFeatureIndex].sub}</span>
       </div>
       {#each FEATURES as feat, i}
@@ -352,16 +377,47 @@
   </section>
 
   <!-- ═══════════════════════════════════════
-       SECTION 2: FLOW — MISSION STAGES
+       SECTION 2: WHY DIFFERENT
+       ═══════════════════════════════════════ -->
+  <section class="about">
+    <div class="about-header">
+      <span class="about-kicker sr sr-r">WHY DIFFERENT</span>
+      <h2 class="about-title sr sr-r" style="--d:0.08s">
+        <span class="ab-line">SEEING THE AGENT FIRST</span>
+        <span class="ab-line ab-pk">CORRUPTS YOUR JUDGMENT</span>
+      </h2>
+    </div>
+    <div class="why-grid">
+      <div class="why-card sr sr-r" style="--d:0.15s">
+        <span class="why-num">01</span>
+        <strong class="why-label">ORPO — CHART PROFESSOR</strong>
+        <p class="why-desc">90 indicators × thousands of charts. Reads only the chart. No noise. No bias.</p>
+      </div>
+      <div class="why-card sr sr-r" style="--d:0.22s">
+        <span class="why-num">02</span>
+        <strong class="why-label">4 CONTEXT AGENTS</strong>
+        <p class="why-desc">DERIV · FLOW · MACRO · SENTI — monitoring everything beyond the chart 24/7.</p>
+      </div>
+      <div class="why-card sr sr-r" style="--d:0.29s">
+        <span class="why-num">03</span>
+        <strong class="why-label">COMMANDER</strong>
+        <p class="why-desc">Resolves ORPO vs Context conflict → Entry Score. One number. Your edge.</p>
+      </div>
+    </div>
+    <div class="about-tag sr su" style="--d:0.4s">YOUR JUDGMENT FIRST. AI SECOND. THAT'S THE ALPHA.</div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       SECTION 3: FLOW — HOW IT WORKS
        ═══════════════════════════════════════ -->
   <section class="flow">
     <div class="flow-header">
-      <span class="flow-tag sr sr-r">//MISSION STAGES</span>
+      <span class="flow-tag sr sr-r">THE JOURNEY</span>
       <h2 class="flow-title sr sr-r" style="--d:0.08s" data-px="0.06">
         <span class="ft-w">HOW IT</span>
         <span class="ft-pk">WORKS</span>
       </h2>
-      <p class="flow-sub sr sr-r" style="--d:0.18s">4 STEPS TO DEGEN GLORY</p>
+      <p class="flow-sub sr sr-r" style="--d:0.18s">4 STEPS FROM CONNECT TO COMPOUND</p>
     </div>
 
     <div class="flow-steps">
@@ -380,62 +436,24 @@
   </section>
 
   <!-- ═══════════════════════════════════════
-       SECTION 3: ABOUT
-       ═══════════════════════════════════════ -->
-  <section class="about">
-    <div class="about-inner">
-      <div class="about-badge sr sl">
-        <svg viewBox="0 0 200 200" class="badge-svg">
-          <defs><path id="cp" d="M100,100 m-75,0 a75,75 0 1,1 150,0 a75,75 0 1,1 -150,0"/></defs>
-          <text><textPath href="#cp" class="badge-txt">MUCH WOW ✦ MUCH WOW ✦ MUCH WOW ✦ MUCH WOW ✦</textPath></text>
-        </svg>
-        <div class="ht badge-face-wrap" style="--ht-img:url(/blockparty/f5-doge-face.png)"><img src="/blockparty/f5-doge-face.png" alt="" class="badge-face" loading="lazy" /></div>
-      </div>
-
-      <div class="about-text sr sr-r" style="--d:0.15s">
-        <p>
-          <strong class="ab abg">8 AI DOGS</strong>
-          <span class="ar">WATCHING</span>
-          <strong class="ab abg">200+ PAIRS,</strong>
-          <em class="ai">scanning</em>
-          <strong class="ab abg">28 PATTERNS,</strong>
-          <span class="ar">DETECTING</span>
-          <strong class="ab abg">WHALE MOVES,</strong>
-          <span class="as">OI COMPRESSION,</span>
-          <strong class="ab abg">LIQUIDATION</strong>
-          <em class="ai">clusters,</em>
-          <span class="ar">FUNDING EXTREMES,</span>
-          <strong class="ab abg">VOLUME SPIKES</strong>
-          <span class="as">AND SOCIAL EXPLOSIONS</span>
-          <span class="ar">SO YOU</span>
-          <strong class="ab abx">NEVER</strong>
-          <span class="ar">MISS</span>
-          <strong class="ab abx">AGAIN.</strong>
-        </p>
-      </div>
-    </div>
-    <div class="about-tag sr su" style="--d:0.3s">YOUR AI PACK. NO SLEEP. NO MERCY. NO MISSED TRADES.</div>
-  </section>
-
-  <!-- ═══════════════════════════════════════
-       SECTION 4: SQUAD — CHARACTER SELECT
+       SECTION 5: SQUAD — THE ARCHITECTURE
        ═══════════════════════════════════════ -->
   <section class="squad">
-    <span class="sq-tag sr sl">//CHARACTER SELECT</span>
+    <span class="sq-tag sr sl">THE ARCHITECTURE</span>
     <h2 class="sq-title sr sl" style="--d:0.06s" data-px="0.05">
       <span class="sq-w">THE</span>
       <span class="sq-pk">SQUAD</span>
     </h2>
-    <p class="sq-sub sr sr-r" style="--d:0.1s">8 AI DOGS THAT EAT THE MARKET ALIVE</p>
+    <p class="sq-sub sr sr-r" style="--d:0.1s">ORPO + 4 CONTEXT AGENTS + COMMANDER</p>
 
     <div class="sq-frame">
-      <div class="sq-grid">
-        {#each AGDEFS as ag, i}
+      <div class="sq-grid sq-grid-6">
+        {#each SQUAD_DISPLAY as ag, i}
           <div class="sq-card sr sr-r" style="--ac:{ag.color};--d:{i * 0.07}s">
-            <div class="ht sq-av-wrap" style="--ht-img:url({ag.img.def})"><img src={ag.img.def} alt={ag.name} class="sq-av" loading="lazy" /></div>
             <div class="sq-info">
               <span class="sq-nm" style="color:var(--ac)">{ag.name}</span>
               <span class="sq-rl">{ag.role}</span>
+              <p class="sq-desc">{ag.desc}</p>
               <div class="sq-bar"><div class="sq-fill" style="width:{ag.conf}%;background:var(--ac)"></div></div>
             </div>
             <div class="sq-pct">{ag.conf}%</div>
@@ -446,10 +464,9 @@
   </section>
 
   <!-- ═══════════════════════════════════════
-       SECTION 5: SCANNER — WHAT WE DETECT
+       SECTION 4: CONTEXT AGENTS — BEYOND THE CHART
        ═══════════════════════════════════════ -->
   <section class="detect">
-    <!-- Floating stars background -->
     <div class="detect-stars" aria-hidden="true">
       <span class="ds" style="top:8%;left:6%;--ds-d:0s">·</span>
       <span class="ds" style="top:15%;left:85%;--ds-d:1.5s">✦</span>
@@ -457,109 +474,39 @@
       <span class="ds" style="top:45%;left:92%;--ds-d:2.3s">✦</span>
       <span class="ds" style="top:55%;left:8%;--ds-d:1.1s">·</span>
       <span class="ds" style="top:70%;left:75%;--ds-d:0.3s">✦</span>
-      <span class="ds" style="top:82%;left:40%;--ds-d:2s">·</span>
-      <span class="ds" style="top:20%;left:55%;--ds-d:1.7s">·</span>
-      <span class="ds" style="top:65%;left:35%;--ds-d:0.5s">✦</span>
-      <span class="ds" style="top:90%;left:15%;--ds-d:2.8s">·</span>
-      <span class="ds" style="top:38%;left:68%;--ds-d:1.3s">✦</span>
-      <span class="ds" style="top:75%;left:55%;--ds-d:0.7s">·</span>
     </div>
     <div class="detect-header">
-      <span class="detect-tag sr sr-r">//ANOMALY DETECTION</span>
+      <span class="detect-tag sr sr-r">CONTEXT AGENTS</span>
       <h2 class="detect-title sr sr-r" style="--d:0.08s">
-        <span class="dt-w">WHAT WE</span>
-        <span class="dt-pk">DETECT</span>
+        <span class="dt-w">BEYOND THE</span>
+        <span class="dt-pk">CHART</span>
       </h2>
-      <p class="detect-sub sr sr-r" style="--d:0.18s">28 PATTERNS ACROSS 7 CATEGORIES — RUNNING 24/7</p>
+      <p class="detect-sub sr sr-r" style="--d:0.18s">4 SPECIALIZED AGENTS MONITOR WHAT ORPO CAN'T SEE</p>
     </div>
 
-    <!-- A-E: Parallel data inputs -->
-    <div class="dtl-phase-label sr sr-r" style="--d:0.08s">
-      <span class="dtl-phase-tag">⚡ SIMULTANEOUS SCAN</span>
-    </div>
-    <div class="dtl-inputs">
-      {#each SCAN_CATS.slice(0, 5) as cat, i}
-        <div class="dtl-input sr sr-r" style="--d:{0.1 + i * 0.04}s">
+    <div class="dtl-inputs dtl-inputs-4">
+      {#each SCAN_CATS as cat, i}
+        <div class="dtl-input sr sr-r" style="--d:{0.1 + i * 0.06}s">
           <span class="dtl-badge">{cat.id}</span>
           <span class="dtl-icon">{cat.icon}</span>
           <div class="dtl-input-body">
             <span class="dtl-label">{cat.label}</span>
-            <span class="dtl-count">{cat.count}</span>
+            <span class="dtl-count">{cat.count} PATTERNS</span>
           </div>
           <p class="dtl-desc">{cat.desc}</p>
         </div>
       {/each}
     </div>
 
-    <!-- Arrow / Flow -->
     <div class="dtl-flow sr su" style="--d:0.35s">
       <div class="dtl-flow-line"></div>
-      <span class="dtl-flow-label">CONVERGE & ANALYZE</span>
+      <span class="dtl-flow-label">CONVERGE → COMMANDER → ENTRY SCORE</span>
       <div class="dtl-flow-line"></div>
     </div>
 
-    <!-- F-G: Conclusion outputs -->
-    <div class="dtl-phase-label sr su" style="--d:0.4s">
-      <span class="dtl-phase-tag">🎯 AI CONCLUSION</span>
-    </div>
-    <div class="dtl-outputs">
-      {#each SCAN_CATS.slice(5) as cat, i}
-        <div class="dtl-output sr su" style="--d:{0.42 + i * 0.06}s">
-          <span class="dtl-badge dtl-badge-out">{cat.id}</span>
-          <span class="dtl-icon">{cat.icon}</span>
-          <div class="dtl-output-body">
-            <span class="dtl-label">{cat.label}</span>
-            <span class="dtl-count">{cat.count}</span>
-          </div>
-          <p class="dtl-desc">{cat.desc}</p>
-        </div>
-      {/each}
-    </div>
-
-    <div class="detect-cta sr su" style="--d:0.5s">
-      <p class="detect-example">"FIND COINS WHERE OI ROSE 4 CANDLES STRAIGHT BUT PRICE DIDN'T MOVE" → SCANNER HANDLES IT</p>
-      <button class="hero-btn hero-btn-primary" onclick={enterTerminal}>TRY SCANNER NOW →</button>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════
-       SECTION 6: FEED
-       ═══════════════════════════════════════ -->
-  <section class="feed">
-    <div class="feed-l">
-      <span class="fd-line fd-w sr sl">IN YOUR</span>
-      <span class="fd-line fd-pk sr sl" style="--d:0.15s">FEED</span>
-      <div class="ht feed-doge-wrap sr sl" style="--d:0.3s;--ht-img:url(/blockparty/f5-doge-fire.png)"><img src="/blockparty/f5-doge-fire.png" alt="" class="feed-doge" loading="lazy" /></div>
-    </div>
-    <div class="feed-r">
-      <a href="/arena" class="arena sr sr-r">
-        <div class="arena-row">
-          <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-muscle.png)"><img src="/blockparty/f5-doge-muscle.png" alt="" class="arena-img" loading="lazy" /></div>
-          <div class="arena-mid">
-            <span class="arena-tag">AI vs YOU</span>
-            <h3 class="arena-name">ARENA</h3>
-            <p class="arena-sub">YOUR THESIS vs 8 AI AGENTS</p>
-          </div>
-          <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)"><img src="/blockparty/f5-doge-bull.png" alt="" class="arena-img" loading="lazy" /></div>
-        </div>
-        <div class="arena-ft"><span>5-PHASE</span><span>8 AGENTS</span><span>RANKING</span></div>
-      </a>
-
-      <div class="ticker sr sr-r" style="--d:0.12s">
-        <div class="tk"><span class="tk-s">₿</span><span class="tk-n">BTC</span><span class="tk-v">${btcPrice.toLocaleString()}</span></div>
-        <div class="tk-sep"></div>
-        <div class="tk"><span class="tk-s tk-eth">Ξ</span><span class="tk-n">ETH</span><span class="tk-v">${ethPrice.toLocaleString()}</span></div>
-        <div class="tk-sep"></div>
-        <div class="tk"><span class="tk-s tk-sol">◎</span><span class="tk-n">SOL</span><span class="tk-v">${solPrice.toLocaleString()}</span></div>
-      </div>
-
-      <div class="qg sr sr-r" style="--d:0.24s">
-        <a href="/terminal" class="qn">TERMINAL</a>
-        <a href="/passport" class="qn">PASSPORT</a>
-        <a href="/oracle" class="qn">ORACLE</a>
-        <a href="/signals" class="qn">SIGNALS {#if trackedSigs > 0}<span class="qn-b">{trackedSigs}</span>{/if}</a>
-        <a href="/signals" class="qn">COMMUNITY</a>
-      </div>
+    <div class="detect-cta sr su" style="--d:0.45s">
+      <p class="detect-example">ORPO READS THE CHART. CONTEXT WATCHES THE WORLD. COMMANDER DECIDES.</p>
+      <button class="hero-btn hero-btn-primary" onclick={enterTerminal}>ENTER TERMINAL →</button>
     </div>
   </section>
 
@@ -573,7 +520,7 @@
       <span class="cta-txt cta-pk sr sl" style="--d:0.2s">PACK</span>
       <div class="cta-det sr sl" style="--d:0.3s">
         <span class="cta-brand">STOCKCLAW</span>
-        <span class="cta-loc">AI TRADING PLATFORM</span>
+        <span class="cta-loc">ORPO-POWERED AI TRADING</span>
       </div>
     </div>
     <div class="cta-r">
@@ -591,22 +538,52 @@
     <div class="grid-floor grid-floor-cta" aria-hidden="true"></div>
   </section>
 
+  <!-- ═══ MOBILE FEATURE BOTTOM SHEET ═══ -->
+  {#if mobileSheet !== null}
+    <div
+      class="m-sheet-backdrop"
+      role="presentation"
+      onclick={closeMobileSheet}
+      onkeydown={(e) => e.key === 'Escape' && closeMobileSheet()}
+    ></div>
+    <div class="m-sheet" role="dialog" aria-modal="true" aria-label={FEATURES[mobileSheet].label}>
+      <div class="m-sheet-handle"></div>
+      <button type="button" class="m-sheet-close" onclick={closeMobileSheet} aria-label="Close">✕</button>
+      <span class="m-sheet-tag">{FEATURES[mobileSheet].sub}</span>
+      <div class="ht m-sheet-img" style="--ht-img:url({FEATURES[mobileSheet].img})">
+        <img src={FEATURES[mobileSheet].img} alt={FEATURES[mobileSheet].label} />
+      </div>
+      <h2 class="m-sheet-title">{FEATURES[mobileSheet].label}</h2>
+      <p class="m-sheet-desc">{FEATURES[mobileSheet].detail}</p>
+      <div class="m-sheet-stats">
+        {#each FEATURES[mobileSheet].stats as s}
+          <div class="m-sheet-stat">
+            <span class="m-sheet-stat-v">{s.v}</span>
+            <span class="m-sheet-stat-k">{s.k}</span>
+          </div>
+        {/each}
+      </div>
+      <button type="button" class="m-sheet-cta" onclick={() => goto(FEATURES[mobileSheet ?? 0].path)}>
+        ENTER {FEATURES[mobileSheet].sub} →
+      </button>
+    </div>
+  {/if}
+
   <!-- ═══ FOOTER ═══ -->
   <footer class="foot">
     <div class="foot-top">
-      <div class="foot-logo" data-px="-0.04">MAXI<span class="foot-bolt">⚡</span>DOGE</div>
+      <div class="foot-logo" data-px="-0.04">STOCK<span class="foot-bolt">⚡</span>CLAW</div>
       <div class="foot-nav">
         <a href="/terminal">TERMINAL</a>
         <a href="/arena">ARENA</a>
-        <a href="/signals">SIGNALS</a>
+        <a href="/signals">SCANNER</a>
         <a href="/passport">PASSPORT</a>
         <a href="/oracle">ORACLE</a>
-        <a href="/signals">COMMUNITY</a>
       </div>
     </div>
     <div class="foot-bot">
-      <span class="foot-copy">© 2025 STOCKCLAW. ALL RIGHTS RESERVED.</span>
-      <span class="foot-tag">such AI. very trade. much profit. wow.</span>
+      <span class="foot-copy">© 2026 STOCKCLAW. ALL RIGHTS RESERVED.</span>
+      <span class="foot-tag">ORPO reads. You decide. WAGMI.</span>
     </div>
   </footer>
 </div>
@@ -617,6 +594,11 @@
      Dark green-black + Salmon pink retro game
      ═══════════════════════════════════════════════ */
 
+  /* ── GLOBAL: Kill yellow body background from app.css ── */
+  :global(html), :global(body) {
+    background: #0a1a0d !important;
+  }
+
   /* ── PALETTE ── */
   :root {
     --sp-bg: #0a1a0d;
@@ -625,7 +607,7 @@
     --sp-pk-l: #F5C4B8;
     --sp-w: #F0EDE4;
     --sp-dim: rgba(240,237,228,0.6);
-    --sp-glow: rgba(232,150,125,0.2);
+    --sp-glow: rgba(232,150,125,0.35);
     --sp-grid: rgba(232,150,125,0.12);
   }
 
@@ -642,20 +624,20 @@
       var(--sp-pk) 0px, var(--sp-pk) 3px,
       rgba(232,150,125,0.15) 3px, rgba(232,150,125,0.15) 5px
     );
-    --space-sec-x: clamp(16px, 3.8vw, 64px);
-    --space-sec-y-lg: clamp(58px, 7.2vw, 94px);
-    --space-hero-x: clamp(14px, 2.2vw, 34px);
-    --space-hero-y-top: clamp(14px, 1.9vw, 20px);
-    --space-hero-y-bottom: clamp(16px, 2.2vw, 24px);
-    --fs-kicker: clamp(8px, 0.95vw, 11px);
-    --fs-meta: clamp(8px, 0.95vw, 10.5px);
-    --fs-copy: clamp(10.5px, 1.05vw, 13px);
-    --fs-subhead: clamp(14px, 1.38vw, 19px);
-    --fs-prop: clamp(10.2px, 0.98vw, 12.2px);
-    --fs-chip-k: clamp(10px, 0.95vw, 11px);
+    --space-sec-x: clamp(20px, 4vw, 64px);
+    --space-sec-y-lg: clamp(64px, 8vw, 96px);
+    --space-hero-x: clamp(20px, 2.8vw, 40px);
+    --space-hero-y-top: clamp(24px, 3vw, 40px);
+    --space-hero-y-bottom: clamp(24px, 3vw, 40px);
+    --fs-kicker: clamp(9px, 0.95vw, 11px);
+    --fs-meta: clamp(9px, 0.95vw, 11px);
+    --fs-copy: clamp(11px, 1.1vw, 13px);
+    --fs-subhead: clamp(11px, 1vw, 13px);
+    --fs-prop: clamp(9.5px, 0.85vw, 11px);
+    --fs-chip-k: clamp(9px, 0.85vw, 10px);
     --fs-chip-v: clamp(11px, 1.08vw, 14px);
-    --fs-hero-white: clamp(30px, 4.7vw, 64px);
-    --fs-hero-pink: clamp(34px, 5.3vw, 72px);
+    --fs-hero-white: clamp(48px, 6.5vw, 95px);
+    --fs-hero-pink: clamp(54px, 7.25vw, 110px);
     --ls-kicker: clamp(1px, 0.24vw, 2.2px);
     --ls-copy: clamp(1px, 0.24vw, 2.4px);
     --ls-title: clamp(2px, 0.44vw, 4.8px);
@@ -725,8 +707,8 @@
 
   /* ── PERSPECTIVE GRID FLOOR ── */
   .grid-floor {
-    position: absolute; bottom: 0; left: -20%; right: -20%;
-    height: 31%; z-index: 1; pointer-events: none;
+    position: absolute; bottom: 0; left: -10%; right: -10%;
+    height: 25%; z-index: 1; pointer-events: none; opacity: 0.6;
     background:
       linear-gradient(90deg, var(--sp-grid) 1px, transparent 1px),
       linear-gradient(0deg, var(--sp-grid) 1px, transparent 1px);
@@ -774,10 +756,9 @@
     grid-template-columns: minmax(0, 1fr) clamp(296px, 31vw, 420px);
     gap: clamp(12px, 1.6vw, 24px);
     padding-inline: var(--space-sec-x);
-    border-bottom: 2px solid rgba(232,150,125,0.2);
+    border-bottom: 1px solid rgba(232,150,125,0.08);
     position: relative;
-    min-height: calc(100vh - var(--header-h, 48px));
-    min-height: calc(100dvh - var(--header-h, 48px));
+    min-height: min(calc(100dvh - var(--header-h, 48px)), 900px);
     z-index: 2;
     align-items: stretch;
   }
@@ -794,7 +775,7 @@
     min-width: 0;
     width: 100%;
     max-width: min(100%, clamp(560px, 64vw, 860px));
-    display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
     padding: var(--space-hero-y-top) var(--space-hero-x) var(--space-hero-y-bottom);
     position: sticky;
     top: var(--header-h, 48px);
@@ -855,7 +836,7 @@
 
   .hero-doge-wrap { flex-shrink: 0; }
   .hero-doge {
-    width: clamp(66px, 9.2vw, 130px); height: auto; object-fit: contain;
+    width: clamp(80px, 12vw, 170px); height: auto; object-fit: contain;
     animation: bob 3s ease-in-out infinite;
   }
   @keyframes bob {
@@ -865,7 +846,7 @@
 
   /* Hero subtitle + value props + CTAs */
   .hero-sub {
-    font-family: var(--fp); margin-top: clamp(8px, 1.1vw, 12px);
+    font-family: var(--fp); margin-top: clamp(16px, 2vw, 24px);
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -875,11 +856,11 @@
     color: var(--sp-pk);
     letter-spacing: var(--ls-copy);
     text-shadow: 0 0 6px var(--sp-glow);
-    max-width: 40ch;
+    max-width: 60ch;
     line-height: 1.3;
     text-wrap: balance;
   }
-  .hero-props { display: flex; flex-direction: column; gap: clamp(5px, 0.8vw, 10px); margin-top: clamp(8px, 1.1vw, 12px); width: min(100%, 74ch); }
+  .hero-props { display: flex; flex-direction: column; gap: clamp(4px, 0.6vw, 8px); margin-top: clamp(10px, 1.3vw, 16px); width: 100%; }
   .hp { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
   .hp-icon { font-size: clamp(12px, 1.3vw, 14px); flex-shrink: 0; line-height: 1.25; }
   .hp-txt {
@@ -890,59 +871,19 @@
   .hp-prime .hp-txt {
     opacity: 0.96;
     color: rgba(240,237,228,0.98);
-    font-size: clamp(10.5px, 1.04vw, 12.8px);
   }
-  .hp-note .hp-txt {
-    opacity: 0.78;
-  }
-  .hero-status {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: clamp(8px, 1vw, 12px);
-    margin-top: clamp(10px, 1.3vw, 14px);
-    width: min(100%, 880px);
-  }
-  .hs-chip {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: clamp(7px, 0.9vw, 10px) clamp(9px, 1.1vw, 12px);
-    border-radius: 8px;
-    border: 1px solid rgba(232,150,125,0.2);
-    background: rgba(232,150,125,0.04);
-    min-width: 0;
-  }
-  .hs-k {
-    font-family: var(--fp);
-    font-size: var(--fs-chip-k);
-    letter-spacing: clamp(0.8px, 0.2vw, 1.4px);
-    color: var(--sp-dim);
-    white-space: nowrap;
-  }
-  .hs-v {
-    font-family: var(--fp);
-    font-size: var(--fs-chip-v);
-    font-weight: 700;
-    color: var(--sp-w);
-    letter-spacing: clamp(0.5px, 0.14vw, 0.9px);
-    text-align: right;
-    min-width: 0;
-  }
-  .hs-v-live {
-    color: #89f4be;
-    text-shadow: 0 0 10px rgba(137,244,190,0.3);
-  }
-  .hero-ctas { display: flex; gap: 10px; margin-top: clamp(12px, 1.6vw, 18px); flex-wrap: wrap; width: min(100%, 760px); }
+  .hero-ctas { display: flex; gap: 12px; margin-top: clamp(16px, 2vw, 22px); flex-wrap: wrap; width: min(100%, 760px); }
   .hero-btn {
-    font-family: var(--fp); font-size: clamp(10.4px, 1.02vw, 12.8px); letter-spacing: clamp(1.1px, 0.22vw, 1.7px);
-    border: none; border-radius: 6px; padding: 12px 18px;
+    font-family: var(--fp); font-size: clamp(10.4px, 1.08vw, 13px); letter-spacing: clamp(1.1px, 0.22vw, 1.7px);
+    border: none; border-radius: 6px; padding: 14px 24px;
     cursor: pointer; transition: all .2s;
-    min-width: 168px;
+    min-width: 180px;
   }
   .hero-btn-primary {
     color: var(--sp-bg); background: var(--sp-pk);
     box-shadow: var(--fx-glow-md);
+    padding: 16px 32px; min-width: 200px; border-radius: 8px;
+    font-size: clamp(11px, 1.15vw, 14px);
   }
   .hero-btn-primary:hover { transform: translateY(-2px); box-shadow: var(--fx-glow-lg); }
   .hero-btn-secondary {
@@ -951,13 +892,32 @@
   }
   .hero-btn-secondary:hover { background: rgba(232,150,125,0.08); border-color: var(--sp-pk); }
 
+  /* Social proof */
+  .hero-social {
+    display: flex; align-items: center; gap: 14px;
+    margin-top: clamp(14px, 1.8vw, 22px);
+    padding-top: clamp(10px, 1.4vw, 16px);
+    border-top: 1px solid rgba(232,150,125,0.1);
+  }
+  .hs-stars {
+    font-size: clamp(12px, 1.3vw, 15px); color: #f5c842;
+    letter-spacing: 2px; line-height: 1;
+  }
+  .hs-quote { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .hs-quote-txt {
+    font-family: var(--fp); font-size: clamp(10px, 1vw, 12px);
+    color: var(--sp-pk); letter-spacing: 1.5px; font-weight: 700;
+  }
+  .hs-quote-src {
+    font-family: var(--fp); font-size: clamp(10px, 0.9vw, 11px);
+    color: var(--sp-dim); letter-spacing: 1px;
+  }
+
   .hero-btn:focus-visible,
   .fc:focus-visible,
   .fc-all:focus-visible,
   .feat-back:focus-visible,
   .feat-detail-cta:focus-visible,
-  .arena:focus-visible,
-  .qn:focus-visible,
   .cta-btn:focus-visible,
   .foot-nav a:focus-visible {
     outline: 2px solid var(--sp-pk);
@@ -1154,12 +1114,11 @@
   /* ═══ FLOW — MISSION STAGES ═══ */
   .flow {
     background: var(--sp-bg2); padding: var(--space-sec-y-lg) var(--space-sec-x);
-    border-bottom: 2px solid rgba(232,150,125,0.15);
+    border-bottom: 1px solid rgba(232,150,125,0.08);
     position: relative; overflow: hidden; z-index: 2;
-    min-height: 80vh;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 800px;
-    contain: layout style paint;
+    min-height: auto;
+    content-visibility: visible;
+    contain: layout style;
   }
   .flow-header { text-align: center; margin-bottom: clamp(28px, 4vw, 48px); position: relative; z-index: 2; }
   .flow-tag {
@@ -1175,7 +1134,6 @@
   .ft-pk,
   .sq-pk,
   .dt-pk,
-  .fd-pk,
   .cta-pk {
     display: block;
     width: fit-content;
@@ -1189,7 +1147,6 @@
   .detect-title .dt-pk {
     margin-inline: auto;
   }
-  .feed-l .fd-pk,
   .cta-l .cta-pk {
     margin-inline: 0;
   }
@@ -1197,7 +1154,6 @@
     .ft-pk,
     .sq-pk,
     .dt-pk,
-    .fd-pk,
     .cta-pk,
     .feat-detail-title {
       background: var(--fx-title-pink-fill);
@@ -1267,52 +1223,87 @@
   }
   .fstep:hover .fstep-img { transform: scale(1.1) rotate(-3deg); }
 
-  /* ═══ ABOUT ═══ */
+  /* ═══ ABOUT — WHY DIFFERENT ═══ */
   .about {
     background: var(--sp-bg);
-    padding: var(--space-sec-y-lg) var(--space-sec-x) clamp(50px, 5vw, 72px);
+    padding: clamp(96px, 12vw, 160px) var(--space-sec-x) clamp(64px, 7vw, 96px);
     display: flex; flex-direction: column; align-items: center;
-    border-bottom: 2px solid rgba(232,150,125,0.15);
+    border-bottom: 1px solid rgba(232,150,125,0.08);
     position: relative; overflow: hidden; z-index: 2;
-    min-height: 60vh;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 600px;
+    min-height: auto;
+    content-visibility: visible;
   }
 
-  .about-inner {
-    display: flex; align-items: flex-start; gap: 48px;
-    max-width: 1100px; width: 100%; position: relative; z-index: 2;
+  .about-header {
+    text-align: center; margin-bottom: clamp(40px, 5vw, 64px);
+    position: relative; z-index: 2;
+  }
+  .about-kicker {
+    font-family: var(--fp); font-size: var(--fs-meta);
+    color: var(--sp-pk); letter-spacing: var(--ls-kicker);
+    display: block; margin-bottom: 12px;
+    text-shadow: var(--fx-glow-sm);
+  }
+  .about-title {
+    font-family: var(--fp); line-height: 1.3;
+  }
+  .ab-line {
+    display: block;
+    font-size: clamp(18px, 3.2vw, 36px);
+    color: var(--sp-w);
+    letter-spacing: clamp(1px, 0.22vw, 2px);
+  }
+  .ab-pk {
+    color: var(--sp-pk);
+    text-shadow: 0 0 12px var(--sp-glow);
+    font-size: clamp(22px, 3.8vw, 42px);
+    text-decoration: underline;
+    text-decoration-color: rgba(232,150,125,0.5);
+    text-underline-offset: 6px;
+    text-decoration-thickness: 2px;
   }
 
-  .about-badge { position: relative; width: 180px; height: 180px; flex-shrink: 0; }
-  .badge-svg { width: 100%; height: 100%; animation: spin 20s linear infinite; }
-  .badge-txt { font-family: var(--fp); font-size: 10px; fill: var(--sp-pk); letter-spacing: 3px; }
-  .badge-face-wrap {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-    width: 70px; height: 70px;
+  .why-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: clamp(16px, 2vw, 24px);
+    max-width: 900px; width: 100%;
+    position: relative; z-index: 2;
   }
-  .badge-face { width: 100%; height: 100%; object-fit: contain; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .about-text { flex: 1; }
-  .about-text p {
-    font-family: var(--fv); font-size: clamp(21px, 2.6vw, 34px);
-    line-height: 1.25; color: var(--sp-w); text-align: center;
-    text-wrap: balance;
+  .why-card {
+    background: var(--sp-bg2);
+    border: 1px solid rgba(232,150,125,0.12);
+    border-radius: 12px;
+    padding: clamp(20px, 2.4vw, 32px);
+    transition: transform .2s, box-shadow .2s, border-color .2s;
   }
-  .ab { font-weight: 700; text-transform: uppercase; }
-  .ai { font-style: italic; font-weight: 400; font-family: Georgia, serif; font-size: .85em; color: var(--sp-pk-l); }
-  .ar { font-weight: 700; font-size: .7em; letter-spacing: 2px; text-transform: uppercase; color: var(--sp-dim); }
-  .as { font-weight: 700; font-size: .55em; letter-spacing: 3px; text-transform: uppercase; color: var(--sp-dim); }
-  .abg { font-size: 1.15em; color: var(--sp-pk); text-shadow: 0 0 6px var(--sp-glow); }
-  .abx { font-size: 1.4em; color: var(--sp-pk); text-shadow: 0 0 8px var(--sp-glow); }
+  .why-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 20px rgba(232,150,125,0.1);
+    border-color: rgba(232,150,125,0.3);
+  }
+  .why-num {
+    font-family: var(--fp); font-size: clamp(24px, 3vw, 36px);
+    color: var(--sp-pk); opacity: 0.3;
+    display: block; margin-bottom: 8px;
+  }
+  .why-label {
+    font-family: var(--fp); font-size: var(--fs-copy);
+    color: var(--sp-pk); letter-spacing: 1px;
+    display: block; margin-bottom: 8px;
+    text-shadow: 0 0 6px var(--sp-glow);
+  }
+  .why-desc {
+    font-family: var(--fv); font-size: clamp(12px, 1.2vw, 14px);
+    color: var(--sp-w); line-height: 1.6;
+    opacity: 0.7;
+  }
 
   .about-tag {
     font-family: var(--fp); font-size: var(--fs-meta);
     letter-spacing: clamp(1.6px, 0.42vw, 3.2px); color: var(--sp-dim); text-align: center;
     margin-top: 40px; padding-top: 20px;
     border-top: 1px solid rgba(232,150,125,0.08);
-    width: 100%; max-width: 600px; position: relative; z-index: 2;
+    width: 100%; max-width: 900px; position: relative; z-index: 2;
     text-wrap: balance;
   }
 
@@ -1320,11 +1311,10 @@
   .squad {
     background: var(--sp-bg2);
     padding: var(--space-sec-y-lg) var(--space-sec-x); position: relative; overflow: hidden; z-index: 2;
-    border-bottom: 2px solid rgba(232,150,125,0.15);
-    min-height: 70vh;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 800px;
-    contain: layout style paint;
+    border-bottom: 1px solid rgba(232,150,125,0.08);
+    min-height: auto;
+    content-visibility: visible;
+    contain: layout style;
   }
   .sq-tag {
     font-family: var(--fp); font-size: var(--fs-meta);
@@ -1396,6 +1386,9 @@
     display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 10px;
   }
+  .sq-grid-6 {
+    grid-template-columns: repeat(3, 1fr);
+  }
   .sq-card {
     display: flex; align-items: center; gap: 10px; padding: 12px 14px;
     background: var(--sp-bg);
@@ -1404,25 +1397,22 @@
     cursor: default; transition: transform .2s, box-shadow .2s;
   }
   .sq-card:hover { transform: translateY(-3px); box-shadow: 0 4px 20px rgba(232,150,125,0.12); }
-  .sq-av-wrap { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; flex-shrink: 0; border: 2px solid var(--ac); }
-  .sq-av-wrap::after { -webkit-mask-size: cover; mask-size: cover; }
-  .sq-av { width: 100%; height: 100%; object-fit: cover; }
   .sq-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
   .sq-nm { font-family: var(--fp); font-size: var(--fs-copy); letter-spacing: clamp(0.7px, 0.2vw, 1.2px); }
   .sq-rl { font-family: var(--fv); font-size: clamp(11px, 1.2vw, 13px); color: var(--sp-dim); }
+  .sq-desc { font-family: var(--fv); font-size: clamp(11px, 1.1vw, 13px); color: var(--sp-w); opacity: 0.6; line-height: 1.5; margin-top: 4px; }
   .sq-bar { width: 100%; height: 4px; background: rgba(232,150,125,0.1); border-radius: 2px; margin-top: 3px; overflow: hidden; }
   .sq-fill { height: 100%; border-radius: 2px; box-shadow: 0 0 4px var(--sp-glow); }
-  .sq-pct { font-family: var(--fp); font-size: var(--fs-copy); color: var(--sp-pk); opacity: .6; margin-left: auto; }
+  .sq-pct { font-family: var(--fp); font-size: var(--fs-copy); color: var(--sp-pk); opacity: .8; margin-left: auto; }
 
   /* ═══ DETECT — SCANNER SHOWCASE ═══ */
   .detect {
     background: var(--sp-bg);
     padding: var(--space-sec-y-lg) var(--space-sec-x);
-    border-bottom: 2px solid rgba(232,150,125,0.15);
+    border-bottom: 1px solid rgba(232,150,125,0.08);
     position: relative; overflow: hidden; z-index: 2;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 900px;
-    contain: layout style paint;
+    content-visibility: visible;
+    contain: layout style;
   }
   .detect-stars {
     position: absolute; inset: 0;
@@ -1459,51 +1449,39 @@
     text-wrap: balance;
   }
 
-  /* Phase labels */
-  .dtl-phase-label {
-    text-align: center; margin-bottom: 16px;
-  }
-  .dtl-phase-tag {
-    font-family: var(--fp); font-size: var(--fs-copy);
-    color: var(--sp-pk); letter-spacing: clamp(1px, 0.22vw, 2px);
-    background: rgba(232,150,125,0.06);
-    border: 1px solid rgba(232,150,125,0.15);
-    padding: 4px 14px; border-radius: 20px;
-    text-shadow: 0 0 6px var(--sp-glow);
-  }
-  /* A-E: Parallel input grid */
+  /* Context Agent grid */
   .dtl-inputs {
     max-width: 960px; margin: 0 auto 0;
     display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 10px;
   }
-  .dtl-input, .dtl-output {
+  .dtl-inputs-4 {
+    grid-template-columns: repeat(4, 1fr);
+    max-width: 1000px;
+  }
+  .dtl-input {
     background: var(--sp-bg2);
     border: 1px solid rgba(232,150,125,0.12);
     border-radius: 10px;
     padding: 16px;
     transition: transform .2s, box-shadow .2s, border-color .2s;
   }
-  .dtl-input:hover, .dtl-output:hover {
+  .dtl-input:hover {
     transform: translateY(-3px);
     box-shadow: 0 4px 20px rgba(232,150,125,0.1);
     border-color: rgba(232,150,125,0.3);
   }
   .dtl-badge {
-    font-family: var(--fp); font-size: 10px; font-weight: 700;
+    font-family: var(--fp); font-size: 9px; font-weight: 700;
     color: var(--sp-bg); background: var(--sp-pk);
-    width: 24px; height: 24px; border-radius: 50%;
+    width: 28px; height: 28px; border-radius: 50%;
     display: inline-flex; align-items: center; justify-content: center;
     text-shadow: none;
     box-shadow: 0 0 8px var(--sp-glow);
     margin-right: 6px; vertical-align: middle;
   }
-  .dtl-badge-out {
-    background: var(--sp-pk);
-    box-shadow: 0 0 8px rgba(232,150,125,0.4);
-  }
   .dtl-icon { font-size: 14px; vertical-align: middle; margin-right: 4px; }
-  .dtl-input-body, .dtl-output-body {
+  .dtl-input-body {
     display: inline; vertical-align: middle;
   }
   .dtl-label {
@@ -1541,22 +1519,6 @@
     text-shadow: 0 0 10px var(--sp-glow);
   }
 
-  /* F-G: Conclusion outputs */
-  .dtl-outputs {
-    max-width: 640px; margin: 0 auto;
-    display: grid; grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-  }
-  .dtl-output {
-    border-color: rgba(232,150,125,0.25);
-    background: rgba(232,150,125,0.04);
-  }
-  .dtl-output:hover {
-    border-color: rgba(232,150,125,0.4);
-    box-shadow: 0 4px 20px rgba(232,150,125,0.1);
-  }
-  .dtl-output .dtl-label { color: var(--sp-pk); }
-
   .detect-cta {
     text-align: center; margin-top: 40px;
     display: flex; flex-direction: column; align-items: center; gap: 16px;
@@ -1571,97 +1533,13 @@
     text-shadow: 0 0 8px var(--sp-glow);
   }
 
-  /* ═══ FEED ═══ */
-  .feed {
-    display: flex; background: var(--sp-bg);
-    border-bottom: 2px solid rgba(232,150,125,0.15);
-    overflow: hidden; z-index: 2;
-    min-height: 80vh;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 800px;
-  }
-  .feed-l {
-    flex: 0 0 40%; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; padding: clamp(22px, 2.8vw, 42px);
-    position: relative; overflow: hidden;
-  }
-  .fd-line {
-    font-family: var(--fp); display: block;
-    position: relative; z-index: 2; line-height: 1.2; text-align: center;
-  }
-  .fd-w { font-size: clamp(20px, 4vw, 36px); color: var(--sp-w); text-shadow: 0 0 10px rgba(240,237,228,0.3); }
-  .fd-pk {
-    font-size: clamp(36px, 8vw, 72px); letter-spacing: 4px;
-  }
-  .feed-doge-wrap { width: clamp(120px, 16vw, 200px); margin-top: 20px; position: relative; z-index: 2; }
-  .feed-doge {
-    width: 100%; object-fit: contain;
-    animation: bob 4s ease-in-out infinite;
-  }
-  .feed-r {
-    flex: 1;
-    background: var(--sp-bg2);
-    border-left: 1px solid rgba(232,150,125,0.1);
-    padding: clamp(16px, 2vw, 26px); display: flex; flex-direction: column; gap: 14px; overflow-y: auto;
-  }
-
-  .arena {
-    display: block; text-decoration: none; color: inherit;
-    background: var(--sp-bg); border: 2px solid rgba(232,150,125,0.2); border-radius: 12px;
-    padding: 16px; cursor: pointer; transition: transform .2s, box-shadow .2s; width: 100%; text-align: left;
-  }
-  .arena:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(232,150,125,0.12); }
-  .arena-row { display: flex; align-items: center; gap: 12px; }
-  .arena-img-wrap { width: 60px; height: 60px; flex-shrink: 0; }
-  .arena-img { width: 100%; height: 100%; object-fit: contain; }
-  .arena-mid { flex: 1; text-align: center; }
-  .arena-tag { font-family: var(--fp); font-size: 10px; color: var(--sp-dim); letter-spacing: 1px; }
-  .arena-name {
-    font-family: var(--fp); font-size: clamp(14px, 2vw, 20px); letter-spacing: clamp(1.6px, 0.34vw, 3.6px);
-    color: var(--sp-pk); line-height: 1.4;
-    text-shadow: 0 0 8px var(--sp-pk), 0 0 20px var(--sp-glow);
-  }
-  .arena-sub { font-family: var(--fp); font-size: 10px; color: var(--sp-dim); margin-top: 4px; }
-  .arena-ft { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
-  .arena-ft span {
-    font-family: var(--fp); font-size: 10px; color: var(--sp-dim);
-    background: rgba(232,150,125,0.06); padding: 4px 10px; border: 1px solid rgba(232,150,125,0.1);
-    border-radius: 4px;
-  }
-
-  .ticker {
-    display: flex; align-items: center; gap: 16px;
-    padding: 14px 18px; background: var(--sp-bg);
-    border: 1px solid rgba(232,150,125,0.15); border-radius: 8px;
-  }
-  .tk { display: flex; align-items: center; gap: 6px; }
-  .tk-s { font-size: 16px; color: #f7931a; }
-  .tk-eth { color: #627eea; }
-  .tk-sol { color: #9945ff; }
-  .tk-n { font-family: var(--fp); font-size: 10px; color: var(--sp-dim); letter-spacing: 1px; }
-  .tk-v { font-family: var(--fp); font-size: 10px; color: var(--sp-w); }
-  .tk-sep { width: 1px; height: 20px; background: rgba(232,150,125,0.12); }
-
-  .qg { display: flex; flex-wrap: wrap; gap: 8px; }
-  .qn {
-    font-family: var(--fp); font-size: var(--fs-meta);
-    letter-spacing: clamp(1px, 0.26vw, 2px); color: var(--sp-w);
-    background: transparent; border: 1px solid rgba(232,150,125,0.2);
-    padding: 8px 14px; cursor: pointer; border-radius: 6px;
-    transition: all .15s; display: flex; align-items: center; gap: 6px; white-space: nowrap;
-    text-decoration: none;
-  }
-  .qn:hover { background: rgba(232,150,125,0.1); color: var(--sp-pk); border-color: var(--sp-pk); }
-  .qn-b { font-size: 8px; background: var(--sp-pk); color: var(--sp-bg); padding: 1px 5px; border-radius: 4px; }
-
   /* ═══ CTA ═══ */
   .cta {
     background: var(--sp-bg2);
     padding: var(--space-sec-y-lg) var(--space-sec-x) clamp(84px, 10vw, 128px); display: flex; flex-wrap: wrap; gap: clamp(20px, 3.2vw, 34px);
     position: relative; overflow: hidden; z-index: 2;
-    min-height: 70vh;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 700px;
+    min-height: auto;
+    content-visibility: visible;
   }
   .cta-l { flex: 1; min-width: 250px; display: flex; flex-direction: column; line-height: 1.2; position: relative; z-index: 3; }
   .cta-txt { font-family: var(--fp); display: block; }
@@ -1726,8 +1604,8 @@
     flex-wrap: wrap; gap: 8px; padding-top: 16px;
     border-top: 1px solid rgba(232,150,125,0.06);
   }
-  .foot-copy { font-family: var(--fp); font-size: clamp(10px, 0.95vw, 11px); letter-spacing: clamp(0.7px, 0.2vw, 1.2px); color: rgba(240,237,228,0.45); }
-  .foot-tag { font-family: var(--fv); font-size: clamp(12px, 1.3vw, 14px); color: rgba(232,150,125,0.5); }
+  .foot-copy { font-family: var(--fp); font-size: clamp(10px, 0.95vw, 11px); letter-spacing: clamp(0.7px, 0.2vw, 1.2px); color: rgba(240,237,228,0.55); }
+  .foot-tag { font-family: var(--fv); font-size: clamp(12px, 1.3vw, 14px); color: rgba(232,150,125,0.6); }
 
   @media (prefers-reduced-motion: reduce) {
     .sr,
@@ -1737,9 +1615,7 @@
       transition: none !important;
     }
     .ht::before,
-    .badge-svg,
     .hero-doge,
-    .feed-doge,
     .sq-frame::before {
       animation: none !important;
     }
@@ -1750,7 +1626,6 @@
     .fstep:hover .fstep-img,
     .hero-btn-primary:hover,
     .feat-detail-cta:hover,
-    .arena:hover,
     .cta-btn:hover {
       transform: none !important;
     }
@@ -1767,7 +1642,6 @@
     .about,
     .squad,
     .detect,
-    .feed,
     .cta {
       min-height: auto;
     }
@@ -1782,17 +1656,13 @@
     }
     .fstep:last-child { border-bottom: 1px solid rgba(232,150,125,0.14); }
 
-    .about-inner { max-width: 1140px; gap: clamp(28px, 4vw, 48px); }
-    .about-text p { text-align: left; }
     .about-tag { max-width: 1080px; text-align: left; }
+    .why-grid { max-width: 960px; }
 
     .dtl-inputs { max-width: 1000px; }
     .sq-frame { max-width: 1080px; padding: clamp(18px, 2vw, 24px); }
     .sq-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-
-    .feed { align-items: stretch; }
-    .feed-l { flex: 0 0 clamp(300px, 38%, 500px); }
-    .feed-r { overflow: visible; }
+    .sq-grid-6 { grid-template-columns: repeat(3, 1fr); }
   }
 
   @media (max-width: 1200px) {
@@ -1805,7 +1675,6 @@
     .hl-pk { font-size: clamp(30px, 6.4vw, 66px); }
     .hl-xl { font-size: clamp(28px, 5.6vw, 58px); }
     .hero-sub-v { max-width: 44ch; }
-    .hero-status { width: min(100%, 860px); }
     .hero-btn { min-width: 164px; }
     .fc { min-height: clamp(186px, 30vh, 264px); }
     .fc-img .ht { width: 54%; }
@@ -1839,24 +1708,58 @@
       position: static;
       padding: 10px var(--space-sec-x);
     }
-    .hero-status {
-      width: 100%;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .hs-chip:first-child {
-      grid-column: 1 / -1;
-    }
     .hero-sub,
     .hero-props,
     .hero-ctas {
       width: 100%;
       max-width: none;
     }
-    .fc { min-height: clamp(210px, 42vw, 300px); }
+    .hero-right {
+      width: 100%;
+      max-height: none;
+      overflow-x: auto;
+      overflow-y: hidden;
+      flex-direction: row;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      gap: 12px;
+      padding: 14px var(--space-sec-x);
+    }
+    .fc {
+      min-height: auto;
+      min-width: 280px;
+      max-width: 320px;
+      flex-shrink: 0;
+      scroll-snap-align: start;
+      padding: 0;
+      flex-direction: column;
+      border-bottom: none;
+      border: 1px solid rgba(232,150,125,0.12);
+      border-radius: 12px;
+    }
+    .fc-img {
+      flex: 0 0 auto;
+      height: 160px;
+      border-bottom: 1px solid rgba(232,150,125,0.06);
+    }
     .fc-img .ht { width: 46%; }
+    .fc-txt {
+      padding: 14px 18px 16px;
+    }
+    .fc-sub { font-size: 9px; }
+    .fc-lbl {
+      font-size: clamp(14px, 2.5vw, 18px);
+    }
+    .fc-brief {
+      font-size: clamp(11px, 1.8vw, 13px);
+      line-height: 1.5;
+    }
+    .fc-all { display: none; }
+    .hero-right-head { display: none; }
 
-    .feed { flex-direction: column; }
-    .feed-l { flex: 0 0 auto; }
+    .why-grid { grid-template-columns: 1fr; gap: 16px; }
+    .dtl-inputs-4 { grid-template-columns: repeat(2, 1fr); }
+    .sq-grid-6 { grid-template-columns: repeat(2, 1fr); }
   }
 
   @media (max-width: 900px) {
@@ -1866,114 +1769,226 @@
       letter-spacing: clamp(1px, 0.24vw, 1.8px);
       max-width: none;
     }
-    .hero-status {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-    .hs-chip:first-child { grid-column: 1 / -1; }
-    .hs-chip {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .hs-v { text-align: left; }
     .feat-detail-stats { flex-wrap: wrap; gap: 10px; }
     .feat-detail-title {
       font-size: clamp(24px, 6vw, 34px);
       letter-spacing: clamp(1.4px, 0.3vw, 2.6px);
     }
-    .about-inner { flex-direction: column; align-items: center; }
+    .why-grid { grid-template-columns: 1fr; }
     .flow { padding-top: clamp(48px, 8vw, 60px); padding-bottom: clamp(48px, 8vw, 60px); }
-    .about { padding-bottom: clamp(34px, 5vw, 46px); }
+    .about { padding-top: clamp(72px, 10vw, 100px); padding-bottom: clamp(48px, 6vw, 64px); }
     .detect { padding-top: clamp(48px, 8vw, 60px); padding-bottom: clamp(48px, 8vw, 60px); }
     .dtl-inputs { grid-template-columns: 1fr 1fr; }
-    .dtl-outputs { grid-template-columns: 1fr; }
+    .dtl-inputs-4 { grid-template-columns: repeat(2, 1fr); }
     .detect-example { font-size: 10px; padding: 10px 14px; }
-    .feed-l { padding: 28px var(--space-sec-x); }
     .cta { padding-top: clamp(46px, 8vw, 58px); }
     .fstep-num { font-size: clamp(22px, 3.2vw, 26px); min-width: 48px; }
     .fstep-imgwrap { width: 60px; height: 60px; }
     .sq-frame { padding: 16px; border-radius: 14px; }
+
+    /* ── Detect card text wrapping fix ── */
+    .dtl-input { padding: 14px; }
+    .dtl-label { font-size: 11px; letter-spacing: 0.8px; white-space: nowrap; }
+    .dtl-desc { font-size: 11px; line-height: 1.5; }
+    .dtl-badge { width: 26px; height: 26px; font-size: 8px; margin-right: 5px; }
+    .dtl-icon { font-size: 13px; }
+    .dtl-count { font-size: 8px; padding: 1px 5px; }
+    .dtl-flow-label { font-size: 10px; letter-spacing: 1.5px; }
+
+    /* ── Squad card normalization ── */
+    .sq-card { padding: 10px 12px; gap: 8px; }
+    .sq-nm { font-size: 11px; }
+    .sq-rl { font-size: 10px; }
+    .sq-desc { font-size: 10px; }
+    .sq-pct { font-size: 11px; }
   }
 
   @media (max-width: 640px) {
-    .hero-left { padding: 24px 16px 34px; }
+    .hero-left { padding: clamp(32px, 8vw, 48px) 20px clamp(24px, 5vw, 36px); }
+
+    /* ── Hero title: 1면답게 크게 ── */
     .hl-pk {
-      font-size: clamp(32px, 11.5vw, 46px);
-      letter-spacing: clamp(1.4px, 0.5vw, 2.4px);
+      font-size: clamp(38px, 13vw, 56px);
+      letter-spacing: clamp(1.6px, 0.6vw, 3px);
     }
     .hl-xl {
-      font-size: clamp(28px, 10.2vw, 40px);
-      letter-spacing: clamp(1.4px, 0.46vw, 2.4px);
+      font-size: clamp(34px, 11.5vw, 48px);
+      letter-spacing: clamp(1.6px, 0.5vw, 3px);
     }
-    .hero-doge { width: clamp(52px, 13vw, 68px); }
+    .htag {
+      font-size: 10px;
+      margin-bottom: clamp(10px, 3vw, 16px);
+    }
+    .hero-doge { width: clamp(52px, 14vw, 72px); }
+    .hero-stack { gap: clamp(4px, 1.2vw, 8px); }
+
+    /* ── 서브타이틀 & value prop ── */
+    .hero-sub {
+      margin-top: clamp(16px, 4vw, 24px);
+    }
     .hero-sub-v {
-      font-size: clamp(12px, 3.8vw, 15px);
-      line-height: 1.44;
+      font-size: clamp(11px, 3.2vw, 14px);
+      line-height: 1.45;
+      letter-spacing: 0.8px;
+      text-wrap: balance;
     }
-    .hp-icon { font-size: 11px; }
+    .hero-props {
+      margin-top: clamp(10px, 3vw, 16px);
+    }
+    .hp-icon { font-size: 10px; }
     .hp-txt {
-      font-size: clamp(9px, 2.8vw, 10px);
-      line-height: 1.42;
-      letter-spacing: clamp(0.6px, 0.2vw, 1px);
+      font-size: clamp(8.5px, 2.5vw, 10px);
+      line-height: 1.5;
+      letter-spacing: 0.5px;
     }
-    .hero-status {
-      grid-template-columns: 1fr;
-      gap: 8px;
-    }
-    .hs-chip:first-child { grid-column: auto; }
-    .hs-chip {
-      width: 100%;
-      min-width: 0;
-      flex-direction: row;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .hs-k { font-size: 10px; }
-    .hs-v { font-size: 10px; text-align: right; }
+
+    /* ── CTA: 비율 맞춤 (타이틀 대비 적절하게) ── */
     .hero-ctas {
       flex-direction: column;
       align-items: stretch;
       gap: 10px;
+      margin-top: clamp(18px, 4vw, 28px);
     }
     .hero-btn {
       width: 100%;
       min-width: 0;
+      min-height: 44px;
       display: inline-flex;
       justify-content: center;
       padding: 12px 16px;
+      font-size: 10px;
+      letter-spacing: 1.2px;
     }
-    .about-text p { font-size: clamp(19px, 6.2vw, 24px); }
-    .about-badge { width: 120px; height: 120px; }
-    .badge-face-wrap { width: 45px; height: 45px; }
-    .squad { padding: 34px 16px; }
+    .hero-social {
+      margin-top: 12px;
+      padding-top: 10px;
+      gap: 10px;
+    }
+    .hs-stars { font-size: 12px; letter-spacing: 1px; }
+    .hs-quote { gap: 6px; }
+    .hs-quote-txt { font-size: 9px; letter-spacing: 1px; }
+    .hs-quote-src { font-size: 8px; }
+
+    /* Mobile feature cards: vertical but image capped */
+    .hero-right {
+      max-height: none;
+      overflow-x: auto;
+      overflow-y: hidden;
+      flex-direction: row;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      gap: 12px;
+      padding: 14px 16px;
+    }
+    .fc {
+      min-width: 240px;
+      max-width: 280px;
+      min-height: auto;
+      flex-shrink: 0;
+      scroll-snap-align: start;
+      border-bottom: none;
+      border: 1px solid rgba(232,150,125,0.15);
+      border-radius: 12px;
+      flex-direction: column;
+    }
+    .fc-img {
+      flex: 0 0 auto;
+      height: 140px;
+      border-bottom: 1px solid rgba(232,150,125,0.06);
+    }
+    .fc-img .ht { width: 50%; }
+    .fc-txt {
+      padding: 14px 16px 16px;
+    }
+    .fc-sub { font-size: 9px; }
+    .fc-lbl { font-size: 14px; margin-top: 3px; }
+    .fc-brief { font-size: 11px; margin-top: 5px; line-height: 1.45; }
+    .fc-all { display: none; }
+    .hero-right-head { display: none; }
+
+    .why-grid { gap: 12px; }
+    .why-card { padding: 16px; }
+    .why-label { font-size: 12px; letter-spacing: 0.8px; }
+    .why-desc { font-size: 12px; line-height: 1.5; }
+    .why-num { font-size: 22px; margin-bottom: 4px; }
+    .ab-line { font-size: clamp(16px, 5vw, 22px); }
+    .ab-pk { font-size: clamp(18px, 6vw, 26px); }
+
+    /* ── Unified section padding ── */
+    .flow, .detect, .cta {
+      padding: clamp(48px, 12vw, 72px) 16px;
+    }
+    .about {
+      padding: clamp(56px, 14vw, 80px) 16px clamp(40px, 10vw, 56px);
+    }
+    .squad { padding: 40px 16px; }
+
     .sq-grid { grid-template-columns: 1fr; }
-    .sq-frame { border-radius: 10px; }
-    .feed-r { padding: 16px; }
-    .arena-img-wrap { width: 45px; height: 45px; }
-    .arena-name { font-size: 14px; letter-spacing: 2.2px; }
-    .ticker { flex-wrap: wrap; gap: 10px; }
-    .tk-sep { display: none; }
+    .sq-grid-6 { grid-template-columns: repeat(2, 1fr); }
+    .sq-frame { border-radius: 10px; padding: 12px; }
+    .sq-card { padding: 12px; gap: 8px; min-height: 56px; }
+    .sq-nm { font-size: 11px; letter-spacing: 0.6px; }
+    .sq-rl { font-size: 10px; }
+    .sq-desc { font-size: 10px; line-height: 1.4; }
+    .sq-pct { font-size: 10px; }
+    .sq-bar { margin-top: 2px; }
+    .sq-title { font-size: clamp(20px, 7vw, 28px); }
+    .sq-sub { font-size: 10px; margin-bottom: 20px; }
+
+    /* ── Detect mobile ── */
+    .dtl-inputs-4 { grid-template-columns: 1fr; gap: 10px; }
+    .dtl-input { padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .dtl-label { font-size: 12px; white-space: nowrap; }
+    .dtl-desc { font-size: 11px; line-height: 1.45; width: 100%; margin-top: 6px; }
+    .dtl-badge { width: 24px; height: 24px; font-size: 8px; }
+    .dtl-icon { font-size: 14px; }
+    .dtl-count { font-size: 8px; }
+    .dtl-flow { margin: 20px 0; }
+    .dtl-flow-label { font-size: 9px; letter-spacing: 1px; }
+    .dtl-flow-line { width: 40px; }
+    .detect-header { margin-bottom: 20px; }
+    .dt-w { font-size: clamp(14px, 4vw, 18px); }
+    .dt-pk { font-size: clamp(18px, 6vw, 26px); }
+    .detect-sub { font-size: 9px; letter-spacing: 1px; margin-top: 8px; }
+    .detect-cta { margin-top: 24px; gap: 12px; }
+    .detect-example { font-size: 10px; padding: 10px 14px; line-height: 1.5; }
+
+    /* ── CTA mobile ── */
     .cta-w { font-size: clamp(22px, 8vw, 32px); }
     .cta-pk {
       font-size: clamp(30px, 10vw, 42px);
       letter-spacing: clamp(1.4px, 0.5vw, 2.6px);
     }
     .cta-doge-wrap { width: 120px; }
-    .cta-btn { font-size: 10px; padding: 12px 20px; width: 100%; max-width: 320px; }
-    .fstep { gap: 12px; padding: 20px 16px; }
-    .fstep-num { font-size: 20px; min-width: 36px; }
-    .fstep-title { font-size: 12px; }
-    .fstep-imgwrap { width: 50px; height: 50px; }
-    .fstep-bar { max-width: 120px; }
+    .cta-btn { font-size: 10px; padding: 14px 20px; width: 100%; max-width: 320px; min-height: 48px; }
+    .cta-det { margin-top: 12px; }
+    .cta-brand { font-size: 10px; }
+    .cta-loc { font-size: 9px; }
+
+    /* ── Flow mobile ── */
+    .flow-tag { font-size: 9px; }
+    .flow-title { margin-bottom: 20px; }
+    .fstep { gap: 12px; padding: 16px; border-radius: 10px; }
+    .fstep-num { font-size: 18px; min-width: 32px; }
+    .fstep-title { font-size: 11px; letter-spacing: 0.8px; }
+    .fstep-desc { font-size: 11px; line-height: 1.45; }
+    .fstep-imgwrap { width: 48px; height: 48px; }
+    .fstep-bar { max-width: 100px; }
+
+    /* ── Footer mobile ── */
+    .foot { padding: 20px 16px 16px; gap: 14px; }
+    .foot-top { gap: 12px; }
+    .foot-logo { font-size: 10px; }
+    .foot-nav { gap: 4px; }
+    .foot-nav a { font-size: 8px; padding: 5px 8px; letter-spacing: 0.8px; }
+    .foot-copy { font-size: 7px; }
+    .foot-tag { font-size: 8px; }
   }
 
   @media (max-width: 400px) {
     .hl-pk { font-size: clamp(26px, 12vw, 32px); }
     .hl-xl { font-size: clamp(24px, 10vw, 28px); }
     .hero-doge { width: 50px; }
-    .about-text p { font-size: 18px; }
     .flow-sub,
     .detect-sub,
     .about-tag { letter-spacing: 1.2px; }
@@ -1990,18 +2005,141 @@
       padding-top: 10px;
       padding-bottom: 12px;
     }
-    .hero-stack { gap: 3px; }
-    .htag { margin-bottom: 8px; }
-    .hl-pk { font-size: clamp(28px, 5.2vh, 52px); }
-    .hl-xl { font-size: clamp(26px, 4.9vh, 48px); }
-    .hero-doge { width: clamp(54px, 6.8vh, 84px); }
+    .hero-stack { gap: 2px; }
+    .htag { margin-bottom: 4px; }
+    /* font-size overrides removed — hero-left overflow-y:auto handles overflow */
     .hero-sub { margin-top: 6px; }
-    .hero-sub-v { font-size: clamp(12px, 2vh, 15px); max-width: 36ch; line-height: 1.22; }
-    .hero-props { gap: 4px; margin-top: 6px; width: min(100%, 66ch); }
+    .hero-sub-v { line-height: 1.22; }
+    .hero-props { gap: 4px; margin-top: 6px; }
     .hp-txt { line-height: 1.3; }
-    .hero-status { margin-top: 8px; gap: 7px; }
-    .hs-chip { padding: 5px 8px; }
     .hero-ctas { margin-top: 10px; }
     .hero-btn { padding: 10px 14px; min-width: 150px; }
+    .hero-social { margin-top: 8px; padding-top: 8px; }
+  }
+
+  /* ═══ MOBILE BOTTOM SHEET ═══ */
+  .m-sheet-backdrop {
+    display: none;
+  }
+  .m-sheet {
+    display: none;
+  }
+
+  @media (max-width: 1080px) {
+    .m-sheet-backdrop {
+      display: block;
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      animation: sheetFadeIn 0.2s ease-out;
+    }
+    .m-sheet {
+      display: flex; flex-direction: column;
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 201;
+      max-height: 82vh;
+      background: var(--sp-bg2, #111a12);
+      border-top: 1px solid rgba(232,150,125,0.25);
+      border-radius: 20px 20px 0 0;
+      padding: 16px 20px 32px;
+      padding-bottom: max(32px, env(safe-area-inset-bottom));
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      animation: sheetSlideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .m-sheet-handle {
+      width: 36px; height: 4px;
+      background: rgba(240,237,228,0.2);
+      border-radius: 2px;
+      margin: 0 auto 16px;
+      flex-shrink: 0;
+    }
+    .m-sheet-close {
+      position: absolute; top: 16px; right: 16px;
+      background: rgba(240,237,228,0.08);
+      border: 1px solid rgba(232,150,125,0.15);
+      color: var(--sp-w, #f0ede4);
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .m-sheet-close:active {
+      background: rgba(232,150,125,0.15);
+    }
+    .m-sheet-tag {
+      font-family: var(--fp); font-size: 10px;
+      color: var(--sp-pk, #e8967d);
+      letter-spacing: 2px;
+      text-shadow: 0 0 6px rgba(232,150,125,0.3);
+      margin-bottom: 8px;
+    }
+    .m-sheet-img {
+      width: 100%; max-width: 200px; aspect-ratio: 1;
+      margin: 0 auto 12px;
+    }
+    .m-sheet-img img {
+      width: 100%; height: 100%; object-fit: contain;
+    }
+    .m-sheet-title {
+      font-family: var(--fp); font-size: clamp(22px, 6vw, 30px);
+      color: var(--sp-w, #f0ede4);
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+    }
+    .m-sheet-desc {
+      font-family: var(--fv); font-size: clamp(12px, 3vw, 14px);
+      color: var(--sp-w, #f0ede4); opacity: 0.7;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .m-sheet-stats {
+      display: flex; gap: 12px; flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .m-sheet-stat {
+      display: flex; flex-direction: column; align-items: center;
+      background: rgba(232,150,125,0.06);
+      border: 1px solid rgba(232,150,125,0.12);
+      border-radius: 10px;
+      padding: 10px 16px;
+      flex: 1; min-width: 80px;
+    }
+    .m-sheet-stat-v {
+      font-family: var(--fp); font-size: 16px;
+      color: var(--sp-pk, #e8967d);
+      letter-spacing: 1px;
+    }
+    .m-sheet-stat-k {
+      font-family: var(--fp); font-size: 9px;
+      color: var(--sp-dim, rgba(240,237,228,0.5));
+      letter-spacing: 1.2px;
+      margin-top: 2px;
+    }
+    .m-sheet-cta {
+      width: 100%;
+      padding: 16px 24px;
+      min-height: 52px;
+      background: linear-gradient(135deg, var(--sp-pk, #e8967d), #d4785f);
+      color: var(--sp-bg, #0a1a0d);
+      font-family: var(--fp); font-size: 13px; font-weight: 600;
+      letter-spacing: 2px;
+      border: none; border-radius: 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: opacity 0.15s;
+    }
+    .m-sheet-cta:active {
+      opacity: 0.85;
+    }
+  }
+
+  @keyframes sheetSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes sheetFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 </style>
