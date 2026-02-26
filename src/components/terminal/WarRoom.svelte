@@ -23,6 +23,8 @@
   import WarRoomHeaderSection from './warroom/WarRoomHeaderSection.svelte';
   import WarRoomSignalFeed from './warroom/WarRoomSignalFeed.svelte';
   import WarRoomFooterSection from './warroom/WarRoomFooterSection.svelte';
+  import ScanBriefCards from './ScanBriefCards.svelte';
+  import { mapSignalsToC02Cards, type DerivativesData, type C02Cards } from '$lib/terminal/scanCardMapper';
   import type { TokenFilter, ScanTab, SignalDiff, ScanHighlight } from './warroom/types';
   import './warroom/warroom.css';
 
@@ -181,6 +183,18 @@
     return 'NEUTRAL';
   });
   let trackedCount = $derived($activeSignalCount);
+
+  // C02 Card mapping: 8-agent signals → ORPO + 4 CTX + COMMANDER
+  let c02Cards: C02Cards | null = $derived.by(() => {
+    if (signalPool.length === 0) return null;
+    const derivData: DerivativesData = {
+      oi: derivOI, funding: derivFunding, predFunding: derivPredFunding,
+      lsRatio: derivLSRatio, liqLong: derivLiqLong, liqShort: derivLiqShort,
+    };
+    const cons = consensusDir === 'LONG' ? 'long' : consensusDir === 'SHORT' ? 'short' : 'neutral';
+    return mapSignalsToC02Cards(signalPool, derivData, cons as 'long'|'short'|'neutral', avgConfidence);
+  });
+  let showC02Cards = $state(true);
 
   function roundPrice(value: number): number {
     if (!Number.isFinite(value)) return 0;
@@ -597,6 +611,28 @@
     onActivateScanTab={activateScanTab}
     onSetActiveToken={(tok) => { activeToken = tok; selectedIds = new Set(); }}
   />
+
+  {#if c02Cards && showC02Cards}
+    <div class="c02-cards-wrap">
+      <button class="c02-toggle" on:click={() => showC02Cards = false} title="Hide analysis cards">
+        ANALYSIS ▾
+      </button>
+      <ScanBriefCards
+        cards={c02Cards}
+        on:track={() => {
+          const sel = filteredSignals.find(s => s.conf === Math.max(...filteredSignals.map(ss => ss.conf)));
+          if (sel) handleTrack(sel);
+        }}
+        on:long={() => { if (filteredSignals[0]) quickTrade('LONG', filteredSignals[0]); }}
+        on:short={() => { if (filteredSignals[0]) quickTrade('SHORT', filteredSignals[0]); }}
+        on:dismiss={() => showC02Cards = false}
+      />
+    </div>
+  {:else if c02Cards && !showC02Cards}
+    <button class="c02-toggle c02-toggle-collapsed" on:click={() => showC02Cards = true}>
+      ANALYSIS ▸
+    </button>
+  {/if}
 
   <WarRoomSignalFeed
     {filteredSignals}
