@@ -41,13 +41,13 @@
   .wr-scan-error { color: var(--red); }
   .wr-spacer { flex: 1; }
   .wr-scan-btn {
-    flex-shrink: 0; padding: 2px 8px; margin-right: 4px;
-    font-family: var(--fm, monospace); font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
-    background: rgba(255, 230, 0, 0.12); border: 1px solid rgba(255, 230, 0, 0.3);
-    border-radius: 4px; color: var(--yel, #ffe600); cursor: pointer; transition: all .12s;
+    flex-shrink: 0; padding: 3px 10px; margin-right: 4px;
+    font-family: var(--fm, monospace); font-size: 9px; font-weight: 900; letter-spacing: 0.5px;
+    background: rgba(0,0,0,.15); border: 1px solid rgba(0,0,0,.3);
+    border-radius: 4px; color: #000; cursor: pointer; transition: all .12s;
   }
-  .wr-scan-btn:hover { background: rgba(255, 230, 0, 0.2); border-color: var(--yel, #ffe600); }
-  .wr-scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .wr-scan-btn:hover { background: rgba(0,0,0,.25); border-color: rgba(0,0,0,.5); }
+  .wr-scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .wr-collapse-btn {
     flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
     height: 24px; width: 24px; padding: 0;
@@ -287,34 +287,34 @@
     color: rgba(255,255,255,.6);
     flex-shrink: 0;
   }
-  .wr-msg-name { font-family: var(--fm); font-size: 11px; font-weight: 800; }
+  .wr-msg-name { font-family: var(--fm); font-size: 12px; font-weight: 800; }
   .wr-msg-token {
     font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: .4px;
     padding: 2px 5px; border-radius: 3px; background: rgba(255,255,255,.05); color: rgba(255,255,255,.6);
   }
   .wr-msg-vote {
-    font-family: var(--fm); font-size: 10px; font-weight: 900;
-    padding: 2px 7px; border: 1px solid; border-radius: 4px; letter-spacing: .5px;
+    font-family: var(--fm); font-size: 13px; font-weight: 900;
+    padding: 2px 8px; border: 1px solid; border-radius: 4px; letter-spacing: .8px;
   }
-  .wr-msg-vote.short { color: var(--red); border-color: rgba(255,45,85,.3); background: rgba(255,45,85,.06); }
-  .wr-msg-vote.long { color: var(--grn); border-color: rgba(0,255,136,.3); background: rgba(0,255,136,.06); }
+  .wr-msg-vote.short { color: var(--red); border-color: rgba(255,45,85,.3); background: rgba(255,45,85,.08); }
+  .wr-msg-vote.long { color: var(--grn); border-color: rgba(0,230,118,.3); background: rgba(0,230,118,.08); }
   .wr-msg-vote.neutral { color: rgba(255,255,255,.3); border-color: rgba(255,255,255,.08); }
-  .wr-msg-conf { font-family: var(--fd); font-size: 13px; font-weight: 900; color: var(--yel); }
-  .wr-msg-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.35); margin-left: auto; }
+  .wr-msg-conf { font-family: var(--fd); font-size: 16px; font-weight: 900; color: #fff; }
+  .wr-msg-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); margin-left: auto; }
   .wr-msg-text {
-    font-family: var(--fm); font-size: 10px; line-height: 1.5; color: rgba(255,255,255,.5);
+    font-family: var(--fm); font-size: 11px; line-height: 1.5; color: rgba(255,255,255,.6);
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     margin: 3px 0;
   }
   .wr-msg-signal-row {
     display: flex; align-items: center; gap: 10px; margin-top: 4px;
-    font-family: var(--fd); font-size: 11px; font-weight: 700;
+    font-family: var(--fd); font-size: 10px; font-weight: 700;
   }
-  .wr-msg-entry { color: rgba(255,255,255,.75); }
+  .wr-msg-entry { color: rgba(255,255,255,.6); }
   .wr-msg-arrow-price { color: rgba(255,255,255,.3); font-size: 9px; }
   .wr-msg-tp { color: var(--grn); }
   .wr-msg-sl { color: var(--red); }
-  .wr-msg-src { font-family: var(--fm); font-size: 9px; color: rgba(255,230,0,.5); }
+  .wr-msg-src { font-family: var(--fm); font-size: 9px; color: rgba(255,230,0,.6); }
   .wr-msg-actions { display: flex; align-items: center; gap: 5px; margin-top: 6px; }
   .wr-act-btn {
     font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: .5px;
@@ -484,7 +484,6 @@
 
   /* ═══ Desktop resizable zones ═══ */
   @media (min-width: 1024px) and (pointer: fine) {
-    .ticker-flow,
     .scan-tabs,
     .token-tabs {
       width: 100%;
@@ -506,40 +505,9 @@
   }
 
   @media (max-width: 1023px), (pointer: coarse) {
-    .ticker-flow,
     .scan-tabs,
     .token-tabs,
     .wr-msgs {
       resize: none;
     }
-  }
-
-  /* ═══ C02 Analysis Cards Toggle ═══ */
-  .c02-cards-wrap {
-    position: relative;
-    z-index: 1;
-    overflow-y: auto;
-    max-height: 280px;
-    border-bottom: 1px solid rgba(255,255,255,.05);
-  }
-  .c02-cards-wrap::-webkit-scrollbar { width: 3px; }
-  .c02-cards-wrap::-webkit-scrollbar-thumb { background: rgba(255,230,0,.15); border-radius: 3px; }
-  .c02-toggle {
-    display: block;
-    width: 100%;
-    padding: 4px 12px;
-    font-family: var(--fm);
-    font-size: 9px;
-    font-weight: 900;
-    letter-spacing: 1.5px;
-    color: rgba(255,230,0,.4);
-    background: rgba(255,230,0,.03);
-    border: none;
-    border-bottom: 1px solid rgba(255,255,255,.04);
-    cursor: pointer;
-    text-align: left;
-  }
-  .c02-toggle:hover { color: var(--yel); background: rgba(255,230,0,.06); }
-  .c02-toggle-collapsed {
-    border-bottom: 1px solid rgba(255,255,255,.04);
   }
