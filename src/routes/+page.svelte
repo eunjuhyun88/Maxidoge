@@ -54,16 +54,16 @@
 
   const FEATURES = [
     { label: 'WAR ROOM', sub: 'TERMINAL', brief: 'YOU MISSED THE PUMP BECAUSE YOU WERE SLEEPING. NEVER AGAIN.', img: '/blockparty/f5-doge-chart.png', path: '/terminal',
-      detail: '8 AI AGENTS RUN 24/7 — SCANNING CHARTS, TRACKING WHALES, READING DERIVATIVES, AND MONITORING SOCIAL SENTIMENT ACROSS 200+ PAIRS. YOU OPEN YOUR EYES. THE INTEL IS ALREADY THERE.',
+      detail: '8 AI AGENTS SCAN 200+ PAIRS 24/7. BEFORE YOU OPEN A CHART, THE SIGNAL, CONTEXT, AND RISK SNAPSHOT ARE READY.',
       stats: [{ k: 'AI AGENTS', v: '8' }, { k: 'PAIRS', v: '200+' }, { k: 'SCAN PATTERNS', v: '28' }] },
     { label: 'AI vs YOU', sub: 'ARENA', brief: 'SUBMIT YOUR CALL. 8 AI AGENTS CHALLENGE EVERY ANGLE.', img: '/blockparty/f5-doge-muscle.png', path: '/arena',
-      detail: 'THINK YOU FOUND THE TRADE? SUBMIT IT. 8 AI AGENTS WILL ANALYZE YOUR ENTRY, TP, SL, AND R:R FROM EVERY ANGLE — STRUCTURE, FLOW, DERIVATIVES, SENTIMENT, MACRO. IF YOUR THESIS SURVIVES 5 PHASES, IT MIGHT ACTUALLY WORK.',
+      detail: 'PUT YOUR THESIS INTO A 5-PHASE STRESS TEST. ENTRY, TP, SL, AND R:R GET CHALLENGED BY 8 SPECIALIZED AI AGENTS.',
       stats: [{ k: 'PHASES', v: '5' }, { k: 'AI JUDGES', v: '8' }, { k: 'REWARDS', v: 'XP+RANK' }] },
     { label: 'AI SCANNER', sub: 'SIGNALS', brief: 'THE MARKET WHISPERS BEFORE IT SCREAMS. WE HEAR IT FIRST.', img: '/blockparty/f5-doge-fire.png', path: '/signals',
-      detail: '28 ANOMALY PATTERNS CATCH WHAT HUMANS MISS — OI COMPRESSION BEFORE THE SQUEEZE, WHALE DEPOSITS BEFORE THE DUMP, LIQUIDATION CLUSTERS BEFORE THE CASCADE. SCORE 70+ = ALERT. SCORE 85+ = DROP EVERYTHING.',
+      detail: '28 ANOMALY PATTERNS CATCH EARLY BREAKOUT OR LIQUIDATION SETUPS. SCORES 70+ TRIGGER ACTIONABLE ALERTS.',
       stats: [{ k: 'PATTERNS', v: '28' }, { k: 'SCAN CYCLE', v: '15 MIN' }, { k: 'ALERTS', v: 'REAL-TIME' }] },
     { label: 'COPY TRADE', sub: 'COMMUNITY', brief: 'STOP WATCHING. START COPYING. ONE CLICK.', img: '/blockparty/f5-doge-excited.png', path: '/signals',
-      detail: 'SEE A SIGNAL YOU LIKE? ONE TAP. THE COPY WIZARD BUILDS YOUR ORDER — ENTRY, TP, SL, R:R — ALL CALCULATED. YOU JUST APPROVE OR SKIP. NO MATH. NO HESITATION. YOUR WALLET, YOUR RULES.',
+      detail: 'WHEN A SIGNAL FITS YOUR STYLE, COPY FLOW BUILDS THE ORDER DRAFT FOR YOU. YOU REVIEW, APPROVE, AND EXECUTE.',
       stats: [{ k: 'COPY WIZARD', v: '4-STEP' }, { k: 'R:R CALC', v: 'AUTO' }, { k: 'APPROVAL', v: 'YOU' }] },
   ];
 
@@ -81,6 +81,7 @@
   let heroRightEl: HTMLDivElement;
   let heroLeftEl: HTMLDivElement;
   let prefersReducedMotion = false;
+  $: activeFeatureIndex = selectedFeature === null ? 0 : selectedFeature;
 
   function selectFeature(i: number) {
     const next = selectedFeature === i ? null : i;
@@ -90,13 +91,6 @@
       });
     }
     selectedFeature = next;
-    // Reset left panel scroll to top when switching views
-    if (heroLeftEl) {
-      heroLeftEl.scrollTo({
-        top: 0,
-        behavior: prefersReducedMotion ? 'auto' : 'smooth',
-      });
-    }
   }
 
   /** Desktop hero behavior: scroll right feature rail first, then let page continue. */
@@ -130,12 +124,6 @@
   function onHeroKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && selectedFeature !== null) {
       selectedFeature = null;
-      if (heroLeftEl) {
-        heroLeftEl.scrollTo({
-          top: 0,
-          behavior: prefersReducedMotion ? 'auto' : 'smooth',
-        });
-      }
     }
   }
 
@@ -323,11 +311,14 @@
             </div>
           </div>
         </div>
-        <p class="hero-sub ha" style="--ha-d:0.44s">AI AGENTS THAT WATCH THE MARKET WHILE YOU SLEEP</p>
+        <p class="hero-sub ha" style="--ha-d:0.44s">
+          <span class="hero-sub-k">ALWAYS-ON MARKET COVERAGE</span>
+          <span class="hero-sub-v">AI AGENTS THAT WATCH THE MARKET WHILE YOU SLEEP</span>
+        </p>
         <div class="hero-props ha" style="--ha-d:0.52s">
-          <div class="hp"><span class="hp-icon">🔍</span><span class="hp-txt">28 ANOMALY PATTERNS SCAN 200+ PAIRS EVERY 15 MIN</span></div>
-          <div class="hp"><span class="hp-icon">🐋</span><span class="hp-txt">WHALE MOVES, OI SPIKES, LIQUIDATION CLUSTERS — AUTO-DETECTED</span></div>
-          <div class="hp"><span class="hp-icon">📋</span><span class="hp-txt">DRAFT ORDERS WITH TP/SL/R:R WHEN SCORE HITS 70+</span></div>
+          <div class="hp hp-prime"><span class="hp-icon">🔍</span><span class="hp-txt">28 ANOMALY PATTERNS SCAN 200+ PAIRS EVERY 15 MIN</span></div>
+          <div class="hp hp-note"><span class="hp-icon">🐋</span><span class="hp-txt">WHALE MOVES, OI SPIKES, LIQUIDATION CLUSTERS — AUTO-DETECTED</span></div>
+          <div class="hp hp-note"><span class="hp-icon">📋</span><span class="hp-txt">DRAFT ORDERS WITH TP/SL/R:R WHEN SCORE HITS 70+</span></div>
         </div>
         <div class="hero-status ha" style="--ha-d:0.56s" role="status" aria-live="polite">
           <div class="hs-chip">
@@ -371,7 +362,7 @@
     >
       <div class="hero-right-head ha ha-r" style="--ha-d:0.14s">
         <span class="fr-k">//OUR FEATURES</span>
-        <span class="fr-hint">SCROLL TO EXPLORE</span>
+        <span class="fr-hint">{activeFeatureIndex + 1}/{FEATURES.length} · {FEATURES[activeFeatureIndex].sub}</span>
       </div>
       {#each FEATURES as feat, i}
         <button
@@ -675,14 +666,14 @@
     --sp-pk-l: #F5C4B8;
     --sp-w: #F0EDE4;
     --sp-dim: rgba(240,237,228,0.4);
-    --sp-glow: rgba(232,150,125,0.34);
+    --sp-glow: rgba(232,150,125,0.22);
     --sp-grid: rgba(232,150,125,0.12);
   }
 
   /* ── BASE ── */
   .home {
-    --fx-orb-blur: 54px;
-    --fx-floor-glow: 0 0 5px rgba(232,150,125,0.56), 0 0 14px rgba(232,150,125,0.24), 0 0 24px rgba(232,150,125,0.1);
+    --fx-orb-blur: 36px;
+    --fx-floor-glow: 0 0 4px rgba(232,150,125,0.42), 0 0 11px rgba(232,150,125,0.18), 0 0 18px rgba(232,150,125,0.08);
     --fx-card-hover-glow: inset 0 0 10px rgba(232,150,125,0.04), 0 0 8px rgba(232,150,125,0.05);
     --fx-btn-glow: 0 0 7px rgba(232,150,125,0.28);
     --fx-btn-glow-hover: 0 0 11px rgba(232,150,125,0.4);
@@ -692,7 +683,7 @@
     --fx-title-tag-glow: 0 0 4px rgba(232,150,125,0.2);
     --fx-title-pink-glow: 0 0 4px rgba(232,150,125,0.36), 0 0 10px rgba(232,150,125,0.12);
     --fx-title-pink-glow-squad: 0 0 3px rgba(232,150,125,0.28), 0 0 7px rgba(232,150,125,0.08);
-    --fx-title-pink-glow-hero: 0 0 8px rgba(232,150,125,0.52), 0 0 20px rgba(232,150,125,0.2), 0 0 34px rgba(232,150,125,0.08);
+    --fx-title-pink-glow-hero: 0 0 6px rgba(232,150,125,0.34), 0 0 14px rgba(232,150,125,0.12);
     --fx-title-pink-fill: repeating-linear-gradient(
       0deg,
       var(--sp-pk) 0px, var(--sp-pk) 3px,
@@ -788,7 +779,7 @@
   .grain {
     position: fixed; inset: 0;
     pointer-events: none; z-index: 0;
-    opacity: 0.035;
+    opacity: 0.012;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     background-size: 200px 200px;
     animation: grainShift 0.3s steps(3) infinite;
@@ -802,9 +793,7 @@
 
   /* ── OLD TV STATIC — short pink/dark alternating bands ── */
   .tv-static {
-    position: fixed; inset: 0;
-    pointer-events: none; z-index: 1;
-    overflow: hidden;
+    display: none;
   }
   .tv-band {
     position: absolute; left: 0; right: 0;
@@ -888,7 +877,7 @@
     position: absolute;
     border-radius: 50%;
     filter: blur(var(--fx-orb-blur));
-    opacity: 0.12;
+    opacity: 0.07;
     will-change: transform;
   }
   .orb-1 {
@@ -1042,19 +1031,14 @@
     min-width: 0;
     width: 100%;
     max-width: min(100%, clamp(560px, 62vw, 860px));
-    display: flex; flex-direction: column; align-items: flex-start; justify-content: safe center;
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
     padding: var(--space-hero-y-top) var(--space-hero-x) var(--space-hero-y-bottom);
     position: sticky;
     top: var(--header-h, 48px);
     height: calc(100vh - var(--header-h, 48px));
-    overflow-y: auto;
+    overflow-y: hidden;
     z-index: 3;
   }
-  .hero-left {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-  .hero-left::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
   .hero-stack {
     display: flex; flex-direction: column; line-height: 0.95;
@@ -1072,7 +1056,7 @@
     font-family: var(--fp); font-weight: 400;
     display: inline-block;
     color: var(--sp-w);
-    text-shadow: 0 0 8px rgba(240,237,228,0.42), 0 0 20px rgba(240,237,228,0.1);
+    text-shadow: 0 0 6px rgba(240,237,228,0.26), 0 0 12px rgba(240,237,228,0.08);
   }
   @supports ((-webkit-background-clip: text) or (background-clip: text)) {
     .hl {
@@ -1139,9 +1123,22 @@
 
   /* Hero subtitle + value props + CTAs */
   .hero-sub {
-    font-family: var(--fp); font-size: var(--fs-subhead);
-    color: var(--sp-pk); letter-spacing: var(--ls-copy); margin-top: clamp(12px, 1.7vw, 20px);
-    text-shadow: 0 0 8px var(--sp-glow);
+    font-family: var(--fp); margin-top: clamp(12px, 1.7vw, 20px);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .hero-sub-k {
+    font-size: clamp(8px, 0.88vw, 10px);
+    color: var(--sp-dim);
+    letter-spacing: clamp(1.1px, 0.24vw, 1.9px);
+    text-transform: uppercase;
+  }
+  .hero-sub-v {
+    font-size: var(--fs-subhead);
+    color: var(--sp-pk);
+    letter-spacing: var(--ls-copy);
+    text-shadow: 0 0 6px var(--sp-glow);
     max-width: 42ch;
     line-height: 1.46;
     text-wrap: balance;
@@ -1154,17 +1151,22 @@
     color: var(--sp-w); letter-spacing: clamp(0.7px, 0.2vw, 1.35px); opacity: 0.76; line-height: 1.48;
     text-wrap: pretty;
   }
-  .hero-props .hp:first-child .hp-txt {
-    opacity: 0.95;
-    color: rgba(240,237,228,0.95);
+  .hp-prime .hp-txt {
+    opacity: 0.96;
+    color: rgba(240,237,228,0.98);
+    font-size: clamp(11px, 1.14vw, 14px);
+  }
+  .hp-note .hp-txt {
+    opacity: 0.78;
   }
   .hero-status {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: clamp(8px, 1vw, 12px);
     margin-top: clamp(12px, 1.7vw, 20px);
     width: min(100%, 880px);
   }
+  .hs-chip:first-child { grid-column: 1 / -1; }
   .hs-chip {
     display: flex;
     align-items: center;
@@ -1198,7 +1200,7 @@
   }
   .hero-ctas { display: flex; gap: 12px; margin-top: clamp(16px, 2vw, 24px); flex-wrap: wrap; width: min(100%, 760px); }
   .hero-btn {
-    font-family: var(--fp); font-size: clamp(10px, 1.08vw, 12px); letter-spacing: clamp(1.1px, 0.22vw, 1.8px);
+    font-family: var(--fp); font-size: clamp(10px, 1.08vw, 13px); letter-spacing: clamp(1.1px, 0.22vw, 1.8px);
     border: none; border-radius: 6px; padding: 15px 24px;
     cursor: pointer; transition: all .2s;
     min-width: 192px;
@@ -1262,11 +1264,11 @@
   }
   .fr-hint {
     font-family: var(--fp);
-    font-size: clamp(8px, 0.82vw, 9px);
+    font-size: clamp(8px, 0.82vw, 9.5px);
     color: var(--sp-dim);
     letter-spacing: clamp(1px, 0.22vw, 1.6px);
   }
-  .hero-right::-webkit-scrollbar { width: 4px; }
+  .hero-right::-webkit-scrollbar { width: 6px; }
   .hero-right::-webkit-scrollbar-thumb {
     background: rgba(232,150,125,0.9);
     border-radius: 4px;
@@ -1282,7 +1284,7 @@
     border-radius: 0;
     position: relative;
     overflow: hidden;
-    min-height: clamp(220px, 41vh, 380px);
+    min-height: clamp(200px, 34vh, 320px);
   }
   /* Glass reflection sweep */
   .fc::before {
@@ -1330,14 +1332,14 @@
     color: var(--sp-dim); letter-spacing: clamp(1px, 0.2vw, 2px);
   }
   .fc-lbl {
-    font-family: var(--fp); font-size: clamp(12px, 1.28vw, 15px);
+    font-family: var(--fp); font-size: clamp(13px, 1.32vw, 16px);
     color: var(--sp-pk); letter-spacing: clamp(0.8px, 0.18vw, 1.2px); line-height: 1.4; margin-top: 4px;
     text-shadow: 0 0 6px var(--sp-glow);
   }
   .fc-brief {
-    font-family: var(--fv); font-size: clamp(10px, 0.96vw, 11px);
+    font-family: var(--fv); font-size: clamp(10.5px, 0.98vw, 12px);
     color: var(--sp-w); letter-spacing: 0.5px; line-height: 1.5; margin-top: 6px;
-    opacity: 0.74;
+    opacity: 0.82;
   }
   .fc-all {
     display: flex; align-items: center; justify-content: space-between;
@@ -2052,13 +2054,13 @@
     }
     .hl-pk { font-size: clamp(30px, 6.4vw, 66px); }
     .hl-xl { font-size: clamp(28px, 5.6vw, 58px); }
-    .hero-sub { max-width: 46ch; }
+    .hero-sub-v { max-width: 46ch; }
     .hero-status {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       width: min(100%, 860px);
     }
     .hs-chip:first-child {
-      grid-column: auto;
+      grid-column: 1 / -1;
     }
     .hero-btn { min-width: 168px; }
     .fc { min-height: clamp(200px, 34vh, 300px); }
@@ -2116,7 +2118,7 @@
 
   @media (max-width: 900px) {
     .hero-left { padding: 22px var(--space-sec-x) 30px; }
-    .hero-sub {
+    .hero-sub-v {
       font-size: clamp(13px, 2.8vw, 16px);
       letter-spacing: clamp(1px, 0.24vw, 1.8px);
       max-width: none;
@@ -2161,7 +2163,7 @@
       letter-spacing: clamp(1.4px, 0.46vw, 2.4px);
     }
     .hero-doge { width: clamp(52px, 13vw, 68px); }
-    .hero-sub {
+    .hero-sub-v {
       font-size: clamp(12px, 3.8vw, 15px);
       line-height: 1.44;
     }

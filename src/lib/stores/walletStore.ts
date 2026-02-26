@@ -41,6 +41,19 @@ export interface WalletState {
   signature: string | null;
 }
 
+function normalizeProvider(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim().toLowerCase();
+  if (value === 'metamask' || value === 'coinbase' || value === 'walletconnect' || value === 'phantom') {
+    return value;
+  }
+
+  if (value === 'meta mask' || value === 'metamask wallet') return 'metamask';
+  if (value === 'coinbase wallet') return 'coinbase';
+  if (value === 'wallet connect') return 'walletconnect';
+  return null;
+}
+
 const defaultWallet: WalletState = {
   tier: 'guest',
   email: null,
@@ -68,8 +81,11 @@ function loadWallet(): WalletState {
     const saved = localStorage.getItem(STORAGE_KEYS.wallet);
     if (saved) {
       const merged = { ...defaultWallet, ...JSON.parse(saved) };
+      const provider = normalizeProvider(merged.provider);
       return {
         ...merged,
+        provider,
+        chain: typeof merged.chain === 'string' && merged.chain.trim() ? merged.chain.toUpperCase() : defaultWallet.chain,
         phase: resolveLifecyclePhase(merged.matchesPlayed, merged.totalLP)
       };
     }
@@ -222,7 +238,7 @@ export function completeDemoView() {
 }
 
 // Wallet connection (now first step before email)
-export function connectWallet(provider: string = 'MetaMask', addressOverride?: string, chain: string = 'ARB') {
+export function connectWallet(provider: string = 'metamask', addressOverride?: string, chain: string = 'ARB') {
   const connection = createSimulatedWalletConnection(provider, addressOverride, chain);
 
   walletStore.update(w => ({

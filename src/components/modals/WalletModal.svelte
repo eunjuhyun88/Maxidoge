@@ -15,6 +15,7 @@
     WALLET_PROVIDER_LABEL,
     getPreferredEvmChainCode,
     hasInjectedEvmProvider,
+    isWalletConnectConfigured,
     requestInjectedEvmAccount,
     requestPhantomSolanaAccount,
     signInjectedEvmMessage,
@@ -39,6 +40,7 @@
 
   const WALLET_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
   const preferredEvmChain = getPreferredEvmChainCode();
+  const walletConnectReady = isWalletConnectConfigured();
 
   $: state = $walletStore;
   $: step = state.walletModalStep;
@@ -296,6 +298,10 @@
       actionError = 'Unsupported wallet provider.';
       return;
     }
+    if (provider === 'walletconnect' && !walletConnectReady) {
+      actionError = 'WalletConnect project id is missing. Set PUBLIC_WALLETCONNECT_PROJECT_ID first.';
+      return;
+    }
 
     connectingProvider = WALLET_PROVIDER_LABEL[provider];
     setWalletModalStep('connecting');
@@ -523,10 +529,16 @@
             <span class="wo-name">MetaMask</span>
             <span class="wo-chain">EVM</span>
           </button>
-          <button class="wopt" type="button" on:click={() => handleConnect('walletconnect')}>
+          <button
+            class="wopt"
+            type="button"
+            on:click={() => handleConnect('walletconnect')}
+            disabled={!walletConnectReady}
+            title={!walletConnectReady ? 'Set PUBLIC_WALLETCONNECT_PROJECT_ID in env first.' : undefined}
+          >
             <span class="wo-icon">🔵</span>
             <span class="wo-name">WalletConnect</span>
-            <span class="wo-chain">EVM</span>
+            <span class="wo-chain">{walletConnectReady ? 'EVM' : 'SETUP REQUIRED'}</span>
           </button>
           <button class="wopt" type="button" on:click={() => handleConnect('coinbase')}>
             <span class="wo-icon">🔷</span>
@@ -953,6 +965,11 @@
   .wopt:hover {
     border-color: rgba(232, 150, 125, 0.5);
     background: rgba(232, 150, 125, 0.1);
+  }
+
+  .wopt:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
   }
 
   .wo-icon {
