@@ -7,17 +7,18 @@
   import { userProfileStore } from '$lib/stores/userProfileStore';
   import { openTradeCount } from '$lib/stores/quickTradeStore';
   import { activeSignalCount } from '$lib/stores/trackedSignalStore';
+  import HomeBackground from '../components/home/HomeBackground.svelte';
 
-  $: state = $gameState;
-  $: connected = $isWalletConnected;
-  $: wallet = $walletStore;
-  $: profile = $userProfileStore;
-  $: trackedSigs = $activeSignalCount;
-  $: openPos = $openTradeCount;
+  const gs = $derived($gameState);
+  const connected = $derived($isWalletConnected);
+  const wallet = $derived($walletStore);
+  const profile = $derived($userProfileStore);
+  const trackedSigs = $derived($activeSignalCount);
+  const openPos = $derived($openTradeCount);
 
-  $: btcPrice = state.prices.BTC;
-  $: ethPrice = state.prices.ETH;
-  $: solPrice = state.prices.SOL;
+  const btcPrice = $derived(gs.prices.BTC);
+  const ethPrice = $derived(gs.prices.ETH);
+  const solPrice = $derived(gs.prices.SOL);
 
   type HomeFunnelStep = 'hero_view' | 'hero_feature_select' | 'hero_cta_click';
   type HomeFunnelStatus = 'view' | 'click';
@@ -77,11 +78,11 @@
     { id: 'G', icon: '🎯', label: 'DIRECT QUERY', desc: '"IS ETH SAFE TO BUY?" — ASK IN PLAIN ENGLISH, GET AI ANALYSIS', count: 4 },
   ];
 
-  let selectedFeature: number | null = null;
+  let selectedFeature: number | null = $state(null);
   let heroRightEl: HTMLDivElement;
   let heroLeftEl: HTMLDivElement;
   let prefersReducedMotion = false;
-  $: activeFeatureIndex = selectedFeature === null ? 0 : selectedFeature;
+  const activeFeatureIndex = $derived(selectedFeature === null ? 0 : selectedFeature);
 
   function selectFeature(i: number) {
     const next = selectedFeature === i ? null : i;
@@ -154,7 +155,7 @@
 
   /* ── Animation system ── */
   let homeEl: HTMLDivElement;
-  let heroReady = false;
+  let heroReady = $state(false);
   let heroIntroTimer: ReturnType<typeof setTimeout> | null = null;
 
   function onScroll() {
@@ -202,6 +203,11 @@
 
     let obs: IntersectionObserver | null = null;
     if (homeEl) {
+      requestAnimationFrame(() => {
+        homeEl.scrollTop = 0;
+        if (heroLeftEl) heroLeftEl.scrollTop = 0;
+        if (heroRightEl) heroRightEl.scrollTop = 0;
+      });
       homeEl.addEventListener('scroll', onScroll, { passive: true });
 
       obs = new IntersectionObserver(
@@ -237,50 +243,17 @@
 </script>
 
 <div class="home" bind:this={homeEl}>
-  <!-- Stars layer -->
-  <div class="stars" aria-hidden="true"></div>
-  <div class="stars2" aria-hidden="true"></div>
-  <!-- Diamond sparkle stars -->
-  <div class="sparkles" aria-hidden="true">
-    <span class="spk" style="top:8%;left:12%;--spk-d:0s;--spk-s:1.2">✦</span>
-    <span class="spk" style="top:15%;left:45%;--spk-d:1.2s;--spk-s:0.8">✦</span>
-    <span class="spk" style="top:22%;left:78%;--spk-d:0.5s;--spk-s:1">✦</span>
-    <span class="spk" style="top:35%;left:5%;--spk-d:2s;--spk-s:0.6">✦</span>
-    <span class="spk" style="top:42%;left:92%;--spk-d:1.8s;--spk-s:1.1">✦</span>
-    <span class="spk" style="top:55%;left:25%;--spk-d:0.8s;--spk-s:0.7">✦</span>
-    <span class="spk" style="top:62%;left:60%;--spk-d:3s;--spk-s:1.3">✦</span>
-    <span class="spk" style="top:70%;left:88%;--spk-d:1.5s;--spk-s:0.9">✦</span>
-    <span class="spk" style="top:80%;left:15%;--spk-d:2.5s;--spk-s:1">✦</span>
-    <span class="spk" style="top:88%;left:50%;--spk-d:0.3s;--spk-s:0.7">✦</span>
-    <span class="spk" style="top:5%;left:65%;--spk-d:1s;--spk-s:1.4">✦</span>
-    <span class="spk" style="top:48%;left:38%;--spk-d:2.2s;--spk-s:0.5">✦</span>
-  </div>
-  <!-- Film grain noise -->
-  <div class="grain" aria-hidden="true"></div>
-  <!-- Old TV static interference -->
-  <div class="tv-static" aria-hidden="true">
-    <div class="tv-band tv-band-1"></div>
-    <div class="tv-band tv-band-2"></div>
-    <div class="tv-band tv-band-3"></div>
-  </div>
-  <!-- Full-screen CRT scanlines -->
-  <div class="crt-overlay" aria-hidden="true"></div>
-  <!-- Floating glow orbs -->
-  <div class="orbs" aria-hidden="true">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-  </div>
+  <HomeBackground />
 
   <!-- ═══════════════════════════════════════
        SECTION 1: HERO
        ═══════════════════════════════════════ -->
-  <section class="hero" class:hero-go={heroReady}>
-    <div class="hero-left" bind:this={heroLeftEl}>
+  <section class="hero {heroReady ? 'hero-go' : ''}">
+    <div class="hero-left {selectedFeature !== null ? 'hero-left-detail' : ''}" bind:this={heroLeftEl}>
       {#if selectedFeature !== null}
         <!-- Feature detail view -->
         <div class="feat-detail" id="hero-feature-detail" tabindex="-1">
-          <button type="button" class="feat-back" on:click={() => selectFeature(selectedFeature ?? 0)}>← BACK</button>
+          <button type="button" class="feat-back" onclick={() => selectFeature(selectedFeature ?? 0)}>← BACK</button>
           <span class="htag">//{FEATURES[selectedFeature].sub}</span>
           <div class="ht feat-detail-img" style="--ht-img:url({FEATURES[selectedFeature].img})">
             <img src={FEATURES[selectedFeature].img} alt={FEATURES[selectedFeature].label} />
@@ -295,35 +268,34 @@
               </div>
             {/each}
           </div>
-          <button type="button" class="feat-detail-cta" on:click={() => goto(FEATURES[selectedFeature ?? 0].path)}>
+          <button type="button" class="feat-detail-cta" onclick={() => goto(FEATURES[selectedFeature ?? 0].path)}>
             ENTER {FEATURES[selectedFeature].sub} →
           </button>
         </div>
       {:else}
         <!-- Default hero content -->
-        <div class="hero-stack">
+        <h1 class="hero-stack">
           <span class="htag ha" style="--ha-d:0s">//STOCKCLAW</span>
-          <div class="ha" style="--ha-d:0.12s"><span class="hl hl-pk">ALPHA</span></div>
-          <div class="hl-row ha" style="--ha-d:0.24s">
+          <span class="ha" style="--ha-d:0.12s"><span class="hl hl-pk">ALPHA</span></span>
+          <span class="hl-row ha" style="--ha-d:0.24s">
             <span class="hl hl-xl">DOGS</span>
-            <div class="ht hero-doge-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)">
+            <span class="ht hero-doge-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)">
               <img src="/blockparty/f5-doge-bull.png" alt="doge" class="hero-doge" />
-            </div>
-          </div>
-        </div>
+            </span>
+          </span>
+        </h1>
         <p class="hero-sub ha" style="--ha-d:0.44s">
-          <span class="hero-sub-k">ALWAYS-ON MARKET COVERAGE</span>
           <span class="hero-sub-v">AI AGENTS THAT WATCH THE MARKET WHILE YOU SLEEP</span>
         </p>
         <div class="hero-props ha" style="--ha-d:0.52s">
-          <div class="hp hp-prime"><span class="hp-icon">🔍</span><span class="hp-txt">28 ANOMALY PATTERNS SCAN 200+ PAIRS EVERY 15 MIN</span></div>
-          <div class="hp hp-note"><span class="hp-icon">🐋</span><span class="hp-txt">WHALE MOVES, OI SPIKES, LIQUIDATION CLUSTERS — AUTO-DETECTED</span></div>
-          <div class="hp hp-note"><span class="hp-icon">📋</span><span class="hp-txt">DRAFT ORDERS WITH TP/SL/R:R WHEN SCORE HITS 70+</span></div>
+          <div class="hp hp-prime"><span class="hp-icon">🔍</span><span class="hp-txt">28 PATTERNS · 200+ PAIRS · EVERY 15 MIN</span></div>
+          <div class="hp hp-note"><span class="hp-icon">🐋</span><span class="hp-txt">WHALE / OI / LIQUIDATION SPIKES AUTO-DETECTED</span></div>
+          <div class="hp hp-note"><span class="hp-icon">📋</span><span class="hp-txt">AI DRAFTS TP/SL/R:R WHEN SCORE ≥ 70</span></div>
         </div>
         <div class="hero-status ha" style="--ha-d:0.56s" role="status" aria-live="polite">
           <div class="hs-chip">
             <span class="hs-k">WALLET</span>
-            <span class="hs-v" class:hs-v-live={connected}>{connected ? wallet.shortAddr : 'NOT CONNECTED'}</span>
+            <span class="hs-v {connected ? 'hs-v-live' : ''}">{connected ? wallet.shortAddr : 'NOT CONNECTED'}</span>
           </div>
           <div class="hs-chip">
             <span class="hs-k">OPEN TRADES</span>
@@ -335,22 +307,12 @@
           </div>
         </div>
         <div class="hero-ctas ha" style="--ha-d:0.6s">
-          <button type="button" class="hero-btn hero-btn-primary" on:click={handleHeroPrimaryCta}>ENTER WAR ROOM →</button>
+          <button type="button" class="hero-btn hero-btn-primary" onclick={handleHeroPrimaryCta}>ENTER WAR ROOM →</button>
           {#if !connected}
-            <button type="button" class="hero-btn hero-btn-secondary" on:click={handleHeroSecondaryCta}>CONNECT WALLET</button>
+            <button type="button" class="hero-btn hero-btn-secondary" onclick={handleHeroSecondaryCta}>CONNECT WALLET</button>
           {:else}
-            <button type="button" class="hero-btn hero-btn-secondary" on:click={handleHeroSecondaryCta}>ENTER ARENA →</button>
+            <button type="button" class="hero-btn hero-btn-secondary" onclick={handleHeroSecondaryCta}>ENTER ARENA →</button>
           {/if}
-        </div>
-        <div class="rbadges ha" style="--ha-d:0.7s">
-          <div class="rbdg rbdg-l">
-            <span class="rbdg-stars">★★★★★</span>
-            <span class="rbdg-src">— DEGENS</span>
-          </div>
-          <div class="rbdg rbdg-r">
-            <span class="rbdg-label">BEST AI DOGS</span>
-            <span class="rbdg-src">— CRYPTO TWITTER</span>
-          </div>
         </div>
       {/if}
     </div>
@@ -367,13 +329,10 @@
       {#each FEATURES as feat, i}
         <button
           type="button"
-          class="fc ha ha-r"
-          class:fc-active={selectedFeature === i}
+          class="fc ha ha-r {selectedFeature === i ? 'fc-active' : ''}"
           style="--ha-d:{0.24 + i * 0.12}s"
-          aria-controls="hero-feature-detail"
-          aria-expanded={selectedFeature === i}
           aria-pressed={selectedFeature === i}
-          on:click={() => selectFeature(i)}
+          onclick={() => selectFeature(i)}
         >
           <div class="fc-img"><div class="ht" style="--ht-img:url({feat.img})"><img src={feat.img} alt={feat.label} /></div></div>
           <div class="fc-txt">
@@ -383,9 +342,9 @@
           </div>
         </button>
       {/each}
-      <button type="button" class="fc-all ha ha-r" style="--ha-d:0.7s" on:click={enterTerminal}>
+      <a href="/terminal" class="fc-all ha ha-r" style="--ha-d:0.7s">
         VIEW ALL <span class="fc-arr">→</span>
-      </button>
+      </a>
     </div>
 
     <!-- Perspective grid floor -->
@@ -414,7 +373,7 @@
             <p class="fstep-desc">{step.desc}</p>
             <div class="fstep-bar"><div class="fstep-fill" style="width:{step.pct}%"></div></div>
           </div>
-          <div class="ht fstep-imgwrap" style="--ht-img:url({step.img})"><img src={step.img} alt="" class="fstep-img" /></div>
+          <div class="ht fstep-imgwrap" style="--ht-img:url({step.img})"><img src={step.img} alt="" class="fstep-img" loading="lazy" /></div>
         </div>
       {/each}
     </div>
@@ -430,7 +389,7 @@
           <defs><path id="cp" d="M100,100 m-75,0 a75,75 0 1,1 150,0 a75,75 0 1,1 -150,0"/></defs>
           <text><textPath href="#cp" class="badge-txt">MUCH WOW ✦ MUCH WOW ✦ MUCH WOW ✦ MUCH WOW ✦</textPath></text>
         </svg>
-        <div class="ht badge-face-wrap" style="--ht-img:url(/blockparty/f5-doge-face.png)"><img src="/blockparty/f5-doge-face.png" alt="" class="badge-face" /></div>
+        <div class="ht badge-face-wrap" style="--ht-img:url(/blockparty/f5-doge-face.png)"><img src="/blockparty/f5-doge-face.png" alt="" class="badge-face" loading="lazy" /></div>
       </div>
 
       <div class="about-text sr sr-r" style="--d:0.15s">
@@ -473,7 +432,7 @@
       <div class="sq-grid">
         {#each AGDEFS as ag, i}
           <div class="sq-card sr sr-r" style="--ac:{ag.color};--d:{i * 0.07}s">
-            <div class="ht sq-av-wrap" style="--ht-img:url({ag.img.def})"><img src={ag.img.def} alt={ag.name} class="sq-av" /></div>
+            <div class="ht sq-av-wrap" style="--ht-img:url({ag.img.def})"><img src={ag.img.def} alt={ag.name} class="sq-av" loading="lazy" /></div>
             <div class="sq-info">
               <span class="sq-nm" style="color:var(--ac)">{ag.name}</span>
               <span class="sq-rl">{ag.role}</span>
@@ -559,7 +518,7 @@
 
     <div class="detect-cta sr su" style="--d:0.5s">
       <p class="detect-example">"FIND COINS WHERE OI ROSE 4 CANDLES STRAIGHT BUT PRICE DIDN'T MOVE" → SCANNER HANDLES IT</p>
-      <button class="hero-btn hero-btn-primary" on:click={enterTerminal}>TRY SCANNER NOW →</button>
+      <button class="hero-btn hero-btn-primary" onclick={enterTerminal}>TRY SCANNER NOW →</button>
     </div>
   </section>
 
@@ -570,21 +529,21 @@
     <div class="feed-l">
       <span class="fd-line fd-w sr sl">IN YOUR</span>
       <span class="fd-line fd-pk sr sl" style="--d:0.15s">FEED</span>
-      <div class="ht feed-doge-wrap sr sl" style="--d:0.3s;--ht-img:url(/blockparty/f5-doge-fire.png)"><img src="/blockparty/f5-doge-fire.png" alt="" class="feed-doge" /></div>
+      <div class="ht feed-doge-wrap sr sl" style="--d:0.3s;--ht-img:url(/blockparty/f5-doge-fire.png)"><img src="/blockparty/f5-doge-fire.png" alt="" class="feed-doge" loading="lazy" /></div>
     </div>
     <div class="feed-r">
-      <button class="arena sr sr-r" on:click={enterArena}>
+      <a href="/arena" class="arena sr sr-r">
         <div class="arena-row">
-          <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-muscle.png)"><img src="/blockparty/f5-doge-muscle.png" alt="" class="arena-img" /></div>
+          <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-muscle.png)"><img src="/blockparty/f5-doge-muscle.png" alt="" class="arena-img" loading="lazy" /></div>
           <div class="arena-mid">
             <span class="arena-tag">AI vs YOU</span>
             <h3 class="arena-name">ARENA</h3>
             <p class="arena-sub">YOUR THESIS vs 8 AI AGENTS</p>
           </div>
-          <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)"><img src="/blockparty/f5-doge-bull.png" alt="" class="arena-img" /></div>
+          <div class="ht arena-img-wrap" style="--ht-img:url(/blockparty/f5-doge-bull.png)"><img src="/blockparty/f5-doge-bull.png" alt="" class="arena-img" loading="lazy" /></div>
         </div>
         <div class="arena-ft"><span>5-PHASE</span><span>8 AGENTS</span><span>RANKING</span></div>
-      </button>
+      </a>
 
       <div class="ticker sr sr-r" style="--d:0.12s">
         <div class="tk"><span class="tk-s">₿</span><span class="tk-n">BTC</span><span class="tk-v">${btcPrice.toLocaleString()}</span></div>
@@ -595,11 +554,11 @@
       </div>
 
       <div class="qg sr sr-r" style="--d:0.24s">
-        <button class="qn" on:click={() => goto('/terminal')}>TERMINAL</button>
-        <button class="qn" on:click={() => goto('/passport')}>PASSPORT</button>
-        <button class="qn" on:click={() => goto('/oracle')}>ORACLE</button>
-        <button class="qn" on:click={() => goto('/signals')}>SIGNALS {#if trackedSigs > 0}<span class="qn-b">{trackedSigs}</span>{/if}</button>
-        <button class="qn" on:click={() => goto('/signals')}>COMMUNITY</button>
+        <a href="/terminal" class="qn">TERMINAL</a>
+        <a href="/passport" class="qn">PASSPORT</a>
+        <a href="/oracle" class="qn">ORACLE</a>
+        <a href="/signals" class="qn">SIGNALS {#if trackedSigs > 0}<span class="qn-b">{trackedSigs}</span>{/if}</a>
+        <a href="/signals" class="qn">COMMUNITY</a>
       </div>
     </div>
   </section>
@@ -618,9 +577,9 @@
       </div>
     </div>
     <div class="cta-r">
-      <div class="ht cta-doge-wrap sr sr-r" style="--ht-img:url(/blockparty/f5-doge-excited.png)"><img src="/blockparty/f5-doge-excited.png" alt="" class="cta-doge" /></div>
+      <div class="ht cta-doge-wrap sr sr-r" style="--ht-img:url(/blockparty/f5-doge-excited.png)"><img src="/blockparty/f5-doge-excited.png" alt="" class="cta-doge" loading="lazy" /></div>
       {#if !connected}
-        <button class="cta-btn sr sr-r" style="--d:0.15s" on:click={openWalletModal}>⚡ CONNECT WALLET</button>
+        <button class="cta-btn sr sr-r" style="--d:0.15s" onclick={openWalletModal}>⚡ CONNECT WALLET</button>
       {:else}
         <div class="cta-connected sr sr-r" style="--d:0.15s">
           <span class="wc-dot"></span>
@@ -637,12 +596,12 @@
     <div class="foot-top">
       <div class="foot-logo" data-px="-0.04">MAXI<span class="foot-bolt">⚡</span>DOGE</div>
       <div class="foot-nav">
-        <button on:click={() => goto('/terminal')}>TERMINAL</button>
-        <button on:click={() => goto('/arena')}>ARENA</button>
-        <button on:click={() => goto('/signals')}>SIGNALS</button>
-        <button on:click={() => goto('/passport')}>PASSPORT</button>
-        <button on:click={() => goto('/oracle')}>ORACLE</button>
-        <button on:click={() => goto('/signals')}>COMMUNITY</button>
+        <a href="/terminal">TERMINAL</a>
+        <a href="/arena">ARENA</a>
+        <a href="/signals">SIGNALS</a>
+        <a href="/passport">PASSPORT</a>
+        <a href="/oracle">ORACLE</a>
+        <a href="/signals">COMMUNITY</a>
       </div>
     </div>
     <div class="foot-bot">
@@ -665,25 +624,19 @@
     --sp-pk: #E8967D;
     --sp-pk-l: #F5C4B8;
     --sp-w: #F0EDE4;
-    --sp-dim: rgba(240,237,228,0.4);
-    --sp-glow: rgba(232,150,125,0.22);
+    --sp-dim: rgba(240,237,228,0.6);
+    --sp-glow: rgba(232,150,125,0.2);
     --sp-grid: rgba(232,150,125,0.12);
   }
 
   /* ── BASE ── */
   .home {
-    --fx-orb-blur: 36px;
-    --fx-floor-glow: 0 0 4px rgba(232,150,125,0.42), 0 0 11px rgba(232,150,125,0.18), 0 0 18px rgba(232,150,125,0.08);
-    --fx-card-hover-glow: inset 0 0 10px rgba(232,150,125,0.04), 0 0 8px rgba(232,150,125,0.05);
-    --fx-btn-glow: 0 0 7px rgba(232,150,125,0.28);
-    --fx-btn-glow-hover: 0 0 11px rgba(232,150,125,0.4);
-    --fx-cta-glow: 0 0 10px rgba(232,150,125,0.24), 0 4px 10px rgba(0,0,0,0.24);
-    --fx-cta-glow-hover: 0 0 14px rgba(232,150,125,0.34), 0 6px 12px rgba(0,0,0,0.28);
-    --fx-live-dot-glow: 0 0 5px #00cc66;
-    --fx-title-tag-glow: 0 0 4px rgba(232,150,125,0.2);
-    --fx-title-pink-glow: 0 0 4px rgba(232,150,125,0.36), 0 0 10px rgba(232,150,125,0.12);
-    --fx-title-pink-glow-squad: 0 0 3px rgba(232,150,125,0.28), 0 0 7px rgba(232,150,125,0.08);
-    --fx-title-pink-glow-hero: 0 0 6px rgba(232,150,125,0.34), 0 0 14px rgba(232,150,125,0.12);
+    --fx-orb-blur: 24px;
+    --fx-glow-sm:   0 0 4px rgba(232,150,125,0.25);
+    --fx-glow-md:   0 0 8px rgba(232,150,125,0.3), 0 0 16px rgba(232,150,125,0.1);
+    --fx-glow-lg:   0 0 12px rgba(232,150,125,0.35), 0 4px 12px rgba(0,0,0,0.25);
+    --fx-glow-text: 0 0 5px rgba(232,150,125,0.3), 0 0 12px rgba(232,150,125,0.1);
+    --fx-glow-live: 0 0 5px #00cc66;
     --fx-title-pink-fill: repeating-linear-gradient(
       0deg,
       var(--sp-pk) 0px, var(--sp-pk) 3px,
@@ -692,20 +645,20 @@
     --space-sec-x: clamp(16px, 3.8vw, 64px);
     --space-sec-y-lg: clamp(58px, 7.2vw, 94px);
     --space-hero-x: clamp(14px, 2.2vw, 34px);
-    --space-hero-y-top: clamp(20px, 2.6vw, 36px);
-    --space-hero-y-bottom: clamp(24px, 3vw, 40px);
+    --space-hero-y-top: clamp(14px, 1.9vw, 20px);
+    --space-hero-y-bottom: clamp(16px, 2.2vw, 24px);
     --fs-kicker: clamp(8px, 0.95vw, 11px);
     --fs-meta: clamp(8px, 0.95vw, 10.5px);
     --fs-copy: clamp(10.5px, 1.05vw, 13px);
-    --fs-subhead: clamp(14px, 1.6vw, 22px);
-    --fs-prop: clamp(10px, 1vw, 12px);
-    --fs-chip-k: clamp(7.5px, 0.82vw, 9.5px);
-    --fs-chip-v: clamp(11px, 1.12vw, 14px);
-    --fs-hero-white: clamp(30px, 5.4vw, 74px);
-    --fs-hero-pink: clamp(34px, 6vw, 84px);
+    --fs-subhead: clamp(14px, 1.38vw, 19px);
+    --fs-prop: clamp(10.2px, 0.98vw, 12.2px);
+    --fs-chip-k: clamp(10px, 0.95vw, 11px);
+    --fs-chip-v: clamp(11px, 1.08vw, 14px);
+    --fs-hero-white: clamp(30px, 4.7vw, 64px);
+    --fs-hero-pink: clamp(34px, 5.3vw, 72px);
     --ls-kicker: clamp(1px, 0.24vw, 2.2px);
     --ls-copy: clamp(1px, 0.24vw, 2.4px);
-    --ls-title: clamp(2px, 0.46vw, 5px);
+    --ls-title: clamp(2px, 0.44vw, 4.8px);
     width: 100%; height: 100%;
     overflow-y: auto; overflow-x: hidden;
     background: var(--sp-bg);
@@ -723,196 +676,6 @@
     display: none;
   }
 
-  /* ── STARS ── */
-  .stars, .stars2 {
-    position: fixed; inset: 0;
-    pointer-events: none; z-index: 0;
-  }
-  .stars {
-    background:
-      radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.7) 50%, transparent 50%),
-      radial-gradient(1px 1px at 25% 35%, rgba(255,255,255,0.5) 50%, transparent 50%),
-      radial-gradient(1.5px 1.5px at 40% 8%, rgba(255,255,255,0.8) 50%, transparent 50%),
-      radial-gradient(1px 1px at 55% 60%, rgba(255,255,255,0.4) 50%, transparent 50%),
-      radial-gradient(1px 1px at 70% 22%, rgba(255,255,255,0.6) 50%, transparent 50%),
-      radial-gradient(1.5px 1.5px at 85% 45%, rgba(255,255,255,0.7) 50%, transparent 50%),
-      radial-gradient(1px 1px at 15% 70%, rgba(255,255,255,0.5) 50%, transparent 50%),
-      radial-gradient(1px 1px at 92% 80%, rgba(255,255,255,0.6) 50%, transparent 50%),
-      radial-gradient(1.5px 1.5px at 5% 90%, rgba(255,255,255,0.4) 50%, transparent 50%),
-      radial-gradient(1px 1px at 48% 42%, rgba(255,255,255,0.5) 50%, transparent 50%),
-      radial-gradient(1px 1px at 78% 68%, rgba(255,255,255,0.3) 50%, transparent 50%),
-      radial-gradient(1px 1px at 33% 88%, rgba(255,255,255,0.6) 50%, transparent 50%);
-    background-size: 300px 300px;
-  }
-  .stars2 {
-    background:
-      radial-gradient(1px 1px at 62% 18%, rgba(135,220,190,0.6) 50%, transparent 50%),
-      radial-gradient(1px 1px at 28% 52%, rgba(135,220,190,0.4) 50%, transparent 50%),
-      radial-gradient(1.5px 1.5px at 82% 72%, rgba(135,220,190,0.5) 50%, transparent 50%),
-      radial-gradient(1px 1px at 45% 92%, rgba(135,220,190,0.3) 50%, transparent 50%),
-      radial-gradient(1px 1px at 8% 38%, rgba(135,220,190,0.5) 50%, transparent 50%);
-    background-size: 500px 500px;
-    animation: twinkle 4s ease-in-out infinite alternate;
-  }
-  @keyframes twinkle { 0% { opacity: 0.4; } 100% { opacity: 1; } }
-
-  /* ── DIAMOND SPARKLES ── */
-  .sparkles {
-    position: fixed; inset: 0;
-    pointer-events: none; z-index: 0;
-  }
-  .spk {
-    position: absolute;
-    font-size: calc(8px * var(--spk-s, 1));
-    color: rgba(135,220,190,0.7);
-    text-shadow: 0 0 6px rgba(135,220,190,0.5);
-    animation: sparkPulse 3s ease-in-out infinite alternate;
-    animation-delay: var(--spk-d, 0s);
-  }
-  @keyframes sparkPulse {
-    0% { opacity: 0.15; transform: scale(0.6) rotate(0deg); }
-    50% { opacity: 1; transform: scale(1.2) rotate(45deg); }
-    100% { opacity: 0.15; transform: scale(0.6) rotate(90deg); }
-  }
-
-  /* ── FILM GRAIN NOISE ── */
-  .grain {
-    position: fixed; inset: 0;
-    pointer-events: none; z-index: 0;
-    opacity: 0.012;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-size: 200px 200px;
-    animation: grainShift 0.3s steps(3) infinite;
-  }
-  @keyframes grainShift {
-    0% { transform: translate(0, 0); }
-    33% { transform: translate(-1px, 1px); }
-    66% { transform: translate(1px, -1px); }
-    100% { transform: translate(0, 0); }
-  }
-
-  /* ── OLD TV STATIC — short pink/dark alternating bands ── */
-  .tv-static {
-    display: none;
-  }
-  .tv-band {
-    position: absolute; left: 0; right: 0;
-    opacity: 0;
-  }
-  /* Pink band */
-  .tv-band-1 {
-    height: 1px;
-    background: rgba(232,150,125,0.35);
-    box-shadow: 0 0 4px rgba(232,150,125,0.2);
-    animation: tvPink1 1.2s steps(1) infinite;
-  }
-  /* Dark band */
-  .tv-band-2 {
-    height: 2px;
-    background: rgba(0,0,0,0.5);
-    animation: tvDark1 1.6s steps(1) infinite;
-  }
-  /* Pink band 2 */
-  .tv-band-3 {
-    height: 1px;
-    background: rgba(232,150,125,0.3);
-    box-shadow: 0 0 3px rgba(232,150,125,0.15);
-    animation: tvPink2 2s steps(1) infinite;
-  }
-  @keyframes tvPink1 {
-    0% { top: 22%; opacity: 0; }
-    4% { top: 22%; opacity: 0.8; }
-    6% { opacity: 0; }
-    40% { top: 67%; opacity: 0; }
-    42% { top: 67%; opacity: 0.6; }
-    44% { opacity: 0; }
-    78% { top: 41%; opacity: 0; }
-    80% { top: 41%; opacity: 0.7; }
-    82% { opacity: 0; }
-    100% { opacity: 0; }
-  }
-  @keyframes tvDark1 {
-    0% { top: 55%; opacity: 0; }
-    5% { top: 55%; opacity: 0.7; }
-    7% { opacity: 0; }
-    35% { top: 12%; opacity: 0; }
-    37% { top: 12%; opacity: 0.5; }
-    39% { opacity: 0; }
-    70% { top: 83%; opacity: 0; }
-    72% { top: 83%; opacity: 0.6; }
-    74% { opacity: 0; }
-    100% { opacity: 0; }
-  }
-  @keyframes tvPink2 {
-    0% { top: 35%; opacity: 0; }
-    3% { top: 35%; opacity: 0.5; }
-    5% { opacity: 0; }
-    50% { top: 78%; opacity: 0; }
-    52% { top: 78%; opacity: 0.7; }
-    54% { opacity: 0; }
-    100% { opacity: 0; }
-  }
-
-  /* ── FULL-SCREEN CRT SCANLINES ── */
-  .crt-overlay {
-    position: fixed; inset: 0;
-    pointer-events: none; z-index: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent 0px,
-      transparent 3px,
-      rgba(0,0,0,0.06) 3px,
-      rgba(0,0,0,0.06) 4px
-    );
-    opacity: 0.5;
-  }
-
-  /* ── FLOATING GLOW ORBS ── */
-  .orbs {
-    position: fixed; inset: 0;
-    pointer-events: none; z-index: 0;
-    overflow: hidden;
-  }
-  .orb {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(var(--fx-orb-blur));
-    opacity: 0.07;
-    will-change: transform;
-  }
-  .orb-1 {
-    width: 500px; height: 500px;
-    background: radial-gradient(circle, rgba(232,150,125,0.6), transparent 70%);
-    top: 10%; left: -5%;
-    animation: orbFloat1 20s ease-in-out infinite alternate;
-  }
-  .orb-2 {
-    width: 400px; height: 400px;
-    background: radial-gradient(circle, rgba(135,220,190,0.5), transparent 70%);
-    top: 50%; right: -8%;
-    animation: orbFloat2 25s ease-in-out infinite alternate;
-  }
-  .orb-3 {
-    width: 350px; height: 350px;
-    background: radial-gradient(circle, rgba(232,150,125,0.4), transparent 70%);
-    bottom: 10%; left: 30%;
-    animation: orbFloat3 18s ease-in-out infinite alternate;
-  }
-  @keyframes orbFloat1 {
-    0% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(80px, 60px) scale(1.15); }
-    100% { transform: translate(-40px, 120px) scale(0.9); }
-  }
-  @keyframes orbFloat2 {
-    0% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(-60px, -80px) scale(1.1); }
-    100% { transform: translate(40px, -40px) scale(0.95); }
-  }
-  @keyframes orbFloat3 {
-    0% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(60px, -50px) scale(1.2); }
-    100% { transform: translate(-80px, 30px) scale(0.85); }
-  }
 
   /* ── HALFTONE OVERLAY + CRT SCANLINE ── */
   .ht {
@@ -943,7 +706,7 @@
       rgba(0,0,0,0.25) 3px
     );
     pointer-events: none;
-    animation: scanFlicker 4s ease-in-out infinite alternate;
+    animation: scanFlicker 6s ease-in-out infinite alternate;
   }
   @keyframes scanFlicker {
     0% { opacity: 0.6; }
@@ -975,7 +738,7 @@
     content: '';
     position: absolute; top: 0; left: 0; right: 0; height: 2px;
     background: rgba(232,150,125,0.78);
-    box-shadow: var(--fx-floor-glow);
+    box-shadow: var(--fx-glow-sm);
     opacity: 0.82;
   }
 
@@ -986,7 +749,6 @@
     opacity: 0;
     transition: opacity 0.9s cubic-bezier(.16,1,.3,1), transform 0.9s cubic-bezier(.16,1,.3,1);
     transition-delay: var(--d, 0s);
-    will-change: opacity, transform;
   }
   .sl  { transform: translateX(-140px); }
   .sr-r { transform: translateX(160px); }
@@ -1009,12 +771,13 @@
   /* ═══ HERO ═══ */
   .hero {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(300px, 34vw, 480px);
-    gap: clamp(12px, 1.8vw, 28px);
+    grid-template-columns: minmax(0, 1fr) clamp(296px, 31vw, 420px);
+    gap: clamp(12px, 1.6vw, 24px);
     padding-inline: var(--space-sec-x);
     border-bottom: 2px solid rgba(232,150,125,0.2);
     position: relative;
     min-height: calc(100vh - var(--header-h, 48px));
+    min-height: calc(100dvh - var(--header-h, 48px));
     z-index: 2;
     align-items: stretch;
   }
@@ -1030,25 +793,30 @@
   .hero-left {
     min-width: 0;
     width: 100%;
-    max-width: min(100%, clamp(560px, 62vw, 860px));
-    display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+    max-width: min(100%, clamp(560px, 64vw, 860px));
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
     padding: var(--space-hero-y-top) var(--space-hero-x) var(--space-hero-y-bottom);
     position: sticky;
     top: var(--header-h, 48px);
     height: calc(100vh - var(--header-h, 48px));
-    overflow-y: hidden;
+    height: calc(100dvh - var(--header-h, 48px));
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     z-index: 3;
   }
+  .hero-left::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
   .hero-stack {
     display: flex; flex-direction: column; line-height: 0.95;
-    gap: clamp(2px, 0.5vw, 8px);
+    gap: clamp(2px, 0.45vw, 8px);
     position: relative; z-index: 3;
+    margin: 0; font-weight: inherit;
   }
   .htag {
     font-family: var(--fp); font-size: var(--fs-kicker);
     color: var(--sp-pk); letter-spacing: var(--ls-kicker);
-    margin-bottom: clamp(10px, 1.5vw, 18px);
+    margin-bottom: clamp(9px, 1.3vw, 15px);
     text-shadow: 0 0 6px var(--sp-glow);
     text-wrap: balance;
   }
@@ -1056,7 +824,7 @@
     font-family: var(--fp); font-weight: 400;
     display: inline-block;
     color: var(--sp-w);
-    text-shadow: 0 0 6px rgba(240,237,228,0.26), 0 0 12px rgba(240,237,228,0.08);
+    text-shadow: 0 0 5px rgba(240,237,228,0.24), 0 0 10px rgba(240,237,228,0.09);
   }
   @supports ((-webkit-background-clip: text) or (background-clip: text)) {
     .hl {
@@ -1074,7 +842,7 @@
   .hl-pk {
     font-size: var(--fs-hero-pink); letter-spacing: var(--ls-title);
     color: var(--sp-pk);
-    text-shadow: var(--fx-title-pink-glow-hero);
+    text-shadow: var(--fx-glow-text);
   }
   @supports ((-webkit-background-clip: text) and (-webkit-text-fill-color: transparent)) {
     .hl-pk {
@@ -1083,96 +851,63 @@
       -webkit-text-fill-color: transparent;
     }
   }
-  .hl-row { display: flex; align-items: center; flex-wrap: wrap; gap: clamp(8px, 1.2vw, 14px); min-width: 0; }
+  .hl-row { display: flex; align-items: center; flex-wrap: wrap; gap: clamp(8px, 1.1vw, 14px); min-width: 0; }
 
   .hero-doge-wrap { flex-shrink: 0; }
   .hero-doge {
-    width: clamp(68px, 10vw, 138px); height: auto; object-fit: contain;
+    width: clamp(66px, 9.2vw, 130px); height: auto; object-fit: contain;
     animation: bob 3s ease-in-out infinite;
   }
   @keyframes bob {
     0%,100% { transform: translateY(0) rotate(0); }
-    50% { transform: translateY(-8px) rotate(2deg); }
-  }
-
-  /* Review badges */
-  .rbadges {
-    display: flex; gap: clamp(10px, 1.5vw, 18px); margin-top: clamp(16px, 2.4vw, 28px); flex-wrap: wrap;
-    width: min(100%, 760px);
-  }
-  .rbdg {
-    display: flex; flex-direction: column; gap: 2px;
-    padding: 8px 10px;
-    border: 1px solid rgba(232,150,125,0.12);
-    border-radius: 10px;
-    background: rgba(232,150,125,0.03);
-  }
-  .rbdg-stars {
-    font-family: var(--fp); font-size: clamp(10px, 1.2vw, 12px);
-    color: var(--sp-pk); letter-spacing: clamp(1px, 0.24vw, 2px);
-  }
-  .rbdg-label {
-    font-family: var(--fp); font-size: var(--fs-meta);
-    color: var(--sp-pk); letter-spacing: clamp(0.8px, 0.2vw, 1.4px);
-    text-shadow: 0 0 6px var(--sp-glow);
-  }
-  .rbdg-src {
-    font-family: var(--fp); font-size: var(--fs-meta);
-    color: var(--sp-w); letter-spacing: clamp(0.8px, 0.22vw, 1.8px); opacity: 0.65;
+    50% { transform: translateY(-7px) rotate(2deg); }
   }
 
   /* Hero subtitle + value props + CTAs */
   .hero-sub {
-    font-family: var(--fp); margin-top: clamp(12px, 1.7vw, 20px);
+    font-family: var(--fp); margin-top: clamp(8px, 1.1vw, 12px);
     display: flex;
     flex-direction: column;
-    gap: 6px;
-  }
-  .hero-sub-k {
-    font-size: clamp(8px, 0.88vw, 10px);
-    color: var(--sp-dim);
-    letter-spacing: clamp(1.1px, 0.24vw, 1.9px);
-    text-transform: uppercase;
+    gap: 3px;
   }
   .hero-sub-v {
     font-size: var(--fs-subhead);
     color: var(--sp-pk);
     letter-spacing: var(--ls-copy);
     text-shadow: 0 0 6px var(--sp-glow);
-    max-width: 42ch;
-    line-height: 1.46;
+    max-width: 40ch;
+    line-height: 1.3;
     text-wrap: balance;
   }
-  .hero-props { display: flex; flex-direction: column; gap: clamp(7px, 0.9vw, 11px); margin-top: clamp(12px, 1.7vw, 20px); width: min(100%, 76ch); }
-  .hp { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
-  .hp-icon { font-size: clamp(12px, 1.4vw, 14px); flex-shrink: 0; line-height: 1.3; }
+  .hero-props { display: flex; flex-direction: column; gap: clamp(5px, 0.8vw, 10px); margin-top: clamp(8px, 1.1vw, 12px); width: min(100%, 74ch); }
+  .hp { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+  .hp-icon { font-size: clamp(12px, 1.3vw, 14px); flex-shrink: 0; line-height: 1.25; }
   .hp-txt {
     font-family: var(--fp); font-size: var(--fs-prop);
-    color: var(--sp-w); letter-spacing: clamp(0.7px, 0.2vw, 1.35px); opacity: 0.76; line-height: 1.48;
+    color: var(--sp-w); letter-spacing: clamp(0.7px, 0.2vw, 1.3px); opacity: 0.76; line-height: 1.4;
     text-wrap: pretty;
   }
   .hp-prime .hp-txt {
     opacity: 0.96;
     color: rgba(240,237,228,0.98);
-    font-size: clamp(11px, 1.14vw, 14px);
+    font-size: clamp(10.5px, 1.04vw, 12.8px);
   }
   .hp-note .hp-txt {
     opacity: 0.78;
   }
   .hero-status {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: clamp(8px, 1vw, 12px);
-    margin-top: clamp(12px, 1.7vw, 20px);
+    margin-top: clamp(10px, 1.3vw, 14px);
     width: min(100%, 880px);
   }
-  .hs-chip:first-child { grid-column: 1 / -1; }
   .hs-chip {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: clamp(8px, 1.2vw, 11px) clamp(10px, 1.4vw, 13px);
+    padding: clamp(7px, 0.9vw, 10px) clamp(9px, 1.1vw, 12px);
     border-radius: 8px;
     border: 1px solid rgba(232,150,125,0.2);
     background: rgba(232,150,125,0.04);
@@ -1198,18 +933,18 @@
     color: #89f4be;
     text-shadow: 0 0 10px rgba(137,244,190,0.3);
   }
-  .hero-ctas { display: flex; gap: 12px; margin-top: clamp(16px, 2vw, 24px); flex-wrap: wrap; width: min(100%, 760px); }
+  .hero-ctas { display: flex; gap: 10px; margin-top: clamp(12px, 1.6vw, 18px); flex-wrap: wrap; width: min(100%, 760px); }
   .hero-btn {
-    font-family: var(--fp); font-size: clamp(10px, 1.08vw, 13px); letter-spacing: clamp(1.1px, 0.22vw, 1.8px);
-    border: none; border-radius: 6px; padding: 15px 24px;
+    font-family: var(--fp); font-size: clamp(10.4px, 1.02vw, 12.8px); letter-spacing: clamp(1.1px, 0.22vw, 1.7px);
+    border: none; border-radius: 6px; padding: 12px 18px;
     cursor: pointer; transition: all .2s;
-    min-width: 192px;
+    min-width: 168px;
   }
   .hero-btn-primary {
     color: var(--sp-bg); background: var(--sp-pk);
-    box-shadow: var(--fx-btn-glow);
+    box-shadow: var(--fx-glow-md);
   }
-  .hero-btn-primary:hover { transform: translateY(-2px); box-shadow: var(--fx-btn-glow-hover); }
+  .hero-btn-primary:hover { transform: translateY(-2px); box-shadow: var(--fx-glow-lg); }
   .hero-btn-secondary {
     color: var(--sp-pk); background: transparent;
     border: 1px solid rgba(232,150,125,0.3);
@@ -1224,7 +959,7 @@
   .arena:focus-visible,
   .qn:focus-visible,
   .cta-btn:focus-visible,
-  .foot-nav button:focus-visible {
+  .foot-nav a:focus-visible {
     outline: 2px solid var(--sp-pk);
     outline-offset: 2px;
   }
@@ -1239,6 +974,7 @@
     position: sticky;
     top: var(--header-h, 48px);
     height: calc(100vh - var(--header-h, 48px));
+    height: calc(100dvh - var(--header-h, 48px));
     overflow-y: auto;
     z-index: 3;
   }
@@ -1264,7 +1000,7 @@
   }
   .fr-hint {
     font-family: var(--fp);
-    font-size: clamp(8px, 0.82vw, 9.5px);
+    font-size: clamp(10px, 0.95vw, 11px);
     color: var(--sp-dim);
     letter-spacing: clamp(1px, 0.22vw, 1.6px);
   }
@@ -1284,7 +1020,7 @@
     border-radius: 0;
     position: relative;
     overflow: hidden;
-    min-height: clamp(200px, 34vh, 320px);
+    min-height: clamp(190px, 32vh, 288px);
   }
   /* Glass reflection sweep */
   .fc::before {
@@ -1311,7 +1047,7 @@
   }
   .fc:hover {
     background: rgba(232,150,125,0.06);
-    box-shadow: var(--fx-card-hover-glow);
+    box-shadow: var(--fx-glow-md);
     border-bottom-color: rgba(232,150,125,0.25);
   }
   .fc-img {
@@ -1328,7 +1064,7 @@
   .fc:hover .fc-img img { transform: scale(1.1) rotate(-2deg); }
   .fc-txt { padding: clamp(12px, 1.4vw, 18px) clamp(14px, 1.8vw, 22px) clamp(14px, 2vw, 22px); }
   .fc-sub {
-    font-family: var(--fp); font-size: clamp(8px, 0.86vw, 9px);
+    font-family: var(--fp); font-size: clamp(10px, 0.95vw, 11px);
     color: var(--sp-dim); letter-spacing: clamp(1px, 0.2vw, 2px);
   }
   .fc-lbl {
@@ -1347,6 +1083,7 @@
     font-family: var(--fp); font-size: 10px;
     letter-spacing: 2px; color: var(--sp-w); transition: color .15s;
     border-top: 1px solid rgba(232,150,125,0.08);
+    text-decoration: none;
   }
   .fc-all:hover { color: var(--sp-pk); }
   .fc-arr { font-size: 16px; }
@@ -1401,18 +1138,18 @@
     text-shadow: 0 0 8px var(--sp-glow);
   }
   .fds-k {
-    font-family: var(--fp); font-size: 9px;
+    font-family: var(--fp); font-size: 10px;
     color: var(--sp-dim); letter-spacing: 2px;
   }
   .feat-detail-cta {
-    font-family: var(--fp); font-size: 9px; letter-spacing: 2px;
+    font-family: var(--fp); font-size: 10px; letter-spacing: 2px;
     color: var(--sp-bg); background: var(--sp-pk);
     border: none; border-radius: 6px;
     padding: 12px 24px; cursor: pointer; margin-top: 8px;
     transition: all .2s;
-    box-shadow: var(--fx-btn-glow);
+    box-shadow: var(--fx-glow-md);
   }
-  .feat-detail-cta:hover { transform: translateY(-2px); box-shadow: var(--fx-btn-glow-hover); }
+  .feat-detail-cta:hover { transform: translateY(-2px); box-shadow: var(--fx-glow-lg); }
 
   /* ═══ FLOW — MISSION STAGES ═══ */
   .flow {
@@ -1420,13 +1157,16 @@
     border-bottom: 2px solid rgba(232,150,125,0.15);
     position: relative; overflow: hidden; z-index: 2;
     min-height: 80vh;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 800px;
+    contain: layout style paint;
   }
   .flow-header { text-align: center; margin-bottom: clamp(28px, 4vw, 48px); position: relative; z-index: 2; }
   .flow-tag {
     font-family: var(--fp); font-size: var(--fs-meta);
     color: var(--sp-pk); letter-spacing: var(--ls-kicker);
     display: block; margin-bottom: 12px;
-    text-shadow: var(--fx-title-tag-glow);
+    text-shadow: var(--fx-glow-sm);
   }
   .flow-title {
     font-family: var(--fp); line-height: 1.4;
@@ -1441,7 +1181,7 @@
     width: fit-content;
     max-width: 100%;
     color: var(--sp-pk);
-    text-shadow: var(--fx-title-pink-glow);
+    text-shadow: var(--fx-glow-text);
     line-height: 1.08;
   }
   .flow-title .ft-pk,
@@ -1535,6 +1275,8 @@
     border-bottom: 2px solid rgba(232,150,125,0.15);
     position: relative; overflow: hidden; z-index: 2;
     min-height: 60vh;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 600px;
   }
 
   .about-inner {
@@ -1580,12 +1322,15 @@
     padding: var(--space-sec-y-lg) var(--space-sec-x); position: relative; overflow: hidden; z-index: 2;
     border-bottom: 2px solid rgba(232,150,125,0.15);
     min-height: 70vh;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 800px;
+    contain: layout style paint;
   }
   .sq-tag {
     font-family: var(--fp); font-size: var(--fs-meta);
     color: var(--sp-pk); letter-spacing: var(--ls-kicker);
     display: block; text-align: center; margin-bottom: 10px;
-    text-shadow: var(--fx-title-tag-glow);
+    text-shadow: var(--fx-glow-sm);
   }
   .sq-title {
     font-family: var(--fp); font-size: clamp(24px, 5vw, 48px);
@@ -1593,7 +1338,7 @@
     position: relative; z-index: 2;
   }
   .sq-w { color: var(--sp-w); display: block; }
-  .sq-pk { text-shadow: var(--fx-title-pink-glow-squad); }
+  .sq-pk { text-shadow: var(--fx-glow-sm); }
   .sq-sub {
     font-family: var(--fp); font-size: var(--fs-copy);
     color: var(--sp-dim); letter-spacing: clamp(1px, 0.24vw, 2px); margin-top: 8px;
@@ -1675,6 +1420,9 @@
     padding: var(--space-sec-y-lg) var(--space-sec-x);
     border-bottom: 2px solid rgba(232,150,125,0.15);
     position: relative; overflow: hidden; z-index: 2;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 900px;
+    contain: layout style paint;
   }
   .detect-stars {
     position: absolute; inset: 0;
@@ -1698,7 +1446,7 @@
     font-family: var(--fp); font-size: var(--fs-meta);
     color: var(--sp-pk); letter-spacing: var(--ls-kicker);
     display: block; margin-bottom: 12px;
-    text-shadow: var(--fx-title-tag-glow);
+    text-shadow: var(--fx-glow-sm);
   }
   .detect-title { font-family: var(--fp); line-height: 1.4; }
   .dt-w { font-size: clamp(16px, 3vw, 28px); color: var(--sp-w); display: block; }
@@ -1751,8 +1499,8 @@
     margin-right: 6px; vertical-align: middle;
   }
   .dtl-badge-out {
-    background: rgba(135,220,190,0.9);
-    box-shadow: 0 0 8px rgba(135,220,190,0.4);
+    background: var(--sp-pk);
+    box-shadow: 0 0 8px rgba(232,150,125,0.4);
   }
   .dtl-icon { font-size: 14px; vertical-align: middle; margin-right: 4px; }
   .dtl-input-body, .dtl-output-body {
@@ -1800,14 +1548,14 @@
     gap: 10px;
   }
   .dtl-output {
-    border-color: rgba(135,220,190,0.2);
-    background: rgba(135,220,190,0.03);
+    border-color: rgba(232,150,125,0.25);
+    background: rgba(232,150,125,0.04);
   }
   .dtl-output:hover {
-    border-color: rgba(135,220,190,0.4);
-    box-shadow: 0 4px 20px rgba(135,220,190,0.1);
+    border-color: rgba(232,150,125,0.4);
+    box-shadow: 0 4px 20px rgba(232,150,125,0.1);
   }
-  .dtl-output .dtl-label { color: rgba(135,220,190,0.9); }
+  .dtl-output .dtl-label { color: var(--sp-pk); }
 
   .detect-cta {
     text-align: center; margin-top: 40px;
@@ -1829,6 +1577,8 @@
     border-bottom: 2px solid rgba(232,150,125,0.15);
     overflow: hidden; z-index: 2;
     min-height: 80vh;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 800px;
   }
   .feed-l {
     flex: 0 0 40%; display: flex; flex-direction: column;
@@ -1856,6 +1606,7 @@
   }
 
   .arena {
+    display: block; text-decoration: none; color: inherit;
     background: var(--sp-bg); border: 2px solid rgba(232,150,125,0.2); border-radius: 12px;
     padding: 16px; cursor: pointer; transition: transform .2s, box-shadow .2s; width: 100%; text-align: left;
   }
@@ -1864,16 +1615,16 @@
   .arena-img-wrap { width: 60px; height: 60px; flex-shrink: 0; }
   .arena-img { width: 100%; height: 100%; object-fit: contain; }
   .arena-mid { flex: 1; text-align: center; }
-  .arena-tag { font-family: var(--fp); font-size: 9px; color: var(--sp-dim); letter-spacing: 1px; }
+  .arena-tag { font-family: var(--fp); font-size: 10px; color: var(--sp-dim); letter-spacing: 1px; }
   .arena-name {
     font-family: var(--fp); font-size: clamp(14px, 2vw, 20px); letter-spacing: clamp(1.6px, 0.34vw, 3.6px);
     color: var(--sp-pk); line-height: 1.4;
     text-shadow: 0 0 8px var(--sp-pk), 0 0 20px var(--sp-glow);
   }
-  .arena-sub { font-family: var(--fp); font-size: 9px; color: var(--sp-dim); margin-top: 4px; }
+  .arena-sub { font-family: var(--fp); font-size: 10px; color: var(--sp-dim); margin-top: 4px; }
   .arena-ft { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
   .arena-ft span {
-    font-family: var(--fp); font-size: 9px; color: var(--sp-dim);
+    font-family: var(--fp); font-size: 10px; color: var(--sp-dim);
     background: rgba(232,150,125,0.06); padding: 4px 10px; border: 1px solid rgba(232,150,125,0.1);
     border-radius: 4px;
   }
@@ -1887,7 +1638,7 @@
   .tk-s { font-size: 16px; color: #f7931a; }
   .tk-eth { color: #627eea; }
   .tk-sol { color: #9945ff; }
-  .tk-n { font-family: var(--fp); font-size: 8px; color: var(--sp-dim); letter-spacing: 1px; }
+  .tk-n { font-family: var(--fp); font-size: 10px; color: var(--sp-dim); letter-spacing: 1px; }
   .tk-v { font-family: var(--fp); font-size: 10px; color: var(--sp-w); }
   .tk-sep { width: 1px; height: 20px; background: rgba(232,150,125,0.12); }
 
@@ -1898,6 +1649,7 @@
     background: transparent; border: 1px solid rgba(232,150,125,0.2);
     padding: 8px 14px; cursor: pointer; border-radius: 6px;
     transition: all .15s; display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    text-decoration: none;
   }
   .qn:hover { background: rgba(232,150,125,0.1); color: var(--sp-pk); border-color: var(--sp-pk); }
   .qn-b { font-size: 8px; background: var(--sp-pk); color: var(--sp-bg); padding: 1px 5px; border-radius: 4px; }
@@ -1908,6 +1660,8 @@
     padding: var(--space-sec-y-lg) var(--space-sec-x) clamp(84px, 10vw, 128px); display: flex; flex-wrap: wrap; gap: clamp(20px, 3.2vw, 34px);
     position: relative; overflow: hidden; z-index: 2;
     min-height: 70vh;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 700px;
   }
   .cta-l { flex: 1; min-width: 250px; display: flex; flex-direction: column; line-height: 1.2; position: relative; z-index: 3; }
   .cta-txt { font-family: var(--fp); display: block; }
@@ -1926,21 +1680,21 @@
   .cta-doge-wrap { width: 180px; }
   .cta-doge { width: 100%; object-fit: contain; }
   .cta-btn {
-    font-family: var(--fp); font-size: clamp(9px, 1.05vw, 11px); letter-spacing: clamp(1.2px, 0.24vw, 2px);
+    font-family: var(--fp); font-size: clamp(10px, 1.05vw, 11px); letter-spacing: clamp(1.2px, 0.24vw, 2px);
     color: var(--sp-bg); background: var(--sp-pk);
     border: none; border-radius: 30px;
     padding: 16px 32px; cursor: pointer;
     transition: all .2s;
-    box-shadow: var(--fx-cta-glow);
+    box-shadow: var(--fx-glow-lg);
   }
-  .cta-btn:hover { transform: translateY(-2px); box-shadow: var(--fx-cta-glow-hover); }
+  .cta-btn:hover { transform: translateY(-2px); box-shadow: var(--fx-glow-lg); }
   .cta-connected {
     display: flex; align-items: center; gap: 8px;
     font-family: var(--fp); font-size: var(--fs-copy);
     color: #00cc66; background: var(--sp-bg); padding: 12px 20px;
     border: 1px solid rgba(0,204,102,0.3); border-radius: 8px;
   }
-  .wc-dot { width: 8px; height: 8px; border-radius: 50%; background: #00cc66; box-shadow: var(--fx-live-dot-glow); }
+  .wc-dot { width: 8px; height: 8px; border-radius: 50%; background: #00cc66; box-shadow: var(--fx-glow-live); }
   .wc-tier { font-size: var(--fs-meta); background: rgba(255,200,0,.15); color: #c8a000; padding: 2px 6px; border-radius: 4px; }
 
   .grid-floor-cta {
@@ -1959,20 +1713,21 @@
   .foot-logo { font-family: var(--fp); font-size: clamp(10px, 1.1vw, 12px); color: var(--sp-w); letter-spacing: clamp(1px, 0.22vw, 2px); }
   .foot-bolt { color: var(--sp-pk); text-shadow: 0 0 10px var(--sp-glow); }
   .foot-nav { display: flex; gap: 6px; flex-wrap: wrap; }
-  .foot-nav button {
+  .foot-nav a {
     font-family: var(--fp); font-size: var(--fs-meta);
     letter-spacing: clamp(1px, 0.24vw, 2px); color: var(--sp-dim);
     background: none; border: 1px solid rgba(232,150,125,0.1);
     padding: 6px 12px; cursor: pointer; transition: all .15s; border-radius: 4px;
+    text-decoration: none;
   }
-  .foot-nav button:hover { color: var(--sp-pk); border-color: rgba(232,150,125,0.3); }
+  .foot-nav a:hover { color: var(--sp-pk); border-color: rgba(232,150,125,0.3); }
   .foot-bot {
     display: flex; justify-content: space-between; align-items: center;
     flex-wrap: wrap; gap: 8px; padding-top: 16px;
     border-top: 1px solid rgba(232,150,125,0.06);
   }
-  .foot-copy { font-family: var(--fp); font-size: clamp(7px, 0.82vw, 9px); letter-spacing: clamp(0.7px, 0.2vw, 1.2px); color: rgba(240,237,228,0.2); }
-  .foot-tag { font-family: var(--fv); font-size: clamp(12px, 1.3vw, 14px); color: rgba(232,150,125,0.3); }
+  .foot-copy { font-family: var(--fp); font-size: clamp(10px, 0.95vw, 11px); letter-spacing: clamp(0.7px, 0.2vw, 1.2px); color: rgba(240,237,228,0.45); }
+  .foot-tag { font-family: var(--fv); font-size: clamp(12px, 1.3vw, 14px); color: rgba(232,150,125,0.5); }
 
   @media (prefers-reduced-motion: reduce) {
     .sr,
@@ -1981,11 +1736,6 @@
       transform: none !important;
       transition: none !important;
     }
-    .stars2,
-    .sparkles .spk,
-    .grain,
-    .tv-band,
-    .orb,
     .ht::before,
     .badge-svg,
     .hero-doge,
@@ -2054,16 +1804,10 @@
     }
     .hl-pk { font-size: clamp(30px, 6.4vw, 66px); }
     .hl-xl { font-size: clamp(28px, 5.6vw, 58px); }
-    .hero-sub-v { max-width: 46ch; }
-    .hero-status {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      width: min(100%, 860px);
-    }
-    .hs-chip:first-child {
-      grid-column: 1 / -1;
-    }
-    .hero-btn { min-width: 168px; }
-    .fc { min-height: clamp(200px, 34vh, 300px); }
+    .hero-sub-v { max-width: 44ch; }
+    .hero-status { width: min(100%, 860px); }
+    .hero-btn { min-width: 164px; }
+    .fc { min-height: clamp(186px, 30vh, 264px); }
     .fc-img .ht { width: 54%; }
   }
 
@@ -2104,8 +1848,7 @@
     }
     .hero-sub,
     .hero-props,
-    .hero-ctas,
-    .rbadges {
+    .hero-ctas {
       width: 100%;
       max-width: none;
     }
@@ -2127,6 +1870,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }
+    .hs-chip:first-child { grid-column: 1 / -1; }
     .hs-chip {
       align-items: flex-start;
       flex-direction: column;
@@ -2177,6 +1921,7 @@
       grid-template-columns: 1fr;
       gap: 8px;
     }
+    .hs-chip:first-child { grid-column: auto; }
     .hs-chip {
       width: 100%;
       min-width: 0;
@@ -2185,8 +1930,8 @@
       justify-content: space-between;
       gap: 10px;
     }
-    .hs-k { font-size: 8px; }
-    .hs-v { font-size: 9px; text-align: right; }
+    .hs-k { font-size: 10px; }
+    .hs-v { font-size: 10px; text-align: right; }
     .hero-ctas {
       flex-direction: column;
       align-items: stretch;
@@ -2199,8 +1944,6 @@
       justify-content: center;
       padding: 12px 16px;
     }
-    .rbadges { gap: 10px; }
-    .rbdg { width: 100%; }
     .about-text p { font-size: clamp(19px, 6.2vw, 24px); }
     .about-badge { width: 120px; height: 120px; }
     .badge-face-wrap { width: 45px; height: 45px; }
@@ -2218,13 +1961,12 @@
       letter-spacing: clamp(1.4px, 0.5vw, 2.6px);
     }
     .cta-doge-wrap { width: 120px; }
-    .cta-btn { font-size: 9px; padding: 12px 20px; width: 100%; max-width: 320px; }
+    .cta-btn { font-size: 10px; padding: 12px 20px; width: 100%; max-width: 320px; }
     .fstep { gap: 12px; padding: 20px 16px; }
     .fstep-num { font-size: 20px; min-width: 36px; }
     .fstep-title { font-size: 12px; }
     .fstep-imgwrap { width: 50px; height: 50px; }
     .fstep-bar { max-width: 120px; }
-    .rbdg-stars { font-size: 10px; }
   }
 
   @media (max-width: 400px) {
@@ -2237,5 +1979,29 @@
     .about-tag { letter-spacing: 1.2px; }
     .cta-w { font-size: 20px; }
     .cta-pk { font-size: 26px; }
+  }
+
+  @media (min-width: 1081px) and (max-height: 900px) {
+    .hero {
+      grid-template-columns: minmax(0, 1fr) clamp(292px, 30vw, 390px);
+      gap: 10px;
+    }
+    .hero-left {
+      padding-top: 10px;
+      padding-bottom: 12px;
+    }
+    .hero-stack { gap: 3px; }
+    .htag { margin-bottom: 8px; }
+    .hl-pk { font-size: clamp(28px, 5.2vh, 52px); }
+    .hl-xl { font-size: clamp(26px, 4.9vh, 48px); }
+    .hero-doge { width: clamp(54px, 6.8vh, 84px); }
+    .hero-sub { margin-top: 6px; }
+    .hero-sub-v { font-size: clamp(12px, 2vh, 15px); max-width: 36ch; line-height: 1.22; }
+    .hero-props { gap: 4px; margin-top: 6px; width: min(100%, 66ch); }
+    .hp-txt { line-height: 1.3; }
+    .hero-status { margin-top: 8px; gap: 7px; }
+    .hs-chip { padding: 5px 8px; }
+    .hero-ctas { margin-top: 10px; }
+    .hero-btn { padding: 10px 14px; min-width: 150px; }
   }
 </style>
