@@ -1,12 +1,24 @@
 <script lang="ts">
-  export let text = '';
-  export let agentColor = '#ffe600';
-  export let agentIcon = '';
-  export let agentName = '';
-  export let dir: 'LONG' | 'SHORT' | 'NEUTRAL' | '' = '';
-  export let conf: number = 0;
-  export let side: 'left' | 'right' = 'left';
-  export let visible = true;
+  interface Props {
+    text?: string;
+    agentColor?: string;
+    agentIcon?: string;
+    agentName?: string;
+    dir?: 'LONG' | 'SHORT' | 'NEUTRAL' | '';
+    conf?: number;
+    side?: 'left' | 'right';
+    visible?: boolean;
+  }
+  let {
+    text = '',
+    agentColor = '#ffe600',
+    agentIcon = '',
+    agentName = '',
+    dir = '',
+    conf = 0,
+    side = 'left',
+    visible = true,
+  }: Props = $props();
 </script>
 
 {#if visible && text}

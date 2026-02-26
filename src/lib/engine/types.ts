@@ -232,6 +232,68 @@ export interface MatchResult {
   }[];
 }
 
+// ─── C02 Architecture ────────────────────────────────────────
+
+/** ORPO (Layer 0) — The single analysis engine combining OFFENSE agents */
+export interface OrpoOutput {
+  direction: Direction;
+  confidence: number;            // 0-100
+  pattern: string;               // Detected pattern name
+  keyLevels: {
+    support: number;
+    resistance: number;
+  };
+  factors: FactorResult[];       // All 48 factor results
+  thesis: string;                // Auto-generated thesis summary
+}
+
+/** CTX Agent IDs — 4 context validators */
+export type CtxAgentId = 'DERIV' | 'FLOW' | 'MACRO' | 'SENTI';
+
+/** CTX signal flag */
+export type CtxFlag = 'RED' | 'GREEN' | 'NEUTRAL';
+
+/** CTX Agent belief — each provides a RED/GREEN/NEUTRAL flag */
+export interface CtxBelief {
+  agentId: CtxAgentId;
+  flag: CtxFlag;
+  confidence: number;            // 0-100
+  headline: string;              // 1-line summary
+  factors: FactorResult[];
+}
+
+/** COMMANDER verdict — resolves ORPO vs CTX conflicts */
+export interface CommanderVerdict {
+  finalDirection: Direction;
+  entryScore: number;            // 0-100
+  reasoning: string;
+  conflictResolved: boolean;     // true if LLM was invoked
+  cost: number;                  // ~$0.008 per LLM call
+}
+
+/** GUARDIAN violation — individual P0 rule check */
+export interface GuardianViolation {
+  rule: string;                  // 'RSI_95' | 'RR_1_5' | 'DATA_DOWN' etc.
+  detail: string;
+  severity: 'BLOCK' | 'WARN';
+}
+
+/** GUARDIAN check — P0 hard rules enforcement */
+export interface GuardianCheck {
+  passed: boolean;
+  violations: GuardianViolation[];
+  halt: boolean;                 // Data source down → halt all
+}
+
+/** Full C02 pipeline result combining all layers */
+export interface C02Result {
+  orpo: OrpoOutput;
+  ctx: CtxBelief[];              // 4 agents
+  guardian: GuardianCheck;
+  commander: CommanderVerdict | null;  // null if no conflict to resolve
+  timestamp: number;
+}
+
 // ─── LP / Tier ───────────────────────────────────────────────
 
 export type Tier = 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'MASTER';

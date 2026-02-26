@@ -1,12 +1,22 @@
 <script lang="ts">
-  export let icon = '⚡';
-  export let title = 'LIVE EVENT';
-  export let detail = '';
-  export let severity: 'LOW' | 'MID' | 'HIGH' = 'LOW';
-  export let tint = '#66cce6';
-  export let freshness = 1;
+  interface Props {
+    icon?: string;
+    title?: string;
+    detail?: string;
+    severity?: 'LOW' | 'MID' | 'HIGH';
+    tint?: string;
+    freshness?: number;
+  }
+  let {
+    icon = '⚡',
+    title = 'LIVE EVENT',
+    detail = '',
+    severity = 'LOW',
+    tint = '#66cce6',
+    freshness = 1,
+  }: Props = $props();
 
-  $: life = `${Math.max(0, Math.min(1, freshness)) * 100}%`;
+  let life = $derived(`${Math.max(0, Math.min(1, freshness)) * 100}%`);
 </script>
 
 <article class="event-card" class:mid={severity === 'MID'} class:high={severity === 'HIGH'} style="--event-tint:{tint}">

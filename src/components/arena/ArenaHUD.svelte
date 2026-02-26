@@ -1,18 +1,29 @@
 <script lang="ts">
-  export let phaseName = 'ANALYSIS';
-  export let timer = 0;
-  export let score = 50;
-  export let streak = 0;
-  export let lp = 0;
-  export let mode = 'PVE';
-  export let phaseProgress = 0;
+  interface Props {
+    phaseName?: string;
+    timer?: number;
+    score?: number;
+    streak?: number;
+    lp?: number;
+    mode?: string;
+    phaseProgress?: number;
+  }
+  let {
+    phaseName = 'ANALYSIS',
+    timer = 0,
+    score = 50,
+    streak = 0,
+    lp = 0,
+    mode = 'PVE',
+    phaseProgress = 0,
+  }: Props = $props();
 
-  $: safeProgress = Math.max(0, Math.min(1, phaseProgress));
-  $: scoreSafe = Math.max(0, Math.min(100, Math.round(score)));
-  $: dash = `${Math.round(safeProgress * 220)} 220`;
-  $: timerText = timer > 0 ? `${Math.ceil(timer)}s` : '--';
-  $: biasLabel = scoreSafe >= 60 ? 'LONG BIAS' : 'SHORT BIAS';
-  $: biasColor = scoreSafe >= 60 ? '#1fff9f' : '#ff637a';
+  let safeProgress = $derived(Math.max(0, Math.min(1, phaseProgress)));
+  let scoreSafe = $derived(Math.max(0, Math.min(100, Math.round(score))));
+  let dash = $derived(`${Math.round(safeProgress * 220)} 220`);
+  let timerText = $derived(timer > 0 ? `${Math.ceil(timer)}s` : '--');
+  let biasLabel = $derived(scoreSafe >= 60 ? 'LONG BIAS' : 'SHORT BIAS');
+  let biasColor = $derived(scoreSafe >= 60 ? '#1fff9f' : '#ff637a');
 </script>
 
 <section class="arena-hud" aria-label="Arena HUD">
@@ -48,13 +59,13 @@
     gap: 10px;
     padding: 8px 10px;
     border-radius: 14px;
-    border: 1px solid rgba(134, 221, 255, 0.45);
+    border: 1px solid rgba(232, 150, 125, 0.3);
     background:
-      linear-gradient(140deg, rgba(7, 14, 36, 0.9), rgba(6, 10, 24, 0.78)),
-      radial-gradient(circle at 80% 0%, rgba(255, 106, 152, 0.2), transparent 52%);
+      linear-gradient(140deg, rgba(10, 26, 18, 0.92), rgba(8, 19, 13, 0.85)),
+      radial-gradient(circle at 80% 0%, rgba(232, 150, 125, 0.12), transparent 52%);
     box-shadow:
-      inset 0 1px 0 rgba(167, 229, 255, 0.32),
-      0 12px 30px rgba(0, 0, 0, 0.35);
+      inset 0 1px 0 rgba(232, 150, 125, 0.1),
+      0 12px 30px rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(8px);
   }
 
@@ -67,14 +78,14 @@
   .hud-phase {
     font: 900 10px/1 var(--fd);
     letter-spacing: 2px;
-    color: #e8f8ff;
+    color: #f0ede4;
     text-transform: uppercase;
   }
 
   .hud-mode {
     font: 700 8px/1 var(--fm);
     letter-spacing: 1px;
-    color: rgba(160, 204, 255, 0.85);
+    color: rgba(240, 237, 228, 0.6);
   }
 
   .hud-ring {
@@ -91,14 +102,14 @@
 
   .hud-ring circle {
     fill: none;
-    stroke: rgba(146, 194, 255, 0.2);
+    stroke: rgba(232, 150, 125, 0.15);
     stroke-width: 4;
     stroke-linecap: round;
   }
 
   .hud-ring circle.progress {
-    stroke: #63d8ff;
-    filter: drop-shadow(0 0 6px rgba(99, 216, 255, 0.6));
+    stroke: #e8967d;
+    filter: drop-shadow(0 0 6px rgba(232, 150, 125, 0.5));
     transition: stroke-dasharray 0.35s ease;
   }
 
@@ -108,7 +119,7 @@
     display: grid;
     place-items: center;
     font: 800 10px/1 var(--fm);
-    color: #eaf6ff;
+    color: #f0ede4;
     letter-spacing: .3px;
   }
 
@@ -123,7 +134,7 @@
     font: 900 16px/1 var(--fc);
     letter-spacing: 1px;
     color: #ffffff;
-    text-shadow: 0 0 16px rgba(94, 211, 255, 0.55);
+    text-shadow: 0 0 16px rgba(232, 150, 125, 0.4);
   }
 
   .hud-bias {
@@ -134,7 +145,7 @@
 
   .hud-meta {
     font: 700 8px/1 var(--fm);
-    color: rgba(184, 213, 255, 0.8);
+    color: rgba(240, 237, 228, 0.55);
   }
 
   @media (max-width: 900px) {

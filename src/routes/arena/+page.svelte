@@ -7,7 +7,7 @@
   import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_GATHER, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, DOGE_VOTE_LONG, DOGE_WORDS, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
   import { normalizeAgentId } from '$lib/engine/agents';
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, resetPhaseInit, startAnalysisFromDraft } from '$lib/engine/gameLoop';
-  import { calculateLP, determineConsensus } from '$lib/engine/scoring';
+  import { calculateLP, determineConsensus, computeFBS, determineActualDirection } from '$lib/engine/scoring';
   import Lobby from '../../components/arena/Lobby.svelte';
   import ChartPanel from '../../components/arena/ChartPanel.svelte';
   import HypothesisPanel from '../../components/arena/HypothesisPanel.svelte';
@@ -21,13 +21,84 @@
   import { addMatchRecord, type MatchRecord } from '$lib/stores/matchHistoryStore';
   import { matchRecordToReplayData, generateReplaySteps, createReplayState, type ReplayStep } from '$lib/engine/replay';
   import { addPnLEntry } from '$lib/stores/pnlStore';
-  import type { Phase } from '$lib/stores/gameState';
+  import type { Phase, Direction } from '$lib/stores/gameState';
   import { onMount, onDestroy } from 'svelte';
   import { isWalletConnected, openWalletModal, recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket } from '$lib/api/arenaApi';
   import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
-  import type { DraftSelection } from '$lib/engine/types';
+  import type { DraftSelection, OrpoOutput, CtxBelief, CtxAgentId, CtxFlag, GuardianCheck, CommanderVerdict } from '$lib/engine/types';
+
+  // ── C02 Mapping: AnalyzeResponse → gameState C02 fields ──
+  const OFFENSE_IDS = ['STRUCTURE', 'VPA', 'ICT'];
+  const CTX_MAP: Record<string, CtxAgentId> = { DERIV: 'DERIV', FLOW: 'FLOW', SENTI: 'SENTI', MACRO: 'MACRO' };
+
+  function mapAnalysisToC02(res: AnalyzeResponse) {
+    const offenseAgents = res.agentOutputs.filter(a => OFFENSE_IDS.includes(a.agentId));
+    const ctxAgents = res.agentOutputs.filter(a => a.agentId in CTX_MAP);
+
+    // ORPO: combine offense agents
+    const weights: Record<string, number> = { STRUCTURE: 0.40, VPA: 0.35, ICT: 0.25 };
+    let longScore = 0, shortScore = 0, totalConf = 0, totalW = 0;
+    for (const a of offenseAgents) {
+      const w = weights[a.agentId] ?? 0.33;
+      totalW += w;
+      totalConf += a.confidence * w;
+      if (a.direction === 'LONG') longScore += w * a.confidence;
+      else if (a.direction === 'SHORT') shortScore += w * a.confidence;
+    }
+    const spread = Math.abs(longScore - shortScore);
+    const orpoDir: Direction = spread < 5 ? 'NEUTRAL' : longScore > shortScore ? 'LONG' : 'SHORT';
+
+    const orpo: OrpoOutput = {
+      direction: orpoDir,
+      confidence: totalW > 0 ? Math.round(totalConf / totalW) : 50,
+      pattern: res.prediction.reasonTags?.[0] ?? 'NO_DOMINANT',
+      keyLevels: { support: res.entryPrice * 0.985, resistance: res.entryPrice * 1.015 },
+      factors: [],
+      thesis: `ORPO: ${orpoDir} ${totalW > 0 ? Math.round(totalConf / totalW) : 50}% [${offenseAgents.map(a => `${a.agentId}:${a.direction}`).join('|')}]`,
+    };
+
+    // CTX: map each defense/context agent
+    const ctx: CtxBelief[] = ctxAgents.map(a => {
+      const ctxId = CTX_MAP[a.agentId];
+      let flag: CtxFlag;
+      if (a.confidence < 55 || a.direction === 'NEUTRAL') flag = 'NEUTRAL';
+      else if (a.direction === 'LONG') flag = 'GREEN';
+      else flag = 'RED';
+      return { agentId: ctxId, flag, confidence: a.confidence, headline: a.thesis, factors: [] };
+    });
+
+    // Guardian: simplified (no raw factors from API)
+    const guardian: GuardianCheck = {
+      passed: res.meta.dataCompleteness >= 0.3,
+      violations: res.meta.dataCompleteness < 0.3
+        ? [{ rule: 'DATA_DOWN', detail: `Data completeness ${(res.meta.dataCompleteness * 100).toFixed(0)}%`, severity: 'BLOCK' as const }]
+        : [],
+      halt: res.meta.dataCompleteness < 0.3,
+    };
+
+    // Commander: check for ORPO vs CTX conflict
+    const greenCount = ctx.filter(c => c.flag === 'GREEN').length;
+    const redCount = ctx.filter(c => c.flag === 'RED').length;
+    const ctxConsensus: Direction = greenCount > redCount ? 'LONG' : redCount > greenCount ? 'SHORT' : 'NEUTRAL';
+    const hasConflict = orpoDir !== 'NEUTRAL' && ctxConsensus !== 'NEUTRAL' && orpoDir !== ctxConsensus;
+
+    let commander: CommanderVerdict | null = null;
+    if (guardian.halt) {
+      commander = { finalDirection: 'NEUTRAL', entryScore: 0, reasoning: 'Guardian HALT — blocking entry.', conflictResolved: false, cost: 0 };
+    } else if (hasConflict) {
+      const strongDissenters = ctx.filter(c => c.confidence >= 70 && ((c.flag === 'RED' && orpoDir === 'LONG') || (c.flag === 'GREEN' && orpoDir === 'SHORT')));
+      if (strongDissenters.length >= 3) {
+        commander = { finalDirection: ctxConsensus, entryScore: Math.max(0, orpo.confidence - strongDissenters.length * 10), reasoning: `CTX override: ${strongDissenters.length}/4 disagree.`, conflictResolved: true, cost: 0 };
+      } else {
+        commander = { finalDirection: orpoDir, entryScore: Math.max(0, orpo.confidence - strongDissenters.length * 10), reasoning: `ORPO maintained with conflict penalty.`, conflictResolved: true, cost: 0 };
+      }
+    }
+
+    // Update gameState with C02 results
+    gameState.update(s => ({ ...s, orpoOutput: orpo, ctxBeliefs: ctx, guardianCheck: guardian, commanderVerdict: commander }));
+  }
 
   $: walletOk = $isWalletConnected;
 
@@ -103,13 +174,13 @@
   let apiError: string | null = null;
 
   // Squad Config handlers
-  async function onSquadDeploy(e: CustomEvent<{ config: import('$lib/stores/gameState').SquadConfig }>) {
-    gameState.update(s => ({ ...s, squadConfig: e.detail.config }));
+  async function onSquadDeploy(e: { config: import('$lib/stores/gameState').SquadConfig }) {
+    gameState.update(s => ({ ...s, squadConfig: e.config }));
     clearFeed();
     pushFeedItem({
       agentId: 'system', agentName: 'SYSTEM', agentIcon: '🐕',
       agentColor: '#E8967D',
-      text: `Squad configured! Risk: ${e.detail.config.riskLevel.toUpperCase()} · TF: ${formatTimeframeLabel(e.detail.config.timeframe)} · Analysis starting...`,
+      text: `Squad configured! Risk: ${e.config.riskLevel.toUpperCase()} · TF: ${formatTimeframeLabel(e.config.timeframe)} · Analysis starting...`,
       phase: 'DRAFT'
     });
 
@@ -117,7 +188,7 @@
     const currentState = $gameState;
     try {
       apiError = null;
-      const matchRes = await createArenaMatch(currentState.pair, e.detail.config.timeframe);
+      const matchRes = await createArenaMatch(currentState.pair, e.config.timeframe);
       serverMatchId = matchRes.matchId;
 
       // Build draft from selected agents (equal weight for now)
@@ -498,8 +569,7 @@
   }
 
   // ═══════ HYPOTHESIS HANDLERS ═══════
-  function onHypothesisSubmit(e: CustomEvent) {
-    const h = e.detail;
+  function onHypothesisSubmit(h: { dir: Direction; conf: number; tf: string; vmode: 'tpsl' | 'close'; closeN: number; tags: string[]; reason: string; entry: number; tp: number; sl: number; rr: number }) {
     // Clear timer
     if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
     hypothesisVisible = false;
@@ -642,7 +712,8 @@
       runArenaAnalysis(serverMatchId)
         .then(res => {
           serverAnalysis = res;
-          console.log('[Arena] Server analysis complete:', res.meta);
+          mapAnalysisToC02(res);
+          console.log('[Arena] Server analysis → C02 mapped:', res.meta);
         })
         .catch(err => {
           console.warn('[Arena] Server analysis failed:', err);
@@ -995,13 +1066,38 @@
     );
     const lpChange = calculateLP(win, state.streak, consensus.lpMult);
 
+    // ── FBS Scoring (C02-aligned) ──
+    const hyp = state.hypothesis;
+    const exitPrice = state.prices.BTC;
+    const entryPrice = hyp?.entry || state.bases.BTC;
+    const priceChange = entryPrice > 0 ? (exitPrice - entryPrice) / entryPrice : 0;
+    const actualDir = determineActualDirection(priceChange);
+    const orpoDir = state.orpoOutput?.direction || 'NEUTRAL';
+
+    const fbsResult = computeFBS({
+      userDir: (hyp?.dir as Direction) || 'NEUTRAL',
+      userConfidence: hyp?.conf || 50,
+      userEntry: entryPrice,
+      userTP: hyp?.tp || entryPrice * 1.02,
+      userSL: hyp?.sl || entryPrice * 0.985,
+      userRR: hyp?.rr || 1.5,
+      orpoDir: orpoDir as Direction,
+      orpoKeyLevels: state.orpoOutput?.keyLevels,
+      guardianViolations: state.guardianCheck?.violations || [],
+      userOverrodeGuardian: false,
+      actualDir,
+      exitPrice,
+      optimalEntry: serverAnalysis?.entryPrice,
+    });
+
     gameState.update(s => ({
       ...s,
       matchN: s.matchN + 1,
       wins: win ? s.wins + 1 : s.wins,
       losses: win ? s.losses : s.losses + 1,
       streak: win ? s.streak + 1 : 0,
-      lp: Math.max(0, s.lp + lpChange)
+      lp: Math.max(0, s.lp + lpChange),
+      fbScore: fbsResult,
     }));
 
     // Update progression (wallet + per-agent)
@@ -1266,7 +1362,7 @@
   {#if state.inLobby}
     <Lobby />
   {:else if state.phase === 'DRAFT'}
-    <SquadConfig selectedAgents={state.selectedAgents} on:deploy={onSquadDeploy} on:back={onSquadBack} />
+    <SquadConfig selectedAgents={state.selectedAgents} ondeploy={onSquadDeploy} onback={onSquadBack} />
   {:else}
     <!-- ═══════ TOP ARENA NAV BAR ═══════ -->
     <div class="arena-topbar">
@@ -1309,7 +1405,7 @@
         <button class="atb-hist" on:click={() => matchHistoryOpen = !matchHistoryOpen}>📋</button>
       </div>
     </div>
-    <MatchHistory visible={matchHistoryOpen} on:close={() => matchHistoryOpen = false} />
+    <MatchHistory visible={matchHistoryOpen} onclose={() => matchHistoryOpen = false} />
 
       <div class="battle-layout">
       <!-- ═══════ LEFT: CHART ═══════ -->
@@ -1330,7 +1426,7 @@
         <!-- Hypothesis Panel on right side during hypothesis phase -->
         {#if hypothesisVisible}
           <div class="hypo-sidebar">
-            <HypothesisPanel timeLeft={hypothesisTimer} on:submit={onHypothesisSubmit} />
+            <HypothesisPanel timeLeft={hypothesisTimer} onsubmit={onHypothesisSubmit} />
           </div>
         {/if}
 
@@ -1612,7 +1708,7 @@
           xpGain={rewardXp}
           streak={rewardStreak}
           badges={rewardBadges}
-          on:close={() => { rewardVisible = false; }}
+          onclose={() => { rewardVisible = false; }}
         />
 
         {#if compareVisible}
@@ -1695,6 +1791,30 @@
             <div class="result-lp">{resultData.tag}<br>{resultData.lp >= 0 ? '+' : ''}{resultData.lp} LP</div>
             {#if state.streak >= 3}
               <div class="result-streak">🔥×{state.streak} MUCH STREAK</div>
+            {/if}
+            {#if state.fbScore}
+              <div class="fbs-card">
+                <div class="fbs-title">FBS SCORECARD</div>
+                <div class="fbs-row">
+                  <span class="fbs-label">DS</span>
+                  <div class="fbs-bar"><div class="fbs-fill" style="width:{state.fbScore.ds}%;background:#e8967d"></div></div>
+                  <span class="fbs-val">{state.fbScore.ds}</span>
+                </div>
+                <div class="fbs-row">
+                  <span class="fbs-label">RE</span>
+                  <div class="fbs-bar"><div class="fbs-fill" style="width:{state.fbScore.re}%;background:#66cce6"></div></div>
+                  <span class="fbs-val">{state.fbScore.re}</span>
+                </div>
+                <div class="fbs-row">
+                  <span class="fbs-label">CI</span>
+                  <div class="fbs-bar"><div class="fbs-fill" style="width:{state.fbScore.ci}%;background:#00cc88"></div></div>
+                  <span class="fbs-val">{state.fbScore.ci}</span>
+                </div>
+                <div class="fbs-total">
+                  <span>FBS</span>
+                  <span class="fbs-total-val">{state.fbScore.fbs}</span>
+                </div>
+              </div>
             {/if}
             <div class="result-motto">{resultData.motto}</div>
           </div>
@@ -1796,16 +1916,16 @@
 <style>
   .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; }
   .arena-space-theme {
-    --space-line: rgba(117, 224, 255, 0.32);
-    --space-line-strong: rgba(153, 230, 255, 0.58);
-    --space-surface: rgba(6, 13, 31, 0.86);
-    --space-surface-soft: rgba(8, 18, 41, 0.68);
-    --space-text: #ecf7ff;
-    --space-text-soft: rgba(195, 222, 255, 0.84);
-    --space-accent: #68d8ff;
-    --space-accent-2: #ff9f70;
-    --space-good: #1effa0;
-    --space-bad: #ff607c;
+    --space-line: rgba(232, 150, 125, 0.25);
+    --space-line-strong: rgba(232, 150, 125, 0.45);
+    --space-surface: rgba(10, 26, 18, 0.9);
+    --space-surface-soft: rgba(10, 26, 18, 0.65);
+    --space-text: #f0ede4;
+    --space-text-soft: rgba(240, 237, 228, 0.75);
+    --space-accent: #e8967d;
+    --space-accent-2: #66cce6;
+    --space-good: #00cc88;
+    --space-bad: #ff5e7a;
   }
   .arena-space-theme::before {
     content: '';
@@ -1814,9 +1934,9 @@
     pointer-events: none;
     z-index: 0;
     background:
-      radial-gradient(circle at 16% 18%, rgba(123, 215, 255, 0.2), transparent 36%),
-      radial-gradient(circle at 85% 12%, rgba(255, 164, 110, 0.14), transparent 34%),
-      radial-gradient(circle at 70% 82%, rgba(125, 140, 255, 0.12), transparent 38%);
+      radial-gradient(circle at 16% 18%, rgba(232, 150, 125, 0.12), transparent 36%),
+      radial-gradient(circle at 85% 12%, rgba(102, 204, 230, 0.08), transparent 34%),
+      radial-gradient(circle at 70% 82%, rgba(0, 204, 136, 0.06), transparent 38%);
     animation: spaceDrift 30s linear infinite alternate;
   }
   .arena-space-theme::after {
@@ -1847,14 +1967,14 @@
     padding: 8px 10px;
     border-bottom: 1px solid var(--space-line);
     background:
-      linear-gradient(180deg, rgba(4, 12, 31, 0.95), rgba(4, 10, 23, 0.88)),
-      radial-gradient(circle at 8% -20%, rgba(109, 212, 255, 0.22), transparent 40%);
+      linear-gradient(180deg, rgba(8, 19, 13, 0.95), rgba(7, 16, 11, 0.9)),
+      radial-gradient(circle at 8% -20%, rgba(232, 150, 125, 0.12), transparent 40%);
     backdrop-filter: blur(10px);
   }
   .atb-back {
     border: 1px solid var(--space-line-strong);
     border-radius: 999px;
-    background: rgba(11, 24, 48, 0.72);
+    background: rgba(10, 26, 18, 0.72);
     color: var(--space-text);
     font: 800 10px/1 var(--fd);
     letter-spacing: 1.2px;
@@ -1865,8 +1985,8 @@
   }
   .atb-back:hover {
     transform: translateY(-1px);
-    border-color: rgba(128, 232, 255, 0.9);
-    background: rgba(10, 30, 63, 0.84);
+    border-color: rgba(232, 150, 125, 0.7);
+    background: rgba(10, 26, 18, 0.84);
   }
   .atb-arrow {
     margin-right: 5px;
@@ -1900,13 +2020,13 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    border: 1px solid rgba(181, 216, 255, 0.5);
-    background: rgba(120, 167, 232, 0.35);
-    box-shadow: 0 0 0 rgba(104, 216, 255, 0);
+    border: 1px solid rgba(232, 150, 125, 0.35);
+    background: rgba(232, 150, 125, 0.2);
+    box-shadow: 0 0 0 rgba(232, 150, 125, 0);
   }
   .atb-phase.active .atp-dot {
-    background: #6bd8ff;
-    box-shadow: 0 0 10px rgba(107, 216, 255, 0.85);
+    background: #e8967d;
+    box-shadow: 0 0 10px rgba(232, 150, 125, 0.7);
   }
   .atb-phase.done .atp-dot {
     background: #1effa0;
@@ -1922,7 +2042,7 @@
     width: 20px;
     height: 1px;
     margin: 0 4px;
-    background: linear-gradient(90deg, rgba(108, 165, 241, 0.18), rgba(106, 225, 255, 0.55), rgba(108, 165, 241, 0.18));
+    background: linear-gradient(90deg, rgba(232, 150, 125, 0.1), rgba(232, 150, 125, 0.35), rgba(232, 150, 125, 0.1));
   }
   .atb-right {
     display: flex;
@@ -1930,10 +2050,10 @@
     gap: 8px;
   }
   .atb-mode {
-    border: 1px solid rgba(115, 221, 255, 0.62);
+    border: 1px solid rgba(232, 150, 125, 0.4);
     border-radius: 999px;
-    background: rgba(33, 113, 173, 0.2);
-    color: #c6ebff;
+    background: rgba(232, 150, 125, 0.1);
+    color: #e8967d;
     font: 800 8px/1 var(--fd);
     letter-spacing: 1.2px;
     text-transform: uppercase;
@@ -1963,15 +2083,15 @@
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    border: 1px solid rgba(136, 221, 255, 0.62);
-    background: rgba(13, 32, 56, 0.8);
-    color: #d7edff;
+    border: 1px solid rgba(232, 150, 125, 0.4);
+    background: rgba(10, 26, 18, 0.8);
+    color: #f0ede4;
     font-size: 13px;
     cursor: pointer;
   }
   .atb-hist:hover {
-    border-color: rgba(170, 239, 255, 0.92);
-    background: rgba(21, 55, 95, 0.9);
+    border-color: rgba(232, 150, 125, 0.6);
+    background: rgba(232, 150, 125, 0.12);
   }
 
   .live-event-stack {
@@ -2002,14 +2122,14 @@
     transition: all .15s;
   }
   .mh-toggle:hover { background: #ffe600; }
-  .chart-side { display: flex; flex-direction: column; background: #05060a; overflow: hidden; border-right: 2px solid #2f3f66; position: relative; }
+  .chart-side { display: flex; flex-direction: column; background: #07130d; overflow: hidden; border-right: 1px solid rgba(232,150,125,.15); position: relative; }
   .arena-side {
     position: relative;
     overflow: hidden;
     background:
-      radial-gradient(circle at 45% 25%, rgba(122, 153, 255, .24), transparent 40%),
-      radial-gradient(circle at 80% 70%, rgba(255, 86, 149, .18), transparent 45%),
-      linear-gradient(180deg, #04070f 0%, #060b16 56%, #080f1b 100%);
+      radial-gradient(circle at 45% 25%, rgba(232, 150, 125, .1), transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(0, 204, 136, .06), transparent 45%),
+      linear-gradient(180deg, #07130d 0%, #08150e 56%, #0a1a12 100%);
   }
 
   /* ═══════ HYPOTHESIS SIDEBAR ═══════ */
@@ -2030,8 +2150,8 @@
 
   /* Score Bar */
   .score-bar {
-    padding: 6px 12px; border-top: 3px solid #000;
-    background: linear-gradient(90deg, #1a1a3a, #0a0a2a);
+    padding: 6px 12px; border-top: 1px solid rgba(232,150,125,.15);
+    background: linear-gradient(90deg, rgba(10,26,18,.95), rgba(8,19,13,.95));
     display: flex; align-items: center; gap: 10px; flex-shrink: 0;
   }
   .sr { position: relative; width: 40px; height: 40px; flex-shrink: 0; }
@@ -2041,7 +2161,7 @@
   .smeta { font-size: 7px; color: #888; font-family: var(--fm); }
   .score-stats { display: flex; gap: 8px; margin-left: auto; }
   .ss-item { font-size: 8px; font-weight: 700; font-family: var(--fm); color: #aaa; }
-  .ss-item.lp { color: #ffe600; }
+  .ss-item.lp { color: #e8967d; }
   .mode-badge {
     padding: 3px 8px;
     border: 1.5px solid rgba(232,150,125,.55);
@@ -2127,10 +2247,10 @@
     bottom: 0;
     z-index: 2;
     height: 14%;
-    border-top: 1px solid rgba(140, 176, 255, .34);
+    border-top: 1px solid rgba(232, 150, 125, .18);
     background:
-      linear-gradient(180deg, rgba(14, 18, 36, .2) 0%, rgba(7, 11, 24, .82) 35%, rgba(6, 10, 20, .95) 100%),
-      repeating-linear-gradient(90deg, rgba(106, 143, 255, .08) 0 1px, transparent 1px 46px);
+      linear-gradient(180deg, rgba(10, 26, 18, .2) 0%, rgba(8, 19, 13, .82) 35%, rgba(7, 16, 11, .95) 100%),
+      repeating-linear-gradient(90deg, rgba(232, 150, 125, .04) 0 1px, transparent 1px 46px);
     backdrop-filter: blur(2px);
   }
   .battle-floor span {
@@ -2141,46 +2261,46 @@
     font-family: var(--fd);
     font-size: 8px;
     letter-spacing: 4px;
-    color: rgba(177, 204, 255, .72);
+    color: rgba(240, 237, 228, .5);
     text-transform: uppercase;
     white-space: nowrap;
   }
 
   /* Data Sources */
   .dsrc { position: absolute; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; transform: translate(-50%, -50%); }
-  .dp { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: transparent; border: 1px solid rgba(146,181,255,.35); animation: dpPulse 2s ease infinite; will-change: transform, opacity; contain: strict; }
+  .dp { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: transparent; border: 1px solid rgba(232,150,125,.2); animation: dpPulse 2s ease infinite; will-change: transform, opacity; contain: strict; }
   @keyframes dpPulse { 0%,100% { transform: scale(1); opacity: .3 } 50% { transform: scale(1.3); opacity: 0 } }
   .di {
     width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px;
-    background: rgba(8,13,28,.86);
+    background: rgba(10,26,18,.88);
     border: 2px solid;
-    box-shadow: 0 0 0 1px rgba(153,189,255,.28), 0 10px 18px rgba(0,0,0,.34);
+    box-shadow: 0 0 0 1px rgba(232,150,125,.15), 0 10px 18px rgba(0,0,0,.4);
     backdrop-filter: blur(4px);
   }
   .dl {
-    font-size: 7px; color: #d7e9ff; letter-spacing: 2px; font-family: var(--fd); font-weight: 900;
-    background: rgba(7,12,26,.76); padding: 2px 6px; border-radius: 8px;
-    border: 1px solid rgba(152,188,255,.35);
+    font-size: 7px; color: rgba(240,237,228,.7); letter-spacing: 2px; font-family: var(--fd); font-weight: 900;
+    background: rgba(8,19,13,.8); padding: 2px 6px; border-radius: 8px;
+    border: 1px solid rgba(232,150,125,.2);
   }
 
   /* Council Table */
   .ctable {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: 108px; height: 58px; border-radius: 999px;
-    border: 1px dashed rgba(149,184,255,.45);
-    background: rgba(5,11,24,.45);
+    border: 1px dashed rgba(232,150,125,.2);
+    background: rgba(10,26,18,.45);
     display: flex; align-items: center; justify-content: center;
     z-index: 4; transition: all .3s;
     backdrop-filter: blur(3px);
   }
   .ctable.on {
-    border-color: rgba(152,193,255,.9);
+    border-color: rgba(232,150,125,.6);
     border-style: solid;
-    background: rgba(7,13,28,.72);
-    box-shadow: 0 0 28px rgba(113, 160, 255, .35);
+    background: rgba(10,26,18,.72);
+    box-shadow: 0 0 28px rgba(232, 150, 125, .2);
   }
-  .cl { font-size: 7px; color: rgba(176, 201, 255, .56); letter-spacing: 3px; font-family: var(--fd); font-weight: 900; }
-  .ctable.on .cl { color: #dff1ff; }
+  .cl { font-size: 7px; color: rgba(240, 237, 228, .35); letter-spacing: 3px; font-family: var(--fd); font-weight: 900; }
+  .ctable.on .cl { color: rgba(240,237,228,.7); }
 
   /* Agent Sprites */
   .ag {
@@ -2353,9 +2473,9 @@
     font-size: 6px; z-index: 15;
     padding: 2px 6px;
     border-radius: 999px;
-    border: 1px solid rgba(130, 175, 255, .52);
-    background: rgba(4, 9, 20, .74);
-    color: #b8dbff;
+    border: 1px solid rgba(232, 150, 125, .35);
+    background: rgba(10, 26, 18, .8);
+    color: rgba(240,237,228,.7);
     letter-spacing: 1.5px;
     font-family: var(--fd);
     font-weight: 900;
@@ -2373,10 +2493,10 @@
   /* Phase Display */
   .phase-display {
     position: absolute; top: 8px; right: 8px; z-index: 15;
-    background: rgba(5, 10, 23, .82);
+    background: rgba(10, 26, 18, .88);
     border-radius: 12px;
     padding: 8px 14px;
-    border: 1px solid rgba(146,179,255,.58);
+    border: 1px solid rgba(232,150,125,.3);
     box-shadow: 0 10px 24px rgba(0,0,0,.4);
     text-align: center;
     backdrop-filter: blur(5px);
@@ -2389,7 +2509,7 @@
     box-shadow: 0 0 10px currentColor;
   }
   .phase-name { font-size: 10px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; text-transform: uppercase; }
-  .phase-timer { font-size: 9px; font-family: var(--fm); color: #8fb2ec; font-weight: 700; }
+  .phase-timer { font-size: 9px; font-family: var(--fm); color: rgba(240,237,228,.5); font-weight: 700; }
 
   /* Agent Decision Card (below sprite) */
   .ag-decision {
@@ -2430,16 +2550,16 @@
   .feed-panel { position: absolute; bottom: 14%; left: 8px; right: 8px; z-index: 14; max-height: 70px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
   .feed-msg {
     display: flex; align-items: center; gap: 4px; font-size: 7px; font-family: var(--fm);
-    background: rgba(4, 9, 20, .74);
-    border: 1px solid rgba(141, 173, 255, .3);
-    color: #a9c8ff;
+    background: rgba(10, 26, 18, .8);
+    border: 1px solid rgba(232, 150, 125, .2);
+    color: rgba(240,237,228,.6);
     padding: 2px 6px;
     border-radius: 4px;
     backdrop-filter: blur(5px);
   }
   .feed-icon { font-size: 8px; }
   .feed-name { font-weight: 900; font-size: 7px; }
-  .feed-text { color: #b9d4ff; flex: 1; }
+  .feed-text { color: rgba(240,237,228,.55); flex: 1; }
   .feed-dir { font-size: 6px; padding: 1px 4px; border-radius: 4px; font-weight: 900; }
   .feed-dir.long { background: #00ff88; color: #000; }
   .feed-dir.short { background: #ff2d55; color: #fff; }
@@ -2554,18 +2674,33 @@
   .verdict-meta { font-size: 8px; color: #888; font-family: var(--fm); margin-top: 4px; }
 
   /* Result Overlay */
-  .result-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 35; text-align: center; animation: popIn .3s ease; padding: 16px 28px; border-radius: 16px; border: 4px solid #000; box-shadow: 6px 6px 0 #000; }
-  .result-overlay.win { background: linear-gradient(135deg, #00ff88, #00cc66); }
-  .result-overlay.lose { background: linear-gradient(135deg, #ff2d55, #cc0033); }
-  .result-text { font-size: 22px; font-weight: 900; font-family: var(--fc); color: #000; letter-spacing: 3px; text-shadow: 2px 2px 0 rgba(255,255,255,.3); }
-  .result-lp { font-size: 14px; font-weight: 900; font-family: var(--fd); color: #000; margin-top: 4px; }
-  .result-streak { font-size: 10px; font-weight: 700; color: #000; margin-top: 4px; }
-  .result-motto { font-size: 8px; font-family: var(--fc); color: #000; margin-top: 8px; font-style: italic; opacity: .7; }
+  .result-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 35; text-align: center; animation: popIn .3s ease; padding: 16px 28px; border-radius: 16px; border: 1px solid rgba(232,150,125,.3); box-shadow: 0 8px 32px rgba(0,0,0,.5); backdrop-filter: blur(8px); }
+  .result-overlay.win { background: linear-gradient(135deg, rgba(0,204,136,.25), rgba(0,180,100,.2)); border-color: rgba(0,204,136,.4); }
+  .result-overlay.lose { background: linear-gradient(135deg, rgba(255,94,122,.25), rgba(200,50,70,.2)); border-color: rgba(255,94,122,.4); }
+  .result-text { font-size: 22px; font-weight: 900; font-family: var(--fc); color: #f0ede4; letter-spacing: 3px; text-shadow: 0 0 12px rgba(232,150,125,.3); }
+  .result-lp { font-size: 14px; font-weight: 900; font-family: var(--fd); color: #f0ede4; margin-top: 4px; }
+  .result-streak { font-size: 10px; font-weight: 700; color: #e8967d; margin-top: 4px; }
+  .result-motto { font-size: 8px; font-family: var(--fc); color: rgba(240,237,228,.6); margin-top: 8px; font-style: italic; }
+
+  /* FBS Scorecard */
+  .fbs-card {
+    margin-top: 10px; padding: 8px 12px; border-radius: 10px;
+    background: rgba(10,26,18,.85); border: 1px solid rgba(232,150,125,.2);
+    text-align: left; min-width: 180px;
+  }
+  .fbs-title { font-size: 7px; font-weight: 900; letter-spacing: 2px; color: rgba(240,237,228,.5); font-family: var(--fd); margin-bottom: 6px; text-align: center; }
+  .fbs-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .fbs-label { font-size: 8px; font-weight: 900; font-family: var(--fd); letter-spacing: 1px; width: 22px; color: rgba(240,237,228,.6); }
+  .fbs-bar { flex: 1; height: 5px; background: rgba(240,237,228,.08); border-radius: 3px; overflow: hidden; }
+  .fbs-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
+  .fbs-val { font-size: 9px; font-weight: 900; font-family: var(--fd); width: 24px; text-align: right; color: #f0ede4; }
+  .fbs-total { display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px solid rgba(232,150,125,.15); margin-top: 4px; font-size: 8px; font-weight: 900; font-family: var(--fd); color: rgba(240,237,228,.5); letter-spacing: 1px; }
+  .fbs-total-val { font-size: 16px; color: #e8967d; text-shadow: 0 0 8px rgba(232,150,125,.3); }
 
   /* PvP Result */
   .pvp-overlay { position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.6); backdrop-filter: blur(4px); animation: fadeIn .3s ease; }
-  .pvp-card { background: #fff; border: 4px solid #000; border-radius: 16px; padding: 20px 30px; text-align: center; box-shadow: 8px 8px 0 #000; min-width: 260px; }
-  .pvp-title { font-size: 18px; font-weight: 900; font-family: var(--fc); letter-spacing: 3px; color: #000; }
+  .pvp-card { background: rgba(10,26,18,.95); border: 1px solid rgba(232,150,125,.3); border-radius: 16px; padding: 20px 30px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,.5); min-width: 260px; }
+  .pvp-title { font-size: 18px; font-weight: 900; font-family: var(--fc); letter-spacing: 3px; color: #f0ede4; }
   .pvp-scores { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 12px 0; }
   .pvp-side { text-align: center; }
   .pvp-label { font-size: 7px; color: #888; font-family: var(--fd); letter-spacing: 2px; }
