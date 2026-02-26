@@ -94,11 +94,26 @@ function resolveInjectedEvmProvider(key: WalletProviderKey): Eip1193Provider | n
 let _walletConnectProvider: Eip1193Provider | null = null;
 let _coinbaseProvider: Eip1193Provider | null = null;
 
+function isPlaceholderWalletConnectProjectId(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === ''
+    || normalized === 'your_walletconnect_project_id'
+    || normalized === 'walletconnect_project_id'
+    || normalized === 'changeme';
+}
+
+export function isWalletConnectConfigured(): boolean {
+  const projectId = PUBLIC_WALLETCONNECT_PROJECT_ID
+    || import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
+    || '';
+  return !isPlaceholderWalletConnectProjectId(projectId);
+}
+
 function getWalletConnectProjectId(): string {
   const projectId = PUBLIC_WALLETCONNECT_PROJECT_ID
     || import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
     || '';
-  if (!projectId) {
+  if (isPlaceholderWalletConnectProjectId(projectId)) {
     throw new Error('WalletConnect project id is missing. Set PUBLIC_WALLETCONNECT_PROJECT_ID.');
   }
   return projectId;
@@ -241,7 +256,8 @@ export async function resolveEvmProvider(key: WalletProviderKey): Promise<Eip119
 }
 
 export function hasInjectedEvmProvider(key: WalletProviderKey): boolean {
-  if (key === 'walletconnect' || key === 'coinbase') return true;
+  if (key === 'walletconnect') return isWalletConnectConfigured();
+  if (key === 'coinbase') return true;
   return resolveInjectedEvmProvider(key) !== null;
 }
 

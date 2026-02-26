@@ -23,7 +23,7 @@
   import { addPnLEntry } from '$lib/stores/pnlStore';
   import type { Phase } from '$lib/stores/gameState';
   import { onMount, onDestroy } from 'svelte';
-  import { isWalletConnected, connectWallet, recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
+  import { isWalletConnected, openWalletModal, recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket } from '$lib/api/arenaApi';
   import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
@@ -1248,7 +1248,7 @@
         <div class="wg-icon">🔗</div>
         <div class="wg-title">CONNECT WALLET</div>
         <div class="wg-sub">Connect your wallet to access the Arena and start trading battles</div>
-        <button class="wg-btn" on:click={() => connectWallet()}>
+        <button class="wg-btn" on:click={openWalletModal}>
           <span>⚡</span> CONNECT WALLET
         </button>
         <div class="wg-hint">Supported: MetaMask · WalletConnect · Coinbase</div>
