@@ -3118,8 +3118,8 @@
     min-height: 0;
   }
   .terminal-tablet :global(.intel-panel .ac-section) {
-    flex: 0 0 132px;
-    min-height: 120px;
+    flex: 1 1 0%;
+    min-height: 0;
     max-height: none;
   }
 
