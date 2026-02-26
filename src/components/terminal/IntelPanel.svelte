@@ -49,9 +49,8 @@
   };
   export let latestScan: ScanBrief | null = null;
 
-  let activeTab = 'intel';
-  let innerTab = 'chat';
-  let posSubTab: 'all' | 'trades' | 'perps' | 'markets' = 'all';
+  let activeTab: 'chat' | 'feed' | 'positions' = 'chat';
+  let feedFilter: 'all' | 'news' | 'events' | 'flow' | 'trending' | 'community' = 'all';
   let betMarket: any = null; // market to open in BetPanel
   let showGmxPanel = false;  // GmxTradePanel visibility
   let tabCollapsed = false;
@@ -236,23 +235,19 @@
   let chatEl: HTMLDivElement;
   let _lastChatFocusKey = 0;
 
-  function setTab(tab: string) {
+  function setTab(tab: 'chat' | 'feed' | 'positions') {
     if (activeTab === tab) {
       tabCollapsed = !tabCollapsed;
     } else {
       activeTab = tab;
       tabCollapsed = false;
-      if (tab === 'intel') {
-        innerTab = 'chat';
-        queueUiStateSave({ terminalInnerTab: innerTab });
-      }
       queueUiStateSave({ terminalActiveTab: activeTab });
     }
   }
-  function setInnerTab(tab: string) {
-    innerTab = tab;
-    queueUiStateSave({ terminalInnerTab: innerTab });
-    if (tab === 'trending') { fetchTopPicks(); fetchTrendingData(); }
+  function setFeedFilter(f: typeof feedFilter) {
+    feedFilter = f;
+    queueUiStateSave({ terminalFeedFilter: feedFilter });
+    if (f === 'trending') { fetchTopPicks(); fetchTrendingData(); }
   }
 
   function queueUiStateSave(partial: Record<string, unknown>) {
@@ -327,8 +322,7 @@
 
   $: if (chatFocusKey !== _lastChatFocusKey) {
     _lastChatFocusKey = chatFocusKey;
-    activeTab = 'intel';
-    innerTab = 'chat';
+    activeTab = 'chat';
     tabCollapsed = false;
   }
 
@@ -351,19 +345,19 @@
   $: filteredDexHot = dexChainFilter === 'all'
     ? trendDexHot
     : trendDexHot.filter((token) => token.chainId === dexChainFilter);
-  $: policyCardsForTab = innerTab === 'headlines'
+  $: policyCardsForTab = feedFilter === 'news'
     ? policyPanels.headlines
-    : innerTab === 'events'
+    : feedFilter === 'events'
       ? policyPanels.events
-      : innerTab === 'flow'
+      : feedFilter === 'flow'
         ? policyPanels.flow
-        : innerTab === 'trending'
+        : feedFilter === 'trending'
           ? trendSubTab === 'picks'
             ? policyPanels.picks
             : policyPanels.trending
           : [];
 
-  let _prevActiveTab = activeTab;
+  let _prevActiveTab: 'chat' | 'feed' | 'positions' = activeTab;
   $: {
     if (activeTab === 'positions' && _prevActiveTab !== 'positions') {
       void syncPositions(true);
@@ -848,18 +842,16 @@
     void (async () => {
       const ui = await fetchUiStateApi();
       // 채팅이 항상 최우선 — 저장된 상태보다 우선
-      // 사용자가 다른 탭을 명시적으로 선택하면 그때 저장됨
       if (prioritizeChat) {
-        activeTab = 'intel';
-        innerTab = 'chat';
+        activeTab = 'chat';
         tabCollapsed = false;
       } else {
-        // 저장 상태 복원하되, 항상 chat을 기본 innerTab으로
-        if (ui?.terminalActiveTab && ['intel', 'community', 'positions'].includes(ui.terminalActiveTab)) {
-          activeTab = ui.terminalActiveTab;
+        // 저장 상태 복원
+        if (ui?.terminalActiveTab && ['chat', 'feed', 'positions'].includes(ui.terminalActiveTab)) {
+          activeTab = ui.terminalActiveTab as typeof activeTab;
         }
-        // innerTab은 항상 chat으로 시작 (headlines/events/flow는 사용자가 직접 선택)
-        innerTab = 'chat';
+        // legacy 'intel' → 'chat' 마이그레이션
+        if ((activeTab as string) === 'intel') activeTab = 'chat';
       }
     })();
 
@@ -886,8 +878,8 @@
 <div class="intel-panel">
   <!-- Main Tabs with collapse toggle -->
   <div class="rp-tabs">
-    <button class="rp-tab" class:active={activeTab === 'intel'} on:click={() => setTab('intel')}>INTEL</button>
-    <button class="rp-tab" class:active={activeTab === 'community'} on:click={() => setTab('community')}>COMMUNITY</button>
+    <button class="rp-tab" class:active={activeTab === 'chat'} on:click={() => setTab('chat')}>CHAT</button>
+    <button class="rp-tab" class:active={activeTab === 'feed'} on:click={() => setTab('feed')}>FEED</button>
     <button class="rp-tab" class:active={activeTab === 'positions'} on:click={() => setTab('positions')}>POSITIONS</button>
     <button class="rp-collapse" on:click={() => tabCollapsed = !tabCollapsed} title={tabCollapsed ? 'Expand' : 'Collapse'}>
       {tabCollapsed ? '▲' : '▼'}
@@ -903,15 +895,7 @@
   <!-- Tab Content (collapsible) -->
   {#if !tabCollapsed}
     <div class="rp-body-wrap">
-      {#if activeTab === 'intel'}
-        <div class="rp-inner-tabs">
-          {#each ['chat', 'headlines', 'trending', 'events', 'flow'] as tab}
-            <button class="rp-inner-tab" class:active={innerTab === tab} on:click={() => setInnerTab(tab)}>
-              {tab.toUpperCase()}
-            </button>
-          {/each}
-        </div>
-
+      {#if activeTab === 'chat'}
         <VerdictCard
           bias={shadowDecision?.enforced.bias ?? policyDecision?.bias ?? 'wait'}
           confidence={shadowDecision?.proposal.confidence ?? policyDecision?.confidence ?? 0}
@@ -927,8 +911,7 @@
           on:execute={executeShadowTrade}
         />
 
-        <div class="rp-body" class:chat-mode={innerTab === 'chat'}>
-          {#if innerTab === 'chat'}
+        <div class="rp-body chat-mode">
             <div class="ac-section ac-embedded">
               <div class="ac-header">
                 <span class="ac-title">🤖 AGENT CHAT <span class="ac-status-dot ac-status-{chatConnectionStatus}" title="{chatConnectionStatus === 'connected' ? 'Connected' : chatConnectionStatus === 'degraded' ? 'Degraded' : 'Disconnected'}"></span></span>
@@ -975,8 +958,18 @@
                 <button class="ac-send" on:click={sendChat} disabled={!chatInput.trim()}>⚡</button>
               </div>
             </div>
+        </div>
 
-          {:else if innerTab === 'headlines'}
+      {:else if activeTab === 'feed'}
+        <!-- Feed filter chips -->
+        <div class="feed-chips">
+          {#each [['all','ALL'],['news','NEWS'],['events','EVENTS'],['flow','FLOW'],['trending','TRENDING'],['community','COMMUNITY']] as [key, label] (key)}
+            <button class="feed-chip" class:active={feedFilter === key} on:click={() => setFeedFilter(key as typeof feedFilter)}>{label}</button>
+          {/each}
+        </div>
+
+        <div class="rp-body">
+          {#if feedFilter === 'all' || feedFilter === 'news'}
             {#if policyCardsForTab.length > 0}
               <div class="policy-cards-wrap">
                 {#each policyCardsForTab as card (card.id)}
@@ -1051,29 +1044,9 @@
                 <div class="hl-end">— end of headlines —</div>
               {/if}
             </div>
+          {/if}
 
-          {:else if innerTab === 'events'}
-            {#if policyCardsForTab.length > 0}
-              <div class="policy-cards-wrap">
-                {#each policyCardsForTab as card (card.id)}
-                  <div class="policy-card">
-                    <div class="policy-card-head">
-                      <span class="policy-card-title">{card.title}</span>
-                      <span class="policy-card-bias {policyBiasClass(card.bias)}">{policyBiasLabel(card.bias)}</span>
-                    </div>
-                    <div class="policy-card-row"><strong>What:</strong> {card.what}</div>
-                    <div class="policy-card-row"><strong>So What:</strong> {card.soWhat}</div>
-                    <div class="policy-card-row"><strong>Now What:</strong> {card.nowWhat}</div>
-                    <div class="policy-card-row"><strong>Why:</strong> {card.why}</div>
-                    <div class="policy-card-row"><strong>Help WHY:</strong> {card.helpfulnessWhy}</div>
-                    <div class="policy-card-score">
-                      <span>Gate {card.gate.weightedScore.toFixed(1)}</span>
-                      <span>{scoreBreakdownText(card.gate.scores)}</span>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+          {#if feedFilter === 'all' || feedFilter === 'events'}
             <div class="ev-list">
               {#if liveEvents.length === 0}
                 <div class="flow-empty">Loading events...</div>
@@ -1089,29 +1062,9 @@
                 </div>
               {/each}
             </div>
+          {/if}
 
-          {:else if innerTab === 'trending'}
-            {#if policyCardsForTab.length > 0}
-              <div class="policy-cards-wrap">
-                {#each policyCardsForTab as card (card.id)}
-                  <div class="policy-card">
-                    <div class="policy-card-head">
-                      <span class="policy-card-title">{card.title}</span>
-                      <span class="policy-card-bias {policyBiasClass(card.bias)}">{policyBiasLabel(card.bias)}</span>
-                    </div>
-                    <div class="policy-card-row"><strong>What:</strong> {card.what}</div>
-                    <div class="policy-card-row"><strong>So What:</strong> {card.soWhat}</div>
-                    <div class="policy-card-row"><strong>Now What:</strong> {card.nowWhat}</div>
-                    <div class="policy-card-row"><strong>Why:</strong> {card.why}</div>
-                    <div class="policy-card-row"><strong>Help WHY:</strong> {card.helpfulnessWhy}</div>
-                    <div class="policy-card-score">
-                      <span>Gate {card.gate.weightedScore.toFixed(1)}</span>
-                      <span>{scoreBreakdownText(card.gate.scores)}</span>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+          {#if feedFilter === 'all' || feedFilter === 'trending'}
             <div class="trend-panel">
               <div class="trend-sub-tabs">
                 <button class="trend-sub" class:active={trendSubTab === 'picks'} on:click={() => { trendSubTab = 'picks'; fetchTopPicks(); }}>🎯 PICKS</button>
@@ -1313,29 +1266,9 @@
                 </div>
               {/if}
             </div>
+          {/if}
 
-          {:else if innerTab === 'flow'}
-            {#if policyCardsForTab.length > 0}
-              <div class="policy-cards-wrap">
-                {#each policyCardsForTab as card (card.id)}
-                  <div class="policy-card">
-                    <div class="policy-card-head">
-                      <span class="policy-card-title">{card.title}</span>
-                      <span class="policy-card-bias {policyBiasClass(card.bias)}">{policyBiasLabel(card.bias)}</span>
-                    </div>
-                    <div class="policy-card-row"><strong>What:</strong> {card.what}</div>
-                    <div class="policy-card-row"><strong>So What:</strong> {card.soWhat}</div>
-                    <div class="policy-card-row"><strong>Now What:</strong> {card.nowWhat}</div>
-                    <div class="policy-card-row"><strong>Why:</strong> {card.why}</div>
-                    <div class="policy-card-row"><strong>Help WHY:</strong> {card.helpfulnessWhy}</div>
-                    <div class="policy-card-score">
-                      <span>Gate {card.gate.weightedScore.toFixed(1)}</span>
-                      <span>{scoreBreakdownText(card.gate.scores)}</span>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+          {#if feedFilter === 'all' || feedFilter === 'flow'}
             <div class="flow-list">
               <div class="flow-section-lbl">SMART MONEY FLOWS (24H)</div>
               {#if liveFlows.length === 0}
@@ -1356,43 +1289,34 @@
               {/each}
             </div>
           {/if}
-        </div>
 
-      {:else if activeTab === 'community'}
-        <div class="rp-body community-body">
-          <!-- User posts (from store) -->
-          {#each $communityPosts as post (post.id)}
-            <div class="comm-post user-post">
-              <div class="comm-head">
-                <div class="comm-avatar" style="background:{post.avatarColor}20;color:{post.avatarColor}">{post.avatar}</div>
-                <span class="comm-name">{post.author}</span>
-                <span class="comm-time">now</span>
+          <!-- COMMUNITY (inside feed) -->
+          {#if feedFilter === 'all' || feedFilter === 'community'}
+            {#each $communityPosts as post (post.id)}
+              <div class="comm-post user-post">
+                <div class="comm-head">
+                  <div class="comm-avatar" style="background:{post.avatarColor}20;color:{post.avatarColor}">{post.avatar}</div>
+                  <span class="comm-name">{post.author}</span>
+                  <span class="comm-time">now</span>
+                </div>
+                <div class="comm-txt">{post.text}</div>
+                <div class="comm-actions">
+                  {#if post.signal}
+                    <span class="comm-sig {post.signal}">{post.signal.toUpperCase()}</span>
+                  {/if}
+                  <button class="comm-react" on:click={() => likeCommunityPost(post.id)}>👍</button>
+                  <button class="comm-react" on:click={() => likeCommunityPost(post.id)}>🔥</button>
+                </div>
               </div>
-              <div class="comm-txt">{post.text}</div>
-              <div class="comm-actions">
-                {#if post.signal}
-                  <span class="comm-sig {post.signal}">{post.signal.toUpperCase()}</span>
-                {/if}
-                <button class="comm-react" on:click={() => likeCommunityPost(post.id)}>👍</button>
-                <button class="comm-react" on:click={() => likeCommunityPost(post.id)}>🔥</button>
-              </div>
-            </div>
-          {/each}
-
-          {#if $communityPosts.length === 0}
-            <div class="flow-empty">No community posts yet. Be the first to share your analysis!</div>
+            {/each}
+            {#if $communityPosts.length === 0 && feedFilter === 'community'}
+              <div class="flow-empty">No community posts yet.</div>
+            {/if}
           {/if}
         </div>
 
       {:else if activeTab === 'positions'}
         <div class="rp-body">
-          <!-- Position sub-tabs: ALL / TRADES / PERPS / MARKETS -->
-          <div class="pos-sub-tabs">
-            <button class="pos-sub" class:active={posSubTab === 'all'} on:click={() => posSubTab = 'all'}>ALL</button>
-            <button class="pos-sub" class:active={posSubTab === 'trades'} on:click={() => posSubTab = 'trades'}>TRADES</button>
-            <button class="pos-sub" class:active={posSubTab === 'perps'} on:click={() => posSubTab = 'perps'}>PERPS</button>
-            <button class="pos-sub" class:active={posSubTab === 'markets'} on:click={() => posSubTab = 'markets'}>MARKETS</button>
-          </div>
 
           <div class="pos-sync-row">
             <span
@@ -1421,135 +1345,112 @@
             </div>
           {/if}
 
-          <!-- ALL / TRADES: Quick Trade Positions -->
-          {#if posSubTab === 'all' || posSubTab === 'trades'}
-            {#if openCount > 0}
-              <div class="pos-header">
-                <span class="pos-title">📊 TRADES</span>
-                <span class="pos-cnt">{openCount}</span>
-              </div>
-              {#each opens as trade (trade.id)}
-                <div class="pos-row">
-                  <span class="pos-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>
-                    {trade.dir === 'LONG' ? '▲' : '▼'}
-                  </span>
-                  <div class="pos-info">
-                    <span class="pos-pair">{trade.pair}</span>
-                    <span class="pos-entry">${Math.round(trade.entry).toLocaleString()}</span>
-                  </div>
-                  <span class="pos-pnl" style="color:{trade.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
-                    {trade.pnlPercent >= 0 ? '+' : ''}{trade.pnlPercent.toFixed(1)}%
-                  </span>
-                  <button class="pos-close" on:click={() => handleClosePos(trade.id)}>CLOSE</button>
+          <!-- TRADES -->
+          {#if openCount > 0}
+            <div class="pos-header">
+              <span class="pos-title">📊 TRADES</span>
+              <span class="pos-cnt">{openCount}</span>
+            </div>
+            {#each opens as trade (trade.id)}
+              <div class="pos-row">
+                <span class="pos-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>
+                  {trade.dir === 'LONG' ? '▲' : '▼'}
+                </span>
+                <div class="pos-info">
+                  <span class="pos-pair">{trade.pair}</span>
+                  <span class="pos-entry">${Math.round(trade.entry).toLocaleString()}</span>
                 </div>
-              {/each}
-            {:else if posSubTab === 'trades'}
-              <div class="pos-empty-mini">
-                <span class="pos-empty-icon">📊</span>
-                <span class="pos-empty-txt">NO OPEN TRADES</span>
+                <span class="pos-pnl" style="color:{trade.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                  {trade.pnlPercent >= 0 ? '+' : ''}{trade.pnlPercent.toFixed(1)}%
+                </span>
+                <button class="pos-close" on:click={() => handleClosePos(trade.id)}>CLOSE</button>
               </div>
-            {/if}
+            {/each}
           {/if}
 
-          <!-- ALL / PERPS: GMX On-chain Positions -->
-          {#if posSubTab === 'all' || posSubTab === 'perps'}
-            {#if $gmxPositions.length > 0}
-              <div class="pos-header">
-                <span class="pos-title">⚡ PERPS</span>
-                <span class="pos-cnt">{$gmxPositions.length}</span>
-              </div>
-              {#each $gmxPositions as pos (pos.id)}
-                <div class="pos-row gmx-row">
-                  <span class="pos-dir" class:long={pos.direction === 'LONG'} class:short={pos.direction === 'SHORT'}>
-                    {pos.direction === 'LONG' ? '▲' : '▼'}
+          <!-- PERPS -->
+          {#if $gmxPositions.length > 0}
+            <div class="pos-header">
+              <span class="pos-title">⚡ PERPS</span>
+              <span class="pos-cnt">{$gmxPositions.length}</span>
+            </div>
+            {#each $gmxPositions as pos (pos.id)}
+              <div class="pos-row gmx-row">
+                <span class="pos-dir" class:long={pos.direction === 'LONG'} class:short={pos.direction === 'SHORT'}>
+                  {pos.direction === 'LONG' ? '▲' : '▼'}
+                </span>
+                <div class="pos-info">
+                  <span class="pos-pair">{pos.asset}</span>
+                  <span class="pos-entry">
+                    {pos.direction} · {pos.meta?.leverage ?? ''}x · ${pos.amountUsdc?.toFixed(0) ?? '0'} USDC
                   </span>
-                  <div class="pos-info">
-                    <span class="pos-pair">{pos.asset}</span>
-                    <span class="pos-entry">
-                      {pos.direction} · {pos.meta?.leverage ?? ''}x · ${pos.amountUsdc?.toFixed(0) ?? '0'} USDC
+                </div>
+                <div class="gmx-pnl-col">
+                  <span class="pos-pnl" style="color:{pos.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                    {pos.pnlPercent >= 0 ? '+' : ''}{pos.pnlPercent.toFixed(2)}%
+                  </span>
+                  {#if pos.pnlUsdc != null}
+                    <span class="gmx-pnl-usd" style="color:{pos.pnlUsdc >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                      {pos.pnlUsdc >= 0 ? '+' : ''}{pos.pnlUsdc.toFixed(2)}$
                     </span>
-                  </div>
-                  <div class="gmx-pnl-col">
-                    <span class="pos-pnl" style="color:{pos.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
-                      {pos.pnlPercent >= 0 ? '+' : ''}{pos.pnlPercent.toFixed(2)}%
-                    </span>
-                    {#if pos.pnlUsdc != null}
-                      <span class="gmx-pnl-usd" style="color:{pos.pnlUsdc >= 0 ? 'var(--grn)' : 'var(--red)'}">
-                        {pos.pnlUsdc >= 0 ? '+' : ''}{pos.pnlUsdc.toFixed(2)}$
-                      </span>
-                    {/if}
-                  </div>
-                  <span class="pos-status-badge gmx-status">{pos.status}</span>
+                  {/if}
                 </div>
-              {/each}
-            {/if}
+                <span class="pos-status-badge gmx-status">{pos.status}</span>
+              </div>
+            {/each}
+          {/if}
+          <button class="gmx-open-btn" on:click={() => showGmxPanel = true}>
+            ⚡ OPEN PERP POSITION
+          </button>
 
-            <!-- Open Perp button -->
-            {#if posSubTab === 'perps'}
-              <button class="gmx-open-btn" on:click={() => showGmxPanel = true}>
-                ⚡ OPEN PERP POSITION
-              </button>
-              {#if $gmxPositions.length === 0}
-                <div class="pos-empty-mini">
-                  <span class="pos-empty-icon">⚡</span>
-                  <span class="pos-empty-txt">NO PERP POSITIONS</span>
+          <!-- MARKET BETS -->
+          {#if $polymarketPositions.length > 0}
+            <div class="pos-header">
+              <span class="pos-title">🔮 MARKET BETS</span>
+              <span class="pos-cnt">{$polymarketPositions.length}</span>
+            </div>
+            {#each $polymarketPositions as pos (pos.id)}
+              <div class="pos-row poly-row">
+                <span class="pos-dir" class:long={pos.direction === 'YES'} class:short={pos.direction === 'NO'}>
+                  {pos.direction === 'YES' ? '↑' : '↓'}
+                </span>
+                <div class="pos-info">
+                  <span class="pos-pair pos-market-q">{pos.asset.length > 40 ? pos.asset.slice(0, 40) + '…' : pos.asset}</span>
+                  <span class="pos-entry">{pos.direction} · ${pos.amountUsdc?.toFixed(0)} USDC</span>
                 </div>
-              {/if}
-            {/if}
+                <span class="pos-pnl" style="color:{(pos.pnlUsdc ?? 0) >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                  {(pos.pnlUsdc ?? 0) >= 0 ? '+' : ''}{(pos.pnlUsdc ?? 0).toFixed(2)}$
+                </span>
+                <span class="pos-status-badge">{pos.status}</span>
+              </div>
+            {/each}
           {/if}
 
-          <!-- ALL / MARKETS: Polymarket Positions -->
-          {#if posSubTab === 'all' || posSubTab === 'markets'}
-            {#if $polymarketPositions.length > 0}
-              <div class="pos-header">
-                <span class="pos-title">🔮 MARKET BETS</span>
-                <span class="pos-cnt">{$polymarketPositions.length}</span>
-              </div>
-              {#each $polymarketPositions as pos (pos.id)}
-                <div class="pos-row poly-row">
-                  <span class="pos-dir" class:long={pos.direction === 'YES'} class:short={pos.direction === 'NO'}>
-                    {pos.direction === 'YES' ? '↑' : '↓'}
-                  </span>
-                  <div class="pos-info">
-                    <span class="pos-pair pos-market-q">{pos.asset.length > 40 ? pos.asset.slice(0, 40) + '…' : pos.asset}</span>
-                    <span class="pos-entry">{pos.direction} · ${pos.amountUsdc?.toFixed(0)} USDC</span>
-                  </div>
-                  <span class="pos-pnl" style="color:{(pos.pnlUsdc ?? 0) >= 0 ? 'var(--grn)' : 'var(--red)'}">
-                    {(pos.pnlUsdc ?? 0) >= 0 ? '+' : ''}{(pos.pnlUsdc ?? 0).toFixed(2)}$
-                  </span>
-                  <span class="pos-status-badge">{pos.status}</span>
+          <!-- Browse Markets -->
+          <div class="pos-header" style="margin-top:8px">
+            <span class="pos-title">🌐 BROWSE MARKETS</span>
+          </div>
+          {#if cryptoMarkets.length > 0}
+            {#each cryptoMarkets.slice(0, 6) as market}
+              {@const outcome = parseOutcomePrices(market.outcomePrices)}
+              <div class="market-browse-card">
+                <div class="mb-q">{market.question.length > 60 ? market.question.slice(0, 60) + '…' : market.question}</div>
+                <div class="mb-odds">
+                  <span class="mb-yes">YES {outcome.yes}¢</span>
+                  <span class="mb-no">NO {outcome.no}¢</span>
                 </div>
-              {/each}
-            {/if}
-
-            <!-- Browse Markets -->
-            {#if posSubTab === 'markets'}
-              <div class="pos-header" style="margin-top:8px">
-                <span class="pos-title">🌐 BROWSE MARKETS</span>
+                <div class="mb-actions">
+                  <button class="mb-bet" on:click={() => { betMarket = market; }}>BET USDC</button>
+                  <a class="mb-link" href="https://polymarket.com/event/{market.slug}" target="_blank" rel="noopener noreferrer">↗</a>
+                </div>
               </div>
-              {#if cryptoMarkets.length > 0}
-                {#each cryptoMarkets.slice(0, 6) as market}
-                  {@const outcome = parseOutcomePrices(market.outcomePrices)}
-                  <div class="market-browse-card">
-                    <div class="mb-q">{market.question.length > 60 ? market.question.slice(0, 60) + '…' : market.question}</div>
-                    <div class="mb-odds">
-                      <span class="mb-yes">YES {outcome.yes}¢</span>
-                      <span class="mb-no">NO {outcome.no}¢</span>
-                    </div>
-                    <div class="mb-actions">
-                      <button class="mb-bet" on:click={() => { betMarket = market; }}>BET USDC</button>
-                      <a class="mb-link" href="https://polymarket.com/event/{market.slug}" target="_blank" rel="noopener noreferrer">↗</a>
-                    </div>
-                  </div>
-                {/each}
-              {:else}
-                <div class="pp-empty">Loading markets...</div>
-              {/if}
-            {/if}
+            {/each}
+          {:else}
+            <div class="pp-empty">Loading markets...</div>
           {/if}
 
-          <!-- Empty state for ALL tab -->
-          {#if posSubTab === 'all' && openCount === 0 && $polymarketPositions.length === 0 && $gmxPositions.length === 0}
+          <!-- Empty state -->
+          {#if openCount === 0 && $polymarketPositions.length === 0 && $gmxPositions.length === 0}
             <div class="pos-empty-mini">
               <span class="pos-empty-icon">📊</span>
               <span class="pos-empty-txt">NO OPEN POSITIONS</span>
@@ -1658,14 +1559,22 @@
   }
   .rp-panel-collapse:hover { background: rgba(255,230,0,.15); color: var(--yel); }
 
-  .rp-inner-tabs { display: flex; border-bottom: 2px solid rgba(255,230,0,.15); flex-shrink: 0; }
-  .rp-inner-tab {
-    flex: 1; padding: 5px 2px;
-    font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: 1px; text-align: center;
-    background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer;
-    color: rgba(255,255,255,.62); transition: all .15s;
+  /* Feed filter chips */
+  .feed-chips {
+    display: flex; gap: 4px; padding: 6px 8px; flex-shrink: 0;
+    border-bottom: 1px solid rgba(255,230,0,.1);
+    overflow-x: auto; scrollbar-width: none;
   }
-  .rp-inner-tab.active { color: var(--yel); border-bottom-color: var(--pk); }
+  .feed-chips::-webkit-scrollbar { display: none; }
+  .feed-chip {
+    padding: 3px 10px; border-radius: 12px;
+    font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: 0.8px;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+    color: rgba(255,255,255,.5); cursor: pointer; white-space: nowrap;
+    transition: all .15s;
+  }
+  .feed-chip:hover { background: rgba(255,230,0,.06); color: rgba(255,255,255,.7); }
+  .feed-chip.active { background: rgba(255,230,0,.12); color: var(--yel); border-color: rgba(255,230,0,.3); }
 
   /* ── Tab Content Wrapper ── */
   .rp-body-wrap { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; min-height: 72px; }
@@ -1842,17 +1751,7 @@
     letter-spacing: 1.5px;
   }
 
-  /* ── Position Sub-tabs ── */
-  .pos-sub-tabs { display: flex; gap: 2px; margin-bottom: 6px; }
-  .pos-sub {
-    flex: 1; padding: 5px 2px;
-    font: 700 9px/1 var(--fm); letter-spacing: 1.5px; text-align: center;
-    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
-    border-radius: 4px; color: rgba(255,255,255,.4); cursor: pointer;
-    transition: all .15s;
-  }
-  .pos-sub:hover { background: rgba(255,230,0,.05); color: rgba(255,255,255,.6); }
-  .pos-sub.active { background: rgba(255,230,0,.08); color: var(--yel); border-color: rgba(255,230,0,.25); }
+  /* Removed: pos-sub-tabs (positions flattened — no sub-tabs) */
 
   .pos-sync-row {
     display: flex;
