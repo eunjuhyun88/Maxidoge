@@ -51,6 +51,7 @@
 
   let activeTab: 'chat' | 'feed' | 'positions' = 'chat';
   let feedFilter: 'all' | 'news' | 'events' | 'flow' | 'trending' | 'community' = 'all';
+  let posView: 'mine' | 'markets' = 'mine';
   let betMarket: any = null; // market to open in BetPanel
   let showGmxPanel = false;  // GmxTradePanel visibility
   let tabCollapsed = false;
@@ -1316,145 +1317,155 @@
         </div>
 
       {:else if activeTab === 'positions'}
-        <div class="rp-body">
-
-          <div class="pos-sync-row">
-            <span
-              class="pos-sync-badge"
-              class:loading={$positionsLoading}
-              class:error={!!$positionsError}
-              class:ok={!$positionsLoading && !$positionsError}
-            >
-              {positionsSyncStatus}
-            </span>
-            {#if pendingCount > 0}
-              <span class="pos-sync-pending">{pendingCount} pending</span>
-            {/if}
-            <span class="pos-sync-total">{positionCount} total</span>
-            <button class="pos-sync-btn" on:click={refreshPositionsNow} disabled={$positionsLoading}>
-              REFRESH
-            </button>
-          </div>
-
-          {#if $positionsError}
-            <div class="pos-sync-error-msg">
-              {$positionsError}
-              {#if !$positionsLoading}
-                <button class="pos-sync-inline-btn" on:click={refreshPositionsNow}>retry</button>
-              {/if}
-            </div>
-          {/if}
-
-          <!-- TRADES -->
-          {#if openCount > 0}
-            <div class="pos-header">
-              <span class="pos-title">📊 TRADES</span>
-              <span class="pos-cnt">{openCount}</span>
-            </div>
-            {#each opens as trade (trade.id)}
-              <div class="pos-row">
-                <span class="pos-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>
-                  {trade.dir === 'LONG' ? '▲' : '▼'}
-                </span>
-                <div class="pos-info">
-                  <span class="pos-pair">{trade.pair}</span>
-                  <span class="pos-entry">${Math.round(trade.entry).toLocaleString()}</span>
-                </div>
-                <span class="pos-pnl" style="color:{trade.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
-                  {trade.pnlPercent >= 0 ? '+' : ''}{trade.pnlPercent.toFixed(1)}%
-                </span>
-                <button class="pos-close" on:click={() => handleClosePos(trade.id)}>CLOSE</button>
-              </div>
-            {/each}
-          {/if}
-
-          <!-- PERPS -->
-          {#if $gmxPositions.length > 0}
-            <div class="pos-header">
-              <span class="pos-title">⚡ PERPS</span>
-              <span class="pos-cnt">{$gmxPositions.length}</span>
-            </div>
-            {#each $gmxPositions as pos (pos.id)}
-              <div class="pos-row gmx-row">
-                <span class="pos-dir" class:long={pos.direction === 'LONG'} class:short={pos.direction === 'SHORT'}>
-                  {pos.direction === 'LONG' ? '▲' : '▼'}
-                </span>
-                <div class="pos-info">
-                  <span class="pos-pair">{pos.asset}</span>
-                  <span class="pos-entry">
-                    {pos.direction} · {pos.meta?.leverage ?? ''}x · ${pos.amountUsdc?.toFixed(0) ?? '0'} USDC
-                  </span>
-                </div>
-                <div class="gmx-pnl-col">
-                  <span class="pos-pnl" style="color:{pos.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
-                    {pos.pnlPercent >= 0 ? '+' : ''}{pos.pnlPercent.toFixed(2)}%
-                  </span>
-                  {#if pos.pnlUsdc != null}
-                    <span class="gmx-pnl-usd" style="color:{pos.pnlUsdc >= 0 ? 'var(--grn)' : 'var(--red)'}">
-                      {pos.pnlUsdc >= 0 ? '+' : ''}{pos.pnlUsdc.toFixed(2)}$
-                    </span>
-                  {/if}
-                </div>
-                <span class="pos-status-badge gmx-status">{pos.status}</span>
-              </div>
-            {/each}
-          {/if}
-          <button class="gmx-open-btn" on:click={() => showGmxPanel = true}>
-            ⚡ OPEN PERP POSITION
+        <!-- Position sub-tabs -->
+        <div class="pos-view-tabs">
+          <button class="pos-view-tab" class:active={posView === 'mine'} on:click={() => posView = 'mine'}>
+            MY POSITIONS
+            {#if positionCount > 0}<span class="pos-view-cnt">{positionCount}</span>{/if}
           </button>
+          <button class="pos-view-tab" class:active={posView === 'markets'} on:click={() => posView = 'markets'}>
+            MARKETS
+          </button>
+        </div>
 
-          <!-- MARKET BETS -->
-          {#if $polymarketPositions.length > 0}
-            <div class="pos-header">
-              <span class="pos-title">🔮 MARKET BETS</span>
-              <span class="pos-cnt">{$polymarketPositions.length}</span>
+        <div class="rp-body">
+          {#if posView === 'mine'}
+            <div class="pos-sync-row">
+              <span
+                class="pos-sync-badge"
+                class:loading={$positionsLoading}
+                class:error={!!$positionsError}
+                class:ok={!$positionsLoading && !$positionsError}
+              >
+                {positionsSyncStatus}
+              </span>
+              {#if pendingCount > 0}
+                <span class="pos-sync-pending">{pendingCount} pending</span>
+              {/if}
+              <span class="pos-sync-total">{positionCount} total</span>
+              <button class="pos-sync-btn" on:click={refreshPositionsNow} disabled={$positionsLoading}>
+                REFRESH
+              </button>
             </div>
-            {#each $polymarketPositions as pos (pos.id)}
-              <div class="pos-row poly-row">
-                <span class="pos-dir" class:long={pos.direction === 'YES'} class:short={pos.direction === 'NO'}>
-                  {pos.direction === 'YES' ? '↑' : '↓'}
-                </span>
-                <div class="pos-info">
-                  <span class="pos-pair pos-market-q">{pos.asset.length > 40 ? pos.asset.slice(0, 40) + '…' : pos.asset}</span>
-                  <span class="pos-entry">{pos.direction} · ${pos.amountUsdc?.toFixed(0)} USDC</span>
-                </div>
-                <span class="pos-pnl" style="color:{(pos.pnlUsdc ?? 0) >= 0 ? 'var(--grn)' : 'var(--red)'}">
-                  {(pos.pnlUsdc ?? 0) >= 0 ? '+' : ''}{(pos.pnlUsdc ?? 0).toFixed(2)}$
-                </span>
-                <span class="pos-status-badge">{pos.status}</span>
-              </div>
-            {/each}
-          {/if}
 
-          <!-- Browse Markets -->
-          <div class="pos-header" style="margin-top:8px">
-            <span class="pos-title">🌐 BROWSE MARKETS</span>
-          </div>
-          {#if cryptoMarkets.length > 0}
-            {#each cryptoMarkets.slice(0, 6) as market}
-              {@const outcome = parseOutcomePrices(market.outcomePrices)}
-              <div class="market-browse-card">
-                <div class="mb-q">{market.question.length > 60 ? market.question.slice(0, 60) + '…' : market.question}</div>
-                <div class="mb-odds">
-                  <span class="mb-yes">YES {outcome.yes}¢</span>
-                  <span class="mb-no">NO {outcome.no}¢</span>
-                </div>
-                <div class="mb-actions">
-                  <button class="mb-bet" on:click={() => { betMarket = market; }}>BET USDC</button>
-                  <a class="mb-link" href="https://polymarket.com/event/{market.slug}" target="_blank" rel="noopener noreferrer">↗</a>
-                </div>
+            {#if $positionsError}
+              <div class="pos-sync-error-msg">
+                {$positionsError}
+                {#if !$positionsLoading}
+                  <button class="pos-sync-inline-btn" on:click={refreshPositionsNow}>retry</button>
+                {/if}
               </div>
-            {/each}
+            {/if}
+
+            <!-- TRADES -->
+            {#if openCount > 0}
+              <div class="pos-header">
+                <span class="pos-title">📊 TRADES</span>
+                <span class="pos-cnt">{openCount}</span>
+              </div>
+              {#each opens as trade (trade.id)}
+                <div class="pos-row">
+                  <span class="pos-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>
+                    {trade.dir === 'LONG' ? '▲' : '▼'}
+                  </span>
+                  <div class="pos-info">
+                    <span class="pos-pair">{trade.pair}</span>
+                    <span class="pos-entry">${Math.round(trade.entry).toLocaleString()}</span>
+                  </div>
+                  <span class="pos-pnl" style="color:{trade.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                    {trade.pnlPercent >= 0 ? '+' : ''}{trade.pnlPercent.toFixed(1)}%
+                  </span>
+                  <button class="pos-close" on:click={() => handleClosePos(trade.id)}>CLOSE</button>
+                </div>
+              {/each}
+            {/if}
+
+            <!-- PERPS -->
+            {#if $gmxPositions.length > 0}
+              <div class="pos-header">
+                <span class="pos-title">⚡ PERPS</span>
+                <span class="pos-cnt">{$gmxPositions.length}</span>
+              </div>
+              {#each $gmxPositions as pos (pos.id)}
+                <div class="pos-row gmx-row">
+                  <span class="pos-dir" class:long={pos.direction === 'LONG'} class:short={pos.direction === 'SHORT'}>
+                    {pos.direction === 'LONG' ? '▲' : '▼'}
+                  </span>
+                  <div class="pos-info">
+                    <span class="pos-pair">{pos.asset}</span>
+                    <span class="pos-entry">
+                      {pos.direction} · {pos.meta?.leverage ?? ''}x · ${pos.amountUsdc?.toFixed(0) ?? '0'} USDC
+                    </span>
+                  </div>
+                  <div class="gmx-pnl-col">
+                    <span class="pos-pnl" style="color:{pos.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                      {pos.pnlPercent >= 0 ? '+' : ''}{pos.pnlPercent.toFixed(2)}%
+                    </span>
+                    {#if pos.pnlUsdc != null}
+                      <span class="gmx-pnl-usd" style="color:{pos.pnlUsdc >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                        {pos.pnlUsdc >= 0 ? '+' : ''}{pos.pnlUsdc.toFixed(2)}$
+                      </span>
+                    {/if}
+                  </div>
+                  <span class="pos-status-badge gmx-status">{pos.status}</span>
+                </div>
+              {/each}
+            {/if}
+            <button class="gmx-open-btn" on:click={() => showGmxPanel = true}>
+              ⚡ OPEN PERP POSITION
+            </button>
+
+            <!-- MARKET BETS -->
+            {#if $polymarketPositions.length > 0}
+              <div class="pos-header">
+                <span class="pos-title">🔮 MARKET BETS</span>
+                <span class="pos-cnt">{$polymarketPositions.length}</span>
+              </div>
+              {#each $polymarketPositions as pos (pos.id)}
+                <div class="pos-row poly-row">
+                  <span class="pos-dir" class:long={pos.direction === 'YES'} class:short={pos.direction === 'NO'}>
+                    {pos.direction === 'YES' ? '↑' : '↓'}
+                  </span>
+                  <div class="pos-info">
+                    <span class="pos-pair pos-market-q">{pos.asset.length > 40 ? pos.asset.slice(0, 40) + '…' : pos.asset}</span>
+                    <span class="pos-entry">{pos.direction} · ${pos.amountUsdc?.toFixed(0)} USDC</span>
+                  </div>
+                  <span class="pos-pnl" style="color:{(pos.pnlUsdc ?? 0) >= 0 ? 'var(--grn)' : 'var(--red)'}">
+                    {(pos.pnlUsdc ?? 0) >= 0 ? '+' : ''}{(pos.pnlUsdc ?? 0).toFixed(2)}$
+                  </span>
+                  <span class="pos-status-badge">{pos.status}</span>
+                </div>
+              {/each}
+            {/if}
+
+            <!-- Empty state -->
+            {#if openCount === 0 && $polymarketPositions.length === 0 && $gmxPositions.length === 0}
+              <div class="pos-empty-mini">
+                <span class="pos-empty-icon">📊</span>
+                <span class="pos-empty-txt">NO OPEN POSITIONS</span>
+              </div>
+            {/if}
+
           {:else}
-            <div class="pp-empty">Loading markets...</div>
-          {/if}
-
-          <!-- Empty state -->
-          {#if openCount === 0 && $polymarketPositions.length === 0 && $gmxPositions.length === 0}
-            <div class="pos-empty-mini">
-              <span class="pos-empty-icon">📊</span>
-              <span class="pos-empty-txt">NO OPEN POSITIONS</span>
-            </div>
+            <!-- BROWSE MARKETS -->
+            {#if cryptoMarkets.length > 0}
+              {#each cryptoMarkets.slice(0, 6) as market}
+                {@const outcome = parseOutcomePrices(market.outcomePrices)}
+                <div class="market-browse-card">
+                  <div class="mb-q">{market.question.length > 60 ? market.question.slice(0, 60) + '…' : market.question}</div>
+                  <div class="mb-odds">
+                    <span class="mb-yes">YES {outcome.yes}¢</span>
+                    <span class="mb-no">NO {outcome.no}¢</span>
+                  </div>
+                  <div class="mb-actions">
+                    <button class="mb-bet" on:click={() => { betMarket = market; }}>BET USDC</button>
+                    <a class="mb-link" href="https://polymarket.com/event/{market.slug}" target="_blank" rel="noopener noreferrer">↗</a>
+                  </div>
+                </div>
+              {/each}
+            {:else}
+              <div class="pp-empty">Loading markets...</div>
+            {/if}
           {/if}
         </div>
 
@@ -1575,6 +1586,26 @@
   }
   .feed-chip:hover { background: rgba(255,230,0,.06); color: rgba(255,255,255,.7); }
   .feed-chip.active { background: rgba(255,230,0,.12); color: var(--yel); border-color: rgba(255,230,0,.3); }
+
+  /* ── Position View Tabs ── */
+  .pos-view-tabs {
+    display: flex; gap: 0; flex-shrink: 0;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .pos-view-tab {
+    flex: 1; padding: 7px 0; text-align: center;
+    font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: 0.8px;
+    color: rgba(255,255,255,.4); background: none; border: none; cursor: pointer;
+    border-bottom: 2px solid transparent; transition: all .12s;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .pos-view-tab:hover { color: rgba(255,255,255,.6); background: rgba(255,255,255,.02); }
+  .pos-view-tab.active { color: #fff; border-bottom-color: var(--yel, #ffe600); }
+  .pos-view-cnt {
+    font-size: 8px; font-weight: 800;
+    background: rgba(255,230,0,.15); color: var(--yel, #ffe600);
+    padding: 1px 5px; border-radius: 8px; min-width: 16px;
+  }
 
   /* ── Tab Content Wrapper ── */
   .rp-body-wrap { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; min-height: 72px; }
