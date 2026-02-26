@@ -2026,8 +2026,8 @@
     background: transparent;
     padding: 0;
     margin: 0;
-    opacity: 0.42;
-    transition: opacity .12s ease;
+    opacity: 0;
+    transition: opacity .2s ease;
   }
   .desk-resize-handle::before {
     content: '';
@@ -2035,33 +2035,33 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     border-radius: 999px;
-    background: rgba(245, 196, 184, 0.45);
+    background: rgba(255, 255, 255, 0.15);
   }
   .desk-resize-handle:hover,
   .desk-resize-handle:focus-visible {
-    opacity: 0.92;
+    opacity: 0.8;
     outline: none;
   }
   .desk-resize-handle-x {
     top: 12px;
     right: 0;
-    width: 12px;
+    width: 8px;
     height: calc(100% - 24px);
     cursor: ew-resize;
   }
   .desk-resize-handle-x::before {
     width: 2px;
-    height: 46%;
+    height: 30%;
   }
   .desk-resize-handle-y {
     left: 12px;
     bottom: 0;
     width: calc(100% - 24px);
-    height: 12px;
+    height: 8px;
     cursor: ns-resize;
   }
   .desk-resize-handle-y::before {
-    width: 46%;
+    width: 30%;
     height: 2px;
   }
 
