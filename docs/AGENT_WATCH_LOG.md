@@ -1765,3 +1765,22 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - Main implementation commit: ca03f8f
   - Push status: SUCCESS (origin/codex/intel-policy-v3-runtime-clean-20260225)
   - Working tree after push: clean
+
+### W-20260226-2228-backend-codex (finish)
+
+- End (KST): 2026-02-26 22:29:26 +0900
+- Agent: Codex (GPT-5)
+- Branch: codex/intel-policy-v3-runtime-clean-20260225
+- What changed:
+  - Added preferred model-routing note requested by user.
+  - Updated AGENTS.md with explicit split:
+    - gpt5.2 xhigh for TL (planning/review/orchestration)
+    - gpt-5.3-codex xhigh for execution (implementation/integration/fixing)
+  - Updated README.md with same recommendation in operational docs.
+- Validation results:
+  - npm run check: PASS
+  - npm run build: PASS
+- Commit hash: pending
+- Push status: pending
+- Final working tree status: pending commit/push
+- Status: DONE

@@ -144,6 +144,15 @@ npm run preview
 - `CTX_AUTO_MIN_INTERVAL_SEC=300`: stage별 최소 실행 간격(스냅샷 과다 생성 방지)
 - `CTX_AUTO_STRICT=1`: 자동화 실패 시 호출 명령도 실패 처리
 
+### Model Setup (Recommended)
+
+현재 권장 운영:
+
+- `gpt5.2 xhigh`: TL 역할 (planning, review, orchestration)
+- `gpt-5.3-codex xhigh`: 실행 역할 (implementation, integration, fixing)
+
+이 분리는 의사결정 품질과 실행 속도를 동시에 높이는 기본값입니다.
+
 ### Context Compaction Routine (Token/Cost Control)
 
 긴 대화/작업에서 토큰 비용과 컨텍스트 오염을 줄이기 위한 표준 루틴입니다.
