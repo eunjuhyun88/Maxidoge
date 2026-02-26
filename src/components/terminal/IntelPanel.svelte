@@ -1990,56 +1990,7 @@
     padding: 5px 8px 3px;
     flex-shrink: 0;
   }
-  .scan-brief {
-    margin: 2px 8px 4px;
-    padding: 6px 7px;
-    border-radius: 6px;
-    border: 1px solid rgba(255,230,0,.26);
-    background: rgba(255,230,0,.08);
-  }
-  .scan-brief-head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
-  .scan-brief-badge {
-    font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 1.1px;
-    color: #000; background: var(--yel); padding: 1px 5px; border-radius: 999px;
-  }
-  .scan-brief-market {
-    font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: .5px; color: rgba(255,255,255,.92);
-  }
-  .scan-brief-time {
-    margin-left: auto; font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.72);
-  }
-  .scan-brief-summary {
-    font-family: var(--fm); font-size: 10px; line-height: 1.5; color: rgba(255,255,255,.9);
-  }
-  .scan-brief-tags {
-    display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 4px;
-  }
-  .scan-brief-tag {
-    font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: .4px;
-    border-radius: 8px; border: 1px solid rgba(255,255,255,.16); padding: 1px 6px;
-    color: rgba(255,255,255,.88); background: rgba(255,255,255,.05);
-  }
-  .scan-brief-tag.long { color: var(--grn); border-color: rgba(0,255,136,.36); background: rgba(0,255,136,.1); }
-  .scan-brief-tag.short { color: var(--red); border-color: rgba(255,45,85,.36); background: rgba(255,45,85,.1); }
-  .scan-brief-tag.neutral { color: rgba(255,255,255,.75); border-color: rgba(255,255,255,.22); }
-  .scan-brief-notes {
-    margin-top: 5px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .scan-brief-note {
-    font-family: var(--fm);
-    font-size: 9px;
-    line-height: 1.35;
-    color: rgba(255,255,255,.82);
-    word-break: break-word;
-  }
-  .scan-brief-note :global(span) {
-    color: rgba(255,230,0,.86);
-    font-weight: 700;
-    letter-spacing: .3px;
-  }
+  /* Removed: scan-brief CSS (scan data now in chat messages) */
   .ac-title {
     font-family: var(--fm); font-size: 10px; font-weight: 900;
     letter-spacing: 2px; color: var(--yel);
@@ -2087,8 +2038,8 @@
   .ac-msgs::-webkit-scrollbar { width: 2px; }
   .ac-msgs::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
   .ac-sys {
-    font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.58);
-    padding: 4px 6px; background: rgba(255,230,0,.04);
+    font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.58);
+    padding: 5px 8px; background: rgba(255,230,0,.04);
     border-left: 2px solid rgba(255,230,0,.2);
   }
   .ac-row { display: flex; gap: 5px; }
@@ -2103,8 +2054,8 @@
   .ac-bub { max-width: 85%; padding: 6px 9px; border-radius: 6px; }
   .ac-bub-user { background: rgba(255,230,0,.12); border: 1px solid rgba(255,230,0,.2); margin-left: auto; }
   .ac-bub-agent { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
-  .ac-name { font-family: var(--fm); font-size: 8px; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 1px; }
-  .ac-txt { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.84); line-height: 1.45; white-space: pre-line; }
+  .ac-name { font-family: var(--fm); font-size: 10px; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 2px; }
+  .ac-txt { font-family: var(--fm); font-size: 11px; color: rgba(255,255,255,.84); line-height: 1.5; white-space: pre-line; }
   .ac-dots { display: flex; gap: 3px; padding: 4px 0; }
   .ac-dots span { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,.3); animation: dotBounce .6s infinite; }
   .ac-dots span:nth-child(2) { animation-delay: .15s; }

@@ -2757,15 +2757,17 @@
     background: rgba(232, 150, 125, 0.14);
     color: var(--term-accent-soft);
   }
-  .terminal-shell :global(.intel-panel .rp-inner-tabs) {
+  .terminal-shell :global(.intel-panel .feed-chips) {
     border-bottom-color: var(--term-border-soft);
   }
-  .terminal-shell :global(.intel-panel .rp-inner-tab) {
-    color: rgba(240, 237, 228, 0.72);
+  .terminal-shell :global(.intel-panel .feed-chip) {
+    color: rgba(240, 237, 228, 0.52);
+    border-color: var(--term-border-soft);
   }
-  .terminal-shell :global(.intel-panel .rp-inner-tab.active) {
+  .terminal-shell :global(.intel-panel .feed-chip.active) {
     color: var(--term-accent-soft);
-    border-bottom-color: var(--term-accent);
+    border-color: var(--term-accent);
+    background: rgba(232, 150, 125, 0.1);
   }
   .terminal-shell :global(.intel-panel .hl-ticker-badge) {
     color: var(--term-accent-soft);
@@ -2831,7 +2833,7 @@
   .terminal-shell :global(.war-room .ticker-chip),
   .terminal-shell :global(.war-room .scan-tab),
   .terminal-shell :global(.war-room .token-tab),
-  .terminal-shell :global(.intel-panel .rp-inner-tab),
+  .terminal-shell :global(.intel-panel .feed-chip),
   .terminal-shell :global(.intel-panel .ac-trade-btn) {
     font-size: var(--term-font-xs);
     letter-spacing: 0.42px;
@@ -2978,7 +2980,7 @@
   }
   .terminal-mobile :global(.war-room .token-tab),
   .terminal-mobile :global(.intel-panel .rp-tab),
-  .terminal-mobile :global(.intel-panel .rp-inner-tab) {
+  .terminal-mobile :global(.intel-panel .feed-chip) {
     min-height: 38px;
     font-size: 10px;
     letter-spacing: 0.9px;
