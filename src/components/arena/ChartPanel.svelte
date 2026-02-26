@@ -170,7 +170,9 @@
   export let agentMarkers: ChartMarker[] = [];
   let patternMarkers: ChartMarker[] = [];
   let detectedPatterns: ChartPatternDetection[] = [];
+  let overlayPatterns: ChartPatternDetection[] = [];
   let patternLineSeries: any[] = [];
+  const MAX_OVERLAY_PATTERNS = 1;
   const ENABLE_PATTERN_LINE_SERIES = false;
   let _patternSignature = '';
   let _patternRangeScanTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1323,9 +1325,9 @@
   }
 
   function drawPatternOverlays(ctx: CanvasRenderingContext2D) {
-    if (!drawingCanvas || !chart || chartMode !== 'agent' || detectedPatterns.length === 0) return;
+    if (!drawingCanvas || !chart || chartMode !== 'agent' || overlayPatterns.length === 0) return;
 
-    for (const pattern of detectedPatterns.slice(0, 3)) {
+    for (const pattern of overlayPatterns) {
       const lineAlpha = 0.9;
       const fillAlpha = 0.14;
 
@@ -1413,9 +1415,9 @@
     }
     if (!chart || !lwcModule) return;
     clearPatternLineSeries();
-    if (detectedPatterns.length === 0) return;
+    if (overlayPatterns.length === 0) return;
 
-    for (const pattern of detectedPatterns) {
+    for (const pattern of overlayPatterns) {
       for (const guide of pattern.guideLines) {
         try {
           const lineSeries = chart.addSeries(lwcModule.LineSeries, {
@@ -1460,11 +1462,22 @@
 
   function clearDetectedPatterns() {
     detectedPatterns = [];
+    overlayPatterns = [];
     patternMarkers = [];
     _patternSignature = '';
     applyCombinedMarkers();
     clearPatternLineSeries();
     renderDrawings();
+  }
+
+  function rankPatternsForOverlay(patterns: ChartPatternDetection[]): ChartPatternDetection[] {
+    return [...patterns].sort((a, b) => {
+      const statusDiff = (b.status === 'CONFIRMED' ? 1 : 0) - (a.status === 'CONFIRMED' ? 1 : 0);
+      if (statusDiff !== 0) return statusDiff;
+      const confidenceDiff = b.confidence - a.confidence;
+      if (Math.abs(confidenceDiff) > 1e-6) return confidenceDiff;
+      return b.endTime - a.endTime;
+    });
   }
 
   function snapshotPattern(pattern: ChartPatternDetection): PatternScanResult['patterns'][number] {
@@ -1510,7 +1523,8 @@
 
     _patternSignature = signature;
     detectedPatterns = next;
-    patternMarkers = next.map(toPatternMarker);
+    overlayPatterns = rankPatternsForOverlay(next).slice(0, MAX_OVERLAY_PATTERNS);
+    patternMarkers = overlayPatterns.map(toPatternMarker);
     applyCombinedMarkers();
     applyPatternLineSeries();
     renderDrawings();
@@ -1595,8 +1609,8 @@
     }
 
     const result = runPatternDetection(scope);
-    if ((options.focus ?? true) && detectedPatterns.length > 0) {
-      focusPatternRange(detectedPatterns[0]);
+    if ((options.focus ?? true) && overlayPatterns.length > 0) {
+      focusPatternRange(overlayPatterns[0]);
       renderDrawings();
     }
     pushChartNotice(result.message);
@@ -2643,8 +2657,8 @@
     {#if chartMode === 'agent' && indicatorEnabled.rsi && !isTvLikePreset}
       <span class="footer-ind rsi" title="RSI14 · 상대강도지수">RSI14(상대강도) {rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
     {/if}
-    {#if chartMode === 'agent' && detectedPatterns.length > 0}
-      {#each detectedPatterns.slice(0, 2) as pat (pat.id)}
+    {#if chartMode === 'agent' && overlayPatterns.length > 0}
+      {#each overlayPatterns as pat (pat.id)}
         <span
           class="pattern-pill"
           class:bull={pat.direction === 'BULLISH'}
