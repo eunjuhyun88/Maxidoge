@@ -17,4 +17,9 @@ fi
 echo "[post-merge] running npm run check"
 npm run check
 
+if [ -x scripts/dev/context-auto.sh ]; then
+	echo "[post-merge] context auto snapshot"
+	bash scripts/dev/context-auto.sh post-merge || true
+fi
+
 echo "[post-merge] sync check passed"

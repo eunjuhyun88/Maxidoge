@@ -80,7 +80,23 @@ npm run ctx:restore -- --mode files
 
 `--mode` is mandatory to avoid confusion between conversation restore and file restore.
 
-## 4) Multi-Agent Handoff Standard
+## 4) Automatic Triggers (Default)
+
+Context save/compact runs automatically in standard workflows:
+
+- `safe:status` -> `ctx:auto(safe-status)`
+- `safe:sync` -> `ctx:auto(safe-sync-start/end)`
+- `pre-push` hook -> `ctx:auto(pre-push)`
+- `post-merge` hook -> `ctx:auto(post-merge)`
+
+Automation controls:
+
+- `CTX_AUTO_DISABLED=1`: disable auto snapshots
+- `CTX_AUTO_MIN_INTERVAL_SEC=300`: per-branch/per-stage throttle
+- `CTX_AUTO_STRICT=1`: fail caller when auto steps fail
+- `CTX_WORK_ID`: optional explicit work id for auto snapshots
+- `CTX_AGENT_ID`: optional agent id label
+## 5) Multi-Agent Handoff Standard
 
 1. Agent A before handoff:
    - `ctx:save` with work id
@@ -90,14 +106,14 @@ npm run ctx:restore -- --mode files
    - confirm branch/worktree
    - continue work with same or new work id
 
-## 5) Minimum Cadence
+## 6) Minimum Cadence
 
-- At task start: `ctx:save`
-- Before push/PR: `ctx:save` + `ctx:compact`
+- At task start: `safe:status` (auto) or `ctx:save`
+- Before push/PR: pre-push auto path (or manual `ctx:save` + `ctx:compact`)
 - Any major decision change: `ctx:pin -- --add "..."`
-- After session reset: `ctx:restore -- --mode context`
+- After session reset: `ctx:restore -- --mode context` (manual trigger)
 
-## 6) Safety Rules
+## 7) Safety Rules
 
 - Do not commit `.agent-context/*` artifacts.
 - Do not place keys/secrets in snapshots or pinned facts.

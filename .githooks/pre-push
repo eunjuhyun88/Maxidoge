@@ -12,6 +12,11 @@ cd "$ROOT_DIR"
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 echo "[pre-push] branch: $CURRENT_BRANCH"
 
+if [ -x scripts/dev/context-auto.sh ]; then
+	echo "[pre-push] context auto snapshot"
+	bash scripts/dev/context-auto.sh pre-push || true
+fi
+
 echo "[pre-push] fetching origin"
 git fetch origin --prune
 

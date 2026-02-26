@@ -1730,3 +1730,30 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: PENDING
 - Final working tree status: pending commit/push
 - Status: DONE
+
+### W-20260226-2209-backend-codex (finish)
+
+- End (KST): 2026-02-26 22:13:01 +0900
+- Agent: Codex (GPT-5)
+- Branch: codex/intel-policy-v3-runtime-clean-20260225
+- What changed:
+  - Added automatic context orchestration script: scripts/dev/context-auto.sh
+  - Wired auto context snapshots/compaction into:
+    - scripts/dev/safe-status.sh (safe-status trigger)
+    - scripts/dev/sync-branch.sh (safe-sync-start/end)
+    - .githooks/pre-push (pre-push trigger)
+    - scripts/dev/post-merge-sync.sh (post-merge trigger)
+  - Added npm command: ctx:auto
+  - Updated AGENTS/README/protocol docs to default zero-command context mode
+  - Updated hook installer messaging for ctx:auto behavior
+- Validation results:
+  - bash -n on updated scripts/hooks: PASS
+  - npm run ctx:auto -- safe-status: PASS
+  - npm run ctx:auto -- pre-push: PASS
+  - npm run safe:status: PASS (throttle verified)
+  - npm run check: PASS
+  - npm run build: PASS
+- Commit hash: pending
+- Push status: pending
+- Final working tree status: pending commit/push
+- Status: DONE

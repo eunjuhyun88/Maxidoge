@@ -10,3 +10,4 @@ chmod +x .githooks/post-merge
 
 echo "Installed local hooks path: .githooks"
 echo "pre-push and post-merge hooks are now active for this repository."
+echo "context auto snapshots are enabled through hook pipeline (ctx:auto)."
