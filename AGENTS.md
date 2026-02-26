@@ -85,3 +85,10 @@ This file defines mandatory execution rules for all coding agents in this reposi
 - Canonical collaboration and project guide: `/Users/ej/Downloads/maxi-doge-unified/README.md`
 - This repo execution rules: `/Users/ej/Downloads/maxidoge-clones/integration/AGENTS.md`
 - `docs/README.md` is a redirect-only compatibility file.
+
+## Recommended Model Routing
+- Preferred setup:
+  - `gpt5.2 xhigh` for TL tasks (planning, review, orchestration).
+  - `gpt-5.3-codex xhigh` for execution tasks (implementation, fix, integration).
+- Principle:
+  - Keep strategic reasoning and implementation execution split for higher throughput and lower coordination noise.
