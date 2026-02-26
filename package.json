@@ -16,6 +16,10 @@
 		"safe:hooks": "bash scripts/dev/install-git-hooks.sh",
 		"safe:sync": "bash scripts/dev/sync-branch.sh",
 		"safe:sync:gate": "bash scripts/dev/sync-branch.sh --gate",
+		"ctx:save": "bash scripts/dev/context-save.sh",
+		"ctx:compact": "bash scripts/dev/context-compact.sh",
+		"ctx:restore": "bash scripts/dev/context-restore.sh",
+		"ctx:pin": "bash scripts/dev/context-pin.sh",
 		"uiux:promote": "bash scripts/dev/uiux-promote.sh",
 		"uiux:promote:gate": "bash scripts/dev/uiux-promote.sh --gate",
 		"perf:k6:auth-snapshot": "k6 run scripts/perf/k6-auth-snapshot.js"

@@ -1703,3 +1703,30 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: N/A (merge blocked)
 - Final working tree status: pending log commit
 - Status: BLOCKED
+
+### W-20260226-2151-backend-codex (finish)
+
+- End (KST): 2026-02-26 21:58:48 +0900
+- Agent: Codex (GPT-5)
+- Branch: codex/intel-policy-v3-runtime-clean-20260225
+- What changed:
+  - Added multi-agent context budgeting scripts:
+    - scripts/dev/context-save.sh
+    - scripts/dev/context-compact.sh
+    - scripts/dev/context-restore.sh
+    - scripts/dev/context-pin.sh
+  - Added npm commands: ctx:save, ctx:compact, ctx:restore, ctx:pin
+  - Added context protocol doc: docs/AGENT_CONTEXT_COMPACTION_PROTOCOL.md
+  - Updated AGENTS.md/README.md with mandatory save→compact→restore mode-disambiguation flow
+  - Added .agent-context/ gitignore rule for local-only context artifacts
+- Validation results:
+  - npm run ctx:save PASS
+  - npm run ctx:pin PASS
+  - npm run ctx:compact PASS
+  - npm run ctx:restore -- --mode context --list PASS
+  - npm run check PASS
+  - npm run build PASS
+- Commit hash: N/A (to be recorded from pushed branch head)
+- Push status: PENDING
+- Final working tree status: pending commit/push
+- Status: DONE
