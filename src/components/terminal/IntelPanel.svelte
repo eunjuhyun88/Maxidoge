@@ -2006,10 +2006,10 @@
 
   /* ═══ AGENT CHAT (inside INTEL tab) ═══ */
   .ac-section {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0%;
     min-height: 0;
-    height: 100%;
     background: rgba(0,0,0,.3);
   }
   .ac-section.ac-embedded { border-top: 0; }

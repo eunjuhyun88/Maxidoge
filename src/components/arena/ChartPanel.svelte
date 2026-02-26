@@ -2649,42 +2649,7 @@
     </div>
   {/if}
 
-  <div class="chart-footer">
-    <span class="src-badge">{chartMode === 'trading' ? 'TV' : 'BINANCE'}</span>
-    {#if chartMode === 'agent' && indicatorEnabled.vol && !isTvLikePreset}
-      <span class="footer-ind vol" title="Volume · 거래량">VOL(거래량) {latestVolume > 0 ? formatCompact(latestVolume) : '—'}</span>
-    {/if}
-    {#if chartMode === 'agent' && indicatorEnabled.rsi && !isTvLikePreset}
-      <span class="footer-ind rsi" title="RSI14 · 상대강도지수">RSI14(상대강도) {rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
-    {/if}
-    {#if chartMode === 'agent' && overlayPatterns.length > 0}
-      {#each overlayPatterns as pat (pat.id)}
-        <span
-          class="pattern-pill"
-          class:bull={pat.direction === 'BULLISH'}
-          class:bear={pat.direction === 'BEARISH'}
-          class:forming={pat.status === 'FORMING'}
-        >
-          {pat.shortName} {pat.status === 'CONFIRMED' ? 'OK' : 'PEND'} {(pat.confidence * 100).toFixed(0)}%
-        </span>
-      {/each}
-    {/if}
-    {#if chartMode === 'agent' && drawings.length > 0 && !isTvLikePreset}
-      <span class="draw-count">DRAW {drawings.length}</span>
-    {/if}
-    {#if showPosition}
-      <span class="pos-active">{posDir || 'POS'}</span>
-    {/if}
-    <span class="agent-feed-text">
-      {#if state.phase === 'ANALYSIS'}SCANNING...
-      {:else if state.phase === 'HYPOTHESIS'}HYPOTHESIS...
-      {:else if state.phase === 'BATTLE'}BATTLE...
-      {:else if state.phase === 'RESULT'}RESULT...
-      {:else}●
-      {/if}
-    </span>
-    <span class="src-ws">{chartMode === 'agent' ? `WS ${wsCleanup ? '●' : '○'}` : 'WIDGET ●'}</span>
-  </div>
+  <!-- chart-footer removed: pattern info shown on chart overlay, indicators in legend -->
 </div>
 
 <style>
@@ -2694,6 +2659,7 @@
     --cp-font-sm: clamp(10px, 0.74vw, 11px);
     --cp-font-md: clamp(11px, 0.86vw, 13px);
     --cp-font-lg: clamp(15px, 1.15vw, 18px);
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -3688,40 +3654,7 @@
   .ann-popup-label { font-family: var(--fm); font-size: 9px; font-weight: 900; color: #fff; margin-bottom: 2px; }
   .ann-popup-detail { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.74); line-height: 1.4; }
 
-  .chart-footer { padding: 2px 8px; border-top: 1px solid rgba(255,255,255,.05); background: rgba(0,0,0,.3); display: flex; align-items: center; gap: 6px; font-size: var(--cp-font-2xs); font-family: var(--fm); color: rgba(255,255,255,.62); flex-shrink: 0; }
-  .src-badge { color: #ffe600; font-weight: 700; }
-  .src-ws { margin-left: auto; color: #00ff88; }
-  .footer-ind { font-weight: 800; letter-spacing: .4px; }
-  .footer-ind.vol { color: #77dba6; }
-  .footer-ind.rsi { color: #d6a8ff; }
-  .pos-active { color: #ffba30; font-weight: 700; animation: pulse .8s infinite; }
-  .draw-count { color: #ffe600; font-weight: 700; }
-  .pattern-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    padding: 1px 6px;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,.18);
-    font-weight: 800;
-    letter-spacing: .3px;
-    background: rgba(255,255,255,.05);
-    color: #ddd;
-  }
-  .pattern-pill.bull {
-    color: #6ff2ab;
-    border-color: rgba(111,242,171,.35);
-    background: rgba(111,242,171,.1);
-  }
-  .pattern-pill.bear {
-    color: #ff8ca0;
-    border-color: rgba(255,140,160,.35);
-    background: rgba(255,140,160,.1);
-  }
-  .pattern-pill.forming {
-    opacity: .8;
-  }
-  .agent-feed-text { flex: 1; color: rgba(255,255,255,.62); font-size: 8px; font-weight: 600; letter-spacing: .5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* chart-footer removed — pattern pills shown on chart annotations, indicators in legend */
 
   /* Keep internal sections fixed-height friendly; pane resizing is handled at terminal layout level. */
   .chart-container,
@@ -3766,9 +3699,7 @@
     border-bottom-color: #2a2e39;
     background: #131722;
   }
-  .chart-wrapper.tv-like .chart-footer {
-    border-top-color: #2a2e39;
-    background: #131722;
+  .chart-wrapper.tv-like .chart-footer { /* removed */
   }
   .chart-wrapper.tv-like .mode-toggle {
     border-color: rgba(255, 255, 255, 0.18);
