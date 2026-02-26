@@ -1784,3 +1784,29 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status: pending
 - Final working tree status: pending commit/push
 - Status: DONE
+
+## [2026-02-27 03:13:16 +0900] START wallet-only-main-merge-20260227 (frontend clone)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend-wallet-merge
+- Request: 지갑 관련 변경만 분리해서 main에 머지
+- Initial branch: codex/wallet-only-main-merge-20260227 (from origin/main)
+- Overlap check: source branch `codex/home-backend-live-20260226` has unrelated dirty home edits in `src/routes/+page.svelte`; keep untouched and extract wallet files only.
+- Next action: apply only wallet file diffs (`src/lib/stores/walletStore.ts`, `src/lib/wallet/providers.ts`, `src/components/modals/WalletModal.svelte`, `src/routes/arena/+page.svelte`), then validate check/build and merge to main.
+
+## [2026-02-27 03:23:23 +0900] FINISH wallet-only-main-merge-20260227 (frontend clone)
+- What changed:
+  - Merged wallet-only changes from `codex/home-backend-live-20260226` into `main` lineage scope:
+    - `src/lib/stores/walletStore.ts`
+    - `src/lib/wallet/providers.ts`
+    - `src/components/modals/WalletModal.svelte`
+    - `src/routes/arena/+page.svelte`
+  - Excluded unrelated home UI edits.
+- Validation results:
+  - Working branch `npm run check`: PASS
+  - Working branch `npm run build`: PASS
+  - Main (local fast-forward state) `npm run check`: PASS
+  - Main (local fast-forward state) `npm run build`: PASS
+- Commit hash: `c30f484`
+- Merge hash (local main fast-forward): `c30f484`
+- Push status:
+  - `origin/codex/wallet-only-main-merge-20260227`: SUCCESS
+  - `origin/main`: REJECTED (protected branch; PR required)
