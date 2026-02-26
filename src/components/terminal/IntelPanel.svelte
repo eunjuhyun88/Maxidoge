@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Headline } from '$lib/data/warroom';
+  import VerdictCard from './VerdictCard.svelte';
   import { communityPosts, hydrateCommunityPosts, likeCommunityPost } from '$lib/stores/communityStore';
   import { openTrades, closeQuickTrade, hydrateQuickTrades } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
@@ -911,88 +912,20 @@
           {/each}
         </div>
 
-        {#if policyDecision}
-          <div class="policy-decision-banner">
-            <div class="policy-decision-head">
-              <span class="policy-decision-title">INTEL DECISION v3</span>
-              <span class="policy-decision-bias {policyBiasClass(policyDecision.bias)}">
-                {policyBiasLabel(policyDecision.bias)}
-              </span>
-            </div>
-            <div class="policy-decision-meta">
-              <span>Edge {policyDecision.edgePct.toFixed(1)}%</span>
-              <span>Conf {policyDecision.confidence.toFixed(0)}%</span>
-              <span>Gate {policyDecision.qualityGateScore.toFixed(1)}</span>
-              <span>Coverage {policyDecision.coveragePct.toFixed(0)}%</span>
-              {#if policySummary}
-                <span>{policySummary.pair} · {policySummary.timeframe.toUpperCase()} · Domains {policySummary.domainsUsed.length}</span>
-              {/if}
-              {#if policyUpdatedAt > 0}
-                <span>Updated {formatRelativeTime(policyUpdatedAt)} ago</span>
-              {/if}
-            </div>
-            {#if policyDecision.reasons?.length}
-              <div class="policy-decision-reason">{policyDecision.reasons[0]}</div>
-            {/if}
-          </div>
-        {:else if policyLoading}
-          <div class="policy-loading">INTEL DECISION v3 계산 중...</div>
-        {/if}
-
-        {#if shadowDecision}
-          <div class="shadow-decision-banner">
-            <div class="shadow-decision-head">
-              <span class="shadow-decision-title">SHADOW AGENT</span>
-              <span class="policy-decision-bias {policyBiasClass(shadowDecision.enforced.bias)}">
-                {policyBiasLabel(shadowDecision.enforced.bias)}
-              </span>
-            </div>
-            <div class="shadow-decision-meta">
-              <span>{shadowSourceLabel(shadowDecision)}</span>
-              <span>Proposal {policyBiasLabel(shadowDecision.proposal.bias)} {shadowDecision.proposal.confidence.toFixed(0)}%</span>
-              <span>{shadowExecuteLabel(shadowDecision)}</span>
-              <span>LLM {shadowRuntime?.available ? 'ON' : 'OFF'}</span>
-              {#if shadowRuntime?.providers?.length}
-                <span>Providers {shadowRuntime.providers.map((provider) => provider.toUpperCase()).join(', ')}</span>
-              {/if}
-              {#if shadowDecision.generatedAt > 0}
-                <span>Updated {formatRelativeTime(shadowDecision.generatedAt)} ago</span>
-              {/if}
-            </div>
-            <div class="shadow-decision-line">
-              <strong>Now:</strong> {shadowDecision.proposal.nowWhat}
-            </div>
-            {#if shadowDecision.enforced.reasons?.length}
-              <div class="shadow-decision-line">
-                <strong>Guard:</strong> {shadowDecision.enforced.reasons.slice(0, 4).join(' · ')}
-              </div>
-            {/if}
-
-            {#if shadowExecutionEnabled}
-              <button
-                class="shadow-exec-btn"
-                class:ready={shadowDecision.enforced.shouldExecute}
-                on:click={executeShadowTrade}
-                disabled={!shadowDecision.enforced.shouldExecute || shadowExecLoading}
-              >
-                {shadowExecLoading ? 'EXECUTING...' : 'EXECUTE SHADOW TRADE'}
-              </button>
-            {:else}
-              <div class="shadow-exec-disabled">
-                Execution disabled (INTEL_SHADOW_EXECUTION_ENABLED=false)
-              </div>
-            {/if}
-
-            {#if shadowExecMessage}
-              <div class="shadow-exec-msg success">{shadowExecMessage}</div>
-            {/if}
-            {#if shadowExecError}
-              <div class="shadow-exec-msg error">{shadowExecError}</div>
-            {/if}
-          </div>
-        {:else if shadowLoading && !policyLoading}
-          <div class="policy-loading">SHADOW AGENT 계산 중...</div>
-        {/if}
+        <VerdictCard
+          bias={shadowDecision?.enforced.bias ?? policyDecision?.bias ?? 'wait'}
+          confidence={shadowDecision?.proposal.confidence ?? policyDecision?.confidence ?? 0}
+          pair={$gameState.pair || 'BTC/USDT'}
+          timeframe={$gameState.timeframe || '4h'}
+          reason={shadowDecision?.proposal.nowWhat ?? policyDecision?.reasons?.[0] ?? ''}
+          edgePct={policyDecision?.edgePct ?? null}
+          gateScore={policyDecision?.qualityGateScore ?? null}
+          shouldExecute={shadowDecision?.enforced.shouldExecute ?? false}
+          model={shadowDecision ? shadowSourceLabel(shadowDecision) : null}
+          loading={policyLoading || shadowLoading}
+          executionEnabled={shadowExecutionEnabled}
+          on:execute={executeShadowTrade}
+        />
 
         <div class="rp-body" class:chat-mode={innerTab === 'chat'}>
           {#if innerTab === 'chat'}
@@ -1639,139 +1572,7 @@
 <style>
   .intel-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--blk); overflow: hidden; }
 
-  .policy-decision-banner {
-    border-bottom: 1px solid rgba(255, 230, 0, 0.2);
-    background: rgba(255, 230, 0, 0.06);
-    padding: 8px 10px;
-    font-family: var(--fm);
-  }
-  .policy-loading {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.04);
-    padding: 6px 10px;
-    font-family: var(--fm);
-    font-size: 10px;
-    letter-spacing: 1px;
-    color: rgba(255, 255, 255, 0.66);
-  }
-  .policy-decision-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .policy-decision-title {
-    color: rgba(255, 255, 255, 0.86);
-    font-size: 10px;
-    letter-spacing: 1.1px;
-    font-weight: 700;
-  }
-  .policy-decision-bias {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.06);
-  }
-  .policy-decision-bias.long { color: #00e676; border-color: rgba(0, 230, 118, 0.38); }
-  .policy-decision-bias.short { color: #ff5252; border-color: rgba(255, 82, 82, 0.38); }
-  .policy-decision-bias.wait { color: #ffd54f; border-color: rgba(255, 213, 79, 0.38); }
-  .policy-decision-meta {
-    margin-top: 4px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.7);
-  }
-  .policy-decision-reason {
-    margin-top: 5px;
-    font-size: 11px;
-    line-height: 1.35;
-    color: rgba(255, 255, 255, 0.82);
-  }
-  .shadow-decision-banner {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.03);
-    padding: 8px 10px;
-    font-family: var(--fm);
-    display: grid;
-    gap: 5px;
-  }
-  .shadow-decision-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .shadow-decision-title {
-    color: rgba(255, 255, 255, 0.82);
-    font-size: 10px;
-    letter-spacing: 1px;
-    font-weight: 700;
-  }
-  .shadow-decision-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.66);
-  }
-  .shadow-decision-line {
-    font-size: 11px;
-    line-height: 1.35;
-    color: rgba(255, 255, 255, 0.84);
-  }
-  .shadow-decision-line strong {
-    color: rgba(255, 255, 255, 0.95);
-    margin-right: 4px;
-  }
-  .shadow-exec-btn {
-    margin-top: 2px;
-    height: 28px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.54);
-    font-family: var(--fm);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.8px;
-    cursor: not-allowed;
-  }
-  .shadow-exec-btn.ready {
-    background: rgba(0, 230, 118, 0.16);
-    border-color: rgba(0, 230, 118, 0.42);
-    color: #00e676;
-    cursor: pointer;
-  }
-  .shadow-exec-btn.ready:hover:not(:disabled) {
-    background: rgba(0, 230, 118, 0.24);
-  }
-  .shadow-exec-btn:disabled {
-    opacity: 0.88;
-  }
-  .shadow-exec-disabled {
-    margin-top: 2px;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.58);
-  }
-  .shadow-exec-msg {
-    font-size: 10px;
-    padding: 4px 6px;
-    border-radius: 4px;
-  }
-  .shadow-exec-msg.success {
-    color: #00e676;
-    background: rgba(0, 230, 118, 0.08);
-    border: 1px solid rgba(0, 230, 118, 0.24);
-  }
-  .shadow-exec-msg.error {
-    color: #ff8a80;
-    background: rgba(255, 82, 82, 0.08);
-    border: 1px solid rgba(255, 82, 82, 0.24);
-  }
+  /* Removed: policy-decision-banner, shadow-decision-banner — replaced by VerdictCard */
   .policy-cards-wrap {
     display: grid;
     gap: 6px;

@@ -897,6 +897,7 @@
   const AGENT_META: Record<string, { icon: string; color: string }> = {};
   for (const ag of AGDEFS) AGENT_META[ag.name] = { icon: ag.icon, color: ag.color };
   AGENT_META['ORCHESTRATOR'] = { icon: '🧠', color: '#ff2d9b' };
+  AGENT_META['COMMANDER'] = { icon: '🧠', color: '#ff2d9b' };
 
   function inferSuggestedDirection(text: string): ChatTradeDirection | null {
     const lower = text.toLowerCase();
@@ -1320,9 +1321,46 @@
   }
 
   function handleScanComplete(e: CustomEvent<ScanIntelDetail>) {
-    // 스캔 컨텍스트만 저장 (채팅에 LLM이 참조할 수 있도록)
-    // 스캔 결과를 채팅에 직접 표시하지 않음
     latestScan = e.detail;
+    const d = e.detail;
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // 1) 스캔 시작 시스템 메시지
+    chatMessages = [...chatMessages, {
+      from: 'SYSTEM', icon: '⚡', color: '#ffe600',
+      text: `SCAN COMPLETE — ${d.pair} ${d.timeframe.toUpperCase()} (${d.label})`,
+      time, isUser: false, isSystem: true,
+    }];
+
+    // 2) 각 에이전트 하이라이트를 개별 메시지로
+    for (const h of d.highlights) {
+      const meta = AGENT_META[h.agent] || { icon: '🤖', color: '#888' };
+      const voteEmoji = h.vote === 'long' ? '🟢' : h.vote === 'short' ? '🔴' : '⚪';
+      chatMessages = [...chatMessages, {
+        from: h.agent,
+        icon: meta.icon,
+        color: meta.color,
+        text: `${voteEmoji} ${h.vote.toUpperCase()} ${h.conf}%\n${h.note}`,
+        time, isUser: false,
+      }];
+    }
+
+    // 3) COMMANDER 종합 판정
+    const dirEmoji = d.consensus === 'long' ? '🟢' : d.consensus === 'short' ? '🔴' : '⚪';
+    chatMessages = [...chatMessages, {
+      from: 'COMMANDER',
+      icon: '🧠',
+      color: '#ff2d9b',
+      text: `${dirEmoji} VERDICT: ${d.consensus.toUpperCase()} — Confidence ${d.avgConfidence}%\n${d.summary}`,
+      time, isUser: false,
+    }];
+
+    // 방향 추론 → 트레이드 버튼 활성화
+    if (d.consensus === 'long' || d.consensus === 'short') {
+      chatSuggestedDir = d.consensus === 'long' ? 'LONG' : 'SHORT';
+      chatTradeReady = true;
+    }
   }
 </script>
 
