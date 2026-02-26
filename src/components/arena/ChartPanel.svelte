@@ -3024,7 +3024,7 @@
   .scale-tools {
     position: absolute;
     left: 50%;
-    bottom: 46px;
+    bottom: 10px;
     transform: translateX(-50%);
     z-index: 8;
     display: inline-flex;
@@ -3032,10 +3032,10 @@
     gap: 4px;
     padding: 4px;
     border-radius: 10px;
-    border: 1px solid rgba(255,255,255,.15);
-    background: rgba(7, 12, 20, 0.9);
-    backdrop-filter: blur(6px);
-    box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(7, 12, 20, 0.86);
+    backdrop-filter: blur(4px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.34);
   }
   .scale-btn {
     border: 1px solid rgba(255,255,255,.2);
@@ -3084,7 +3084,7 @@
 
   @media (max-width: 900px) {
     .scale-tools {
-      bottom: 46px;
+      bottom: 6px;
       gap: 3px;
       padding: 3px;
     }

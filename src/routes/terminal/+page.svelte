@@ -2026,8 +2026,8 @@
     background: transparent;
     padding: 0;
     margin: 0;
-    opacity: 0;
-    transition: opacity .2s ease;
+    opacity: 0.42;
+    transition: opacity .12s ease;
   }
   .desk-resize-handle::before {
     content: '';
@@ -2035,33 +2035,33 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(245, 196, 184, 0.45);
   }
   .desk-resize-handle:hover,
   .desk-resize-handle:focus-visible {
-    opacity: 0.8;
+    opacity: 0.92;
     outline: none;
   }
   .desk-resize-handle-x {
     top: 12px;
     right: 0;
-    width: 8px;
+    width: 12px;
     height: calc(100% - 24px);
     cursor: ew-resize;
   }
   .desk-resize-handle-x::before {
     width: 2px;
-    height: 30%;
+    height: 46%;
   }
   .desk-resize-handle-y {
     left: 12px;
     bottom: 0;
     width: calc(100% - 24px);
-    height: 8px;
+    height: 12px;
     cursor: ns-resize;
   }
   .desk-resize-handle-y::before {
-    width: 30%;
+    width: 46%;
     height: 2px;
   }
 
@@ -2541,8 +2541,8 @@
     background: transparent;
     padding: 0;
     margin: 0;
-    opacity: 0;
-    transition: opacity .2s ease;
+    opacity: 0.42;
+    transition: opacity .12s ease;
   }
   .tab-resize-handle::before {
     content: '';
@@ -2550,33 +2550,33 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(245, 196, 184, 0.45);
   }
   .tab-resize-handle:hover,
   .tab-resize-handle:focus-visible {
-    opacity: 0.8;
+    opacity: 0.92;
     outline: none;
   }
   .tab-resize-handle-x {
     top: 10px;
     right: 0;
-    width: 12px;
+    width: 20px;
     height: calc(100% - 20px);
     cursor: ew-resize;
   }
   .tab-resize-handle-x::before {
     width: 2px;
-    height: 30%;
+    height: 44%;
   }
   .tab-resize-handle-y {
     left: 10px;
     bottom: 0;
     width: calc(100% - 20px);
-    height: 12px;
+    height: 20px;
     cursor: ns-resize;
   }
   .tab-resize-handle-y::before {
-    width: 30%;
+    width: 44%;
     height: 2px;
   }
   .tab-chart-area {
@@ -2586,14 +2586,13 @@
   }
   .tab-layout-split {
     border: 0;
-    background: transparent;
+    background: rgba(8, 18, 13, 0.86);
     padding: 0;
     margin: 0;
     position: relative;
     z-index: 16;
     cursor: col-resize;
-    opacity: 0;
-    transition: opacity .2s ease, background .14s ease;
+    transition: background .14s ease;
   }
   .tab-layout-split span {
     position: absolute;
@@ -2601,12 +2600,11 @@
     transform: translate(-50%, -50%);
     display: block;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(245, 196, 184, 0.45);
   }
   .tab-layout-split:hover,
   .tab-layout-split:focus-visible {
-    opacity: 0.8;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(232, 150, 125, 0.14);
     outline: none;
   }
   .tab-layout-split-v {
@@ -2614,7 +2612,7 @@
   }
   .tab-layout-split-v span {
     width: 2px;
-    height: 30%;
+    height: 42px;
   }
   .tab-layout-split-h {
     grid-row: 2;
@@ -2622,7 +2620,7 @@
     cursor: row-resize;
   }
   .tab-layout-split-h span {
-    width: 30%;
+    width: 44px;
     height: 2px;
   }
   .tab-bottom {
