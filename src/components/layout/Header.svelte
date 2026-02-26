@@ -129,7 +129,6 @@
 
       <button class="settings-btn" title="SETTINGS" aria-label="SETTINGS" on:click={() => nav('/settings')}>SET</button>
     </div>
-  </div>
 
   <!-- Mobile bottom tab bar -->
   <div class="nav-tabs-mobile">

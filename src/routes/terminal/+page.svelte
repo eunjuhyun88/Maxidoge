@@ -2541,8 +2541,8 @@
     background: transparent;
     padding: 0;
     margin: 0;
-    opacity: 0.42;
-    transition: opacity .12s ease;
+    opacity: 0;
+    transition: opacity .2s ease;
   }
   .tab-resize-handle::before {
     content: '';
@@ -2550,33 +2550,33 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     border-radius: 999px;
-    background: rgba(245, 196, 184, 0.45);
+    background: rgba(255, 255, 255, 0.15);
   }
   .tab-resize-handle:hover,
   .tab-resize-handle:focus-visible {
-    opacity: 0.92;
+    opacity: 0.8;
     outline: none;
   }
   .tab-resize-handle-x {
     top: 10px;
     right: 0;
-    width: 20px;
+    width: 12px;
     height: calc(100% - 20px);
     cursor: ew-resize;
   }
   .tab-resize-handle-x::before {
     width: 2px;
-    height: 44%;
+    height: 30%;
   }
   .tab-resize-handle-y {
     left: 10px;
     bottom: 0;
     width: calc(100% - 20px);
-    height: 20px;
+    height: 12px;
     cursor: ns-resize;
   }
   .tab-resize-handle-y::before {
-    width: 44%;
+    width: 30%;
     height: 2px;
   }
   .tab-chart-area {
@@ -2586,13 +2586,14 @@
   }
   .tab-layout-split {
     border: 0;
-    background: rgba(8, 18, 13, 0.86);
+    background: transparent;
     padding: 0;
     margin: 0;
     position: relative;
     z-index: 16;
     cursor: col-resize;
-    transition: background .14s ease;
+    opacity: 0;
+    transition: opacity .2s ease, background .14s ease;
   }
   .tab-layout-split span {
     position: absolute;
@@ -2600,11 +2601,12 @@
     transform: translate(-50%, -50%);
     display: block;
     border-radius: 999px;
-    background: rgba(245, 196, 184, 0.45);
+    background: rgba(255, 255, 255, 0.15);
   }
   .tab-layout-split:hover,
   .tab-layout-split:focus-visible {
-    background: rgba(232, 150, 125, 0.14);
+    opacity: 0.8;
+    background: rgba(255, 255, 255, 0.04);
     outline: none;
   }
   .tab-layout-split-v {
@@ -2612,7 +2614,7 @@
   }
   .tab-layout-split-v span {
     width: 2px;
-    height: 42px;
+    height: 30%;
   }
   .tab-layout-split-h {
     grid-row: 2;
@@ -2620,7 +2622,7 @@
     cursor: row-resize;
   }
   .tab-layout-split-h span {
-    width: 44px;
+    width: 30%;
     height: 2px;
   }
   .tab-bottom {
