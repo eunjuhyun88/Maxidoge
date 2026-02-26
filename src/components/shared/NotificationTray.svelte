@@ -295,7 +295,7 @@
     background: rgba(255, 255, 255, 0.03);
   }
   .notif-item.unread {
-    background: rgba(255, 230, 0, 0.03);
+    background: rgba(232,150,125, 0.03);
   }
   .notif-item.unread::after {
     content: '';

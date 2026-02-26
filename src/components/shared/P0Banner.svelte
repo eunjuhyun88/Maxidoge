@@ -90,7 +90,7 @@
     font-weight: 900;
     letter-spacing: 2px;
     color: #000;
-    background: #ffe600;
+    background: #E8967D;
     padding: 2px 8px;
     border-radius: 4px;
     border: 2px solid #000;

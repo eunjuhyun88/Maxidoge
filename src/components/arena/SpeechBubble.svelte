@@ -1,6 +1,6 @@
 <script lang="ts">
   export let text = '';
-  export let agentColor = '#ffe600';
+  export let agentColor = '#E8967D';
   export let agentIcon = '';
   export let agentName = '';
   export let dir: 'LONG' | 'SHORT' | 'NEUTRAL' | '' = '';

@@ -135,7 +135,7 @@
   }
   .st-header {
     padding: 12px 16px;
-    background: linear-gradient(90deg, #ffe600, #ffcc00);
+    background: linear-gradient(90deg, #E8967D, #d07a64);
     border-bottom: 4px solid #000;
     display: flex; align-items: center; gap: 8px;
     color: #000;
@@ -160,15 +160,15 @@
   }
   .spd-btn:hover, .tg-btn:hover, .pair-btn:hover, .tf-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
   .spd-btn.active, .tg-btn.active, .pair-btn.active, .tf-btn.active {
-    background: #ffe600; color: #000; border-color: #ffe600;
+    background: #E8967D; color: #000; border-color: #E8967D;
   }
-  .thm-btn.active { background: #ffe600; color: #000; border-color: #ffe600; }
+  .thm-btn.active { background: #E8967D; color: #000; border-color: #E8967D; }
   .thm-btn:disabled { opacity: .3; cursor: not-allowed; }
 
   .st-toggle { display: flex; gap: 4px; }
 
   .api-info { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .api-badge { font-size: 9px; color: #ffe600; font-weight: 700; }
+  .api-badge { font-size: 9px; color: #E8967D; font-weight: 700; }
   .api-status { font-size: 7px; color: #00ff88; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(0,255,136,.1); }
   .api-ep { font-size: 7px; color: #555; font-family: var(--fm); margin: 2px 0; }
 

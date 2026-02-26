@@ -42,7 +42,7 @@
         <div class="lb-list">
           {#each leaderboard as ag, i}
             <div class="lb-row" class:top3={i < 3}>
-              <span class="lb-rank" style="color:{i===0?'#ffe600':i===1?'#ccc':i===2?'#cd7f32':'#555'}">
+              <span class="lb-rank" style="color:{i===0?'#E8967D':i===1?'#ccc':i===2?'#cd7f32':'#555'}">
                 {i < 3 ? ['🥇','🥈','🥉'][i] : `#${i+1}`}
               </span>
               <span class="lb-icon">{ag.icon}</span>
@@ -84,7 +84,7 @@
   }
   .oh {
     padding: 12px 16px;
-    background: linear-gradient(90deg, #ffe600, #ffcc00);
+    background: linear-gradient(90deg, #E8967D, #d07a64);
     border-bottom: 4px solid #000;
     display: flex; align-items: center; gap: 8px;
     color: #000;
@@ -103,7 +103,7 @@
     letter-spacing: 2px; cursor: pointer; transition: all .15s;
   }
   .otab:hover { color: #fff; }
-  .otab.active { color: #ffe600; border-bottom-color: #ffe600; }
+  .otab.active { color: #E8967D; border-bottom-color: #E8967D; }
 
   .ob { padding: 10px; overflow-y: auto; max-height: calc(80vh - 100px); }
 
@@ -115,7 +115,7 @@
     transition: background .15s;
   }
   .lb-row:hover { background: rgba(255,255,255,.05); }
-  .lb-row.top3 { border-color: rgba(255,230,0,.15); }
+  .lb-row.top3 { border-color: rgba(232,150,125,.15); }
   .lb-rank { font-size: 12px; width: 28px; text-align: center; font-weight: 900; }
   .lb-icon { font-size: 18px; }
   .lb-info { flex: 1; }

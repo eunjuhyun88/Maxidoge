@@ -73,7 +73,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
 
     const author = user.nickname;
     const avatar = typeof body?.avatar === 'string' ? body.avatar.trim() : '🐕';
-    const avatarColor = typeof body?.avatarColor === 'string' ? body.avatarColor.trim() : '#ffe600';
+    const avatarColor = typeof body?.avatarColor === 'string' ? body.avatarColor.trim() : '#E8967D';
     const content = typeof body?.body === 'string' ? body.body.trim() : '';
     const signal = typeof body?.signal === 'string' ? body.signal.trim().toLowerCase() : null;
 

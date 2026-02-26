@@ -128,8 +128,8 @@
   type TabletPanelSize = { widthPct: number; heightPct: number };
   const TABLET_LEFT_MIN = 188;
   const TABLET_LEFT_MAX = 360;
-  const TABLET_BOTTOM_MIN = 164;
-  const TABLET_BOTTOM_MAX = 320;
+  const TABLET_BOTTOM_MIN = 200;
+  const TABLET_BOTTOM_MAX = 360;
   const TABLET_SPLIT_STEP = 12;
   let tabletPanelSizes: Record<TabletPanelKey, TabletPanelSize> = {
     left: { widthPct: 100, heightPct: 100 },
@@ -137,7 +137,7 @@
     bottom: { widthPct: 100, heightPct: 100 },
   };
   let tabletLeftWidth = 232;
-  let tabletBottomHeight = 208;
+  let tabletBottomHeight = 260;
   $: tabletLayoutStyle = `--tab-left-width: ${tabletLeftWidth}px; --tab-bottom-height: ${tabletBottomHeight}px;`;
   type TabletSplitResizeAxis = 'x' | 'y';
   type TabletSplitResizeState = {
@@ -204,8 +204,8 @@
   }
 
   function getDefaultTabletBottomHeight() {
-    if (typeof window === 'undefined') return 208;
-    return Math.round(Math.min(230, Math.max(176, window.innerHeight * 0.24)));
+    if (typeof window === 'undefined') return 260;
+    return Math.round(Math.min(280, Math.max(200, window.innerHeight * 0.28)));
   }
 
   function clampTabletLeftWidth(next: number) {
@@ -881,7 +881,7 @@
   };
 
   let chatMessages: ChatMsg[] = [
-    { from: 'SYSTEM', icon: '🤖', color: '#ffe600', text: 'Stockclaw Orchestrator v8 online. 8 agents standing by. Scan first, then ask questions about the results.', time: '—', isUser: false, isSystem: true },
+    { from: 'SYSTEM', icon: '🤖', color: '#E8967D', text: 'Stockclaw Orchestrator v8 online. 8 agents standing by. Scan first, then ask questions about the results.', time: '—', isUser: false, isSystem: true },
     { from: 'ORCHESTRATOR', icon: '🧠', color: '#ff2d9b',
       text: '💡 Try these:\n• "BTC 전망 분석해줘" — I\'ll route to the right agents\n• "차트패턴 찾아봐" — 보이는 구간 패턴을 차트에 바로 표시\n• "@STRUCTURE MA, RSI 분석" — Direct to Structure agent\n• "@DERIV 펀딩 + OI 어때?" — Derivatives analysis\n• "@FLOW 고래 움직임?" — On-chain + whale flow\n• "@SENTI 소셜 센티먼트" — F&G + LunarCrush social\n• "@MACRO DXY, 금리 영향?" — Macro regime check',
       time: '—', isUser: false },
@@ -897,6 +897,7 @@
   const AGENT_META: Record<string, { icon: string; color: string }> = {};
   for (const ag of AGDEFS) AGENT_META[ag.name] = { icon: ag.icon, color: ag.color };
   AGENT_META['ORCHESTRATOR'] = { icon: '🧠', color: '#ff2d9b' };
+  AGENT_META['COMMANDER'] = { icon: '🧠', color: '#ff2d9b' };
 
   function inferSuggestedDirection(text: string): ChatTradeDirection | null {
     const lower = text.toLowerCase();
@@ -935,13 +936,46 @@
     return 'ORCHESTRATOR';
   }
 
-  function buildOfflineAgentReply(userText: string, statusLabel: string): { sender: string; text: string; tradeDir: ChatTradeDirection | null } {
+  type ChatErrorKind = 'network' | 'timeout' | 'llm_unavailable' | 'server_error' | 'unknown';
+
+  function classifyError(statusLabel: string, err?: unknown): ChatErrorKind {
+    const label = statusLabel.toLowerCase();
+    if (err instanceof DOMException && err.name === 'TimeoutError') return 'timeout';
+    if (label === 'network' || label.includes('failed to fetch') || label.includes('networkerror')) return 'network';
+    if (label.startsWith('503') || label.includes('llm') || label.includes('provider')) return 'llm_unavailable';
+    if (label.startsWith('5')) return 'server_error';
+    if (label === 'timeout' || label.includes('timeout') || label.includes('abort')) return 'timeout';
+    return 'unknown';
+  }
+
+  const ERROR_MESSAGES: Record<ChatErrorKind, string> = {
+    network: '네트워크 연결이 끊어졌습니다. Wi-Fi/인터넷 상태를 확인해주세요.',
+    timeout: 'LLM 응답이 20초를 초과했습니다. 서버 부하가 높거나 프롬프트가 길 수 있습니다. 잠시 후 다시 시도해주세요.',
+    llm_unavailable: 'LLM 프로바이더에 연결할 수 없습니다. Settings에서 API 키(Groq/Gemini/DeepSeek)가 설정되어 있는지 확인해주세요.',
+    server_error: '서버 내부 오류가 발생했습니다. 잠시 후 재시도해주세요.',
+    unknown: '알 수 없는 오류가 발생했습니다.',
+  };
+
+  // Chat connection status for UI dot indicator
+  let chatConnectionStatus: 'connected' | 'degraded' | 'disconnected' = 'connected';
+  let lastChatSuccess = 0;
+
+  function buildOfflineAgentReply(userText: string, statusLabel: string, err?: unknown): { sender: string; text: string; tradeDir: ChatTradeDirection | null } {
     const sender = detectMentionedAgentLocal(userText) || inferAgentFromIntentLocal(userText);
     const pair = $gameState.pair || 'BTC/USDT';
     const timeframe = ($gameState.timeframe || '4h').toUpperCase();
+    const errorKind = classifyError(statusLabel, err);
+
+    // Update connection status
+    if (errorKind === 'network' || errorKind === 'llm_unavailable') {
+      chatConnectionStatus = 'disconnected';
+    } else {
+      chatConnectionStatus = 'degraded';
+    }
+
     const scanSummary = latestScan
       ? `최근 스캔: ${latestScan.pair} ${latestScan.timeframe.toUpperCase()} ${String(latestScan.consensus).toUpperCase()} ${Math.round(latestScan.avgConfidence)}%`
-      : '최근 스캔 데이터가 없어 즉시 컨텍스트는 제한됩니다.';
+      : '';
     const tradeDirFromQuestion = inferSuggestedDirection(userText);
     const tradeDirFromScan = latestScan?.consensus === 'long'
       ? 'LONG'
@@ -950,16 +984,17 @@
         : null;
     const tradeDir = tradeDirFromQuestion || tradeDirFromScan;
     const tradeHint = tradeDir
-      ? `\n실행 힌트: ${tradeDir} 관점으로 보고, 필요하면 START ${tradeDir}로 드래그 진입을 시작하세요.`
+      ? `\n💡 ${tradeDir} 관점 참고. START ${tradeDir}로 드래그 진입 가능.`
       : '';
 
     return {
       sender,
       tradeDir,
       text:
-        `서버 채팅 연결이 불안정해 로컬 폴백으로 응답합니다 (${statusLabel}).\n` +
-        `${pair} ${timeframe} 기준으로 우선 판단을 이어갑니다.\n` +
-        `${scanSummary}${tradeHint}`,
+        `⚠️ ${ERROR_MESSAGES[errorKind]}\n` +
+        `${pair} ${timeframe} 기준 로컬 폴백 응답입니다.` +
+        (scanSummary ? `\n${scanSummary}` : '') +
+        tradeHint,
     };
   }
 
@@ -1150,7 +1185,7 @@
     const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     // 유저 메시지 즉시 표시
-    chatMessages = [...chatMessages, { from: 'YOU', icon: '🐕', color: '#ffe600', text, time, isUser: true }];
+    chatMessages = [...chatMessages, { from: 'YOU', icon: '🐕', color: '#E8967D', text, time, isUser: true }];
     isTyping = true;
 
     // 멘션된 에이전트 감지 (없으면 서버에서 ORCHESTRATOR로 기본 처리)
@@ -1191,12 +1226,14 @@
             livePrices: { ...$livePrices },
           },
         }),
-        signal: AbortSignal.timeout(15000), // 15s timeout for LLM responses
+        signal: AbortSignal.timeout(20000), // 20s timeout for LLM responses
       });
 
       isTyping = false;
 
       if (res.ok) {
+        chatConnectionStatus = 'connected';
+        lastChatSuccess = Date.now();
         const data = await res.json();
         if (data.agentResponse) {
           const r = data.agentResponse;
@@ -1256,7 +1293,8 @@
       }
     } catch (err) {
       isTyping = false;
-      const offline = buildOfflineAgentReply(text, 'network');
+      const errorLabel = err instanceof DOMException && err.name === 'TimeoutError' ? 'timeout' : 'network';
+      const offline = buildOfflineAgentReply(text, errorLabel, err);
       const fallbackMeta = AGENT_META[offline.sender] || AGENT_META.ORCHESTRATOR;
       if (offline.tradeDir) {
         chatSuggestedDir = offline.tradeDir;
@@ -1283,9 +1321,46 @@
   }
 
   function handleScanComplete(e: CustomEvent<ScanIntelDetail>) {
-    // 스캔 컨텍스트만 저장 (채팅에 LLM이 참조할 수 있도록)
-    // 스캔 결과를 채팅에 직접 표시하지 않음
     latestScan = e.detail;
+    const d = e.detail;
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // 1) 스캔 시작 시스템 메시지
+    chatMessages = [...chatMessages, {
+      from: 'SYSTEM', icon: '⚡', color: '#E8967D',
+      text: `SCAN COMPLETE — ${d.pair} ${d.timeframe.toUpperCase()} (${d.label})`,
+      time, isUser: false, isSystem: true,
+    }];
+
+    // 2) 각 에이전트 하이라이트를 개별 메시지로
+    for (const h of d.highlights) {
+      const meta = AGENT_META[h.agent] || { icon: '🤖', color: '#888' };
+      const voteEmoji = h.vote === 'long' ? '🟢' : h.vote === 'short' ? '🔴' : '⚪';
+      chatMessages = [...chatMessages, {
+        from: h.agent,
+        icon: meta.icon,
+        color: meta.color,
+        text: `${voteEmoji} ${h.vote.toUpperCase()} ${h.conf}%\n${h.note}`,
+        time, isUser: false,
+      }];
+    }
+
+    // 3) COMMANDER 종합 판정
+    const dirEmoji = d.consensus === 'long' ? '🟢' : d.consensus === 'short' ? '🔴' : '⚪';
+    chatMessages = [...chatMessages, {
+      from: 'COMMANDER',
+      icon: '🧠',
+      color: '#ff2d9b',
+      text: `${dirEmoji} VERDICT: ${d.consensus.toUpperCase()} — Confidence ${d.avgConfidence}%\n${d.summary}`,
+      time, isUser: false,
+    }];
+
+    // 방향 추론 → 트레이드 버튼 활성화
+    if (d.consensus === 'long' || d.consensus === 'short') {
+      chatSuggestedDir = d.consensus === 'long' ? 'LONG' : 'SHORT';
+      chatTradeReady = true;
+    }
   }
 </script>
 
@@ -1389,6 +1464,7 @@
             prioritizeChat
             {chatTradeReady}
             {chatFocusKey}
+            {chatConnectionStatus}
             on:sendchat={handleSendChat}
             on:gototrade={handleIntelGoTrade}
           />
@@ -1532,6 +1608,7 @@
             {latestScan}
             {chatTradeReady}
             {chatFocusKey}
+            {chatConnectionStatus}
             on:sendchat={handleSendChat}
             on:gototrade={handleIntelGoTrade}
           />
@@ -1613,8 +1690,8 @@
     <!-- Left Resizer (drag only, no toggle) -->
     {#if !leftCollapsed}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="resizer resizer-h resizer-left" on:wheel={(e) => resizePanelByWheel('left', e, { force: true })} title="스크롤/드래그로 WAR ROOM 너비 조절">
-        <div class="resizer-drag" on:mousedown={(e) => startDrag('left', e)}></div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="resizer resizer-h resizer-left" on:mousedown={(e) => startDrag('left', e)}>
       </div>
     {:else}
       <div class="resizer-spacer"></div>
@@ -1848,6 +1925,17 @@
     z-index: 1;
   }
 
+  /* Global thin scrollbar for all terminal panels */
+  .terminal-page :global(*::-webkit-scrollbar),
+  .terminal-mobile :global(*::-webkit-scrollbar),
+  .terminal-tablet :global(*::-webkit-scrollbar) { width: 3px; height: 3px; }
+  .terminal-page :global(*::-webkit-scrollbar-thumb),
+  .terminal-mobile :global(*::-webkit-scrollbar-thumb),
+  .terminal-tablet :global(*::-webkit-scrollbar-thumb) { background: rgba(255,255,255,.1); border-radius: 3px; }
+  .terminal-page :global(*::-webkit-scrollbar-track),
+  .terminal-mobile :global(*::-webkit-scrollbar-track),
+  .terminal-tablet :global(*::-webkit-scrollbar-track) { background: transparent; }
+
   /* ═══════════════════════════════════════════
      DESKTOP — Full 5-column grid with resizers
      ═══════════════════════════════════════════ */
@@ -1938,8 +2026,8 @@
     background: transparent;
     padding: 0;
     margin: 0;
-    opacity: 0.42;
-    transition: opacity .12s ease;
+    opacity: 0;
+    transition: opacity .2s ease;
   }
   .desk-resize-handle::before {
     content: '';
@@ -1947,33 +2035,33 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     border-radius: 999px;
-    background: rgba(245, 196, 184, 0.45);
+    background: rgba(232, 150, 125, 0.5);
   }
   .desk-resize-handle:hover,
   .desk-resize-handle:focus-visible {
-    opacity: 0.92;
+    opacity: 0.7;
     outline: none;
   }
   .desk-resize-handle-x {
     top: 12px;
     right: 0;
-    width: 12px;
+    width: 8px;
     height: calc(100% - 24px);
     cursor: ew-resize;
   }
   .desk-resize-handle-x::before {
     width: 2px;
-    height: 46%;
+    height: 36%;
   }
   .desk-resize-handle-y {
     left: 12px;
     bottom: 0;
     width: calc(100% - 24px);
-    height: 12px;
+    height: 8px;
     cursor: ns-resize;
   }
   .desk-resize-handle-y::before {
-    width: 46%;
+    width: 36%;
     height: 2px;
   }
 
@@ -2011,16 +2099,13 @@
   .resizer-left { grid-column: 2; }
   .resizer-right { grid-column: 4; }
   .resizer-h {
-    width: 4px;
-    background: rgba(10, 24, 16, 0.82);
-    border-left: 1px solid rgba(232, 150, 125, 0.1);
-    border-right: 1px solid rgba(232, 150, 125, 0.1);
-    transition: background .15s, border-color .15s;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: col-resize;
+    transition: background .15s;
   }
   .resizer-h:hover {
-    background: rgba(232, 150, 125, 0.1);
-    border-left-color: var(--term-border);
-    border-right-color: var(--term-border);
+    background: rgba(232, 150, 125, 0.15);
   }
   .resizer-spacer {
     width: 1px;
@@ -2268,8 +2353,8 @@
     background: transparent;
     padding: 0;
     margin: 0;
-    opacity: 0.45;
-    transition: opacity .12s ease;
+    opacity: 0;
+    transition: opacity .2s ease;
     touch-action: none;
     user-select: none;
   }
@@ -2279,11 +2364,11 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     border-radius: 999px;
-    background: rgba(245, 196, 184, 0.44);
+    background: rgba(232, 150, 125, 0.5);
   }
   .mob-resize-handle:hover,
   .mob-resize-handle:focus-visible {
-    opacity: 0.95;
+    opacity: 0.7;
     outline: none;
   }
   .mob-resize-handle-x {
@@ -2389,7 +2474,7 @@
      ═══════════════════════════════════════════ */
   .terminal-tablet {
     --tab-left-width: clamp(196px, 23vw, 232px);
-    --tab-bottom-height: clamp(176px, 24vh, 230px);
+    --tab-bottom-height: clamp(200px, 28vh, 280px);
     display: grid;
     grid-template-rows: minmax(0, 1fr) 6px var(--tab-bottom-height) auto;
     height: 100%;
@@ -2456,8 +2541,8 @@
     background: transparent;
     padding: 0;
     margin: 0;
-    opacity: 0.42;
-    transition: opacity .12s ease;
+    opacity: 0;
+    transition: opacity .2s ease;
   }
   .tab-resize-handle::before {
     content: '';
@@ -2465,17 +2550,17 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     border-radius: 999px;
-    background: rgba(245, 196, 184, 0.45);
+    background: rgba(232, 150, 125, 0.5);
   }
   .tab-resize-handle:hover,
   .tab-resize-handle:focus-visible {
-    opacity: 0.92;
+    opacity: 0.7;
     outline: none;
   }
   .tab-resize-handle-x {
     top: 10px;
     right: 0;
-    width: 12px;
+    width: 20px;
     height: calc(100% - 20px);
     cursor: ew-resize;
   }
@@ -2487,7 +2572,7 @@
     left: 10px;
     bottom: 0;
     width: calc(100% - 20px);
-    height: 12px;
+    height: 20px;
     cursor: ns-resize;
   }
   .tab-resize-handle-y::before {
@@ -2680,15 +2765,17 @@
     background: rgba(232, 150, 125, 0.14);
     color: var(--term-accent-soft);
   }
-  .terminal-shell :global(.intel-panel .rp-inner-tabs) {
+  .terminal-shell :global(.intel-panel .feed-chips) {
     border-bottom-color: var(--term-border-soft);
   }
-  .terminal-shell :global(.intel-panel .rp-inner-tab) {
-    color: rgba(240, 237, 228, 0.72);
+  .terminal-shell :global(.intel-panel .feed-chip) {
+    color: rgba(240, 237, 228, 0.52);
+    border-color: var(--term-border-soft);
   }
-  .terminal-shell :global(.intel-panel .rp-inner-tab.active) {
+  .terminal-shell :global(.intel-panel .feed-chip.active) {
     color: var(--term-accent-soft);
-    border-bottom-color: var(--term-accent);
+    border-color: var(--term-accent);
+    background: rgba(232, 150, 125, 0.1);
   }
   .terminal-shell :global(.intel-panel .hl-ticker-badge) {
     color: var(--term-accent-soft);
@@ -2754,7 +2841,7 @@
   .terminal-shell :global(.war-room .ticker-chip),
   .terminal-shell :global(.war-room .scan-tab),
   .terminal-shell :global(.war-room .token-tab),
-  .terminal-shell :global(.intel-panel .rp-inner-tab),
+  .terminal-shell :global(.intel-panel .feed-chip),
   .terminal-shell :global(.intel-panel .ac-trade-btn) {
     font-size: var(--term-font-xs);
     letter-spacing: 0.42px;
@@ -2901,7 +2988,7 @@
   }
   .terminal-mobile :global(.war-room .token-tab),
   .terminal-mobile :global(.intel-panel .rp-tab),
-  .terminal-mobile :global(.intel-panel .rp-inner-tab) {
+  .terminal-mobile :global(.intel-panel .feed-chip) {
     min-height: 38px;
     font-size: 10px;
     letter-spacing: 0.9px;
@@ -3029,8 +3116,8 @@
     min-height: 0;
   }
   .terminal-tablet :global(.intel-panel .ac-section) {
-    flex: 0 0 132px;
-    min-height: 120px;
+    flex: 1 1 0%;
+    min-height: 0;
     max-height: none;
   }
 

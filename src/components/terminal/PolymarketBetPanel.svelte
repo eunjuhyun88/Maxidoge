@@ -312,7 +312,7 @@
   }
   .bet-panel {
     width: 100%; max-width: 420px;
-    background: #111; border-top: 2px solid var(--yel, #ffe600);
+    background: #111; border-top: 2px solid var(--yel, #E8967D);
     border-radius: 16px 16px 0 0;
     padding: 16px; display: flex; flex-direction: column; gap: 12px;
     animation: slideUp .25s ease-out;
@@ -355,7 +355,7 @@
   .bet-field { display: flex; flex-direction: column; gap: 4px; }
   .bet-field label { font: 400 10px/1 var(--fm); color: rgba(255,255,255,.4); text-transform: uppercase; letter-spacing: 1px; }
   .bet-field input {
-    background: rgba(255,255,255,.06); border: 1px solid rgba(255,230,0,.15); border-radius: 6px;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(232,150,125,.15); border-radius: 6px;
     padding: 10px 12px; color: #fff; font: 400 14px/1 var(--fm); outline: none;
   }
   .bet-field input:focus { border-color: var(--yel); }
@@ -363,11 +363,11 @@
 
   .quick-amounts { display: flex; gap: 4px; margin-top: 4px; }
   .qa-btn {
-    flex: 1; padding: 5px; border: 1px solid rgba(255,230,0,.12); border-radius: 4px;
-    background: rgba(255,230,0,.04); color: rgba(255,230,0,.6);
+    flex: 1; padding: 5px; border: 1px solid rgba(232,150,125,.12); border-radius: 4px;
+    background: rgba(232,150,125,.04); color: rgba(232,150,125,.6);
     font: 400 10px/1 var(--fm); cursor: pointer; transition: all .15s;
   }
-  .qa-btn:hover { background: rgba(255,230,0,.1); color: var(--yel); }
+  .qa-btn:hover { background: rgba(232,150,125,.1); color: var(--yel); }
 
   .bet-estimate {
     display: flex; flex-direction: column; gap: 6px;
@@ -398,7 +398,7 @@
   .bet-status.error .status-icon { color: #FF5E7A; }
 
   .status-spinner {
-    width: 28px; height: 28px; border: 2px solid rgba(255,230,0,.2);
+    width: 28px; height: 28px; border: 2px solid rgba(232,150,125,.2);
     border-top-color: var(--yel); border-radius: 50%;
     animation: spin .7s linear infinite;
   }

@@ -350,7 +350,7 @@
 
   /* Hypothesis First Banner */
   .hypo-first-banner {
-    background: linear-gradient(90deg, #ffe600, #ffcc00);
+    background: linear-gradient(90deg, #E8967D, #d07a64);
     color: #000;
     font-family: var(--fm);
     font-size: 7px;
@@ -390,10 +390,10 @@
   }
   .hypo-icon { font-size: 18px; }
   .hypo-title { font-size: 14px; font-weight: 900; font-family: var(--fc); letter-spacing: 3px; }
-  .hypo-pair { font-size: 9px; font-weight: 700; font-family: var(--fd); color: #ffe600; background: #000; padding: 2px 6px; border-radius: 4px; letter-spacing: 1px; }
+  .hypo-pair { font-size: 9px; font-weight: 700; font-family: var(--fd); color: #E8967D; background: #000; padding: 2px 6px; border-radius: 4px; letter-spacing: 1px; }
   .hypo-timer {
     font-size: 16px; font-weight: 900; font-family: var(--fd);
-    background: #ffe600; border: 2px solid #000; border-radius: 8px;
+    background: #E8967D; border: 2px solid #000; border-radius: 8px;
     padding: 2px 10px; min-width: 40px; text-align: center; margin-left: auto;
   }
   .hypo-timer.urgent { background: #ff2d55; color: #fff; animation: timerPulse .5s ease infinite; }
@@ -434,7 +434,7 @@
     background: transparent; transition: background .15s;
   }
   .conf-dot.on { border-color: #000; }
-  .conf-dot.on .dot-fill { background: #ffe600; }
+  .conf-dot.on .dot-fill { background: #E8967D; }
   .conf-dot:hover:not(:disabled) { border-color: #000; transform: scale(1.1); }
   .conf-label {
     font-family: var(--fm); font-size: 8px; font-weight: 900;
@@ -453,7 +453,7 @@
   }
   .tag-chip:disabled { opacity: .5; cursor: not-allowed; }
   .tag-chip.sel {
-    border-color: #000; background: #ffe600; color: #000;
+    border-color: #000; background: #E8967D; color: #000;
     box-shadow: 1px 1px 0 #000;
   }
   .tag-chip:hover:not(:disabled):not(.sel) {
@@ -488,7 +488,7 @@
     background: #fff; cursor: pointer; color: #888;
   }
   .tf-btn:disabled { opacity: .5; cursor: not-allowed; }
-  .tf-btn.sel { border-color: #000; background: #ffe600; color: #000; box-shadow: 1px 1px 0 #000; }
+  .tf-btn.sel { border-color: #000; background: #E8967D; color: #000; box-shadow: 1px 1px 0 #000; }
 
   /* Verdict Mode */
   .vmode-section { margin-bottom: 8px; }
@@ -514,7 +514,7 @@
     font-family: var(--fm); font-size: 9px;
   }
   .level-row.tp { background: rgba(0,255,136,.08); border-bottom: 1px solid #eee; }
-  .level-row.entry { background: rgba(255,230,0,.1); border-bottom: 1px solid #eee; }
+  .level-row.entry { background: rgba(232,150,125,.1); border-bottom: 1px solid #eee; }
   .level-row.sl { background: rgba(255,45,85,.06); }
   .level-label { font-size: 8px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; width: 36px; }
   .level-price { font-size: 11px; font-weight: 900; font-family: var(--fd); }
@@ -523,7 +523,7 @@
   .level-controls { display: flex; align-items: center; gap: 4px; }
   .adj-btn { width: 22px; height: 22px; border: 2px solid #000; border-radius: 6px; background: #fff; cursor: pointer; font-weight: 900; font-size: 12px; display: flex; align-items: center; justify-content: center; }
   .adj-btn:disabled { opacity: .5; cursor: not-allowed; }
-  .adj-btn:hover:not(:disabled) { background: #ffe600; }
+  .adj-btn:hover:not(:disabled) { background: #E8967D; }
   .adj-btn:active:not(:disabled) { transform: scale(.9); }
 
   /* R:R */
