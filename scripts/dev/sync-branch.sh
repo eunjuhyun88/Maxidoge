@@ -22,6 +22,11 @@ fi
 
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
+if [ -x scripts/dev/context-auto.sh ]; then
+	echo "[safe-sync] context auto snapshot (before sync)"
+	bash scripts/dev/context-auto.sh safe-sync-start || true
+fi
+
 echo "[safe-sync] fetching origin"
 git fetch origin --prune
 
@@ -48,6 +53,11 @@ if [ "$RUN_GATE" -eq 1 ]; then
 else
 	echo "[safe-sync] running npm run check"
 	npm run check
+fi
+
+if [ -x scripts/dev/context-auto.sh ]; then
+	echo "[safe-sync] context auto snapshot (after sync)"
+	bash scripts/dev/context-auto.sh safe-sync-end || true
 fi
 
 echo "[safe-sync] done"

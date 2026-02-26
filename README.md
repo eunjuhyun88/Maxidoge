@@ -102,6 +102,7 @@ npm run preview
 - `npm run ctx:compact`: 스냅샷을 핵심 요약본으로 압축
 - `npm run ctx:pin -- --add "<durable fact>"`: 리셋 시 유실되면 안 되는 고정 사실 저장
 - `npm run ctx:restore -- --mode context|files`: 복구(세션 컨텍스트/파일 복구 의도 분리)
+- `npm run ctx:auto -- <stage>`: 자동 저장/컴팩션 오케스트레이션 (hook/safe 스크립트에서 호출)
 
 ### Solo Safety Routine (Recommended)
 
@@ -124,9 +125,24 @@ npm run preview
    ```
 
 참고:
-- pre-push는 기본적으로 `npm run check` + `npm run build`를 자동 실행합니다.
-- post-merge는 pull/merge 직후 `npm run check`를 자동 실행합니다.
+- pre-push는 `ctx:auto(pre-push)` + `npm run check` + `npm run build`를 자동 실행합니다.
+- post-merge는 `npm run check` + `ctx:auto(post-merge)`를 자동 실행합니다.
 - 긴급 상황에서만 `SKIP_PREPUSH=1 git push`로 일시 우회하세요.
+
+### Zero-Command Context Mode (Default)
+
+사용자가 매번 `현재를 저장`, `컴팩션`을 말하지 않아도 자동으로 수행됩니다.
+
+- `npm run safe:status` 실행 시: `ctx:auto(safe-status)`
+- `npm run safe:sync` 실행 시: `ctx:auto(safe-sync-start/end)`
+- `git push` 시(pre-push): `ctx:auto(pre-push)`
+- `git merge/pull` 후(post-merge): `ctx:auto(post-merge)`
+
+자동화 제어 환경 변수:
+
+- `CTX_AUTO_DISABLED=1`: 자동 저장/컴팩션 비활성화
+- `CTX_AUTO_MIN_INTERVAL_SEC=300`: stage별 최소 실행 간격(스냅샷 과다 생성 방지)
+- `CTX_AUTO_STRICT=1`: 자동화 실패 시 호출 명령도 실패 처리
 
 ### Context Compaction Routine (Token/Cost Control)
 

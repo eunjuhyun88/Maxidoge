@@ -8,8 +8,9 @@ This file defines mandatory execution rules for all coding agents in this reposi
 3. Confirm current branch/worktree and detect overlapping edits before making changes.
 4. Run `npm run safe:status` and include the result in the start log.
 5. Reserve a unique work ID using `W-YYYYMMDD-HHMM-<repo>-<agent>`.
-6. Save an initial context snapshot:
-   - `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`
+6. Context snapshot is auto-triggered by `safe:status` (`ctx:auto` hook).
+   - If automation is disabled, run manually:
+     - `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`
 
 ## Mandatory Branch/Sync Policy
 1. Implement only on `codex/*` branches. Direct development on `main` is prohibited.
@@ -23,9 +24,13 @@ This file defines mandatory execution rules for all coding agents in this reposi
 3. If either command fails, stop push/merge and fix errors first.
 
 ## Mandatory Context Budgeting (Multi-Agent)
-1. Before handoff/push, save snapshot:
+1. Automatic context save/compact runs at:
+   - `safe:status`
+   - `safe:sync` (start/end)
+   - `pre-push`
+   - `post-merge`
+2. Manual fallback (when automation disabled/fails):
    - `npm run ctx:save -- --title "<handoff>" --work-id "<W-ID>" --agent "<agent>"`
-2. Compact before PR/push:
    - `npm run ctx:compact`
 3. Restore command must always disambiguate mode:
    - `npm run ctx:restore -- --mode context`
@@ -40,8 +45,8 @@ This file defines mandatory execution rules for all coding agents in this reposi
    - Commit hash
    - Push status
    - Final working tree status
-3. Run final context compaction for next agent handoff:
-   - `npm run ctx:compact`
+3. Confirm context compaction exists for handoff (`.agent-context/compact/*-latest.md`).
+   - If missing, run `npm run ctx:compact`.
 4. If this task is merged into `main`, run `npm run check` and `npm run build` again on `main`.
 5. If this task is merged into `main`, append an integration summary in `/Users/ej/Downloads/maxi-doge-unified/docs/AGENT_WATCH_LOG.md`:
    - What changed (summary)

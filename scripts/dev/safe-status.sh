@@ -31,3 +31,9 @@ if git diff --quiet && git diff --cached --quiet; then
 else
 	git status --short
 fi
+
+if [ -x scripts/dev/context-auto.sh ]; then
+	echo ""
+	echo "[ctx:auto] safe-status trigger"
+	bash scripts/dev/context-auto.sh safe-status || true
+fi
