@@ -103,42 +103,50 @@
 {/if}
 
 <div class="deriv-strip">
-  <div class="deriv-row">
-    <div class="deriv-cell">
-      <span class="deriv-lbl">OI</span>
-      <span class="deriv-val" class:loading={derivLoading}>
-        {derivOI != null ? formatOI(derivOI) : '—'}
-      </span>
+  {#if derivLoading}
+    <div class="deriv-skeleton">
+      <div class="deriv-skel-bar"></div>
+      <div class="deriv-skel-bar short"></div>
     </div>
-    <div class="deriv-cell">
-      <span class="deriv-lbl">FUNDING</span>
-      <span class="deriv-val" class:pos={derivFunding != null && derivFunding > 0} class:neg={derivFunding != null && derivFunding < 0}>
-        {derivFunding != null ? formatFunding(derivFunding) : '—'}
-      </span>
+  {:else}
+    <div class="deriv-primary">
+      <div class="deriv-cell-lg">
+        <span class="deriv-lbl">OI</span>
+        <span class="deriv-val-lg">
+          {derivOI != null ? formatOI(derivOI) : '—'}
+        </span>
+      </div>
+      <div class="deriv-cell-lg">
+        <span class="deriv-lbl">FUNDING</span>
+        <span class="deriv-val-lg" class:pos={derivFunding != null && derivFunding > 0} class:neg={derivFunding != null && derivFunding < 0}>
+          {#if derivFunding != null}<span class="deriv-arrow">{derivFunding > 0 ? '▲' : derivFunding < 0 ? '▼' : ''}</span>{/if}
+          {derivFunding != null ? formatFunding(derivFunding) : '—'}
+        </span>
+      </div>
     </div>
-    <div class="deriv-cell">
-      <span class="deriv-lbl">PRED</span>
-      <span class="deriv-val" class:pos={derivPredFunding != null && derivPredFunding > 0} class:neg={derivPredFunding != null && derivPredFunding < 0}>
-        {derivPredFunding != null ? formatFunding(derivPredFunding) : '—'}
-      </span>
+    <div class="deriv-secondary">
+      <div class="deriv-cell-sm">
+        <span class="deriv-lbl-sm">PRED</span>
+        <span class="deriv-val-sm" class:pos={derivPredFunding != null && derivPredFunding > 0} class:neg={derivPredFunding != null && derivPredFunding < 0}>
+          {derivPredFunding != null ? formatFunding(derivPredFunding) : '—'}
+        </span>
+      </div>
+      <div class="deriv-cell-sm">
+        <span class="deriv-lbl-sm">L/S</span>
+        <span class="deriv-val-sm" class:pos={derivLSRatio != null && derivLSRatio > 1} class:neg={derivLSRatio != null && derivLSRatio < 1}>
+          {derivLSRatio != null ? Number(derivLSRatio).toFixed(2) : '—'}
+        </span>
+      </div>
+      <div class="deriv-cell-sm">
+        <span class="deriv-lbl-sm">LIQ ▲</span>
+        <span class="deriv-val-sm long-liq">{derivLiqLong > 0 ? formatOI(derivLiqLong) : '—'}</span>
+      </div>
+      <div class="deriv-cell-sm">
+        <span class="deriv-lbl-sm">LIQ ▼</span>
+        <span class="deriv-val-sm short-liq">{derivLiqShort > 0 ? formatOI(derivLiqShort) : '—'}</span>
+      </div>
     </div>
-  </div>
-  <div class="deriv-row">
-    <div class="deriv-cell">
-      <span class="deriv-lbl">L/S</span>
-      <span class="deriv-val" class:pos={derivLSRatio != null && derivLSRatio > 1} class:neg={derivLSRatio != null && derivLSRatio < 1}>
-        {derivLSRatio != null ? Number(derivLSRatio).toFixed(2) : '—'}
-      </span>
-    </div>
-    <div class="deriv-cell">
-      <span class="deriv-lbl">LIQ ▲</span>
-      <span class="deriv-val long-liq">{derivLiqLong > 0 ? formatOI(derivLiqLong) : '—'}</span>
-    </div>
-    <div class="deriv-cell">
-      <span class="deriv-lbl">LIQ ▼</span>
-      <span class="deriv-val short-liq">{derivLiqShort > 0 ? formatOI(derivLiqShort) : '—'}</span>
-    </div>
-  </div>
+  {/if}
 </div>
 
 {#if scanRunning || scanStep || scanError}
