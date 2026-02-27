@@ -620,7 +620,7 @@
           <div class="ap-grid">
             {#each AVATAR_OPTIONS as opt}
               <button class="ap-opt" class:selected={profile.avatar === opt} on:click={() => pickAvatar(opt)}>
-                <img src={opt} alt="avatar option" />
+                <img src={opt} alt="avatar option" loading="lazy" />
               </button>
             {/each}
           </div>
@@ -1093,7 +1093,7 @@
                     <div class="agent-perf-card" style="border-left-color:{ag.color}">
                       <div class="apc-head">
                         {#if ag.img?.def}
-                          <img src={ag.img.def} alt={ag.name} class="apc-img" />
+                          <img src={ag.img.def} alt={ag.name} class="apc-img" loading="lazy" />
                         {:else}
                           <span class="apc-icon">{ag.icon}</span>
                         {/if}

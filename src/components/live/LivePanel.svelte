@@ -187,7 +187,7 @@
                 {#each (match.agentVotes || []).slice(0, 5) as vote}
                   {@const ag = AGDEFS.find(a => a.id === vote.agentId)}
                   {#if ag?.img?.def}
-                    <img src={ag.img.def} alt={vote.name} class="sc-agent-img" title="{vote.name}: {vote.dir}" />
+                    <img src={ag.img.def} alt={vote.name} class="sc-agent-img" title="{vote.name}: {vote.dir}" loading="lazy" />
                   {:else}
                     <span class="sc-agent-icon" style="color:{vote.color}" title="{vote.name}: {vote.dir}">{ag?.icon || '🤖'}</span>
                   {/if}

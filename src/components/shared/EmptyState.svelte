@@ -38,7 +38,7 @@
     {#if icon}
       <div class="empty-icon">{icon}</div>
     {/if}
-    <img src={image} alt="" class="empty-img" />
+    <img src={image} alt="" class="empty-img" loading="lazy" />
     <div class="empty-img-glow"></div>
   </div>
 
