@@ -27,78 +27,8 @@
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket } from '$lib/api/arenaApi';
   import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
-  import type { DraftSelection, OrpoOutput, CtxBelief, CtxAgentId, CtxFlag, GuardianCheck, CommanderVerdict } from '$lib/engine/types';
-
-  // ── C02 Mapping: AnalyzeResponse → gameState C02 fields ──
-  const OFFENSE_IDS = ['STRUCTURE', 'VPA', 'ICT'];
-  const CTX_MAP: Record<string, CtxAgentId> = { DERIV: 'DERIV', FLOW: 'FLOW', SENTI: 'SENTI', MACRO: 'MACRO' };
-
-  function mapAnalysisToC02(res: AnalyzeResponse) {
-    const offenseAgents = res.agentOutputs.filter(a => OFFENSE_IDS.includes(a.agentId));
-    const ctxAgents = res.agentOutputs.filter(a => a.agentId in CTX_MAP);
-
-    // ORPO: combine offense agents
-    const weights: Record<string, number> = { STRUCTURE: 0.40, VPA: 0.35, ICT: 0.25 };
-    let longScore = 0, shortScore = 0, totalConf = 0, totalW = 0;
-    for (const a of offenseAgents) {
-      const w = weights[a.agentId] ?? 0.33;
-      totalW += w;
-      totalConf += a.confidence * w;
-      if (a.direction === 'LONG') longScore += w * a.confidence;
-      else if (a.direction === 'SHORT') shortScore += w * a.confidence;
-    }
-    const spread = Math.abs(longScore - shortScore);
-    const orpoDir: Direction = spread < 5 ? 'NEUTRAL' : longScore > shortScore ? 'LONG' : 'SHORT';
-
-    const orpo: OrpoOutput = {
-      direction: orpoDir,
-      confidence: totalW > 0 ? Math.round(totalConf / totalW) : 50,
-      pattern: res.prediction.reasonTags?.[0] ?? 'NO_DOMINANT',
-      keyLevels: { support: res.entryPrice * 0.985, resistance: res.entryPrice * 1.015 },
-      factors: [],
-      thesis: `ORPO: ${orpoDir} ${totalW > 0 ? Math.round(totalConf / totalW) : 50}% [${offenseAgents.map(a => `${a.agentId}:${a.direction}`).join('|')}]`,
-    };
-
-    // CTX: map each defense/context agent
-    const ctx: CtxBelief[] = ctxAgents.map(a => {
-      const ctxId = CTX_MAP[a.agentId];
-      let flag: CtxFlag;
-      if (a.confidence < 55 || a.direction === 'NEUTRAL') flag = 'NEUTRAL';
-      else if (a.direction === 'LONG') flag = 'GREEN';
-      else flag = 'RED';
-      return { agentId: ctxId, flag, confidence: a.confidence, headline: a.thesis, factors: [] };
-    });
-
-    // Guardian: simplified (no raw factors from API)
-    const guardian: GuardianCheck = {
-      passed: res.meta.dataCompleteness >= 0.3,
-      violations: res.meta.dataCompleteness < 0.3
-        ? [{ rule: 'DATA_DOWN', detail: `Data completeness ${(res.meta.dataCompleteness * 100).toFixed(0)}%`, severity: 'BLOCK' as const }]
-        : [],
-      halt: res.meta.dataCompleteness < 0.3,
-    };
-
-    // Commander: check for ORPO vs CTX conflict
-    const greenCount = ctx.filter(c => c.flag === 'GREEN').length;
-    const redCount = ctx.filter(c => c.flag === 'RED').length;
-    const ctxConsensus: Direction = greenCount > redCount ? 'LONG' : redCount > greenCount ? 'SHORT' : 'NEUTRAL';
-    const hasConflict = orpoDir !== 'NEUTRAL' && ctxConsensus !== 'NEUTRAL' && orpoDir !== ctxConsensus;
-
-    let commander: CommanderVerdict | null = null;
-    if (guardian.halt) {
-      commander = { finalDirection: 'NEUTRAL', entryScore: 0, reasoning: 'Guardian HALT — blocking entry.', conflictResolved: false, cost: 0 };
-    } else if (hasConflict) {
-      const strongDissenters = ctx.filter(c => c.confidence >= 70 && ((c.flag === 'RED' && orpoDir === 'LONG') || (c.flag === 'GREEN' && orpoDir === 'SHORT')));
-      if (strongDissenters.length >= 3) {
-        commander = { finalDirection: ctxConsensus, entryScore: Math.max(0, orpo.confidence - strongDissenters.length * 10), reasoning: `CTX override: ${strongDissenters.length}/4 disagree.`, conflictResolved: true, cost: 0 };
-      } else {
-        commander = { finalDirection: orpoDir, entryScore: Math.max(0, orpo.confidence - strongDissenters.length * 10), reasoning: `ORPO maintained with conflict penalty.`, conflictResolved: true, cost: 0 };
-      }
-    }
-
-    // Update gameState with C02 results
-    gameState.update(s => ({ ...s, orpoOutput: orpo, ctxBeliefs: ctx, guardianCheck: guardian, commanderVerdict: commander }));
-  }
+  import type { DraftSelection } from '$lib/engine/types';
+  import { mapAnalysisToC02, buildChartAnnotations, buildAgentMarkers } from '../../components/arena/arenaState';
 
   $: walletOk = $isWalletConnected;
 
@@ -335,96 +265,11 @@
   }> = [];
 
   function generateAnnotations() {
-    const anns: typeof chartAnnotations = [];
-    const agents = activeAgents;
-
-    // STRUCTURE agent → OB zone
-    const structAg = agents.find(a => a.id === 'structure');
-    if (structAg) {
-      anns.push({
-        id: 'ob-zone', icon: '⚡', name: 'STRUCTURE', color: structAg.color,
-        label: structAg.finding.title,
-        detail: structAg.finding.detail,
-        yPercent: 25 + Math.random() * 15,
-        xPercent: 60 + Math.random() * 20,
-        type: 'ob'
-      });
-    }
-
-    // DERIV agent → Funding rate
-    const derivAg = agents.find(a => a.id === 'deriv');
-    if (derivAg) {
-      anns.push({
-        id: 'funding-zone', icon: '📊', name: 'DERIV', color: derivAg.color,
-        label: derivAg.finding.title,
-        detail: derivAg.finding.detail,
-        yPercent: 15 + Math.random() * 10,
-        xPercent: 75 + Math.random() * 15,
-        type: 'funding'
-      });
-    }
-
-    // FLOW agent → Whale deposit
-    const flowAg = agents.find(a => a.id === 'flow');
-    if (flowAg) {
-      anns.push({
-        id: 'whale-zone', icon: '💰', name: 'FLOW', color: flowAg.color,
-        label: flowAg.finding.title,
-        detail: flowAg.finding.detail,
-        yPercent: 40 + Math.random() * 15,
-        xPercent: 45 + Math.random() * 20,
-        type: 'whale'
-      });
-    }
-
-    // SENTI agent → Social signal
-    const sentiAg = agents.find(a => a.id === 'senti');
-    if (sentiAg) {
-      anns.push({
-        id: 'senti-zone', icon: '💜', name: 'SENTI', color: sentiAg.color,
-        label: sentiAg.finding.title,
-        detail: sentiAg.finding.detail,
-        yPercent: 55 + Math.random() * 15,
-        xPercent: 55 + Math.random() * 25,
-        type: 'signal'
-      });
-    }
-
-    // MACRO agent → Regime zone
-    const macroAg = agents.find(a => a.id === 'macro');
-    if (macroAg) {
-      anns.push({
-        id: 'macro-zone', icon: '🌍', name: 'MACRO', color: macroAg.color,
-        label: macroAg.finding.title,
-        detail: macroAg.finding.detail,
-        yPercent: 70 + Math.random() * 10,
-        xPercent: 30 + Math.random() * 15,
-        type: 'signal'
-      });
-    }
-
-    chartAnnotations = anns;
+    chartAnnotations = buildChartAnnotations(activeAgents);
   }
 
   function generateAgentMarkers() {
-    // Generate LWC markers from active agents' signals
-    const now = Math.floor(Date.now() / 1000);
-    const markers: typeof chartAgentMarkers = [];
-
-    activeAgents.forEach((ag, i) => {
-      const isLong = ag.dir === 'LONG';
-      markers.push({
-        time: now - (activeAgents.length - i) * 3600, // spread across recent candles
-        position: isLong ? 'belowBar' : 'aboveBar',
-        color: ag.color,
-        shape: isLong ? 'arrowUp' : 'arrowDown',
-        text: `${ag.icon} ${ag.name}`
-      });
-    });
-
-    // Sort by time (required by LWC)
-    markers.sort((a, b) => a.time - b.time);
-    chartAgentMarkers = markers;
+    chartAgentMarkers = buildAgentMarkers(activeAgents);
   }
 
   function initAgentStates() {
@@ -712,7 +557,8 @@
       runArenaAnalysis(serverMatchId)
         .then(res => {
           serverAnalysis = res;
-          mapAnalysisToC02(res);
+          const c02 = mapAnalysisToC02(res);
+          gameState.update(s => ({ ...s, orpoOutput: c02.orpo, ctxBeliefs: c02.ctx, guardianCheck: c02.guardian, commanderVerdict: c02.commander }));
           console.log('[Arena] Server analysis → C02 mapped:', res.meta);
         })
         .catch(err => {
