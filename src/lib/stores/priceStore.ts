@@ -189,14 +189,6 @@ export function updatePriceFull(symbol: string, entry: PriceEntry) {
   });
 }
 
-/**
- * @deprecated S-03 계약에서 랜덤 지터를 제거했다.
- * 레거시 호출 호환을 위해 no-op으로 유지한다.
- */
-export function simulatePriceJitter() {
-  return;
-}
-
 // ─── Helpers ─────────────────────────────────────────────────
 
 /** 단일 심볼 구독용 selector (Header/Chart/Terminal 공통 소비용) */
