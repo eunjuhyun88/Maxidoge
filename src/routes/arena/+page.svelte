@@ -559,7 +559,6 @@
           serverAnalysis = res;
           const c02 = mapAnalysisToC02(res);
           gameState.update(s => ({ ...s, orpoOutput: c02.orpo, ctxBeliefs: c02.ctx, guardianCheck: c02.guardian, commanderVerdict: c02.commander }));
-          console.log('[Arena] Server analysis → C02 mapped:', res.meta);
         })
         .catch(err => {
           console.warn('[Arena] Server analysis failed:', err);
@@ -995,9 +994,6 @@
     if (serverMatchId) {
       const exitP = state.prices.BTC;
       resolveArenaMatch(serverMatchId, exitP)
-        .then(res => {
-          console.log('[Arena] Match resolved on server:', res.result);
-        })
         .catch(err => console.warn('[Arena] Resolve sync failed:', err));
     }
 
