@@ -62,7 +62,7 @@ const defaultWallet: WalletState = {
   address: null,
   shortAddr: null,
   balance: 0,
-  chain: 'ARB',
+  chain: 'BASE',
   provider: null,
   phase: 0,
   hasSeenDemo: false,
@@ -238,7 +238,7 @@ export function completeDemoView() {
 }
 
 // Wallet connection (now first step before email)
-export function connectWallet(provider: string = 'metamask', addressOverride?: string, chain: string = 'ARB') {
+export function connectWallet(provider: string = 'metamask', addressOverride?: string, chain: string = 'BASE') {
   const connection = createSimulatedWalletConnection(provider, addressOverride, chain);
 
   walletStore.update(w => ({

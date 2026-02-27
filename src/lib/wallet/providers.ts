@@ -123,8 +123,8 @@ function getPreferredChainId(): number {
   const raw = PUBLIC_EVM_CHAIN_ID
     || import.meta.env.VITE_EVM_CHAIN_ID
     || '';
-  const value = raw ? Number(raw) : 42161;
-  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 42161;
+  const value = raw ? Number(raw) : 8453;
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 8453;
 }
 
 function getPreferredRpcUrl(chainId: number): string {
@@ -133,9 +133,9 @@ function getPreferredRpcUrl(chainId: number): string {
     || '';
   if (envUrl) return envUrl;
 
+  if (chainId === 8453) return 'https://base-mainnet.g.alchemy.com/v2/F-WLNSBCJJ5xTefhTssUx';
   if (chainId === 42161) return 'https://arb1.arbitrum.io/rpc';
   if (chainId === 137) return 'https://polygon-rpc.com';
-  if (chainId === 8453) return 'https://mainnet.base.org';
   return 'https://cloudflare-eth.com';
 }
 
@@ -176,7 +176,7 @@ async function getWalletConnectProvider(): Promise<Eip1193Provider> {
     projectId,
     showQrModal: true,
     chains: [chainId],
-    optionalChains: [1, 10, 56, 137, 8453, 42161],
+    optionalChains: [1, 10, 56, 137, 42161],
     methods: ['eth_requestAccounts', 'personal_sign'],
   });
 
@@ -190,8 +190,7 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mod: any;
   try {
-    const moduleName = '@coinbase/wallet-sdk';
-    mod = await import(/* @vite-ignore */ moduleName);
+    mod = await import('@coinbase/wallet-sdk');
   } catch {
     throw new Error('Coinbase Wallet SDK is not installed. Add @coinbase/wallet-sdk.');
   }
@@ -205,18 +204,20 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
   if (typeof CoinbaseWalletSDK === 'function') {
     const sdk = new CoinbaseWalletSDK({
       appName: 'Stockclaw',
+      appChainIds: [chainId],
     });
     provider = typeof sdk?.makeWeb3Provider === 'function'
-      ? sdk.makeWeb3Provider(rpcUrl, chainId)
+      ? sdk.makeWeb3Provider({ options: 'smartWalletOnly' })
       : typeof sdk?.getProvider === 'function'
         ? sdk.getProvider()
         : null;
   } else if (typeof mod?.createCoinbaseWalletSDK === 'function') {
     const sdk = mod.createCoinbaseWalletSDK({
       appName: 'Stockclaw',
+      appChainIds: [chainId],
     });
     provider = typeof sdk?.makeWeb3Provider === 'function'
-      ? sdk.makeWeb3Provider(rpcUrl, chainId)
+      ? sdk.makeWeb3Provider({ options: 'smartWalletOnly' })
       : typeof sdk?.getProvider === 'function'
         ? sdk.getProvider()
         : null;

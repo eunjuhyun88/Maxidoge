@@ -1,10 +1,76 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Chain Switching (Polygon + Arbitrum)
+// STOCKCLAW — Chain Switching (Base + Polygon + Arbitrum)
 // ═══════════════════════════════════════════════════════════════
 // Ensures the user's wallet is on the correct chain before
-// executing transactions. Polygon for Polymarket, Arbitrum for GMX.
+// executing transactions. Base (primary), Polygon for Polymarket, Arbitrum for GMX.
 
 import { resolveEvmProvider, type WalletProviderKey } from './providers';
+
+// ═══ Base (Primary Chain) ═════════════════════════════════════
+
+const BASE_CHAIN_ID = '0x2105'; // 8453 in hex
+const BASE_CHAIN_CONFIG = {
+  chainId: BASE_CHAIN_ID,
+  chainName: 'Base',
+  nativeCurrency: {
+    name: 'Ether',
+    symbol: 'ETH',
+    decimals: 18,
+  },
+  rpcUrls: [
+    'https://base-mainnet.g.alchemy.com/v2/F-WLNSBCJJ5xTefhTssUx',
+    'https://mainnet.base.org',
+  ],
+  blockExplorerUrls: ['https://basescan.org'],
+};
+
+/**
+ * Ensure the user's wallet is connected to Base.
+ *
+ * @param providerKey Which wallet to use
+ * @returns true if successfully on Base, false if user rejected
+ */
+export async function ensureBaseChain(providerKey: WalletProviderKey): Promise<boolean> {
+  const provider = await resolveEvmProvider(providerKey);
+  if (!provider) return false;
+
+  try {
+    const currentChainId = await provider.request({ method: 'eth_chainId' }) as string;
+    if (currentChainId?.toLowerCase() === BASE_CHAIN_ID) {
+      return true; // Already on Base
+    }
+
+    await provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: BASE_CHAIN_ID }],
+    });
+    return true;
+  } catch (switchError: any) {
+    if (switchError?.code === 4902) {
+      try {
+        await provider.request({
+          method: 'wallet_addEthereumChain',
+          params: [BASE_CHAIN_CONFIG],
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    if (switchError?.code === 4001) return false;
+    return false;
+  }
+}
+
+/**
+ * Check if the wallet is currently on Base.
+ */
+export async function isOnBase(providerKey: WalletProviderKey): Promise<boolean> {
+  const chainId = await getCurrentChainId(providerKey);
+  return chainId === 8453;
+}
+
+// ═══ Polygon (for Polymarket) ═════════════════════════════════
 
 const POLYGON_CHAIN_ID = '0x89'; // 137 in hex
 const POLYGON_CHAIN_CONFIG = {
