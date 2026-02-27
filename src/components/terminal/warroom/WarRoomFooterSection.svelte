@@ -31,5 +31,5 @@
   <div class="stat-cell"><div class="stat-lbl">SIG</div><div class="stat-val" style="color:var(--yel)">{signalPoolLength}</div></div>
   <div class="stat-cell"><div class="stat-lbl">CONF</div><div class="stat-val" style="color:var(--grn)">{avgConfidence}%</div></div>
   <div class="stat-cell"><div class="stat-lbl">R:R</div><div class="stat-val" style="color:var(--ora)">1:{avgRR.toFixed(1)}</div></div>
-  <div class="stat-cell"><div class="stat-lbl">DIR</div><div class="stat-val" style="color:var(--pk)">{consensusDir}</div></div>
+  <div class="stat-cell"><div class="stat-lbl">DIR</div><div class="stat-val" style="color:{consensusDir === 'LONG' ? 'var(--grn)' : consensusDir === 'SHORT' ? '#ff4466' : 'var(--pk)'}">{consensusDir === 'LONG' ? '▲' : consensusDir === 'SHORT' ? '▼' : '◆'} {consensusDir}</div></div>
 </div>

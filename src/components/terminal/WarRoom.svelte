@@ -44,6 +44,7 @@
     collapse: void;
     tracked: { dir: AgentSignal['vote']; pair: string };
     quicktrade: { dir: 'LONG' | 'SHORT'; pair: string; price: number };
+    scanstart: void;
     scancomplete: ScanCompleteDetail;
   };
 
@@ -52,6 +53,7 @@
   const SCAN_STATE_STORAGE_KEY = STORAGE_KEYS.warRoomScan;
   const MAX_SCAN_TABS = 6;
   const MAX_SIGNALS_PER_TAB = 60;
+  const AUTO_SCAN_STALE_MS = 5 * 60_000; // 5분 이상이면 stale → 자동 재스캔
 
   let activeToken: TokenFilter = $state('ALL');
   let selectedIds: Set<string> = $state(new Set());
@@ -412,6 +414,7 @@
     scanQueued = false;
     scanError = '';
     scanStep = 'ANALYSIS · loading market data';
+    dispatch('scanstart');
 
     const pair = currentPair || 'BTC/USDT';
     const timeframe = String(currentTF || '4h');
@@ -620,6 +623,14 @@
       })
       .catch(() => {
         // Server history unavailable — localStorage fallback already active
+      })
+      .finally(() => {
+        // C1: Auto-Scan on Entry — 스캔이 없거나 5분 이상 stale이면 자동 실행
+        const latestTab = scanTabs[0];
+        const isStale = !latestTab || (Date.now() - latestTab.createdAt > AUTO_SCAN_STALE_MS);
+        if (isStale && !scanRunning) {
+          void runAgentScan();
+        }
       });
   });
 
