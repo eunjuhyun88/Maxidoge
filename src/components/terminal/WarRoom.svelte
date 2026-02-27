@@ -615,7 +615,6 @@
         if (res.records.length > 0) {
           scanTabs = mergeServerTabs(scanTabs, res.records);
           serverScanSynced = true;
-          console.log(`[WarRoom] Merged ${res.records.length} server scan records`);
         }
       })
       .catch(() => {

@@ -287,7 +287,6 @@ export const alertEngine = {
       document.addEventListener('visibilitychange', _visibilityHandler);
     }
 
-    console.log(`[AlertEngine] Started (interval: ~${_intervalMs / 1000}s, initDelay: ${(initDelay / 1000).toFixed(0)}s)`);
   },
 
   /** Stop background monitoring. */
@@ -299,7 +298,6 @@ export const alertEngine = {
       document.removeEventListener('visibilitychange', _visibilityHandler);
       _visibilityHandler = null;
     }
-    console.log('[AlertEngine] Stopped');
   },
 
   /** Force an immediate scan cycle. */
