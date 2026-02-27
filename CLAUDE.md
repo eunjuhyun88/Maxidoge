@@ -222,6 +222,6 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - [x] B-09: Terminal Scan endpoints
 - [x] B-10: Chat API + scan-context
 - [x] B-11: Market data APIs + server modules
-- [ ] B-05: Data source provider abstraction (in progress)
+- [x] B-05: Data source provider abstraction (providers/, cache, registry, 14+ sources)
 - [x] B-01: Arena API scaffolding + community bridge (Phase 1+2)
-- [ ] B-04: exitOptimizer implementation
+- [x] B-04: exitOptimizer implementation (617 lines, 3 risk profiles, ATR/Fib/Kelly)
