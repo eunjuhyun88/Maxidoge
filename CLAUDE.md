@@ -62,7 +62,14 @@ src/
 |--------|------|---------|
 | factorEngine | `src/lib/engine/factorEngine.ts` | 48-factor scoring engine |
 | agentPipeline | `src/lib/engine/agentPipeline.ts` | Multi-agent prediction pipeline |
-| gameLoop | `src/lib/engine/gameLoop.ts` | Arena game state machine |
+| gameLoop | `src/lib/engine/gameLoop.ts` | Arena game state machine (client UI) |
+| arenaMatchStateMachine | `src/lib/server/arenaMatchStateMachine.ts` | Server-authoritative phase transitions |
+| agentPersonaService | `src/lib/server/agentPersonaService.ts` | 8 agent personas + Emergency Meeting LLM |
+| ragMemoryService | `src/lib/server/ragMemoryService.ts` | RAG match memory store/search |
+| pvpMatchingService | `src/lib/server/pvpMatchingService.ts` | PvP async queue + tier matching |
+| liveConnectionManager | `src/lib/server/liveConnectionManager.ts` | SSE LIVE spectator streaming |
+| arenaSignalBridge | `src/lib/server/arenaSignalBridge.ts` | Arena→Signal→Follow→CopyTrade bridge |
+| arenaService | `src/lib/server/arenaService.ts` | Match CRUD + scoring + decision windows |
 | marketSnapshotService | `src/lib/server/marketSnapshotService.ts` | Aggregated market data |
 | scanService | `src/lib/services/scanService.ts` | Terminal scan orchestration |
 | llmConfig | `src/lib/server/llmConfig.ts` | LLM provider config (Groq/Gemini/DeepSeek) |
@@ -74,6 +81,11 @@ All API routes follow SvelteKit conventions: `src/routes/api/[group]/+server.ts`
 - Terminal: `/api/terminal/scan`, `/api/terminal/scan/[id]`
 - Chat: `/api/chat`
 - Auth: `/api/auth/*`
+- Arena (core): `/api/arena/{match,draft,analyze,hypothesis,resolve}`
+- Arena (game): `/api/arena/match/[id]/{phase,decision,emergency-meeting,memory,publish}`
+- Arena (social): `/api/arena/{memories,challenge,pvp/queue}`
+- Arena (LIVE): `/api/arena/live/{session,sessions,stream/[sessionId],react}`
+- Social: `/api/social/{follow,feed,profile/[userId]}`
 
 ## Environment Variables
 See `.env.example` for all required keys:
@@ -211,5 +223,5 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - [x] B-10: Chat API + scan-context
 - [x] B-11: Market data APIs + server modules
 - [ ] B-05: Data source provider abstraction (in progress)
-- [ ] B-01: Arena API scaffolding
+- [x] B-01: Arena API scaffolding + community bridge (Phase 1+2)
 - [ ] B-04: exitOptimizer implementation
