@@ -1,5 +1,6 @@
 <script lang="ts">
   import { type AgentSignal } from '$lib/data/warroom';
+  import { STORAGE_KEYS } from '$lib/stores/storageKeys';
   import { gameState, setView } from '$lib/stores/gameState';
   import { openQuickTrade } from '$lib/stores/quickTradeStore';
   import { trackSignal as trackSignalStore, activeSignalCount } from '$lib/stores/trackedSignalStore';
@@ -48,7 +49,7 @@
 
   const dispatch = createEventDispatcher<WarRoomEvents>();
 
-  const SCAN_STATE_STORAGE_KEY = 'stockclaw.warroom.scanstate.v1';
+  const SCAN_STATE_STORAGE_KEY = STORAGE_KEYS.warRoomScan;
   const MAX_SCAN_TABS = 6;
   const MAX_SIGNALS_PER_TAB = 60;
 
