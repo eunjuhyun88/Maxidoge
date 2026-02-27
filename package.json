@@ -36,6 +36,7 @@
 	},
 	"dependencies": {
 		"@coinbase/wallet-sdk": "^4.3.7",
+		"@phantom/browser-sdk": "^1.0.3",
 		"@supabase/supabase-js": "^2.97.0",
 		"@walletconnect/ethereum-provider": "^2.23.6",
 		"lightweight-charts": "^5.1.0",

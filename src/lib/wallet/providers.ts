@@ -29,27 +29,8 @@ interface Eip1193Provider {
   disconnect?: () => Promise<void>;
 }
 
-interface PhantomSolanaConnectResult {
-  publicKey?: { toString: () => string };
-}
-
-interface PhantomSolanaSignResult {
-  signature: Uint8Array;
-}
-
-interface PhantomSolanaProvider {
-  isPhantom?: boolean;
-  connect: (args?: { onlyIfTrusted?: boolean }) => Promise<PhantomSolanaConnectResult>;
-  signMessage: (message: Uint8Array, display?: 'utf8' | 'hex') => Promise<PhantomSolanaSignResult>;
-  publicKey?: { toString: () => string };
-}
-
 interface WalletWindow extends Window {
   ethereum?: Eip1193Provider;
-  solana?: PhantomSolanaProvider;
-  phantom?: {
-    solana?: PhantomSolanaProvider;
-  };
 }
 
 function getWalletWindow(): WalletWindow | null {
@@ -93,6 +74,28 @@ function resolveInjectedEvmProvider(key: WalletProviderKey): Eip1193Provider | n
 
 let _walletConnectProvider: Eip1193Provider | null = null;
 let _coinbaseProvider: Eip1193Provider | null = null;
+
+// ═══ Phantom Browser SDK ═════════════════════════════════════
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _phantomSdk: any = null;
+
+async function getPhantomSdk() {
+  if (_phantomSdk) return _phantomSdk;
+
+  try {
+    const { BrowserSDK, AddressType } = await import('@phantom/browser-sdk');
+    _phantomSdk = new BrowserSDK({
+      providers: ['injected'],
+      addressTypes: [AddressType.solana, AddressType.ethereum],
+    });
+    return _phantomSdk;
+  } catch {
+    throw new Error('Phantom Browser SDK is not available.');
+  }
+}
+
+// ═══ Config helpers ══════════════════════════════════════════
 
 function isPlaceholderWalletConnectProjectId(value: string): boolean {
   const normalized = value.trim().toLowerCase();
@@ -153,14 +156,15 @@ export function getPreferredEvmChainCode(): string {
   return mapChainIdToCode(getPreferredChainId());
 }
 
+// ═══ WalletConnect ═══════════════════════════════════════════
+
 async function getWalletConnectProvider(): Promise<Eip1193Provider> {
   if (_walletConnectProvider) return _walletConnectProvider;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mod: any;
   try {
-    const moduleName = '@walletconnect/ethereum-provider';
-    mod = await import(/* @vite-ignore */ moduleName);
+    mod = await import('@walletconnect/ethereum-provider');
   } catch {
     throw new Error('WalletConnect SDK is not installed. Add @walletconnect/ethereum-provider.');
   }
@@ -172,17 +176,26 @@ async function getWalletConnectProvider(): Promise<Eip1193Provider> {
 
   const projectId = getWalletConnectProjectId();
   const chainId = getPreferredChainId();
+  const rpcUrl = getPreferredRpcUrl(chainId);
   const provider = await EthereumProvider.init({
     projectId,
     showQrModal: true,
     chains: [chainId],
     optionalChains: [1, 10, 56, 137, 42161],
-    methods: ['eth_requestAccounts', 'personal_sign'],
+    methods: ['eth_requestAccounts', 'personal_sign', 'eth_sendTransaction'],
+    rpcMap: { [chainId]: rpcUrl },
   });
+
+  // WalletConnect v2 requires explicit connect() (shows QR modal) before request()
+  if (!provider.session) {
+    await provider.connect();
+  }
 
   _walletConnectProvider = provider as Eip1193Provider;
   return _walletConnectProvider;
 }
+
+// ═══ Coinbase Wallet ═════════════════════════════════════════
 
 async function getCoinbaseProvider(): Promise<Eip1193Provider> {
   if (_coinbaseProvider) return _coinbaseProvider;
@@ -196,7 +209,6 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
   }
 
   const chainId = getPreferredChainId();
-  const rpcUrl = getPreferredRpcUrl(chainId);
 
   let provider: unknown;
   const CoinbaseWalletSDK = mod?.default ?? mod?.CoinbaseWalletSDK;
@@ -207,7 +219,7 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
       appChainIds: [chainId],
     });
     provider = typeof sdk?.makeWeb3Provider === 'function'
-      ? sdk.makeWeb3Provider({ options: 'smartWalletOnly' })
+      ? sdk.makeWeb3Provider({ options: 'all' })
       : typeof sdk?.getProvider === 'function'
         ? sdk.getProvider()
         : null;
@@ -217,7 +229,7 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
       appChainIds: [chainId],
     });
     provider = typeof sdk?.makeWeb3Provider === 'function'
-      ? sdk.makeWeb3Provider({ options: 'smartWalletOnly' })
+      ? sdk.makeWeb3Provider({ options: 'all' })
       : typeof sdk?.getProvider === 'function'
         ? sdk.getProvider()
         : null;
@@ -232,6 +244,8 @@ async function getCoinbaseProvider(): Promise<Eip1193Provider> {
   _coinbaseProvider = provider as Eip1193Provider;
   return _coinbaseProvider;
 }
+
+// ═══ EVM Provider Resolution ═════════════════════════════════
 
 /** Exposed for EIP-712 signing and chain switching modules */
 export async function resolveEvmProvider(key: WalletProviderKey): Promise<Eip1193Provider | null> {
@@ -253,12 +267,25 @@ export async function resolveEvmProvider(key: WalletProviderKey): Promise<Eip119
     }
   }
 
+  // For phantom EVM, try Phantom SDK's ethereum interface first
+  if (key === 'phantom') {
+    try {
+      const sdk = await getPhantomSdk();
+      if (sdk?.ethereum && typeof sdk.ethereum.request === 'function') {
+        return sdk.ethereum as unknown as Eip1193Provider;
+      }
+    } catch {
+      // fall through to injected
+    }
+  }
+
   return resolveInjectedEvmProvider(key);
 }
 
 export function hasInjectedEvmProvider(key: WalletProviderKey): boolean {
   if (key === 'walletconnect') return isWalletConnectConfigured();
   if (key === 'coinbase') return true;
+  if (key === 'phantom') return true; // SDK handles extension detection
   return resolveInjectedEvmProvider(key) !== null;
 }
 
@@ -298,8 +325,100 @@ export async function signInjectedEvmMessage(
   return signatureRaw;
 }
 
+// ═══ Phantom SDK — Solana + EVM ══════════════════════════════
+
+/**
+ * Connect via Phantom Browser SDK.
+ * Returns { addresses, chain } where addresses contain Solana and/or EVM addresses.
+ */
+export async function requestPhantomAccount(): Promise<{
+  solanaAddress: string | null;
+  evmAddress: string | null;
+}> {
+  const sdk = await getPhantomSdk();
+
+  const result = await sdk.connect({ provider: 'injected' });
+  const addresses: Array<{ address: string; type: string }> = result?.addresses ?? [];
+
+  let solanaAddress: string | null = null;
+  let evmAddress: string | null = null;
+
+  for (const addr of addresses) {
+    if (addr.type === 'solana' && !solanaAddress) {
+      solanaAddress = addr.address;
+    }
+    if (addr.type === 'ethereum' && !evmAddress) {
+      evmAddress = addr.address;
+    }
+  }
+
+  if (!solanaAddress && !evmAddress) {
+    throw new Error('Failed to read any Phantom address. Is the extension installed?');
+  }
+
+  return { solanaAddress, evmAddress };
+}
+
+/**
+ * Sign a UTF-8 message via Phantom Solana.
+ */
+export async function signPhantomSolanaMessage(message: string): Promise<string> {
+  const sdk = await getPhantomSdk();
+  const signature = await sdk.solana.signMessage(message);
+
+  if (!signature) {
+    throw new Error('Phantom returned an empty Solana signature.');
+  }
+
+  // signature from SDK is already a base58 or hex string depending on version
+  if (typeof signature === 'string') {
+    return signature.startsWith('0x') ? signature : `0x${signature}`;
+  }
+
+  // If Uint8Array
+  if (signature instanceof Uint8Array) {
+    return `0x${Array.from(signature, (b: number) => b.toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  // If object with signature property
+  if (signature?.signature instanceof Uint8Array) {
+    return `0x${Array.from(signature.signature, (b: number) => b.toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  throw new Error('Phantom returned an unexpected signature format.');
+}
+
+/**
+ * Sign a message via Phantom EVM (personal_sign).
+ */
+export async function signPhantomEvmMessage(message: string, address: string): Promise<string> {
+  const sdk = await getPhantomSdk();
+  const encoded = '0x' + Array.from(new TextEncoder().encode(message), (b) => b.toString(16).padStart(2, '0')).join('');
+  const signature = await sdk.ethereum.signPersonalMessage(encoded, address);
+
+  if (typeof signature !== 'string' || !signature.startsWith('0x')) {
+    throw new Error('Phantom returned an invalid EVM signature.');
+  }
+  return signature;
+}
+
+// ═══ Legacy Phantom Solana (fallback) ════════════════════════
+
+interface PhantomSolanaProvider {
+  isPhantom?: boolean;
+  connect: (args?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey?: { toString: () => string } }>;
+  signMessage: (message: Uint8Array, display?: 'utf8' | 'hex') => Promise<{ signature: Uint8Array }>;
+  publicKey?: { toString: () => string };
+}
+
+interface PhantomWindow extends Window {
+  solana?: PhantomSolanaProvider;
+  phantom?: { solana?: PhantomSolanaProvider };
+}
+
 function getPhantomSolanaProvider(): PhantomSolanaProvider | null {
-  const w = getWalletWindow();
+  if (typeof window === 'undefined') return null;
+  const w = window as PhantomWindow;
   const provider = w?.solana || w?.phantom?.solana;
   if (!provider) return null;
   if (typeof provider.connect !== 'function' || typeof provider.signMessage !== 'function') return null;
@@ -308,9 +427,18 @@ function getPhantomSolanaProvider(): PhantomSolanaProvider | null {
 }
 
 export async function requestPhantomSolanaAccount(): Promise<string> {
+  // Try SDK first
+  try {
+    const { solanaAddress } = await requestPhantomAccount();
+    if (solanaAddress) return solanaAddress;
+  } catch {
+    // fall through to legacy
+  }
+
+  // Legacy fallback via window.solana
   const provider = getPhantomSolanaProvider();
   if (!provider) {
-    throw new Error('Phantom (Solana) provider not detected. Install/enable Phantom extension.');
+    throw new Error('Phantom wallet not detected. Install Phantom extension or use another wallet.');
   }
 
   const connected = await provider.connect();
@@ -326,6 +454,14 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 export async function signPhantomSolanaUtf8Message(message: string): Promise<string> {
+  // Try SDK first
+  try {
+    return await signPhantomSolanaMessage(message);
+  } catch {
+    // fall through to legacy
+  }
+
+  // Legacy fallback
   const provider = getPhantomSolanaProvider();
   if (!provider) {
     throw new Error('Phantom (Solana) provider is unavailable for signing.');

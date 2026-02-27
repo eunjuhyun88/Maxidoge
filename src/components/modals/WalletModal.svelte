@@ -17,6 +17,7 @@
     hasInjectedEvmProvider,
     isWalletConnectConfigured,
     requestInjectedEvmAccount,
+    requestPhantomAccount,
     requestPhantomSolanaAccount,
     signInjectedEvmMessage,
     type WalletProviderKey
@@ -308,12 +309,25 @@
 
     try {
       if (provider === 'phantom') {
-        if (hasInjectedEvmProvider('phantom')) {
-          const walletAddress = await requestInjectedEvmAccount('phantom');
-          connectWallet(provider, walletAddress, preferredEvmChain);
-        } else {
-          const solAddress = await requestPhantomSolanaAccount();
-          connectWallet(provider, solAddress, 'SOL');
+        // Try Phantom Browser SDK first (gets both EVM + SOL)
+        try {
+          const { evmAddress, solanaAddress } = await requestPhantomAccount();
+          if (evmAddress) {
+            connectWallet(provider, evmAddress, preferredEvmChain);
+          } else if (solanaAddress) {
+            connectWallet(provider, solanaAddress, 'SOL');
+          } else {
+            throw new Error('No addresses returned from Phantom.');
+          }
+        } catch {
+          // Fallback: legacy window.solana / injected EVM
+          if (hasInjectedEvmProvider('phantom')) {
+            const walletAddress = await requestInjectedEvmAccount('phantom');
+            connectWallet(provider, walletAddress, preferredEvmChain);
+          } else {
+            const solAddress = await requestPhantomSolanaAccount();
+            connectWallet(provider, solAddress, 'SOL');
+          }
         }
       } else {
         const walletAddress = await requestInjectedEvmAccount(provider);
