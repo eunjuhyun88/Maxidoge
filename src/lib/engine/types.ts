@@ -592,3 +592,46 @@ export type LPReasonExtended = LPReason
   | 'tournament_win' | 'tournament_loss'
   | 'live_bonus'
   | 'signal_publish';
+
+// ─── Phase 3: Team System ──────────────────────────────────
+
+export type TeamRole = 'CAPTAIN' | 'SUPPORT_A' | 'SUPPORT_B';
+export type TeamMatchStatus = 'FORMING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+export interface TeamInfo {
+  id: string;
+  name: string;
+  creatorId: string;
+  tier: string;
+  lpPool: number;
+  winCount: number;
+  lossCount: number;
+  isActive: boolean;
+  memberCount: number;
+}
+
+export interface TeamMemberInfo {
+  userId: string;
+  role: TeamRole;
+  displayName?: string;
+}
+
+export interface TeamMatchSummary {
+  id: string;
+  teamAName: string;
+  teamBName: string | null;
+  pair: string;
+  status: TeamMatchStatus;
+  teamAFbsAvg: number | null;
+  teamBFbsAvg: number | null;
+  winnerTeamName: string | null;
+  createdAt: string;
+}
+
+// ─── Phase 3: RAG Search Modes ────────────────────────────
+
+export type MemorySearchMode =
+  | 'similar_all'           // 유사한 모든 기억
+  | 'similar_failures'      // 유사 실패 기억 (같은 실수 반복 방지)
+  | 'cross_agent'           // 다른 agent의 기억 (cross-pollination)
+  | 'spec_agnostic';        // agent 무관, pair+regime 기반 검색

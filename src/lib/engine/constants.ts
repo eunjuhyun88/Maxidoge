@@ -239,6 +239,23 @@ export const LIVE_REACTION_WINDOW_SEC = 10;
 export const SIGNAL_AUTO_PUBLISH_MIN_TIER: import('./types').Tier = 'SILVER';
 export const SIGNAL_MAX_PER_DAY = 50;
 
+// ─── Team System ────────────────────────────────────────────
+
+export const TEAM_SIZE = 3;
+export const TEAM_MAX_PER_USER = 3;
+export const TEAM_WIN_LP = 15;
+export const TEAM_LOSS_LP = -6;
+export const TEAM_MIN_TIER: import('./types').Tier = 'DIAMOND';
+export const TEAM_NAME_MIN_LENGTH = 2;
+export const TEAM_NAME_MAX_LENGTH = 20;
+
+// ─── Tournament ─────────────────────────────────────────────
+
+export const TOURNAMENT_BRACKET_SIZES = [8, 16, 32] as const;
+export const TOURNAMENT_WIN_LP = 25;
+export const TOURNAMENT_LOSS_LP = -5;
+export const TOURNAMENT_REGISTRATION_TIMEOUT_HOURS = 24;
+
 // ─── Notification ────────────────────────────────────────────
 
 export const NOTIFICATION_LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;

@@ -65,7 +65,10 @@ src/
 | gameLoop | `src/lib/engine/gameLoop.ts` | Arena game state machine (client UI) |
 | arenaMatchStateMachine | `src/lib/server/arenaMatchStateMachine.ts` | Server-authoritative phase transitions |
 | agentPersonaService | `src/lib/server/agentPersonaService.ts` | 8 agent personas + Emergency Meeting LLM |
-| ragMemoryService | `src/lib/server/ragMemoryService.ts` | RAG match memory store/search |
+| ragMemoryService | `src/lib/server/ragMemoryService.ts` | RAG match memory (pgvector + 4-way search) |
+| embeddingService | `src/lib/server/embeddingService.ts` | Text embedding (Gemini 256d + hash fallback) |
+| tournamentService | `src/lib/server/tournamentService.ts` | Tournament CRUD + bracket + registration |
+| teamService | `src/lib/server/teamService.ts` | 3v3 team CRUD + team match + resolve |
 | pvpMatchingService | `src/lib/server/pvpMatchingService.ts` | PvP async queue + tier matching |
 | liveConnectionManager | `src/lib/server/liveConnectionManager.ts` | SSE LIVE spectator streaming |
 | arenaSignalBridge | `src/lib/server/arenaSignalBridge.ts` | Arena→Signal→Follow→CopyTrade bridge |
@@ -85,6 +88,8 @@ All API routes follow SvelteKit conventions: `src/routes/api/[group]/+server.ts`
 - Arena (game): `/api/arena/match/[id]/{phase,decision,emergency-meeting,memory,publish}`
 - Arena (social): `/api/arena/{memories,challenge,pvp/queue}`
 - Arena (LIVE): `/api/arena/live/{session,sessions,stream/[sessionId],react}`
+- Arena (tournament): `/api/arena/tournament`, `/api/arena/tournament/[id]/bracket`
+- Arena (team): `/api/arena/team`, `/api/arena/team/match`, `/api/arena/team/match/[id]`
 - Social: `/api/social/{follow,feed,profile/[userId]}`
 
 ## Environment Variables
@@ -225,3 +230,4 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - [x] B-05: Data source provider abstraction (providers/, cache, registry, 14+ sources)
 - [x] B-01: Arena API scaffolding + community bridge (Phase 1+2)
 - [x] B-04: exitOptimizer implementation (617 lines, 3 risk profiles, ATR/Fib/Kelly)
+- [x] B-01 Phase 3: Tournament API + pgvector RAG + 3v3 Team System
