@@ -13,6 +13,10 @@ export const STORAGE_KEYS = {
   dbMatches: 'stockclaw_matches',
   dbSignals: 'stockclaw_signals',
   dbPredictions: 'stockclaw_predictions',
+  warRoomScan: 'stockclaw.warroom.scanstate.v1',
+  notificationsSeeded: 'stockclaw_notifications_seeded_v1',
 } as const;
 
-export const RESETTABLE_STORAGE_KEYS: ReadonlyArray<string> = Object.values(STORAGE_KEYS);
+/** Keys safe to clear on user-initiated data reset (excludes session-only flags) */
+export const RESETTABLE_STORAGE_KEYS: ReadonlyArray<string> = Object.values(STORAGE_KEYS)
+  .filter(k => k !== STORAGE_KEYS.notificationsSeeded);

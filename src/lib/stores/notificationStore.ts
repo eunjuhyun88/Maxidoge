@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived } from 'svelte/store';
+import { STORAGE_KEYS } from './storageKeys';
 import {
   createNotificationApi,
   deleteNotificationApi,
@@ -271,7 +272,7 @@ export function notifySignalTracked(pair: string, dir: string) {
 
 export function seedNotifications() {
   if (typeof window === 'undefined') return;
-  const seedKey = 'stockclaw_notifications_seeded_v1';
+  const seedKey = STORAGE_KEYS.notificationsSeeded;
   if (sessionStorage.getItem(seedKey) === '1') return;
   sessionStorage.setItem(seedKey, '1');
 

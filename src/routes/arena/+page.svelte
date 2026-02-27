@@ -636,7 +636,6 @@
           serverAnalysis = res;
           const c02 = mapAnalysisToC02(res);
           gameState.update(s => ({ ...s, orpoOutput: c02.orpo, ctxBeliefs: c02.ctx, guardianCheck: c02.guardian, commanderVerdict: c02.commander }));
-          console.log('[Arena] Server analysis → C02 mapped:', res.meta);
           // Sync phase to server
           await advanceMatchPhase(serverMatchId!, 'ANALYSIS').catch(() => {});
         })
@@ -1077,7 +1076,6 @@
       const exitP = state.prices.BTC;
       resolveArenaMatch(serverMatchId, exitP)
         .then(async (res) => {
-          console.log('[Arena] Match resolved on server:', res.result);
           await advanceMatchPhase(serverMatchId!, 'RESULT').catch(() => {});
           await storeMatchMemory(serverMatchId!).catch(() => {});
         })
