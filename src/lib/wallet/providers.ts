@@ -73,6 +73,8 @@ function resolveInjectedEvmProvider(key: WalletProviderKey): Eip1193Provider | n
 }
 
 let _walletConnectProvider: Eip1193Provider | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _walletConnectInitedProvider: any = null; // init'd but not connect'd
 let _coinbaseProvider: Eip1193Provider | null = null;
 
 // ═══ Phantom Browser SDK ═════════════════════════════════════
@@ -93,6 +95,163 @@ async function getPhantomSdk() {
   } catch {
     throw new Error('Phantom Browser SDK is not available.');
   }
+}
+
+// ═══ Popup Pre-open Helper ════════════════════════════════════
+// Chrome blocks popups not opened in a synchronous user-gesture stack.
+// Wallet SDKs call window.open() deep inside async chains, which
+// Chrome considers "not user-initiated".  Fix: pre-open a blank
+// popup **synchronously** from the click handler, then monkey-patch
+// window.open so the SDK reuses it instead of opening a new one.
+
+let _preOpenedPopup: Window | null = null;
+
+// Lazily capture the real window.open (can't bind at module-load time
+// because SvelteKit may load this module on the server where window
+// is undefined).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _realWindowOpen: ((...args: any[]) => Window | null) | null = null;
+
+function getRealWindowOpen() {
+  if (!_realWindowOpen && typeof window !== 'undefined') {
+    _realWindowOpen = window.open.bind(window);
+  }
+  return _realWindowOpen;
+}
+
+/**
+ * Call this **synchronously** inside the wallet-button click handler,
+ * BEFORE any awaits.  It opens a tiny blank popup (allowed because
+ * we're still in the user-gesture call-stack) and patches
+ * window.open so the next call reuses it.
+ */
+export function preOpenWalletPopup(): void {
+  if (typeof window === 'undefined') return;
+  const realOpen = getRealWindowOpen();
+  if (!realOpen) return;
+
+  // Don't stack multiple pre-opened popups
+  if (_preOpenedPopup && !_preOpenedPopup.closed) return;
+
+  _preOpenedPopup = realOpen(
+    'about:blank',
+    'wallet_popup',
+    'width=460,height=730,left=200,top=100'
+  );
+
+  if (!_preOpenedPopup) return; // popup was blocked anyway
+
+  // Patch window.open so the SDK reuses our pre-opened popup
+  window.open = function (
+    url?: string | URL,
+    target?: string,
+    features?: string,
+  ): Window | null {
+    const popup = _preOpenedPopup;
+    if (popup && !popup.closed) {
+      _preOpenedPopup = null;          // consumed
+      window.open = getRealWindowOpen()!; // restore immediately
+      try {
+        if (url && url !== 'about:blank') {
+          popup.location.href = typeof url === 'string' ? url : url.toString();
+        }
+      } catch {
+        // cross-origin; SDK will handle it
+      }
+      return popup;
+    }
+    // Fallback: no pre-opened popup available → use real open
+    const ro = getRealWindowOpen()!;
+    window.open = ro;
+    return ro(url, target, features);
+  } as typeof window.open;
+}
+
+/**
+ * Close the pre-opened popup (e.g. on error or if connection
+ * succeeded without needing a popup).
+ */
+export function closePreOpenedPopup(): void {
+  if (_preOpenedPopup && !_preOpenedPopup.closed) {
+    _preOpenedPopup.close();
+  }
+  _preOpenedPopup = null;
+  // Restore window.open in case it was patched but never consumed
+  const realOpen = getRealWindowOpen();
+  if (typeof window !== 'undefined' && realOpen) {
+    window.open = realOpen;
+  }
+}
+
+// ═══ SDK Preloading ══════════════════════════════════════════
+// Eagerly import + init SDKs when modal opens so bundles are cached.
+
+let _preloadPromise: Promise<void> | null = null;
+
+/**
+ * Call this EARLY (e.g. when wallet modal opens) so SDK bundles are
+ * already loaded by the time the user clicks a wallet button.
+ */
+export function preloadWalletSdks(): void {
+  if (_preloadPromise) return;
+  _preloadPromise = _preloadAll();
+}
+
+async function _preloadAll(): Promise<void> {
+  // Fire all imports in parallel — failures are silently swallowed
+  await Promise.allSettled([
+    _preloadCoinbase(),
+    _preloadWalletConnect(),
+    getPhantomSdk().catch(() => {}),
+  ]);
+}
+
+async function _preloadCoinbase(): Promise<void> {
+  if (_coinbaseProvider) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mod: any = await import('@coinbase/wallet-sdk');
+    const chainId = getPreferredChainId();
+    const CoinbaseWalletSDK = mod?.default ?? mod?.CoinbaseWalletSDK;
+    if (typeof CoinbaseWalletSDK === 'function') {
+      const sdk = new CoinbaseWalletSDK({ appName: 'Stockclaw', appChainIds: [chainId] });
+      const p = typeof sdk?.makeWeb3Provider === 'function'
+        ? sdk.makeWeb3Provider({ options: 'all' })
+        : typeof sdk?.getProvider === 'function' ? sdk.getProvider() : null;
+      if (p && typeof (p as Record<string, unknown>).request === 'function') {
+        _coinbaseProvider = p as Eip1193Provider;
+      }
+    } else if (typeof mod?.createCoinbaseWalletSDK === 'function') {
+      const sdk = mod.createCoinbaseWalletSDK({ appName: 'Stockclaw', appChainIds: [chainId] });
+      const p = typeof sdk?.makeWeb3Provider === 'function'
+        ? sdk.makeWeb3Provider({ options: 'all' })
+        : typeof sdk?.getProvider === 'function' ? sdk.getProvider() : null;
+      if (p && typeof (p as Record<string, unknown>).request === 'function') {
+        _coinbaseProvider = p as Eip1193Provider;
+      }
+    }
+  } catch { /* swallow — getCoinbaseProvider() will retry */ }
+}
+
+async function _preloadWalletConnect(): Promise<void> {
+  if (_walletConnectProvider || _walletConnectInitedProvider) return;
+  if (!isWalletConnectConfigured()) return;
+  try {
+    const mod = await import('@walletconnect/ethereum-provider');
+    const EthereumProvider = mod?.default ?? mod?.EthereumProvider ?? mod;
+    if (!EthereumProvider || typeof EthereumProvider.init !== 'function') return;
+    const projectId = getWalletConnectProjectId();
+    const chainId = getPreferredChainId();
+    const rpcUrl = getPreferredRpcUrl(chainId);
+    _walletConnectInitedProvider = await EthereumProvider.init({
+      projectId,
+      showQrModal: true,
+      chains: [chainId],
+      optionalChains: [1, 10, 56, 137, 42161],
+      methods: ['eth_requestAccounts', 'personal_sign', 'eth_sendTransaction'],
+      rpcMap: { [chainId]: rpcUrl },
+    });
+  } catch { /* swallow */ }
 }
 
 // ═══ Config helpers ══════════════════════════════════════════
@@ -161,78 +320,61 @@ export function getPreferredEvmChainCode(): string {
 async function getWalletConnectProvider(): Promise<Eip1193Provider> {
   if (_walletConnectProvider) return _walletConnectProvider;
 
+  // Use preloaded init'd provider if available
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mod: any;
-  try {
-    mod = await import('@walletconnect/ethereum-provider');
-  } catch {
-    throw new Error('WalletConnect SDK is not installed. Add @walletconnect/ethereum-provider.');
+  let provider: any = _walletConnectInitedProvider;
+
+  if (!provider) {
+    // Fallback: init now (rare — preload should have done this)
+    const mod = await import('@walletconnect/ethereum-provider');
+    const EthereumProvider = mod?.default ?? mod?.EthereumProvider ?? mod;
+    if (!EthereumProvider || typeof EthereumProvider.init !== 'function') {
+      throw new Error('WalletConnect SDK initialization failed.');
+    }
+    const projectId = getWalletConnectProjectId();
+    const chainId = getPreferredChainId();
+    const rpcUrl = getPreferredRpcUrl(chainId);
+    provider = await EthereumProvider.init({
+      projectId, showQrModal: true, chains: [chainId],
+      optionalChains: [1, 10, 56, 137, 42161],
+      methods: ['eth_requestAccounts', 'personal_sign', 'eth_sendTransaction'],
+      rpcMap: { [chainId]: rpcUrl },
+    });
   }
 
-  const EthereumProvider = mod?.default ?? mod?.EthereumProvider ?? mod;
-  if (!EthereumProvider || typeof EthereumProvider.init !== 'function') {
-    throw new Error('WalletConnect SDK initialization failed.');
-  }
-
-  const projectId = getWalletConnectProjectId();
-  const chainId = getPreferredChainId();
-  const rpcUrl = getPreferredRpcUrl(chainId);
-  const provider = await EthereumProvider.init({
-    projectId,
-    showQrModal: true,
-    chains: [chainId],
-    optionalChains: [1, 10, 56, 137, 42161],
-    methods: ['eth_requestAccounts', 'personal_sign', 'eth_sendTransaction'],
-    rpcMap: { [chainId]: rpcUrl },
-  });
-
-  // WalletConnect v2 requires explicit connect() (shows QR modal) before request()
+  // connect() shows QR modal — MUST run in user-gesture call stack
   if (!provider.session) {
     await provider.connect();
   }
 
   _walletConnectProvider = provider as Eip1193Provider;
+  _walletConnectInitedProvider = null; // consumed
   return _walletConnectProvider;
 }
 
 // ═══ Coinbase Wallet ═════════════════════════════════════════
 
 async function getCoinbaseProvider(): Promise<Eip1193Provider> {
+  // If preloaded, return immediately (keeps us in user-gesture stack)
   if (_coinbaseProvider) return _coinbaseProvider;
 
+  // Fallback: init now (rare — preload should have done this)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mod: any;
-  try {
-    mod = await import('@coinbase/wallet-sdk');
-  } catch {
-    throw new Error('Coinbase Wallet SDK is not installed. Add @coinbase/wallet-sdk.');
-  }
-
+  const mod: any = await import('@coinbase/wallet-sdk');
   const chainId = getPreferredChainId();
-
   let provider: unknown;
   const CoinbaseWalletSDK = mod?.default ?? mod?.CoinbaseWalletSDK;
 
   if (typeof CoinbaseWalletSDK === 'function') {
-    const sdk = new CoinbaseWalletSDK({
-      appName: 'Stockclaw',
-      appChainIds: [chainId],
-    });
+    const sdk = new CoinbaseWalletSDK({ appName: 'Stockclaw', appChainIds: [chainId] });
     provider = typeof sdk?.makeWeb3Provider === 'function'
       ? sdk.makeWeb3Provider({ options: 'all' })
-      : typeof sdk?.getProvider === 'function'
-        ? sdk.getProvider()
-        : null;
+      : typeof sdk?.getProvider === 'function' ? sdk.getProvider() : null;
   } else if (typeof mod?.createCoinbaseWalletSDK === 'function') {
-    const sdk = mod.createCoinbaseWalletSDK({
-      appName: 'Stockclaw',
-      appChainIds: [chainId],
-    });
+    const sdk = mod.createCoinbaseWalletSDK({ appName: 'Stockclaw', appChainIds: [chainId] });
     provider = typeof sdk?.makeWeb3Provider === 'function'
       ? sdk.makeWeb3Provider({ options: 'all' })
-      : typeof sdk?.getProvider === 'function'
-        ? sdk.getProvider()
-        : null;
+      : typeof sdk?.getProvider === 'function' ? sdk.getProvider() : null;
   } else {
     throw new Error('Coinbase Wallet SDK initialization failed.');
   }

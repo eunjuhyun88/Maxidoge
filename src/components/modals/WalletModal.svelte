@@ -16,6 +16,9 @@
     getPreferredEvmChainCode,
     hasInjectedEvmProvider,
     isWalletConnectConfigured,
+    preloadWalletSdks,
+    preOpenWalletPopup,
+    closePreOpenedPopup,
     requestInjectedEvmAccount,
     requestPhantomAccount,
     requestPhantomSolanaAccount,
@@ -304,6 +307,17 @@
       return;
     }
 
+    // ── Pre-open popup SYNCHRONOUSLY (before any await) ──────
+    // Coinbase Smart Wallet & WalletConnect both need window.open()
+    // deep inside their async SDK chains.  Chrome blocks those popups
+    // because the user-gesture is lost.  By opening a blank popup NOW
+    // (still in the synchronous click handler) and monkey-patching
+    // window.open, the SDK reuses our already-opened popup.
+    const needsPopup = provider === 'coinbase' || provider === 'walletconnect';
+    if (needsPopup) {
+      preOpenWalletPopup();
+    }
+
     connectingProvider = WALLET_PROVIDER_LABEL[provider];
     setWalletModalStep('connecting');
 
@@ -333,11 +347,14 @@
         const walletAddress = await requestInjectedEvmAccount(provider);
         connectWallet(provider, walletAddress, preferredEvmChain);
       }
+      // Connection succeeded — close pre-opened popup if unused
+      closePreOpenedPopup();
       trackWalletFunnel('connect', 'success', {
         provider,
         chain: preferredEvmChain,
       });
     } catch (error) {
+      closePreOpenedPopup();
       actionError = error instanceof Error ? error.message : 'Failed to connect wallet';
       trackWalletFunnel('connect', 'error', {
         provider,
@@ -446,6 +463,8 @@
   }
 
   $: if (state.showWalletModal && !trackedModalOpen) {
+    // Eagerly preload wallet SDKs so popup opens immediately on user click
+    preloadWalletSdks();
     trackWalletFunnel('modal_open', 'view', { entry_step: step });
     trackedModalOpen = true;
   }
