@@ -20,6 +20,21 @@
   import PolymarketBetPanel from './PolymarketBetPanel.svelte';
   import GmxTradePanel from './GmxTradePanel.svelte';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import {
+    scoreColor,
+    dirIcon,
+    dirColor,
+    policyBiasLabel,
+    policyBiasClass,
+    shadowSourceLabel,
+    shadowExecuteLabel,
+    scoreBreakdownText,
+    fmtTrendPrice,
+    fmtTrendVol,
+    formatRelativeTime,
+    getTokenAliases,
+    apiErrorMessage,
+  } from './intelHelpers';
 
   const dispatch = createEventDispatcher();
 
@@ -453,10 +468,6 @@
     policyLoaded = true;
   }
 
-  function apiErrorMessage(payload: any, fallback: string): string {
-    return typeof payload?.error === 'string' && payload.error.trim().length > 0 ? payload.error.trim() : fallback;
-  }
-
   async function fetchIntelPolicy() {
     if (policyLoading) return;
     policyLoading = true;
@@ -711,89 +722,6 @@
     } finally {
       picksLoading = false;
     }
-  }
-
-  function scoreColor(score: number): string {
-    if (score >= 65) return '#00e676';
-    if (score >= 50) return '#ffeb3b';
-    if (score >= 35) return '#ff9800';
-    return '#ff1744';
-  }
-
-  function dirIcon(dir: string): string {
-    if (dir === 'long') return '▲';
-    if (dir === 'short') return '▼';
-    return '●';
-  }
-
-  function dirColor(dir: string): string {
-    if (dir === 'long') return '#00e676';
-    if (dir === 'short') return '#ff1744';
-    return '#ffeb3b';
-  }
-
-  function policyBiasLabel(bias: PolicyCard['bias'] | PolicyDecision['bias']): string {
-    if (bias === 'long') return 'LONG';
-    if (bias === 'short') return 'SHORT';
-    return 'WAIT';
-  }
-
-  function policyBiasClass(bias: PolicyCard['bias'] | PolicyDecision['bias']): string {
-    if (bias === 'long') return 'long';
-    if (bias === 'short') return 'short';
-    return 'wait';
-  }
-
-  function shadowSourceLabel(decision: ShadowDecision): string {
-    if (decision.source === 'llm') {
-      const provider = decision.provider ? decision.provider.toUpperCase() : 'LLM';
-      return decision.model ? `${provider} · ${decision.model}` : provider;
-    }
-    if (decision.fallbackReason === 'provider_unavailable') return 'FALLBACK · NO API KEY';
-    if (decision.fallbackReason === 'llm_call_failed') return 'FALLBACK · LLM ERROR';
-    return 'FALLBACK';
-  }
-
-  function shadowExecuteLabel(decision: ShadowDecision): string {
-    return decision.enforced.shouldExecute ? 'EXECUTE READY' : 'EXECUTION BLOCKED';
-  }
-
-  function scoreBreakdownText(scores: PolicyScores): string {
-    return `A ${Math.round(scores.actionability)} · T ${Math.round(scores.timeliness)} · R ${Math.round(scores.reliability)} · Re ${Math.round(scores.relevance)} · H ${Math.round(scores.helpfulness)}`;
-  }
-
-  function fmtTrendPrice(p: number): string {
-    if (!Number.isFinite(p)) return '$0';
-    if (p >= 1000) return '$' + p.toLocaleString(undefined, { maximumFractionDigits: 0 });
-    if (p >= 1) return '$' + p.toFixed(2);
-    if (p >= 0.001) return '$' + p.toFixed(4);
-    return '$' + p.toFixed(6);
-  }
-
-  function fmtTrendVol(v: number): string {
-    if (v >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
-    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
-    if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
-    return '$' + v.toFixed(0);
-  }
-
-  function formatRelativeTime(ts: number): string {
-    const mins = Math.round((Date.now() - ts) / 60000);
-    if (mins < 1) return 'now';
-    if (mins < 60) return `${mins}m`;
-    if (mins < 1440) return `${Math.round(mins / 60)}h`;
-    return `${Math.round(mins / 1440)}d`;
-  }
-
-  function getTokenAliases(token: string): string[] {
-    const map: Record<string, string[]> = {
-      BTC: ['btc', 'bitcoin', 'microstrategy'],
-      ETH: ['eth', 'ethereum', 'vitalik'],
-      SOL: ['sol', 'solana'],
-      DOGE: ['doge', 'dogecoin'],
-      XRP: ['xrp', 'ripple'],
-    };
-    return map[token] || [token.toLowerCase()];
   }
 
   // ═══ Pair 변경 시 Events/Flow 자동 refetch ═══
