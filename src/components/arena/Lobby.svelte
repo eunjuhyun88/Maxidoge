@@ -12,12 +12,19 @@
     type TournamentBracketMatch,
     type TournamentType,
   } from '$lib/api/arenaApi';
+  import PvPQueuePanel from './PvPQueuePanel.svelte';
+  import TeamPanel from './TeamPanel.svelte';
+  import { enqueue } from '$lib/stores/pvpQueueStore';
+  import type { DraftSelection } from '$lib/engine/types';
 
   const PVP_UNLOCK_MATCHES = 10;
   const TOURNAMENT_UNLOCK_LP = 500;
   const TOURNAMENT_UNLOCK_PVP_WINS = 5;
+  const TEAM_UNLOCK_LP = 1200; // Diamond tier
 
-  let selectedMode: 'pve' | 'pvp' | 'tournament' = $state('pve');
+  let selectedMode: 'pve' | 'pvp' | 'tournament' | 'team' = $state('pve');
+  let pvpQueueVisible = $state(false);
+  let teamPanelVisible = $state(false);
   let tournaments: TournamentActiveRecord[] = $state([]);
   let tournamentsLoading = $state(false);
   let tournamentsError: string | null = $state(null);
@@ -47,6 +54,7 @@
   let pvpRecord = $derived(`${pvpWins}W-${pvpLosses}L`);
   let pvpUnlocked = $derived($gameState.matchN >= PVP_UNLOCK_MATCHES);
   let tournamentUnlocked = $derived($gameState.lp >= TOURNAMENT_UNLOCK_LP && pvpWins >= TOURNAMENT_UNLOCK_PVP_WINS);
+  let teamUnlocked = $derived($gameState.lp >= TEAM_UNLOCK_LP);
   let activeCount = $derived(Math.min(5, Math.max(1, ($gameState.matchN % 5) + 1)));
   let selectedTournament = $derived(tournaments.find((t) => t.tournamentId === selectedTournamentId) ?? tournaments[0] ?? null);
   let canRegisterTournament = $derived(
@@ -64,10 +72,10 @@
     { id: `#${Math.max(1, $gameState.matchN - 2)}`, result: 'LOSS', lp: -8, pair: 'SOL', dir: 'SHORT', tag: 'DISSENT', fbs: 52, age: '8h' },
   ]);
 
-  function modeStart(mode: 'pve' | 'pvp' | 'tournament', tournament: TournamentActiveRecord | null = null) {
+  function modeStart(mode: 'pve' | 'pvp' | 'tournament' | 'team', tournament: TournamentActiveRecord | null = null) {
     sfx.enter();
     selectedMode = mode;
-    const arenaMode = mode === 'pve' ? 'PVE' : mode === 'pvp' ? 'PVP' : 'TOURNAMENT';
+    const arenaMode = mode === 'pve' ? 'PVE' : mode === 'pvp' ? 'PVP' : mode === 'team' ? 'TEAM' : 'TOURNAMENT';
 
     gameState.update((s) => ({
       ...s,
@@ -157,11 +165,42 @@
     return type;
   }
 
-  function enterMode(mode: 'pve' | 'pvp' | 'tournament') {
+  function enterMode(mode: 'pve' | 'pvp' | 'tournament' | 'team') {
     if (mode === 'pvp' && !pvpUnlocked) return;
     if (mode === 'tournament' && !tournamentUnlocked) return;
+    if (mode === 'team' && !teamUnlocked) return;
+    selectedMode = mode;
     if (mode === 'tournament') { openTournamentPanel(); return; }
+    if (mode === 'pvp') { pvpQueueVisible = true; teamPanelVisible = false; return; }
+    if (mode === 'team') { teamPanelVisible = true; pvpQueueVisible = false; return; }
     modeStart(mode);
+  }
+
+  /** PvP: join queue then auto-start on match */
+  function onPvPJoinQueue() {
+    const gs = $gameState;
+    const agentCount = gs.selectedAgents.length || 3;
+    const weight = Math.round(100 / agentCount);
+    const draft: DraftSelection[] = (gs.selectedAgents.length > 0 ? gs.selectedAgents : ['STRUCTURE', 'VPA', 'ICT']).map((id, i) => ({
+      agentId: id as import('$lib/engine/types').AgentId,
+      specId: 'base',
+      weight: i === agentCount - 1 ? 100 - weight * (agentCount - 1) : weight,
+    }));
+    enqueue(gs.pair, gs.timeframe, draft);
+  }
+
+  function onPvPMatched(_matchId: string) {
+    pvpQueueVisible = false;
+    modeStart('pvp');
+  }
+
+  function onPvPCancel() {
+    pvpQueueVisible = false;
+  }
+
+  function onTeamMatchStart(_teamMatchId: string) {
+    teamPanelVisible = false;
+    modeStart('team' as any);
   }
 
   function startTournamentRound() {
@@ -411,7 +450,63 @@
           </div>
           <div class="portal-edge tour-edge"></div>
         </button>
+
+        <!-- Team Portal -->
+        <button
+          class="portal portal-team"
+          class:hovered={hoveredMode === 'team'}
+          class:locked={!teamUnlocked}
+          onmouseenter={() => { hoveredMode = 'team'; if(teamUnlocked) sfx.step(); }}
+          onmouseleave={() => hoveredMode = null}
+          onclick={() => enterMode('team')}
+        >
+          <div class="portal-bg team-bg">
+            {#if teamUnlocked}
+              <div class="team-shield-glow"></div>
+            {/if}
+          </div>
+          <div class="portal-content">
+            <div class="portal-icon-wrap team-icon">
+              <span class="portal-icon">🛡️</span>
+              <div class="portal-ring team-ring"></div>
+            </div>
+            <div class="portal-label team-text">TEAM</div>
+            <div class="portal-title team-text">3v3 BATTLE</div>
+            <div class="portal-sub team-text">
+              {#if teamUnlocked}
+                FORM YOUR SQUAD
+              {:else}
+                🔒 LP {TEAM_UNLOCK_LP}+ (DIAMOND)
+              {/if}
+            </div>
+            <div class="portal-stats team-text">COOPERATIVE MODE</div>
+            <div class="portal-enter team-enter">
+              {#if teamUnlocked}
+                <span class="enter-arrow">▶</span> MANAGE TEAM
+              {:else}
+                <span class="lock-icon">🔒</span> LOCKED
+              {/if}
+            </div>
+          </div>
+          <div class="portal-edge team-edge"></div>
+        </button>
       </div>
+
+      <!-- ═══ PVP QUEUE PANEL ═══ -->
+      {#if pvpQueueVisible && pvpUnlocked}
+        <section class="panel panel-pvpq">
+          <div class="panel-head">
+            <span class="panel-title pvp-text">⚔️ PvP MATCHMAKING</span>
+            <button class="btn-sm" onclick={onPvPJoinQueue}>Join Queue</button>
+          </div>
+          <PvPQueuePanel visible={pvpQueueVisible} onMatched={onPvPMatched} onCancel={onPvPCancel} />
+        </section>
+      {/if}
+
+      <!-- ═══ TEAM PANEL ═══ -->
+      {#if teamPanelVisible && teamUnlocked}
+        <TeamPanel visible={teamPanelVisible} pair={$gameState.pair} onTeamMatchStart={onTeamMatchStart} />
+      {/if}
     </section>
 
     <!-- ═══ TOURNAMENT PANEL ═══ -->
@@ -894,7 +989,7 @@
   /* ═══ PORTALS ═══ */
   .portals {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 12px;
   }
 
@@ -1346,7 +1441,26 @@
   .status-lat { color: var(--cyan2); }
   .status-pair { color: var(--coral); font-weight: 700; }
 
+  /* ═══ TEAM PORTAL ═══ */
+  .team-bg { background: radial-gradient(ellipse at 30% 50%, rgba(138, 180, 255, 0.08) 0%, transparent 70%); }
+  .team-shield-glow {
+    position: absolute; inset: 0; border-radius: inherit;
+    background: radial-gradient(circle at center, rgba(138,180,255,0.12) 0%, transparent 60%);
+    animation: teamGlow 3s ease-in-out infinite;
+  }
+  @keyframes teamGlow { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+  .team-text { color: #8ab4ff !important; }
+  .team-ring { border-color: rgba(138, 180, 255, 0.4) !important; }
+  .team-icon .portal-ring { box-shadow: 0 0 12px rgba(138,180,255,0.2); }
+  .team-enter { color: #8ab4ff; }
+  .team-edge { background: linear-gradient(90deg, transparent, rgba(138,180,255,0.15), transparent); }
+
+  .panel-pvpq { margin-top: 12px; }
+
   /* ═══ RESPONSIVE ═══ */
+  @media (max-width: 1100px) {
+    .portals { grid-template-columns: repeat(2, 1fr); }
+  }
   @media (max-width: 900px) {
     .portals { grid-template-columns: 1fr; }
     .portal { min-height: 160px; }

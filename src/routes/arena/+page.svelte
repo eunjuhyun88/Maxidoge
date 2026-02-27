@@ -17,6 +17,8 @@
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
   import MatchHistory from '../../components/arena/MatchHistory.svelte';
   import SpeechBubble from '../../components/arena/SpeechBubble.svelte';
+  import DecisionWindowOverlay from '../../components/arena/DecisionWindowOverlay.svelte';
+  import EmergencyMeetingPanel from '../../components/arena/EmergencyMeetingPanel.svelte';
   import { pushFeedItem, clearFeed } from '$lib/stores/battleFeedStore';
   import { addMatchRecord, type MatchRecord } from '$lib/stores/matchHistoryStore';
   import { matchRecordToReplayData, generateReplaySteps, createReplayState, type ReplayStep } from '$lib/engine/replay';
@@ -25,8 +27,9 @@
   import { onMount, onDestroy } from 'svelte';
   import { isWalletConnected, openWalletModal, recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
-  import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket } from '$lib/api/arenaApi';
+  import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket, advanceMatchPhase, storeMatchMemory, submitDecision, triggerEmergencyMeeting } from '$lib/api/arenaApi';
   import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
+  import type { DecisionAction } from '$lib/engine/types';
   import type { DraftSelection } from '$lib/engine/types';
   import { mapAnalysisToC02, buildChartAnnotations, buildAgentMarkers } from '../../components/arena/arenaState';
 
@@ -102,6 +105,78 @@
   let serverMatchId: string | null = null;
   let serverAnalysis: AnalyzeResponse | null = null;
   let apiError: string | null = null;
+
+  // ═══════ DECISION WINDOWS (BATTLE phase) ═══════
+  let _dwInterval: ReturnType<typeof setInterval> | null = null;
+  let dwCurrent = 0;        // 0=not started, 1-6 during battle
+  let dwTimerSec = 10;      // countdown per window
+  let dwVisible = false;    // show overlay?
+  const DW_TOTAL = 6;
+  const DW_INTERVAL_MS = 10_000;
+
+  function startDecisionWindows() {
+    dwCurrent = 0;
+    dwVisible = false;
+    if (_dwInterval) clearInterval(_dwInterval);
+    _dwInterval = setInterval(() => {
+      dwCurrent++;
+      if (dwCurrent > DW_TOTAL) { clearDecisionWindows(); return; }
+      dwTimerSec = 10;
+      dwVisible = true;
+      // Countdown
+      const countdownId = setInterval(() => {
+        dwTimerSec--;
+        if (dwTimerSec <= 0) {
+          clearInterval(countdownId);
+          if (dwVisible) handleDecision('HOLD'); // auto-HOLD on timeout
+        }
+      }, 1000);
+    }, DW_INTERVAL_MS);
+  }
+
+  function handleDecision(action: DecisionAction) {
+    dwVisible = false;
+    const currentPrice = $gameState.prices.BTC;
+    gameState.update(s => ({
+      ...s,
+      decisionWindows: {
+        ...s.decisionWindows,
+        currentWindow: dwCurrent,
+        submissions: [...s.decisionWindows.submissions, { windowN: dwCurrent, action, priceAt: currentPrice }],
+      },
+    }));
+    // Fire-and-forget server sync
+    if (serverMatchId) {
+      submitDecision(serverMatchId, dwCurrent, action, currentPrice)
+        .catch(err => console.warn('[Arena] Decision sync failed:', err));
+    }
+  }
+
+  function clearDecisionWindows() {
+    if (_dwInterval) { clearInterval(_dwInterval); _dwInterval = null; }
+    dwVisible = false;
+    dwCurrent = 0;
+  }
+
+  // ═══════ EMERGENCY MEETING ═══════
+  async function onEmergencyMeeting() {
+    if (!serverMatchId) return;
+    gameState.update(s => ({ ...s, emergencyMeeting: { active: true, loading: true, data: null } }));
+    try {
+      const res = await triggerEmergencyMeeting(serverMatchId);
+      gameState.update(s => ({
+        ...s,
+        emergencyMeeting: { active: true, loading: false, data: res.emergencyMeeting },
+      }));
+    } catch (err) {
+      console.warn('[Arena] Emergency meeting failed:', err);
+      gameState.update(s => ({ ...s, emergencyMeeting: { active: false, loading: false, data: null } }));
+    }
+  }
+
+  function dismissEmergencyMeeting() {
+    gameState.update(s => ({ ...s, emergencyMeeting: { active: false, loading: false, data: null } }));
+  }
 
   // Squad Config handlers
   async function onSquadDeploy(e: { config: import('$lib/stores/gameState').SquadConfig }) {
@@ -455,10 +530,12 @@
     addFeed('🐕', 'YOU', '#E8967D', `${h.dir} · TP $${h.tp.toLocaleString()} · SL $${h.sl.toLocaleString()} · R:R 1:${h.rr}`, h.dir);
     sfx.vote();
 
-    // ── Server sync: submit hypothesis ──
+    // ── Server sync: submit hypothesis + advance phase ──
     if (serverMatchId) {
       const dirMap: Record<string, 'LONG' | 'SHORT' | 'NEUTRAL'> = { LONG: 'LONG', SHORT: 'SHORT', NEUTRAL: 'NEUTRAL' };
       submitArenaHypothesis(serverMatchId, dirMap[h.dir] || 'NEUTRAL', h.conf)
+        .then(() => advanceMatchPhase(serverMatchId!, 'HYPOTHESIS'))
+        .then(() => advanceMatchPhase(serverMatchId!, 'BATTLE'))
         .catch(err => console.warn('[Arena] Hypothesis sync failed:', err));
     }
 
@@ -555,11 +632,13 @@
     // ── Server sync: run analysis in background ──
     if (serverMatchId) {
       runArenaAnalysis(serverMatchId)
-        .then(res => {
+        .then(async (res) => {
           serverAnalysis = res;
           const c02 = mapAnalysisToC02(res);
           gameState.update(s => ({ ...s, orpoOutput: c02.orpo, ctxBeliefs: c02.ctx, guardianCheck: c02.guardian, commanderVerdict: c02.commander }));
           console.log('[Arena] Server analysis → C02 mapped:', res.meta);
+          // Sync phase to server
+          await advanceMatchPhase(serverMatchId!, 'ANALYSIS').catch(() => {});
         })
         .catch(err => {
           console.warn('[Arena] Server analysis failed:', err);
@@ -846,6 +925,7 @@
     verdictVisible = false;
     compareVisible = false;
     addFeed('⚔', 'BATTLE', '#FF5E7A', 'Battle in progress!');
+    startDecisionWindows();
     activeAgents.forEach((ag, i) => {
       setAgentState(ag.id, 'alert');
       setSpeech(ag.id, DOGE_BATTLE[i % DOGE_BATTLE.length], 400);
@@ -881,6 +961,7 @@
         const slHit = isLong ? price <= pos.sl : price >= pos.sl;
         if (tpHit || slHit || elapsed >= 8000) {
           if (_battleInterval) { clearInterval(_battleInterval); _battleInterval = null; }
+          clearDecisionWindows();
           const result = tpHit ? 'tp' : slHit ? 'sl' : (price > pos.entry ? 'time_win' : 'time_loss');
           setTimeout(() => advancePhase(), 500);
           return { ...s, prices: { ...s.prices, BTC: price }, battleResult: result };
@@ -991,12 +1072,14 @@
       `${win ? 'WIN' : 'LOSS'} · M${state.matchN + 1} · ${state.hypothesis?.dir || 'NEUTRAL'} · ${consensus.type}`
     );
 
-    // ── Server sync: resolve match ──
+    // ── Server sync: resolve match + advance phase + store memory ──
     if (serverMatchId) {
       const exitP = state.prices.BTC;
       resolveArenaMatch(serverMatchId, exitP)
-        .then(res => {
+        .then(async (res) => {
           console.log('[Arena] Match resolved on server:', res.result);
+          await advanceMatchPhase(serverMatchId!, 'RESULT').catch(() => {});
+          await storeMatchMemory(serverMatchId!).catch(() => {});
         })
         .catch(err => console.warn('[Arena] Resolve sync failed:', err));
     }
@@ -1555,6 +1638,27 @@
           streak={rewardStreak}
           badges={rewardBadges}
           onclose={() => { rewardVisible = false; }}
+        />
+
+        <!-- ═══════ DECISION WINDOW OVERLAY (BATTLE) ═══════ -->
+        <DecisionWindowOverlay
+          visible={dwVisible}
+          windowN={dwCurrent}
+          totalWindows={DW_TOTAL}
+          timerSec={dwTimerSec}
+          currentPrice={state.prices.BTC}
+          onDecision={handleDecision}
+        />
+
+        <!-- ═══════ EMERGENCY MEETING PANEL ═══════ -->
+        <EmergencyMeetingPanel
+          active={state.emergencyMeeting.active}
+          loading={state.emergencyMeeting.loading}
+          data={state.emergencyMeeting.data}
+          onTrigger={onEmergencyMeeting}
+          onDismiss={dismissEmergencyMeeting}
+          showButton={state.phase === 'ANALYSIS' || state.phase === 'HYPOTHESIS'}
+          disabled={!serverMatchId}
         />
 
         {#if compareVisible}

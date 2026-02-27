@@ -4,7 +4,7 @@
 
 import { writable, derived } from 'svelte/store';
 import type { CanonicalTimeframe } from '$lib/utils/timeframe';
-import type { OrpoOutput, CtxBelief, CommanderVerdict, GuardianCheck, FBScore } from '$lib/engine/types';
+import type { OrpoOutput, CtxBelief, CommanderVerdict, GuardianCheck, FBScore, DecisionAction, EmergencyMeetingData, TeamRole } from '$lib/engine/types';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
 import { getLivePriceSnapshot } from './priceStore';
@@ -14,7 +14,37 @@ export type ViewMode = 'arena' | 'terminal' | 'passport';
 export type Direction = 'LONG' | 'SHORT' | 'NEUTRAL';
 export type RiskLevel = 'low' | 'mid' | 'aggro';
 export type SquadTimeframe = CanonicalTimeframe;
-export type ArenaMode = 'PVE' | 'PVP' | 'TOURNAMENT';
+export type ArenaMode = 'PVE' | 'PVP' | 'TOURNAMENT' | 'TEAM';
+
+// ─── Decision Window (BATTLE phase) ─────────────────────────
+export interface DecisionWindowState {
+  currentWindow: number;       // 0 = not started, 1-6 during battle
+  submissions: { windowN: number; action: DecisionAction; priceAt: number }[];
+  timerSec: number;            // countdown per window (10s default)
+}
+
+// ─── Emergency Meeting ──────────────────────────────────────
+export interface EmergencyMeetingState {
+  active: boolean;
+  loading: boolean;
+  data: EmergencyMeetingData | null;
+}
+
+// ─── PvP Queue ──────────────────────────────────────────────
+export interface PvPQueueState {
+  inQueue: boolean;
+  poolEntryId: string | null;
+  matched: boolean;
+  matchId: string | null;
+}
+
+// ─── Team Context ───────────────────────────────────────────
+export interface TeamContext {
+  teamId: string | null;
+  teamName: string | null;
+  role: TeamRole | null;
+  teamMatchId: string | null;
+}
 
 export interface TournamentContext {
   tournamentId: string | null;
@@ -97,6 +127,18 @@ export interface GameState {
   guardianCheck: GuardianCheck | null;
   fbScore: FBScore | null;
 
+  // Phase 2: Decision windows (BATTLE phase)
+  decisionWindows: DecisionWindowState;
+
+  // Phase 2: Emergency meeting (Among Us-style debate)
+  emergencyMeeting: EmergencyMeetingState;
+
+  // Phase 2: PvP queue state
+  pvpQueue: PvPQueueState;
+
+  // Phase 3: Team context
+  teamContext: TeamContext;
+
   // Squad config (v2: team-wide parameters)
   squadConfig: SquadConfig;
 
@@ -143,6 +185,10 @@ const defaultState: GameState = {
   commanderVerdict: null,
   guardianCheck: null,
   fbScore: null,
+  decisionWindows: { currentWindow: 0, submissions: [], timerSec: 10 },
+  emergencyMeeting: { active: false, loading: false, data: null },
+  pvpQueue: { inQueue: false, poolEntryId: null, matched: false, matchId: null },
+  teamContext: { teamId: null, teamName: null, role: null, teamMatchId: null },
   squadConfig: { riskLevel: 'mid', timeframe: '4h', leverageBias: 5, confidenceWeight: 5 },
   pendingAction: null,
   prices: { BTC: 97420, ETH: 3481, SOL: 198.46 },
@@ -165,11 +211,19 @@ function loadState(): GameState {
       return {
         ...defaultState,
         ...parsed,
-        arenaMode: parsed?.arenaMode === 'PVP' || parsed?.arenaMode === 'TOURNAMENT' ? parsed.arenaMode : 'PVE',
+        arenaMode: ['PVP', 'TOURNAMENT', 'TEAM'].includes(parsed?.arenaMode) ? parsed.arenaMode : 'PVE',
         tournament: {
           ...defaultState.tournament,
           ...(parsed?.tournament ?? {}),
         },
+        teamContext: {
+          ...defaultState.teamContext,
+          ...(parsed?.teamContext ?? {}),
+        },
+        // Transient fields — always reset on load
+        decisionWindows: defaultState.decisionWindows,
+        emergencyMeeting: defaultState.emergencyMeeting,
+        pvpQueue: defaultState.pvpQueue,
         squadConfig,
         timeframe: normalizeTimeframe(parsed?.timeframe),
         running: false,
@@ -204,7 +258,8 @@ gameState.subscribe(s => {
     selectedAgents: s.selectedAgents,
     pair: s.pair,
     timeframe: s.timeframe,
-    squadConfig: s.squadConfig
+    squadConfig: s.squadConfig,
+    teamContext: s.teamContext
   };
   const json = JSON.stringify(persist);
   // Skip if nothing changed
