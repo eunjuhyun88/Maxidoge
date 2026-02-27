@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { timeSince } from '$lib/utils/time';
   import { CHARACTER_ART } from '$lib/data/agents';
   import { AGENT_POOL } from '$lib/engine/agents';
   import type { AgentId } from '$lib/engine/types';
@@ -166,13 +167,6 @@
 
   function triggerArena() {
     goto('/arena');
-  }
-
-  function timeSince(ts: number): string {
-    const sec = Math.floor((Date.now() - ts) / 1000);
-    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-    return `${Math.floor(sec / 86400)}d ago`;
   }
 
   onMount(() => {

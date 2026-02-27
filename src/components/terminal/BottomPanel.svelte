@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { timeSince } from '$lib/utils/time';
   import { quickTradeStore, openTrades, closedTrades, totalQuickPnL, closeQuickTrade, clearClosedTrades } from '$lib/stores/quickTradeStore';
   import { trackedSignalStore, activeSignals, activeSignalCount, convertToTrade, removeTracked, clearExpired } from '$lib/stores/trackedSignalStore';
   import { gameState } from '$lib/stores/gameState';
@@ -60,12 +61,6 @@
   // ── Helpers ──
   function pnlColor(n: number) { return n >= 0 ? 'var(--grn)' : 'var(--red)'; }
   function pnlPfx(n: number) { return n >= 0 ? '+' : ''; }
-  function timeSince(ts: number) {
-    const sec = Math.floor((Date.now() - ts) / 1000);
-    if (sec < 60) return `${sec}s`;
-    if (sec < 3600) return `${Math.floor(sec / 60)}m`;
-    return `${Math.floor(sec / 3600)}h`;
-  }
   function timeLeft(ts: number) {
     const ms = ts - Date.now();
     if (ms <= 0) return 'expired';
@@ -115,7 +110,7 @@
               <span class="bp-pnl-val" style="color:{pnlColor(trade.pnlPercent)}">
                 {pnlPfx(trade.pnlPercent)}{trade.pnlPercent}%
               </span>
-              <span class="bp-time">{timeSince(trade.openedAt)}</span>
+              <span class="bp-time">{timeSince(trade.openedAt, false)}</span>
               <button class="bp-action-btn bp-close-btn" on:click={() => handleCloseTrade(trade.id)}>CLOSE</button>
             </div>
           {/each}
@@ -180,7 +175,7 @@
             <div class="bp-row bp-act-row">
               <span class="bp-act-icon">{act.icon}</span>
               <span class="bp-act-text" style="color:{act.color}">{act.text}</span>
-              <span class="bp-time">{timeSince(act.time)}</span>
+              <span class="bp-time">{timeSince(act.time, false)}</span>
             </div>
           {/each}
         {/if}

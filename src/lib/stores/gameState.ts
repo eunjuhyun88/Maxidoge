@@ -7,7 +7,7 @@ import type { CanonicalTimeframe } from '$lib/utils/timeframe';
 import type { OrpoOutput, CtxBelief, CommanderVerdict, GuardianCheck, FBScore } from '$lib/engine/types';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
-import { getLivePriceSnapshot } from './priceStore';
+import { btcPrice, ethPrice, solPrice } from './priceStore';
 
 export type Phase = 'DRAFT' | 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE' | 'RESULT';
 export type ViewMode = 'arena' | 'terminal' | 'passport';
@@ -183,8 +183,22 @@ function loadState(): GameState {
 
 export const gameState = writable<GameState>(loadState());
 
-// S-03 이후 가격 동기화는 layout/chart 측 경로에서 수행한다.
-// gameState.prices는 레거시 호환 필드로 유지한다.
+// S-03: priceStore → gameState.prices 자동 동기화 (단일 소스)
+// +layout.svelte의 이중 쓰기를 제거하고 여기서 중앙 관리한다.
+if (typeof window !== 'undefined') {
+  derived(
+    [btcPrice, ethPrice, solPrice],
+    ([$btc, $eth, $sol]) => ({ BTC: $btc, ETH: $eth, SOL: $sol })
+  ).subscribe(p => {
+    gameState.update(s => {
+      const nextBtc = p.BTC || s.prices.BTC;
+      const nextEth = p.ETH || s.prices.ETH;
+      const nextSol = p.SOL || s.prices.SOL;
+      if (s.prices.BTC === nextBtc && s.prices.ETH === nextEth && s.prices.SOL === nextSol) return s;
+      return { ...s, prices: { BTC: nextBtc, ETH: nextEth, SOL: nextSol } };
+    });
+  });
+}
 
 // Auto-save persistent fields to localStorage (debounced — prices excluded intentionally)
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -227,25 +241,3 @@ export function setView(view: ViewMode) {
   gameState.update(s => ({ ...s, currentView: view }));
 }
 
-/**
- * @deprecated S-03: 랜덤 지터를 제거하고 livePrice 스냅샷을 사용한다.
- * 레거시 호출 호환을 위해 유지하되, 실제 가격 소스는 priceStore다.
- */
-export function updatePrices() {
-  const snap = getLivePriceSnapshot(['BTC', 'ETH', 'SOL']);
-  gameState.update(s => {
-    const nextBtc = snap.BTC?.price ?? s.prices.BTC;
-    const nextEth = snap.ETH?.price ?? s.prices.ETH;
-    const nextSol = snap.SOL?.price ?? s.prices.SOL;
-    if (nextBtc === s.prices.BTC && nextEth === s.prices.ETH && nextSol === s.prices.SOL) return s;
-
-    return {
-      ...s,
-      prices: {
-        BTC: nextBtc,
-        ETH: nextEth,
-        SOL: nextSol
-      }
-    };
-  });
-}

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { timeSince } from '$lib/utils/time';
+
   export let embedded = false;
   export let variant: 'full' | 'stream' = 'full';
 
@@ -116,13 +118,6 @@
     }, 2000);
   }
 
-  function timeSince(ts: number): string {
-    const sec = Math.floor((Date.now() - ts) / 1000);
-    if (sec < 60) return `${sec}s ago`;
-    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-    return `${Math.floor(sec / 86400)}d ago`;
-  }
 </script>
 
 <div class="live-page" class:stream={isStream}>

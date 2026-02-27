@@ -10,6 +10,7 @@
 // 이 단일 스토어를 구독하도록 교체 예정.
 
 import { writable, derived, get, type Readable } from 'svelte/store';
+import { normalizeSymbol } from '$lib/utils/price';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -86,10 +87,6 @@ export const ethPrice = derived(livePrice, ($p) => $p.ETH?.price ?? 0);
 export const solPrice = derived(livePrice, ($p) => $p.SOL?.price ?? 0);
 
 // ─── Actions ─────────────────────────────────────────────────
-
-function normalizeSymbol(symbol: string): string {
-  return symbol.trim().toUpperCase();
-}
 
 function normalizePrice(value: number): number | null {
   if (!Number.isFinite(value) || value <= 0) return null;
