@@ -28,6 +28,29 @@
   } from '$lib/api/passportLearningApi';
   import { livePrices } from '$lib/stores/priceStore';
   import EmptyState from '../../components/shared/EmptyState.svelte';
+  import {
+    ASSET_COLORS,
+    ASSET_ICONS,
+    withLivePrices,
+    toHoldingAsset,
+    summarizeClosedTrades,
+    countLongTrades,
+    focusToneClass,
+    formatDateTime,
+    formatAgo,
+    statusColor,
+    compactSummary,
+    evalMetricsPreview,
+    tierColor,
+    tierEmoji,
+    tierLabel,
+    pnlColor,
+    pnlPrefix,
+    timeSince,
+    isPassportTab,
+    type FocusTone,
+    type PassportTabType,
+  } from '../../components/passport/passportHelpers';
 
   $: profile = $userProfileStore;
   $: wallet = $walletStore;
@@ -57,43 +80,6 @@
   let baseHoldings: HoldingAsset[] = HOLDINGS_DATA;
   let effectiveHoldings: HoldingAsset[] = HOLDINGS_DATA;
   $: liveP = $livePrices;
-
-  function withLivePrices(holdings: HoldingAsset[], prices: Record<string, number>): HoldingAsset[] {
-    const repriced = holdings.map((asset) => {
-      const livePrice = prices[asset.symbol];
-      const currentPrice = Number.isFinite(livePrice) && livePrice > 0 ? livePrice : asset.currentPrice;
-      return { ...asset, currentPrice };
-    });
-
-    const totalValue = repriced.reduce((sum, asset) => sum + asset.amount * asset.currentPrice, 0);
-    if (totalValue <= 0) {
-      return repriced.map((asset) => ({ ...asset, allocation: 0 }));
-    }
-
-    return repriced.map((asset) => ({
-      ...asset,
-      allocation: (asset.amount * asset.currentPrice) / totalValue,
-    }));
-  }
-
-  function toHoldingAsset(item: {
-    symbol: string;
-    name: string;
-    amount: number;
-    avgPrice: number;
-    currentPrice: number;
-  }): HoldingAsset {
-    return {
-      symbol: item.symbol,
-      name: item.name,
-      icon: ASSET_ICONS[item.symbol] || item.symbol[0],
-      color: ASSET_COLORS[item.symbol] || '#888',
-      amount: item.amount,
-      avgPrice: item.avgPrice,
-      currentPrice: item.currentPrice,
-      allocation: 0,
-    };
-  }
 
   async function hydrateHoldings() {
     holdingsState = 'loading';
@@ -132,7 +118,7 @@
   $: unrealizedPnl = opens.reduce((s, t) => s + t.pnlPercent, 0);
 
   // Tab state
-  type TabType = 'profile' | 'wallet' | 'positions' | 'arena';
+  type TabType = PassportTabType;
   let activeTab: TabType = 'wallet';
 
   const TABS: { id: TabType; label: string; icon: string }[] = [
@@ -151,7 +137,6 @@
   $: holdingsOverflow = effectiveHoldings.slice(HOLDINGS_PREVIEW_LIMIT);
   $: matchPreview = records.slice(0, MATCH_PREVIEW_LIMIT);
 
-  type FocusTone = 'good' | 'warn' | 'bad' | 'neutral';
   interface FocusInsight {
     key: string;
     value: string;
@@ -167,50 +152,6 @@
 
   interface FocusCard extends FocusInsight {
     primary?: boolean;
-  }
-
-  interface ClosedTradeLike {
-    closePnl?: number | null;
-  }
-
-  interface DirectionalTradeLike {
-    dir?: string | null;
-  }
-
-  function summarizeClosedTrades(trades: ClosedTradeLike[]) {
-    let wins = 0;
-    let losses = 0;
-    let winPnlSum = 0;
-    let lossPnlAbsSum = 0;
-
-    for (const trade of trades) {
-      const pnl = trade.closePnl ?? 0;
-      if (pnl > 0) {
-        wins += 1;
-        winPnlSum += pnl;
-      } else if (pnl < 0) {
-        losses += 1;
-        lossPnlAbsSum += Math.abs(pnl);
-      }
-    }
-
-    return {
-      wins,
-      losses,
-      avgWinPnl: wins > 0 ? winPnlSum / wins : 0,
-      avgLossPnl: losses > 0 ? lossPnlAbsSum / losses : 0
-    };
-  }
-
-  function countLongTrades(trades: DirectionalTradeLike[]): number {
-    return trades.reduce((count, trade) => count + (trade.dir === 'LONG' ? 1 : 0), 0);
-  }
-
-  function focusToneClass(tone: FocusTone): string {
-    if (tone === 'good') return 'focus-good';
-    if (tone === 'warn') return 'focus-warn';
-    if (tone === 'bad') return 'focus-bad';
-    return 'focus-neutral';
   }
 
   let headerStats: HeaderStat[] = [];
@@ -430,43 +371,6 @@
   let learningActionMessage = '';
   let learningErrorMessage = '';
 
-  function formatDateTime(ts: number | null | undefined): string {
-    if (!ts || !Number.isFinite(ts)) return '-';
-    return new Date(ts).toLocaleString();
-  }
-
-  function formatAgo(ts: number | null | undefined): string {
-    if (!ts || !Number.isFinite(ts)) return '-';
-    const sec = Math.floor((Date.now() - ts) / 1000);
-    if (sec < 60) return `${sec}s ago`;
-    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-    return `${Math.floor(sec / 86400)}d ago`;
-  }
-
-  function statusColor(status: string | null | undefined): string {
-    const normalized = (status || '').toLowerCase();
-    if (normalized === 'failed' || normalized === 'fail') return '#ff725d';
-    if (normalized === 'running' || normalized === 'processing') return '#ffd060';
-    if (normalized === 'succeeded' || normalized === 'done' || normalized === 'pass' || normalized === 'ready') return '#9dffcf';
-    if (normalized === 'queued' || normalized === 'pending' || normalized === 'draft') return '#8bd8ff';
-    return '#c9c2bf';
-  }
-
-  function compactSummary(text: string, maxLen = 240): string {
-    const normalized = text.replace(/\s+/g, ' ').trim();
-    if (normalized.length <= maxLen) return normalized;
-    return `${normalized.slice(0, maxLen - 1)}…`;
-  }
-
-  function evalMetricsPreview(metrics: Record<string, unknown>): string {
-    const pairs = Object.entries(metrics).slice(0, 3);
-    if (pairs.length === 0) return 'No metrics';
-    return pairs
-      .map(([k, v]) => `${k}: ${typeof v === 'number' ? v.toFixed(3) : String(v)}`)
-      .join(' · ');
-  }
-
   async function hydrateLearningPanel() {
     learningRefreshing = true;
     learningErrorMessage = '';
@@ -582,38 +486,6 @@
   function startEditName() { nameInput = profile.username; editingName = true; }
   function saveName() { if (nameInput.trim().length >= 2) setUsername(nameInput.trim()); editingName = false; }
 
-  function tierColor(t: string): string {
-    if (t === 'diamond') return '#00d4ff';
-    if (t === 'gold') return '#ffd060';
-    if (t === 'silver') return '#c0c0c0';
-    return '#cd7f32';
-  }
-  function tierEmoji(t: string): string {
-    if (t === 'diamond') return '💎';
-    if (t === 'gold') return '🏆';
-    if (t === 'silver') return '🌙';
-    return '🐶';
-  }
-  function tierLabel(t: string): string {
-    if (t === 'diamond') return 'DIAMOND PAWS';
-    if (t === 'gold') return 'GOLD DOGE';
-    if (t === 'silver') return 'SILVER MOON';
-    return 'BRONZE WOW';
-  }
-  function pnlColor(v: number): string { return v >= 0 ? '#00ff88' : '#ff2d55'; }
-  function pnlPrefix(v: number): string { return v >= 0 ? '+' : ''; }
-  function timeSince(ts: number): string {
-    const sec = Math.floor((Date.now() - ts) / 1000);
-    if (sec < 60) return `${sec}s ago`;
-    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-    return `${Math.floor(sec / 86400)}d ago`;
-  }
-
-  function isPassportTab(value: string): value is TabType {
-    return value === 'profile' || value === 'wallet' || value === 'positions' || value === 'arena';
-  }
-
   function setActiveTab(tab: TabType) {
     if (tab === activeTab) return;
     activeTab = tab;
@@ -630,17 +502,6 @@
       holdingsSyncing = false;
     }
   }
-
-  // Color map for known assets (donut chart)
-  const ASSET_COLORS: Record<string, string> = {
-    BTC: '#f7931a', ETH: '#627eea', SOL: '#14f195', AVAX: '#e84142',
-    DOGE: '#c2a633', USDC: '#2775ca', USDT: '#26a17b', BNB: '#f3ba2f',
-    ADA: '#0d1e30', MATIC: '#8247e5', DOT: '#e6007a', LINK: '#2a5ada',
-  };
-  const ASSET_ICONS: Record<string, string> = {
-    BTC: '₿', ETH: 'Ξ', SOL: 'S', AVAX: 'A', DOGE: 'Ð',
-    USDC: '$', USDT: '$', BNB: 'B', ADA: 'A', MATIC: 'M', DOT: 'D', LINK: 'L',
-  };
 
   $: if (wallet.connected && wallet.address && wallet.address !== holdingsSyncAddress) {
     holdingsSyncAddress = wallet.address;
