@@ -281,7 +281,7 @@
                 {#if sig.agent}
                   <div class="sig-agent">
                     {#if sig.agent.img?.def}
-                      <img src={sig.agent.img.def} alt={sig.agent.name} class="sig-agent-img" />
+                      <img src={sig.agent.img.def} alt={sig.agent.name} class="sig-agent-img" loading="lazy" />
                     {/if}
                     <span class="sig-agent-name" style="color:{sig.agent.color}">{sig.agent.name}</span>
                   </div>

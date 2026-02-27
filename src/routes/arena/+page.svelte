@@ -190,7 +190,7 @@
         break;
       case 'scout':
         step.agentVotes.forEach((v, i) => {
-          setTimeout(() => {
+          safeTimeout(() => {
             addFeed(v.icon, v.name, v.color, `${v.dir} — ${v.conf}% confidence`);
           }, i * 300 / speed);
         });
@@ -302,7 +302,7 @@
         agentStates = { ...agentStates };
 
         // Clear after duration
-        if (dur > 0) setTimeout(() => {
+        if (dur > 0) safeTimeout(() => {
           if (agentStates[agentId]) {
             agentStates[agentId] = { ...agentStates[agentId], speech: '' };
             agentStates = { ...agentStates };
@@ -333,6 +333,13 @@
   let compareAutoTimer: ReturnType<typeof setTimeout> | null = null;
   let pvpShowTimer: ReturnType<typeof setTimeout> | null = null;
   let _arenaDestroyed = false; // guard for fire-and-forget timers after unmount
+  const _pendingTimers = new Set<ReturnType<typeof setTimeout>>(); // track unnamed timers for cleanup
+  /** Tracked setTimeout that auto-cleans from the set and respects _arenaDestroyed */
+  function safeTimeout(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
+    const id = setTimeout(() => { _pendingTimers.delete(id); if (!_arenaDestroyed) fn(); }, ms);
+    _pendingTimers.add(id);
+    return id;
+  }
 
   function addFeed(icon: string, name: string, color: string, text: string, dir?: string) {
     // Add with 'new' flag for slide-in animation + blinking cursor
@@ -350,7 +357,7 @@
     const colors = ['#FF5E7A', '#E8967D', '#66CCE6', '#00CC88', '#DCB970', '#F0EDE4'];
     const n = 3 + Math.floor(Math.random() * 3);
     for (let i = 0; i < n; i++) {
-      setTimeout(() => {
+      safeTimeout(() => {
         const id = Date.now() + i;
         floatingWords = [...floatingWords, {
           id,
@@ -359,7 +366,7 @@
           x: 10 + Math.random() * 80,
           dur: 1.5 + Math.random() * 1
         }];
-        setTimeout(() => { floatingWords = floatingWords.filter(w => w.id !== id); }, 2500);
+        safeTimeout(() => { floatingWords = floatingWords.filter(w => w.id !== id); }, 2500);
       }, i * 200);
     }
   }
@@ -387,7 +394,7 @@
     };
     liveEvents = [ev, ...liveEvents].slice(0, 3);
     addFeed(ev.icon, 'EVENT', ev.tint, `${ev.title} · ${ev.detail}`);
-    setTimeout(() => {
+    safeTimeout(() => {
       liveEvents = liveEvents.filter((item) => item.id !== ev.id);
     }, LIVE_EVENT_TTL_MS + 60);
   }
@@ -538,7 +545,7 @@
     dogeFloat();
     addFeed('🐕', 'ARENA', '#E8967D', 'Draft locked. Preparing analysis...');
     activeAgents.forEach((ag, i) => {
-      setTimeout(() => {
+      safeTimeout(() => {
         setAgentState(ag.id, 'alert');
         setSpeech(ag.id, DOGE_DEPLOYS[i % DOGE_DEPLOYS.length], 800);
       }, i * 200);
@@ -615,7 +622,7 @@
 
     // Agents go into think state
     activeAgents.forEach((ag, i) => {
-      setTimeout(() => {
+      safeTimeout(() => {
         setAgentState(ag.id, 'think');
         setSpeech(ag.id, '🤔...', 600);
       }, i * 300);
@@ -629,7 +636,7 @@
 
     // Agents look at the position
     activeAgents.forEach((ag, i) => {
-      setTimeout(() => {
+      safeTimeout(() => {
         setAgentState(ag.id, 'think');
         setSpeech(ag.id, '📋 reviewing...', 600);
       }, i * 200);
@@ -672,8 +679,7 @@
       const pair = agentSourcePairs.find(p => p.agentId === ag.id);
       const targetSource = pair?.source || SOURCES[i % SOURCES.length];
 
-      setTimeout(() => {
-        if (_arenaDestroyed) return;
+      safeTimeout(() => {
         // Phase 1: Walk toward data source — move agent position
         setAgentState(ag.id, 'walk');
         if (targetSource) {
@@ -686,21 +692,18 @@
         }
         sfx.scan();
 
-        setTimeout(() => {
-          if (_arenaDestroyed) return;
+        safeTimeout(() => {
           // Phase 2: Arrive at source + charge up energy
           setAgentState(ag.id, 'charge');
           setAgentEnergy(ag.id, 30);
           setSpeech(ag.id, ag.speech.scout, 800 / speed);
 
-          setTimeout(() => {
-            if (_arenaDestroyed) return;
+          safeTimeout(() => {
             // Phase 3: Energy full → show finding (at source)
             setAgentEnergy(ag.id, 75);
             addFeed(ag.icon, ag.name, ag.color, ag.finding.title, ag.dir);
 
-            setTimeout(() => {
-              if (_arenaDestroyed) return;
+            safeTimeout(() => {
               // Phase 4: Full charge + decision — return to original position
               setAgentEnergy(ag.id, 100);
               sfx.charge();
@@ -718,8 +721,8 @@
               findings = [...findings, { def: ag, visible: true }];
 
               // Phase 5: Return to idle stance
-              setTimeout(() => {
-                if (!_arenaDestroyed) setAgentState(ag.id, 'idle');
+              safeTimeout(() => {
+                setAgentState(ag.id, 'idle');
               }, 500 / speed);
             }, 300 / speed);
           }, 300 / speed);
@@ -732,7 +735,7 @@
     councilActive = true;
     addFeed('📊', 'GATHER', '#66CCE6', 'Gathering analysis data...');
     activeAgents.forEach((ag, i) => {
-      setTimeout(() => {
+      safeTimeout(() => {
         setAgentState(ag.id, 'vote');
         setSpeech(ag.id, DOGE_GATHER[i % DOGE_GATHER.length], 400);
       }, i * 150);
@@ -742,7 +745,7 @@
   function initCouncil() {
     addFeed('🗳', 'COUNCIL', '#E8967D', 'Agents voting on direction...');
     activeAgents.forEach((ag, i) => {
-      setTimeout(() => {
+      safeTimeout(() => {
         const dir = ag.dir;
         agentStates[ag.id] = { ...agentStates[ag.id], voteDir: dir };
         agentStates = { ...agentStates };
@@ -786,7 +789,7 @@
     dogeFloat();
     addFeed('⭐', 'VERDICT', '#E8967D', `Agent verdict: ${agentDir} · Score ${score} · ${bullish}/${activeAgents.length} agree`, agentDir);
     activeAgents.forEach((ag, i) => {
-      setTimeout(() => {
+      safeTimeout(() => {
         setAgentState(ag.id, 'jump');
         setSpeech(ag.id, DOGE_VOTE_LONG[i % DOGE_VOTE_LONG.length], 600);
       }, i * 100);
@@ -865,7 +868,7 @@
     const pos = state.pos || fallbackPos;
     if (!pos) {
       gameState.update(s => ({ ...s, battleResult: null, running: false }));
-      setTimeout(() => advancePhase(), 3000);
+      safeTimeout(() => advancePhase(), 3000);
       return;
     }
 
@@ -881,7 +884,7 @@
         if (tpHit || slHit || elapsed >= 8000) {
           if (_battleInterval) { clearInterval(_battleInterval); _battleInterval = null; }
           const result = tpHit ? 'tp' : slHit ? 'sl' : (price > pos.entry ? 'time_win' : 'time_loss');
-          setTimeout(() => advancePhase(), 500);
+          safeTimeout(() => advancePhase(), 500);
           return { ...s, prices: { ...s.prices, BTC: price }, battleResult: result };
         }
         return { ...s, prices: { ...s.prices, BTC: price } };
@@ -1135,7 +1138,7 @@
         confirmingExit = false;
       } else {
         confirmingExit = true;
-        setTimeout(() => { confirmingExit = false; }, 3000);
+        safeTimeout(() => { confirmingExit = false; }, 3000);
       }
     }
   }
@@ -1149,7 +1152,7 @@
       goLobby();
     } else {
       confirmingExit = true;
-      setTimeout(() => { confirmingExit = false; }, 3000);
+      safeTimeout(() => { confirmingExit = false; }, 3000);
     }
   }
 
@@ -1175,6 +1178,9 @@
     clearLiveEventTimer();
     // Clean up typing timers
     Object.values(speechTimers).forEach(t => clearInterval(t));
+    // Clean up all fire-and-forget timers
+    _pendingTimers.forEach(t => clearTimeout(t));
+    _pendingTimers.clear();
   });
 </script>
 
@@ -1448,7 +1454,7 @@
                 {#if ag.img.def}
                   <img class="sprite-img"
                     src={agState.state === 'jump' || agState.state === 'vote' ? ag.img.win : agState.state === 'sad' || agState.state === 'alert' ? ag.img.alt : ag.img.def}
-                    alt={ag.name} />
+                    alt={ag.name} loading="lazy" />
                 {:else}
                   <span class="sprite-icon">{ag.icon}</span>
                 {/if}

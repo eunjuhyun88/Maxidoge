@@ -1162,7 +1162,7 @@
                     <a class="trend-row dex-row" href={token.url} target="_blank" rel="noopener">
                       <span class="trend-rank">#{i + 1}</span>
                       {#if token.icon}
-                        <img class="dex-icon" src={token.icon} alt="" width="18" height="18" />
+                        <img class="dex-icon" src={token.icon} alt="" width="18" height="18" loading="lazy" />
                       {/if}
                       <div class="trend-coin">
                         <span class="trend-sym">{token.symbol || token.chainId.toUpperCase()}</span>

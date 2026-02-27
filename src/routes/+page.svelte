@@ -218,7 +218,7 @@
           <button type="button" class="feat-back" onclick={() => selectFeature(selectedFeature ?? 0)}>← BACK</button>
           <span class="htag">{FEATURES[selectedFeature].sub}</span>
           <div class="ht feat-detail-img" style="--ht-img:url({FEATURES[selectedFeature].img})">
-            <img src={FEATURES[selectedFeature].img} alt={FEATURES[selectedFeature].label} />
+            <img src={FEATURES[selectedFeature].img} alt={FEATURES[selectedFeature].label} loading="lazy" />
           </div>
           <h2 class="feat-detail-title">{FEATURES[selectedFeature].label}</h2>
           <p class="feat-detail-desc">{FEATURES[selectedFeature].detail}</p>
@@ -288,7 +288,7 @@
           aria-pressed={selectedFeature === i}
           onclick={() => selectFeature(i)}
         >
-          <div class="fc-img"><div class="ht" style="--ht-img:url({feat.img})"><img src={feat.img} alt={feat.label} /></div></div>
+          <div class="fc-img"><div class="ht" style="--ht-img:url({feat.img})"><img src={feat.img} alt={feat.label} loading="lazy" /></div></div>
           <div class="fc-txt">
             <span class="fc-sub">{feat.sub}</span>
             <h3 class="fc-lbl">{feat.label}</h3>
@@ -480,7 +480,7 @@
       <button type="button" class="m-sheet-close" onclick={closeMobileSheet} aria-label="Close">✕</button>
       <span class="m-sheet-tag">{FEATURES[mobileSheet].sub}</span>
       <div class="ht m-sheet-img" style="--ht-img:url({FEATURES[mobileSheet].img})">
-        <img src={FEATURES[mobileSheet].img} alt={FEATURES[mobileSheet].label} />
+        <img src={FEATURES[mobileSheet].img} alt={FEATURES[mobileSheet].label} loading="lazy" />
       </div>
       <h2 class="m-sheet-title">{FEATURES[mobileSheet].label}</h2>
       <p class="m-sheet-desc">{FEATURES[mobileSheet].detail}</p>
