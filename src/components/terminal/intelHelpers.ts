@@ -107,14 +107,7 @@ export function fmtTrendVol(v: number): string {
 
 // ─── Time Formatting ──────────────────────────────────────────
 
-/** Format timestamp as relative time (now, 5m, 2h, 1d) */
-export function formatRelativeTime(ts: number): string {
-  const mins = Math.round((Date.now() - ts) / 60000);
-  if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h`;
-  return `${Math.round(mins / 1440)}d`;
-}
+export { formatRelativeTime } from '$lib/utils/time';
 
 // ─── Token Aliases ────────────────────────────────────────────
 

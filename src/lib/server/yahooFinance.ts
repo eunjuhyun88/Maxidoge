@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { getCached, setCache } from './providers/cache';
+import { normalizeSymbol } from '$lib/utils/price';
 
 const YAHOO_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
 const CACHE_TTL = 5 * 60_000; // 5분 (DXY/SPX/수익률은 느리게 변동)
@@ -26,10 +27,6 @@ export type YahooSeries = {
 
 function isAllowedSymbol(symbol: string): boolean {
   return /^[A-Z0-9^.=/-]{1,20}$/.test(symbol);
-}
-
-function normalizeSymbol(raw: string): string {
-  return raw.trim().toUpperCase();
 }
 
 async function fetchJson(symbol: string, range: string, interval: string, timeoutMs = 8000): Promise<any> {

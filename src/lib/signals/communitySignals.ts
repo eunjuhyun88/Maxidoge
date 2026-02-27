@@ -1,3 +1,7 @@
+import { timeSince } from '$lib/utils/time';
+
+export { timeSince };
+
 export type SignalPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 export type SignalSource = 'arena' | 'trade' | 'tracked' | 'agent';
 
@@ -86,13 +90,6 @@ export interface CommunityIdea {
 
 const TF_ROTATION: CommunityIdea['timeframe'][] = ['4H', '1D', '1H', '15m', '30m', '5m'];
 
-export function timeSince(ts: number): string {
-  const sec = Math.floor((Date.now() - ts) / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  return `${Math.floor(sec / 86400)}d ago`;
-}
 
 export function buildArenaSignals(recs: MatchRecordInput[], agents: SignalAgent[], state: PriceStateInput): Signal[] {
   return recs.slice(0, 10).flatMap((r) => {

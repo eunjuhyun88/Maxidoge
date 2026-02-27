@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import type { HoldingAsset } from '$lib/data/holdings';
+import { timeSince as _timeSince, formatAgo as _formatAgo } from '$lib/utils/time';
 
 // ─── Asset Constants ─────────────────────────────────────────
 
@@ -121,14 +122,7 @@ export function formatDateTime(ts: number | null | undefined): string {
 }
 
 /** Format timestamp as relative "ago" string */
-export function formatAgo(ts: number | null | undefined): string {
-  if (!ts || !Number.isFinite(ts)) return '-';
-  const sec = Math.floor((Date.now() - ts) / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  return `${Math.floor(sec / 86400)}d ago`;
-}
+export const formatAgo = _formatAgo;
 
 /** Map status string to color */
 export function statusColor(status: string | null | undefined): string {
@@ -191,13 +185,7 @@ export function pnlColor(v: number): string { return v >= 0 ? '#00ff88' : '#ff2d
 export function pnlPrefix(v: number): string { return v >= 0 ? '+' : ''; }
 
 /** Format timestamp as relative time-since string */
-export function timeSince(ts: number): string {
-  const sec = Math.floor((Date.now() - ts) / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  return `${Math.floor(sec / 86400)}d ago`;
-}
+export const timeSince = _timeSince;
 
 // ─── Tab Validation ──────────────────────────────────────────
 

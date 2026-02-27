@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { timeSince } from '$lib/utils/time';
   import { quickTradeStore, openTrades, closedTrades, totalQuickPnL, closeQuickTrade, clearClosedTrades, toggleTradePanel } from '$lib/stores/quickTradeStore';
   import { gameState } from '$lib/stores/gameState';
 
@@ -26,12 +27,6 @@
     return pnl >= 0 ? '+' : '';
   }
 
-  function timeSince(ts: number): string {
-    const sec = Math.floor((Date.now() - ts) / 1000);
-    if (sec < 60) return `${sec}s`;
-    if (sec < 3600) return `${Math.floor(sec / 60)}m`;
-    return `${Math.floor(sec / 3600)}h`;
-  }
 </script>
 
 {#if panel.showPanel}
@@ -64,7 +59,7 @@
             <span class="qtp-pnl-val" style="color:{pnlColor(trade.pnlPercent)}">
               {pnlPrefix(trade.pnlPercent)}{trade.pnlPercent}%
             </span>
-            <span class="qtp-time">{timeSince(trade.openedAt)}</span>
+            <span class="qtp-time">{timeSince(trade.openedAt, false)}</span>
             <button class="qtp-close-btn" on:click={() => handleClose(trade.id)}>CLOSE</button>
           </div>
         </div>

@@ -72,14 +72,9 @@
         }
       }
       if (Object.keys(updates).length) {
-        // gameState 가격도 동기화 (레거시 호환)
+        // bases만 초기화 (prices는 gameState 내부 auto-sync가 처리)
         gameState.update(s => ({
           ...s,
-          prices: {
-            BTC: updates.BTC ?? s.prices.BTC,
-            ETH: updates.ETH ?? s.prices.ETH,
-            SOL: updates.SOL ?? s.prices.SOL,
-          },
           bases: {
             BTC: updates.BTC ?? s.bases.BTC,
             ETH: updates.ETH ?? s.bases.ETH,
@@ -113,15 +108,7 @@
           }
           if (Object.keys(mapped).length) {
             updatePriceStore(mapped, 'ws');
-            // gameState 가격도 동기화 (레거시 호환)
-            gameState.update(s => ({
-              ...s,
-              prices: {
-                BTC: mapped.BTC ?? s.prices.BTC,
-                ETH: mapped.ETH ?? s.prices.ETH,
-                SOL: mapped.SOL ?? s.prices.SOL,
-              },
-            }));
+            // gameState.prices는 gameState 내부 auto-sync가 처리
           }
         }, 350);
       }, (fullUpdate) => {
