@@ -1,6 +1,7 @@
 <script lang="ts">
   import WarRoom from '../../components/terminal/WarRoom.svelte';
   import ChartPanel from '../../components/arena/ChartPanel.svelte';
+  import VerdictBanner from '../../components/terminal/VerdictBanner.svelte';
   import IntelPanel from '../../components/terminal/IntelPanel.svelte';
   import TokenDropdown from '../../components/shared/TokenDropdown.svelte';
   import CopyTradeModal from '../../components/modals/CopyTradeModal.svelte';
@@ -885,6 +886,7 @@
   ];
   let isTyping = false;
   let latestScan: ScanIntelDetail | null = null;
+  let terminalScanning = false;
   type ChatTradeDirection = 'LONG' | 'SHORT';
   let chatTradeReady = false;
   let chatSuggestedDir: ChatTradeDirection = 'LONG';
@@ -1229,7 +1231,12 @@
     }
   }
 
+  function handleScanStart() {
+    terminalScanning = true;
+  }
+
   function handleScanComplete(e: CustomEvent<ScanIntelDetail>) {
+    terminalScanning = false;
     latestScan = e.detail;
     const d = e.detail;
     const now = new Date();
@@ -1303,7 +1310,7 @@
     <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
       {#if mobileTab === 'warroom'}
         <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('warroom')}>
-          <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
+          <WarRoom bind:this={warRoomRef} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} />
           <button
             type="button"
             class="mob-resize-handle mob-resize-handle-x"
@@ -1328,6 +1335,7 @@
       {:else if mobileTab === 'chart'}
         <div class="mob-chart-stack">
           <div class="mob-chart-section mob-panel-resizable" style={getMobilePanelStyle('chart')}>
+            <VerdictBanner verdict={latestScan} scanning={terminalScanning} />
             <div class="mob-chart-area">
               <ChartPanel
                 bind:this={mobileChartRef}
@@ -1427,7 +1435,7 @@
       <div class="tab-left">
         <div class="tab-panel-resizable" style={getTabletPanelStyle('left')}>
           <div class="tab-panel-body">
-            <WarRoom bind:this={warRoomRef} on:scancomplete={handleScanComplete} />
+            <WarRoom bind:this={warRoomRef} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} />
           </div>
           <button
             type="button"
@@ -1462,6 +1470,7 @@
       </button>
       <div class="tab-center">
         <div class="tab-panel-resizable" style={getTabletPanelStyle('center')}>
+          <VerdictBanner verdict={latestScan} scanning={terminalScanning} />
           <div class="tab-panel-body tab-chart-area">
             <ChartPanel
               bind:this={tabletChartRef}
@@ -1561,7 +1570,7 @@
       <div class="tl" on:wheel={(e) => resizePanelByWheel('left', e)}>
         <div class="desk-panel-resizable" style={getDesktopPanelStyle('left')}>
           <div class="desk-panel-body">
-            <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scancomplete={handleScanComplete} />
+            <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} />
           </div>
           <button
             type="button"
@@ -1610,6 +1619,7 @@
     <div class="tc">
       <div class="desk-panel-resizable" style={getDesktopPanelStyle('center')}>
         <div class="desk-panel-body">
+          <VerdictBanner verdict={latestScan} scanning={terminalScanning} />
           <div class="chart-area chart-area-full">
             <ChartPanel
               bind:this={desktopChartRef}
