@@ -87,6 +87,13 @@ See `.env.example` for all required keys:
 
 ## Coding Conventions
 - **Svelte 5 runes only**: Use `$state()`, `$derived()`, `$effect()`. No legacy `$:` reactive statements.
+- **Svelte 5 점진적 마이그레이션**: `.svelte` 파일을 수정할 때, 해당 파일 내 레거시 문법이 있으면 함께 전환한다:
+  - `let x = 0;` → `let x = $state(0);` (반응적 상태)
+  - `$: y = x * 2;` → `const y = $derived(x * 2);` (파생값)
+  - `$: { ... }` / `$: if (...)` → `$effect(() => { ... });` (사이드이펙트)
+  - `export let prop` → `const { prop } = $props();` (컴포넌트 props)
+  - `$$restProps` → `const { ...rest } = $props();`
+  - 수정 대상이 아닌 파일은 건드리지 않는다 (수정하는 파일만 전환)
 - **Server-side secrets**: Never expose API keys to client. Use `src/lib/server/` for key access.
 - **File naming**: camelCase for modules (`factorEngine.ts`), kebab-case for routes.
 - **Imports**: Use `$lib/` alias (maps to `src/lib/`).
