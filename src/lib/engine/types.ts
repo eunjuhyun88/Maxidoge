@@ -190,6 +190,7 @@ export interface MatchState {
   pair: string;
   timeframe: string;
   phase: MatchPhase;
+  mode: ArenaMatchMode;            // PVE | PVP | TEAM | TOURNAMENT
   userAId: string;
   userBId: string | null;          // null = AI
   userADraft: DraftSelection[] | null;
@@ -197,6 +198,8 @@ export interface MatchState {
   userAPrediction: MatchPrediction | null;
   userBPrediction: MatchPrediction | null;
   analysisResults: AgentOutput[];
+  decisionWindows: DecisionWindow[];
+  emergencyMeetingData: EmergencyMeetingData | null;
   entryPrice: number | null;
   exitPrice: number | null;
   priceChange: number | null;
@@ -468,3 +471,124 @@ export interface LiveSession {
 }
 
 export type LiveReaction = '🔥' | '🧊' | '🤔' | '⚡' | '💀';
+
+// ─── Arena Phase 2: Match Modes & Decision Windows ──────────
+
+export type ArenaMatchMode = 'PVE' | 'PVP' | 'TEAM' | 'TOURNAMENT';
+
+export type DecisionAction = 'BUY' | 'SELL' | 'HOLD';
+
+export interface DecisionWindow {
+  windowN: number;            // 1-6
+  action: DecisionAction;
+  priceAt: number;
+  submittedAt: string;        // ISO
+}
+
+// ─── Emergency Meeting (Among Us-style agent debate) ────────
+
+export interface AgentDialogue {
+  agentId: AgentId;
+  specId: string;
+  personaName: string;        // e.g. "차트 순수주의자"
+  direction: Direction;
+  confidence: number;
+  dialogueText: string;       // LLM-generated in-character dialogue
+  isImposter: boolean;        // 틀린 agent 판정
+}
+
+export interface EmergencyMeetingVoteSummary {
+  totalAgents: number;
+  longVotes: number;
+  shortVotes: number;
+  neutralVotes: number;
+  imposterAgentId: AgentId | null;
+  consensusDirection: Direction;
+}
+
+export interface EmergencyMeetingData {
+  dialogues: AgentDialogue[];
+  voteSummary: EmergencyMeetingVoteSummary;
+  generatedAt: string;        // ISO
+}
+
+// ─── PvP Matching Pool ──────────────────────────────────────
+
+export type PvPPoolStatus = 'WAITING' | 'MATCHED' | 'EXPIRED' | 'CANCELLED';
+
+export interface PvPPoolEntry {
+  id: string;
+  userId: string;
+  pair: string;
+  timeframe: string;
+  tier: Tier;
+  draft: DraftSelection[];
+  status: PvPPoolStatus;
+  matchId: string | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
+// ─── Arena Signal (match result → community) ────────────────
+
+export interface ArenaSignal {
+  id: string;
+  userId: string;
+  matchId: string;
+  pair: string;
+  direction: Direction;
+  fbs: number;
+  isWin: boolean;
+  draftSummary: string;       // e.g. "STRUCTURE(40) + VPA(35) + ICT(25)"
+  exitStrategy?: string;
+  entryPrice?: number;
+  exitPrice?: number;
+  priceChangePct?: number;
+  createdAt: string;
+}
+
+// ─── Social Follow System ───────────────────────────────────
+
+export interface UserFollowStats {
+  followersCount: number;
+  followingCount: number;
+  isFollowing: boolean;       // current user follows target
+}
+
+// ─── SSE Event Types (LIVE streaming) ───────────────────────
+
+export type SSEEventType =
+  | 'match:phase_change'
+  | 'match:agent_output'
+  | 'match:decision_window'
+  | 'match:emergency_meeting'
+  | 'match:price_update'
+  | 'match:result'
+  | 'live:spectator_count'
+  | 'live:reaction'
+  | 'pvp:matched'
+  | 'pvp:queue_update';
+
+export interface SSEEvent {
+  type: SSEEventType;
+  data: Record<string, unknown>;
+  timestamp: number;
+}
+
+// ─── Match State Machine ────────────────────────────────────
+
+export interface PhaseTransitionResult {
+  valid: boolean;
+  errors: string[];
+  phase?: MatchPhase;
+  expiresAt?: string;         // ISO timestamp when this phase times out
+}
+
+// ─── LP Reason extensions ───────────────────────────────────
+
+export type LPReasonExtended = LPReason
+  | 'pvp_win' | 'pvp_loss'
+  | 'team_win' | 'team_loss'
+  | 'tournament_win' | 'tournament_loss'
+  | 'live_bonus'
+  | 'signal_publish';

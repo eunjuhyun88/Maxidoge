@@ -16,6 +16,9 @@ import type {
   MatchResultType,
   MarketRegime,
   AgentId,
+  ArenaMatchMode,
+  DecisionWindow,
+  DecisionAction,
 } from '$lib/engine/types';
 import {
   FBS_WEIGHT_DS, FBS_WEIGHT_RE, FBS_WEIGHT_CI,
@@ -26,6 +29,7 @@ import {
 export interface CreateMatchInput {
   pair: string;
   timeframe: string;
+  mode?: ArenaMatchMode;
 }
 
 export interface SubmitDraftInput {
@@ -62,13 +66,14 @@ export async function createMatch(userId: string, input: CreateMatchInput): Prom
   const matchId = randomUUID();
   const pair = (input.pair || 'BTC/USDT').toUpperCase().trim();
   const timeframe = (input.timeframe || '4h').toLowerCase().trim();
+  const mode: ArenaMatchMode = input.mode || 'PVE';
   const now = new Date().toISOString();
 
   try {
     await query(
-      `INSERT INTO arena_matches (id, user_a_id, pair, timeframe, phase, created_at)
-       VALUES ($1, $2, $3, $4, 'DRAFT', $5)`,
-      [matchId, userId, pair, timeframe, now]
+      `INSERT INTO arena_matches (id, user_a_id, pair, timeframe, mode, phase, created_at)
+       VALUES ($1, $2, $3, $4, $5, 'DRAFT', $6)`,
+      [matchId, userId, pair, timeframe, mode, now]
     );
   } catch (err: unknown) {
     if (!isTableError(err)) throw err;
@@ -82,6 +87,7 @@ export async function createMatch(userId: string, input: CreateMatchInput): Prom
       pair,
       timeframe,
       phase: 'DRAFT',
+      mode,
       userAId: userId,
       userBId: null,
       userADraft: null,
@@ -89,6 +95,8 @@ export async function createMatch(userId: string, input: CreateMatchInput): Prom
       userAPrediction: null,
       userBPrediction: null,
       analysisResults: [],
+      decisionWindows: [],
+      emergencyMeetingData: null,
       entryPrice: null,
       exitPrice: null,
       priceChange: null,
@@ -284,6 +292,7 @@ export async function getMatch(userId: string, matchId: string): Promise<Partial
       pair: row.pair,
       timeframe: row.timeframe,
       phase: row.phase,
+      mode: row.mode ?? 'PVE',
       userAId: row.user_a_id,
       userBId: row.user_b_id,
       userADraft: row.user_a_draft,
@@ -291,6 +300,8 @@ export async function getMatch(userId: string, matchId: string): Promise<Partial
       userAPrediction: row.user_a_prediction,
       userBPrediction: row.user_b_prediction,
       analysisResults: row.analysis_results ?? [],
+      decisionWindows: row.decision_windows ?? [],
+      emergencyMeetingData: row.emergency_meeting_data ?? null,
       entryPrice: row.entry_price ? Number(row.entry_price) : null,
       exitPrice: row.exit_price ? Number(row.exit_price) : null,
       priceChange: row.price_change ? Number(row.price_change) : null,
@@ -302,6 +313,53 @@ export async function getMatch(userId: string, matchId: string): Promise<Partial
   } catch (err: unknown) {
     if (isTableError(err)) return null;
     throw err;
+  }
+}
+
+// ── Submit Decision Window ──
+export async function submitDecisionWindow(
+  userId: string,
+  matchId: string,
+  windowN: number,
+  action: DecisionAction,
+  priceAt: number,
+): Promise<{ success: boolean; window: DecisionWindow }> {
+  const dw: DecisionWindow = {
+    windowN,
+    action,
+    priceAt,
+    submittedAt: new Date().toISOString(),
+  };
+
+  try {
+    // Append to the decision_windows jsonb array
+    await query(
+      `UPDATE arena_matches
+       SET decision_windows = COALESCE(decision_windows, '[]'::jsonb) || $1::jsonb
+       WHERE id = $2 AND user_a_id = $3 AND phase = 'BATTLE'`,
+      [JSON.stringify([dw]), matchId, userId]
+    );
+  } catch (err: unknown) {
+    if (!isTableError(err)) throw err;
+  }
+
+  return { success: true, window: dw };
+}
+
+// ── Store Emergency Meeting ──
+export async function storeEmergencyMeetingData(
+  matchId: string,
+  data: import('$lib/engine/types').EmergencyMeetingData,
+): Promise<void> {
+  try {
+    await query(
+      `UPDATE arena_matches
+       SET emergency_meeting_data = $1::jsonb
+       WHERE id = $2`,
+      [JSON.stringify(data), matchId]
+    );
+  } catch (err: unknown) {
+    if (!isTableError(err)) throw err;
   }
 }
 

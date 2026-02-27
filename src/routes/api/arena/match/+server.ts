@@ -16,8 +16,12 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const body = await request.json();
     const pair = typeof body.pair === 'string' ? body.pair.trim() : 'BTC/USDT';
     const timeframe = typeof body.timeframe === 'string' ? body.timeframe.trim() : '4h';
+    const validModes = ['PVE', 'PVP', 'TEAM', 'TOURNAMENT'] as const;
+    type ValidMode = (typeof validModes)[number];
+    const mode: ValidMode = typeof body.mode === 'string' && (validModes as readonly string[]).includes(body.mode)
+      ? body.mode as ValidMode : 'PVE';
 
-    const result = await createMatch(user.id, { pair, timeframe });
+    const result = await createMatch(user.id, { pair, timeframe, mode });
 
     return json({ success: true, ...result });
   } catch (err: any) {

@@ -6,6 +6,7 @@ import type { RequestHandler } from './$types';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { getMatch, resolveMatch } from '$lib/server/arenaService';
 import { updateProgressionAfterMatch } from '$lib/server/progressionUpdater';
+import { storeMatchMemories } from '$lib/server/ragMemoryService';
 
 export const POST: RequestHandler = async ({ cookies, request }) => {
   try {
@@ -45,10 +46,27 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       return null;
     });
 
+    // ── B-01: RAG Memory 자동 저장 (비동기, 실패해도 결과 반환) ──
+    const priceChangeDecimal = match.entryPrice > 0 ? (exitPrice - match.entryPrice) / match.entryPrice : 0;
+    const memoryResult = await storeMatchMemories({
+      userId: user.id,
+      matchId,
+      pair: match.pair ?? 'BTC/USDT',
+      marketRegime: match.marketRegime ?? null,
+      agentOutputs: match.analysisResults ?? [],
+      userDirection: match.userAPrediction?.direction ?? 'NEUTRAL',
+      outcome: result.winnerId === user.id,
+      priceChange: priceChangeDecimal,
+    }).catch(err => {
+      console.warn('[arena/resolve] RAG memory storage failed:', err);
+      return null;
+    });
+
     return json({
       success: true,
       result,
       lpUpdate,
+      memoriesStored: memoryResult?.stored ?? 0,
       priceChange: match.entryPrice > 0 ? ((exitPrice - match.entryPrice) / match.entryPrice * 100).toFixed(2) + '%' : '0%',
     });
   } catch (err: any) {

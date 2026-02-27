@@ -138,3 +138,24 @@ export const authVerifyLimiter = createRateLimiter({ windowMs: 60_000, max: 10 }
 
 /** Market snapshot (heavy fan-out): 20 per minute per IP */
 export const marketSnapshotLimiter = createRateLimiter({ windowMs: 60_000, max: 20 });
+
+/** Arena decision window: 1 per 10s per IP (6 windows × 10s = 60s battle) */
+export const decisionWindowLimiter = createRateLimiter({ windowMs: 10_000, max: 1 });
+
+/** Emergency meeting: 3 per minute per IP (LLM calls are expensive) */
+export const emergencyMeetingLimiter = createRateLimiter({ windowMs: 60_000, max: 3 });
+
+/** Arena phase transition: 10 per minute per IP */
+export const arenaPhaseTransitionLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });
+
+/** PvP queue: 6 per minute per IP */
+export const pvpQueueLimiter = createRateLimiter({ windowMs: 60_000, max: 6 });
+
+/** LIVE reactions: 5 per 10s per IP (danmaku rate limit) */
+export const liveReactionLimiter = createRateLimiter({ windowMs: 10_000, max: 5 });
+
+/** Social follow: 20 per minute per IP */
+export const socialFollowLimiter = createRateLimiter({ windowMs: 60_000, max: 20 });
+
+/** Arena signal publish: 10 per minute per IP */
+export const arenaSignalPublishLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });

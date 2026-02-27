@@ -217,6 +217,28 @@ export const SNAPSHOT_INTERVALS = {
   social_volume: 3_600_000, // 1시간
 };
 
+// ─── Emergency Meeting ──────────────────────────────────────
+
+export const PERSONA_TEMPERATURE = 0.85;
+export const EMERGENCY_MEETING_MAX_TOKENS = 256;
+export const EMERGENCY_MEETING_CACHE_TTL_MS = 3_600_000;  // 1시간
+
+// ─── PvP Matching ───────────────────────────────────────────
+
+export const PVP_QUEUE_TIMEOUT_MIN = 10;
+export const PVP_MAX_CONCURRENT = 3;     // 유저당 동시 PvP 최대
+export const PVP_TIER_RANGE = 1;          // 매칭 tier 차이 허용
+
+// ─── LIVE Reactions ─────────────────────────────────────────
+
+export const LIVE_REACTION_RATE_LIMIT = 5;      // 10초당 최대 리액션
+export const LIVE_REACTION_WINDOW_SEC = 10;
+
+// ─── Arena Signal ───────────────────────────────────────────
+
+export const SIGNAL_AUTO_PUBLISH_MIN_TIER: import('./types').Tier = 'SILVER';
+export const SIGNAL_MAX_PER_DAY = 50;
+
 // ─── Notification ────────────────────────────────────────────
 
 export const NOTIFICATION_LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
