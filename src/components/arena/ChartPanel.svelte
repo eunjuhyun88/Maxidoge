@@ -95,7 +95,7 @@
   // ═══ Drawing Tools ═══
   const LINE_ENTRY_DEFAULT_RR = 2;
   const LINE_ENTRY_MIN_PIXEL_RISK = 6;
-  type DrawingMode = 'none' | 'hline' | 'trendline' | 'longentry' | 'shortentry';
+  type DrawingMode = 'none' | 'hline' | 'trendline' | 'longentry' | 'shortentry' | 'trade';
   type DrawingAnchorPoint = { time: number; price: number };
   type DrawingItem =
     | { type: 'hline'; points: Array<{ x: number; y: number }>; price?: number; color: string }
@@ -117,7 +117,7 @@
   let drawingMode: DrawingMode = 'none';
   let drawings: DrawingItem[] = [];
   let currentDrawing: { type: 'trendline'; points: Array<{ x: number; y: number }> } | null = null;
-  let tradePreview: { mode: 'longentry' | 'shortentry'; startX: number; startY: number; cursorX: number; cursorY: number } | null = null;
+  let tradePreview: { mode: 'longentry' | 'shortentry' | 'trade'; startX: number; startY: number; cursorX: number; cursorY: number } | null = null;
   type TradePlanDraft = {
     pair: string;
     previewDir: 'LONG' | 'SHORT';
@@ -133,6 +133,7 @@
   let _ratioDragPointerId: number | null = null;
   let _ratioDragBound = false;
   let isDrawing = false;
+  let drawingsVisible = true;
   let chartNotice = '';
   let _chartNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -153,6 +154,21 @@
   export let chatFirstMode = false;
   export let chatTradeReady = false;
   export let chatTradeDir: 'LONG' | 'SHORT' = 'LONG';
+
+  // ═══ Agent Trade Overlay (TradingView-style TP/SL zones) ═══
+  type AgentTradeSetup = {
+    source: 'consensus' | 'agent';
+    agentName?: string;
+    dir: 'LONG' | 'SHORT';
+    entry: number;
+    tp: number;
+    sl: number;
+    rr: number;
+    conf: number;
+    pair: string;
+  };
+  export let activeTradeSetup: AgentTradeSetup | null = null;
+  let agentPriceLines: { tp: any; entry: any; sl: any } = { tp: null, entry: null, sl: null };
 
   type ChartMarker = {
     time: number; position: 'aboveBar' | 'belowBar'; color: string;
@@ -451,7 +467,7 @@
     return Math.max(0, Math.min(max, v));
   }
 
-  function computeTradePreview(mode: 'longentry' | 'shortentry', startX: number, startY: number, cursorX: number, cursorY: number) {
+  function computeTradePreview(mode: 'longentry' | 'shortentry' | 'trade', startX: number, startY: number, cursorX: number, cursorY: number) {
     if (!drawingCanvas) return null;
     const sx = clampToCanvas(startX, drawingCanvas.width);
     const sy = clampToCanvas(startY, drawingCanvas.height);
@@ -464,7 +480,15 @@
     let slY = cy;
     let tpY = cy;
 
-    if (mode === 'longentry') {
+    // For unified 'trade' mode: auto-detect direction from drag.
+    // Drag DOWN (cy > entryY) → SL below entry → LONG
+    // Drag UP   (cy < entryY) → SL above entry → SHORT
+    const effectiveMode: 'longentry' | 'shortentry' =
+      mode === 'trade'
+        ? (cy >= entryY ? 'longentry' : 'shortentry')
+        : mode;
+
+    if (effectiveMode === 'longentry') {
       slY = Math.max(cy, entryY + LINE_ENTRY_MIN_PIXEL_RISK);
       tpY = entryY - (slY - entryY) * LINE_ENTRY_DEFAULT_RR;
     } else {
@@ -482,16 +506,15 @@
     if (slRaw != null) {
       slPx = clampRoundPrice(slRaw);
     } else {
-      // If pointer is outside candle pane, approximate stop distance by drag pixel delta.
       const pxDelta = Math.max(LINE_ENTRY_MIN_PIXEL_RISK, Math.abs(slY - entryY));
       const approxRisk = Math.max(0.0035, Math.min(0.08, (pxDelta / Math.max(120, drawingCanvas.height)) * 0.24));
-      slPx = clampRoundPrice(mode === 'longentry' ? entryPx * (1 - approxRisk) : entryPx * (1 + approxRisk));
+      slPx = clampRoundPrice(effectiveMode === 'longentry' ? entryPx * (1 - approxRisk) : entryPx * (1 + approxRisk));
     }
-    if (mode === 'longentry' && slPx >= entryPx) slPx = clampRoundPrice(entryPx * 0.995);
-    if (mode === 'shortentry' && slPx <= entryPx) slPx = clampRoundPrice(entryPx * 1.005);
+    if (effectiveMode === 'longentry' && slPx >= entryPx) slPx = clampRoundPrice(entryPx * 0.995);
+    if (effectiveMode === 'shortentry' && slPx <= entryPx) slPx = clampRoundPrice(entryPx * 1.005);
     const risk = Math.abs(entryPx - slPx);
     if (!Number.isFinite(risk) || risk <= 0) return null;
-    const tpPx = clampRoundPrice(mode === 'longentry' ? entryPx + risk * LINE_ENTRY_DEFAULT_RR : entryPx - risk * LINE_ENTRY_DEFAULT_RR);
+    const tpPx = clampRoundPrice(effectiveMode === 'longentry' ? entryPx + risk * LINE_ENTRY_DEFAULT_RR : entryPx - risk * LINE_ENTRY_DEFAULT_RR);
 
     const mappedEntryY = toChartY(entryPx);
     const mappedSlY = toChartY(slPx);
@@ -503,8 +526,8 @@
     const riskPct = Math.abs(entryPx - slPx) / Math.max(Math.abs(entryPx), 1) * 100;
 
     return {
-      mode,
-      dir: mode === 'longentry' ? 'LONG' as const : 'SHORT' as const,
+      mode: effectiveMode,
+      dir: effectiveMode === 'longentry' ? 'LONG' as const : 'SHORT' as const,
       left,
       right,
       entryY: normalizedEntryY,
@@ -567,6 +590,193 @@
     ctx.fillStyle = withAlpha('#f5f7fa', 0.95);
     ctx.fillText(label, boxX + padX, boxY + 11);
     ctx.restore();
+  }
+
+  // ═══ Agent Trade Overlay — TradingView-style position box ═══
+  // Clean, minimal: just colored zones + inside labels. No price lines on axis.
+  function drawAgentTradeOverlay(ctx: CanvasRenderingContext2D, setup: AgentTradeSetup) {
+    if (!drawingCanvas || !chart) return;
+    const rawEntryY = toChartY(setup.entry);
+    const rawTpY = toChartY(setup.tp);
+    const rawSlY = toChartY(setup.sl);
+    if (rawEntryY === null || rawTpY === null || rawSlY === null) return;
+
+    const W = drawingCanvas.width;
+    const rightPad = 72;
+    const R = W - rightPad;
+    const isLong = setup.dir === 'LONG';
+    const tpPct = ((Math.abs(setup.tp - setup.entry) / setup.entry) * 100).toFixed(1);
+    const slPct = ((Math.abs(setup.entry - setup.sl) / setup.entry) * 100).toFixed(1);
+
+    // ── Enforce minimum zone heights so overlay is always visible ──
+    const MIN_ZONE = 22;
+    const entryY = rawEntryY;
+    let tpY = rawTpY;
+    let slY = rawSlY;
+    if (Math.abs(tpY - entryY) < MIN_ZONE) {
+      tpY = isLong ? entryY - MIN_ZONE : entryY + MIN_ZONE;
+    }
+    if (Math.abs(slY - entryY) < MIN_ZONE) {
+      slY = isLong ? entryY + MIN_ZONE : entryY - MIN_ZONE;
+    }
+
+    ctx.save();
+
+    const GREEN = '#26a69a';
+    const RED = '#ef5350';
+
+    // ── TP zone (profit) — visible fill + boundary ──
+    const tpTop = Math.min(entryY, tpY);
+    const tpH = Math.abs(tpY - entryY);
+    ctx.fillStyle = withAlpha(GREEN, 0.15);
+    ctx.fillRect(0, tpTop, R, tpH);
+    ctx.strokeStyle = withAlpha(GREEN, 0.7);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(0, tpY);
+    ctx.lineTo(R, tpY);
+    ctx.stroke();
+
+    // ── SL zone (risk) — visible fill + boundary ──
+    const slTop = Math.min(entryY, slY);
+    const slH = Math.abs(slY - entryY);
+    ctx.fillStyle = withAlpha(RED, 0.15);
+    ctx.fillRect(0, slTop, R, slH);
+    ctx.strokeStyle = withAlpha(RED, 0.7);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, slY);
+    ctx.lineTo(R, slY);
+    ctx.stroke();
+
+    // ── Entry line — dashed, prominent ──
+    ctx.strokeStyle = withAlpha('#fff', 0.6);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(0, entryY);
+    ctx.lineTo(R, entryY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // ── Right-edge price axis tags (TradingView colored labels) ──
+    const tagW = rightPad - 2;
+    const tagH = 18;
+    const tagX = R + 1;
+    ctx.font = "bold 10px 'JetBrains Mono', monospace";
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    // TP price tag
+    ctx.fillStyle = GREEN;
+    _roundRect(ctx, tagX, tpY - tagH / 2, tagW, tagH, 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(formatPrice(setup.tp), tagX + tagW / 2, tpY);
+    // SL price tag
+    ctx.fillStyle = RED;
+    _roundRect(ctx, tagX, slY - tagH / 2, tagW, tagH, 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(formatPrice(setup.sl), tagX + tagW / 2, slY);
+    ctx.textAlign = 'left';
+
+    // ── Zone labels (always visible inside zones) ──
+    ctx.font = "bold 10px 'JetBrains Mono', monospace";
+    ctx.textBaseline = 'middle';
+    // TP label
+    const tpZoneMid = tpTop + tpH / 2;
+    const tpLabel = `Take Profit  ${tpPct}%`;
+    const tpLabelW = ctx.measureText(tpLabel).width;
+    ctx.fillStyle = withAlpha('#000', 0.55);
+    _roundRect(ctx, 10, tpZoneMid - 9, tpLabelW + 14, 18, 3);
+    ctx.fill();
+    ctx.fillStyle = GREEN;
+    ctx.fillText(tpLabel, 17, tpZoneMid);
+    // SL label
+    const slZoneMid = slTop + slH / 2;
+    const slLabel = `Stop Loss  ${slPct}%`;
+    const slLabelW = ctx.measureText(slLabel).width;
+    ctx.fillStyle = withAlpha('#000', 0.55);
+    _roundRect(ctx, 10, slZoneMid - 9, slLabelW + 14, 18, 3);
+    ctx.fill();
+    ctx.fillStyle = RED;
+    ctx.fillText(slLabel, 17, slZoneMid);
+
+    // ── Entry info bar (above entry line) ──
+    const srcLabel = setup.source === 'consensus' ? 'CONSENSUS' : (setup.agentName?.toUpperCase() ?? 'AGENT');
+    const dirArrow = isLong ? '▲' : '▼';
+    ctx.font = "bold 10px 'JetBrains Mono', monospace";
+    const eLabelH = 18;
+    const eLabelY = entryY - eLabelH - 3;
+
+    // Badge 1: Direction + Source + Entry price (colored)
+    const b1Text = `${dirArrow} ${srcLabel} ${setup.dir} · $${formatPrice(setup.entry)}`;
+    const b1W = ctx.measureText(b1Text).width + 14;
+    const b1X = 8;
+    ctx.fillStyle = withAlpha(isLong ? GREEN : RED, 0.85);
+    _roundRect(ctx, b1X, eLabelY, b1W, eLabelH, 3);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(b1Text, b1X + 7, eLabelY + eLabelH / 2);
+
+    // Badge 2: R:R ratio (dark)
+    const b2Text = `R:R 1:${setup.rr.toFixed(1)}`;
+    const b2W = ctx.measureText(b2Text).width + 14;
+    const b2X = b1X + b1W + 4;
+    ctx.fillStyle = withAlpha('#000', 0.65);
+    _roundRect(ctx, b2X, eLabelY, b2W, eLabelH, 3);
+    ctx.fill();
+    ctx.fillStyle = withAlpha('#fff', 0.9);
+    ctx.fillText(b2Text, b2X + 7, eLabelY + eLabelH / 2);
+
+    // Badge 3: Confidence
+    const b3Text = `${setup.conf}%`;
+    const b3W = ctx.measureText(b3Text).width + 14;
+    const b3X = b2X + b2W + 4;
+    ctx.fillStyle = withAlpha('#000', 0.65);
+    _roundRect(ctx, b3X, eLabelY, b3W, eLabelH, 3);
+    ctx.fill();
+    ctx.fillStyle = withAlpha(isLong ? GREEN : RED, 0.9);
+    ctx.fillText(b3Text, b3X + 7, eLabelY + eLabelH / 2);
+
+    // Badge 4: Live P&L (colored)
+    if (livePrice > 0) {
+      const pnl = isLong
+        ? ((livePrice - setup.entry) / setup.entry) * 100
+        : ((setup.entry - livePrice) / setup.entry) * 100;
+      const pnlColor = pnl >= 0 ? GREEN : RED;
+      const pnlText = `P&L ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`;
+      const b4W = ctx.measureText(pnlText).width + 14;
+      const b4X = b3X + b3W + 4;
+      ctx.fillStyle = withAlpha(pnlColor, 0.85);
+      _roundRect(ctx, b4X, eLabelY, b4W, eLabelH, 3);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText(pnlText, b4X + 7, eLabelY + eLabelH / 2);
+    }
+
+    ctx.restore();
+  }
+
+  function _roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function applyAgentTradeSetup(setup: AgentTradeSetup | null) {
+    // Clear old price lines (no more axis labels — canvas only)
+    if (agentPriceLines.tp && series) { try { series.removePriceLine(agentPriceLines.tp); } catch {} }
+    if (agentPriceLines.entry && series) { try { series.removePriceLine(agentPriceLines.entry); } catch {} }
+    if (agentPriceLines.sl && series) { try { series.removePriceLine(agentPriceLines.sl); } catch {} }
+    agentPriceLines = { tp: null, entry: null, sl: null };
+    renderDrawings();
   }
 
   function makeTradeBoxDrawing(preview: NonNullable<ReturnType<typeof computeTradePreview>>): DrawingItem {
@@ -943,6 +1153,10 @@
     unbindGlobalDrawingMouseUp();
     renderDrawings();
   }
+  function toggleDrawingsVisible() {
+    drawingsVisible = !drawingsVisible;
+    renderDrawings();
+  }
   function clearAllDrawings() {
     drawings = [];
     currentDrawing = null;
@@ -992,7 +1206,7 @@
       }
       return;
     }
-    if (drawingMode === 'longentry' || drawingMode === 'shortentry') {
+    if (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade') {
       tradePreview = { mode: drawingMode, startX: x, startY: y, cursorX: x, cursorY: y };
       currentDrawing = null;
       isDrawing = true;
@@ -1004,7 +1218,7 @@
 
   function handleDrawingMouseUp(e: MouseEvent) {
     if (!drawingCanvas || !isDrawing || !tradePreview) return;
-    if (drawingMode !== 'longentry' && drawingMode !== 'shortentry') return;
+    if (drawingMode !== 'longentry' && drawingMode !== 'shortentry' && drawingMode !== 'trade') return;
     const rect = drawingCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -1045,7 +1259,7 @@
       _drawRAF = null;
       if (!drawingCanvas) return;
       const rect = drawingCanvas.getBoundingClientRect();
-      if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry')) {
+      if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade')) {
         tradePreview = {
           ...tradePreview,
           cursorX: e.clientX - rect.left,
@@ -1075,6 +1289,16 @@
     if (!ctx) return;
     ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
     drawPatternOverlays(ctx);
+    // Agent trade overlay (TP/SL zones from scan signals)
+    if (activeTradeSetup && drawingsVisible) drawAgentTradeOverlay(ctx, activeTradeSetup);
+    if (!drawingsVisible) {
+      // Still render active drag preview even when drawings hidden
+      if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade')) {
+        const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
+        if (preview) drawTradePreview(ctx, preview);
+      }
+      return;
+    }
     for (const d of drawings) {
       ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.5;
       if (d.type === 'hline') {
@@ -1141,7 +1365,7 @@
       }
       ctx.stroke(); ctx.setLineDash([]);
     }
-    if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry')) {
+    if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade')) {
       const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
       if (preview) drawTradePreview(ctx, preview);
     }
@@ -1550,6 +1774,7 @@
 
   $: if (series && showPosition && posEntry !== null && posTp !== null && posSl !== null) { updatePositionLines(posEntry, posTp, posSl, posDir); }
   $: if (series && !showPosition) { clearPositionLines(); }
+  $: if (series) { applyAgentTradeSetup(activeTradeSetup); }
 
   function updatePositionLines(entry: number, tp: number, sl: number, dir: string) {
     if (!series) return;
@@ -1763,8 +1988,10 @@
         else if (k === '-' || k === '_') zoomChart(-1);
         else if (k === '0') resetChartScale();
         else if (k === 'f') fitChartRange();
+        else if (k === 'v') toggleDrawingsVisible();
         else if (k === 'h') setDrawingMode('hline');
         else if (k === 't') setDrawingMode('trendline');
+        else if (enableTradeLineEntry && k === 'r') setDrawingMode('trade');
         else if (enableTradeLineEntry && k === 'l') setDrawingMode('longentry');
         else if (enableTradeLineEntry && k === 's') setDrawingMode('shortentry');
       };
@@ -2095,21 +2322,25 @@
     pushChartNotice('채팅 탭에서 질문 후 거래를 시작하세요');
   }
 
-  export async function activateTradeDrawing(dir: 'LONG' | 'SHORT' = 'LONG') {
+  export async function activateTradeDrawing(dir?: 'LONG' | 'SHORT') {
     if (!enableTradeLineEntry) return;
     if (chartMode !== 'agent') {
       await setChartMode('agent');
       await tick();
     }
-    const mode: DrawingMode = dir === 'SHORT' ? 'shortentry' : 'longentry';
+    const mode: DrawingMode = dir === 'SHORT' ? 'shortentry' : dir === 'LONG' ? 'longentry' : 'trade';
     setDrawingMode(mode);
     gtmEvent('terminal_trade_drawing_activate', {
-      source: 'chat-first',
-      dir,
+      source: dir ? 'chat-first' : 'unified-tool',
+      dir: dir ?? 'auto',
       pair: state.pair,
       timeframe: state.timeframe,
     });
-    pushChartNotice(`${dir} 드래그 모드 시작 · 차트에서 드래그해 ENTRY/TP/SL 생성`);
+    if (dir) {
+      pushChartNotice(`${dir} 드래그 모드 시작 · 차트에서 드래그해 ENTRY/TP/SL 생성`);
+    } else {
+      pushChartNotice('Position 모드 · 드래그 ↓ LONG · 드래그 ↑ SHORT');
+    }
   }
 
   onDestroy(() => {
@@ -2214,8 +2445,12 @@
               <button class="draw-btn" class:active={drawingMode === 'trendline'} on:click={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
             {/if}
             {#if enableTradeLineEntry}
-              <button class="draw-btn long-tool" class:active={drawingMode === 'longentry'} on:click={() => setDrawingMode(drawingMode === 'longentry' ? 'none' : 'longentry')} title="LONG RR Box (L) · drag once">L</button>
-              <button class="draw-btn short-tool" class:active={drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'shortentry' ? 'none' : 'shortentry')} title="SHORT RR Box (S) · drag once">S</button>
+              <button class="draw-btn trade-tool" class:active={drawingMode === 'trade' || drawingMode === 'longentry' || drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'trade' ? 'none' : 'trade')} title="Position Tool (R) · 드래그 아래=LONG 위=SHORT">⬡</button>
+            {/if}
+            {#if drawings.length > 0 || activeTradeSetup}
+              <button class="draw-btn vis-toggle" class:off={!drawingsVisible} on:click={toggleDrawingsVisible} title={drawingsVisible ? 'Hide drawings (V)' : 'Show drawings (V)'}>
+                {drawingsVisible ? '◉' : '○'}<span class="vis-count">{drawings.length}</span>
+              </button>
             {/if}
             <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
           </div>
@@ -2386,10 +2621,12 @@
           ── CLICK to place horizontal line
         {:else if drawingMode === 'trendline'}
           CLICK two points for trend line
+        {:else if drawingMode === 'trade'}
+          Position: 드래그 ↓ LONG · 드래그 ↑ SHORT — 자동 ENTRY/TP/SL 생성
         {:else if drawingMode === 'longentry'}
-          LONG RR Box: 클릭 후 드래그(캔들/하단패널 가능)로 ENTRY/SL/TP 생성
+          LONG: 클릭 후 드래그로 ENTRY/SL/TP 생성
         {:else if drawingMode === 'shortentry'}
-          SHORT RR Box: 클릭 후 드래그(캔들/하단패널 가능)로 ENTRY/SL/TP 생성
+          SHORT: 클릭 후 드래그로 ENTRY/SL/TP 생성
         {/if}
         <button class="drawing-cancel" on:click={() => setDrawingMode('none')}>ESC</button>
       </div>
@@ -3061,6 +3298,14 @@
   .draw-btn.short-tool { font-family: var(--fd); font-size: 8px; color: #e77f90; border-color: rgba(231,127,144,.22); }
   .draw-btn.short-tool:hover { background: rgba(231,127,144,.15); color: #ff9caf; border-color: rgba(231,127,144,.45); }
   .draw-btn.short-tool.active { background: rgba(231,127,144,.2); color: #ffadbc; border-color: rgba(231,127,144,.6); box-shadow: 0 0 8px rgba(231,127,144,.35); }
+  .draw-btn.trade-tool { font-size: 10px; color: #E8967D; border-color: rgba(232,150,125,.25); width: 26px; }
+  .draw-btn.trade-tool:hover { background: rgba(232,150,125,.15); color: #f0a88e; border-color: rgba(232,150,125,.45); }
+  .draw-btn.trade-tool.active { background: rgba(232,150,125,.2); color: #f5c0a8; border-color: rgba(232,150,125,.6); box-shadow: 0 0 8px rgba(232,150,125,.35); }
+  .draw-btn.vis-toggle { font-size: 9px; gap: 2px; width: auto; padding: 0 5px; color: #E8967D; border-color: rgba(232,150,125,.2); }
+  .draw-btn.vis-toggle:hover { background: rgba(232,150,125,.1); border-color: rgba(232,150,125,.35); }
+  .draw-btn.vis-toggle.off { opacity: 0.35; border-style: dashed; }
+  .draw-btn.vis-toggle.off:hover { opacity: 0.7; }
+  .vis-count { font-family: var(--fd, monospace); font-size: 8px; color: rgba(232,150,125,.6); }
   .draw-btn.clear-btn:hover { background: rgba(255,45,85,.15); color: #ff2d55; border-color: rgba(255,45,85,.4); }
 
   .indicator-strip {
