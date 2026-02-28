@@ -326,6 +326,8 @@
   .wr-act-btn.short:hover { background: rgba(255,45,85,.15); }
   .wr-act-btn.track { color: #00ccff; border-color: rgba(0,204,255,.25); background: rgba(0,204,255,.05); }
   .wr-act-btn.track:hover { background: rgba(0,204,255,.15); }
+  .wr-act-btn.chart { color: #E8967D; border-color: rgba(232,150,125,.25); background: rgba(232,150,125,.05); padding: 2px 5px; }
+  .wr-act-btn.chart:hover { background: rgba(232,150,125,.15); border-color: rgba(232,150,125,.5); }
 
   /* ═══ Empty State ═══ */
   .wr-empty {

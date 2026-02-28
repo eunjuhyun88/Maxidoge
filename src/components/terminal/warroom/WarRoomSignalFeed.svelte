@@ -15,6 +15,7 @@
   export let onQuickTrade: (dir: 'LONG' | 'SHORT', sig: AgentSignal) => void;
   export let onTrack: (sig: AgentSignal) => void;
   export let onRunScan: () => void;
+  export let onShowOnChart: (sig: AgentSignal) => void = () => {};
 </script>
 
 <div class="select-bar">
@@ -83,6 +84,7 @@
         </div>
         <div class="wr-msg-actions">
           <span class="wr-msg-src">{sig.src}</span>
+          <button class="wr-act-btn chart" on:click|stopPropagation={() => onShowOnChart(sig)} title="Show entry/TP/SL on chart">📊</button>
           <button class="wr-act-btn long" on:click|stopPropagation={() => onQuickTrade('LONG', sig)} title="Quick Trade: open LONG position">▲ LONG</button>
           <button class="wr-act-btn short" on:click|stopPropagation={() => onQuickTrade('SHORT', sig)} title="Quick Trade: open SHORT position">▼ SHORT</button>
           <button class="wr-act-btn track" on:click|stopPropagation={() => onTrack(sig)}>TRACK</button>

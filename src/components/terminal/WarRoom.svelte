@@ -38,6 +38,7 @@
     avgConfidence: number;
     summary: string;
     highlights: ScanHighlight[];
+    signals: AgentSignal[];
   };
 
   type WarRoomEvents = {
@@ -46,6 +47,7 @@
     quicktrade: { dir: 'LONG' | 'SHORT'; pair: string; price: number };
     scanstart: void;
     scancomplete: ScanCompleteDetail;
+    showonchart: { signal: AgentSignal };
   };
 
   const dispatch = createEventDispatcher<WarRoomEvents>();
@@ -527,7 +529,8 @@
         consensus: scan.consensus,
         avgConfidence: scan.avgConfidence,
         summary: scan.summary,
-        highlights: scan.highlights
+        highlights: scan.highlights,
+        signals: nextTab.signals,
       });
       scanError = '';
       scanStep = 'DONE';
@@ -686,6 +689,7 @@
     onQuickTrade={quickTrade}
     onTrack={handleTrack}
     onRunScan={runAgentScan}
+    onShowOnChart={(sig) => dispatch('showonchart', { signal: sig })}
   />
 
   <WarRoomFooterSection
