@@ -2448,8 +2448,8 @@
               <button class="draw-btn trade-tool" class:active={drawingMode === 'trade' || drawingMode === 'longentry' || drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'trade' ? 'none' : 'trade')} title="Position Tool (R) · 드래그 아래=LONG 위=SHORT">⬡</button>
             {/if}
             {#if drawings.length > 0 || activeTradeSetup}
-              <button class="draw-btn eye-btn" class:hidden-state={!drawingsVisible} on:click={toggleDrawingsVisible} title={drawingsVisible ? 'Hide drawings (V)' : 'Show drawings (V)'}>
-                {drawingsVisible ? '👁' : '👁‍🗨'}
+              <button class="draw-btn vis-toggle" class:off={!drawingsVisible} on:click={toggleDrawingsVisible} title={drawingsVisible ? 'Hide drawings (V)' : 'Show drawings (V)'}>
+                {drawingsVisible ? '◉' : '○'}<span class="vis-count">{drawings.length}</span>
               </button>
             {/if}
             <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
@@ -3301,8 +3301,11 @@
   .draw-btn.trade-tool { font-size: 10px; color: #E8967D; border-color: rgba(232,150,125,.25); width: 26px; }
   .draw-btn.trade-tool:hover { background: rgba(232,150,125,.15); color: #f0a88e; border-color: rgba(232,150,125,.45); }
   .draw-btn.trade-tool.active { background: rgba(232,150,125,.2); color: #f5c0a8; border-color: rgba(232,150,125,.6); box-shadow: 0 0 8px rgba(232,150,125,.35); }
-  .draw-btn.eye-btn { font-size: 11px; width: 24px; }
-  .draw-btn.eye-btn.hidden-state { opacity: 0.4; }
+  .draw-btn.vis-toggle { font-size: 9px; gap: 2px; width: auto; padding: 0 5px; color: #E8967D; border-color: rgba(232,150,125,.2); }
+  .draw-btn.vis-toggle:hover { background: rgba(232,150,125,.1); border-color: rgba(232,150,125,.35); }
+  .draw-btn.vis-toggle.off { opacity: 0.35; border-style: dashed; }
+  .draw-btn.vis-toggle.off:hover { opacity: 0.7; }
+  .vis-count { font-family: var(--fd, monospace); font-size: 8px; color: rgba(232,150,125,.6); }
   .draw-btn.clear-btn:hover { background: rgba(255,45,85,.15); color: #ff2d55; border-color: rgba(255,45,85,.4); }
 
   .indicator-strip {
