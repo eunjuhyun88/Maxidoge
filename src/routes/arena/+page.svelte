@@ -54,6 +54,218 @@
   let floatingWords: Array<{id: number; text: string; color: string; x: number; dur: number}> = [];
   let feedMessages: Array<{icon: string; name: string; color: string; text: string; dir?: string; isNew?: boolean}> = [];
   let councilActive = false;
+
+  // ═══════ CHARACTER-CENTERED ARENA STATE ═══════
+  // 9-state character state machine
+  type CharState = 'idle' | 'patrol' | 'lock' | 'windup' | 'cast' | 'impact' | 'recover' | 'celebrate' | 'panic';
+  // 8 action types
+  type ActionType = 'dash' | 'ping' | 'shield' | 'burst' | 'hook' | 'taunt' | 'assist' | 'finisher';
+  interface CharAction {
+    type: ActionType;
+    label: string;
+    emoji: string;
+    duration: number; // ms for cast animation
+    shakeLevel: 'light' | 'medium' | 'heavy';
+    flashColor: 'white' | 'green' | 'red' | 'gold';
+  }
+  const ACTION_CATALOG: Record<ActionType, CharAction> = {
+    dash:     { type: 'dash',     label: '돌진!',     emoji: '💨', duration: 400,  shakeLevel: 'light',  flashColor: 'white' },
+    ping:     { type: 'ping',     label: '핑!',       emoji: '📡', duration: 300,  shakeLevel: 'light',  flashColor: 'white' },
+    shield:   { type: 'shield',   label: '방어!',     emoji: '🛡️', duration: 600,  shakeLevel: 'light',  flashColor: 'green' },
+    burst:    { type: 'burst',    label: '폭발!',     emoji: '💥', duration: 500,  shakeLevel: 'medium', flashColor: 'gold' },
+    hook:     { type: 'hook',     label: '훅!',       emoji: '🪝', duration: 450,  shakeLevel: 'medium', flashColor: 'red' },
+    taunt:    { type: 'taunt',    label: '도발!',     emoji: '😤', duration: 350,  shakeLevel: 'light',  flashColor: 'white' },
+    assist:   { type: 'assist',   label: '지원!',     emoji: '✨', duration: 500,  shakeLevel: 'light',  flashColor: 'green' },
+    finisher: { type: 'finisher', label: '필살기!',   emoji: '⚡', duration: 800,  shakeLevel: 'heavy',  flashColor: 'gold' },
+  };
+  // Per-character role → preferred actions
+  const CHAR_ACTIONS: Record<string, ActionType[]> = {
+    STRUCTURE: ['dash', 'shield', 'burst', 'finisher'],
+    ICT:       ['hook', 'shield', 'taunt', 'finisher'],
+    VPA:       ['burst', 'dash', 'assist', 'finisher'],
+    FLOW:      ['ping', 'dash', 'assist', 'finisher'],
+    MACRO:     ['shield', 'assist', 'burst', 'finisher'],
+    DERIV:     ['burst', 'hook', 'dash', 'finisher'],
+    SENTI:     ['taunt', 'ping', 'assist', 'finisher'],
+    VALUATION: ['ping', 'shield', 'burst', 'finisher'],
+  };
+  // Character sprite state per agent
+  interface CharSpriteState {
+    charState: CharState;
+    x: number;       // % position in arena
+    y: number;       // % position in arena
+    targetX: number;
+    targetY: number;
+    actionEmoji: string;
+    actionLabel: string;
+    flipX: boolean;
+    hp: number;       // 0-100
+    energy: number;   // 0-100
+    showHit: boolean;
+    hitText: string;
+    hitColor: string;
+  }
+  let charSprites: Record<string, CharSpriteState> = {};
+  // Arena combat state
+  let vsMeter = 50;
+  let vsMeterTarget = 50;
+  interface BattleTurn {
+    agent: typeof AGDEFS[0];
+    attackName: string;
+    action: ActionType;
+    effectiveness: 'super' | 'normal' | 'weak';
+    isCritical: boolean;
+    meterShift: number;
+    dirSign: number;
+    damage: number;
+  }
+  let battleTurns: BattleTurn[] = [];
+  let currentTurnIdx = -1;
+  let battleNarration = '';
+  let turnTimers: ReturnType<typeof setTimeout>[] = [];
+  let showVsSplash = false;
+  let showMarkers = true;
+  // Game HUD state
+  let missionText = '';
+  let enemyHP = 100;
+  let enemyMomentum = 50;
+  let comboCount = 0;
+  let lastHitTime = 0;
+  let showCritical = false;
+  let showCombo = false;
+  let criticalText = '';
+  let battleRoundTime = 0; // 0-90 seconds
+  let battlePhaseLabel = 'STANDBY';
+  // Arena chat log (secondary)
+  let chatMessages: Array<{id: number; agentId: string; name: string; icon: string; color: string; text: string; isAction?: boolean}> = [];
+  // Particles floating in arena
+  let arenaParticles: Array<{id: number; x: number; y: number; size: number; speed: number; opacity: number}> = [];
+
+  $: missionText = state.hypothesis
+    ? `${state.hypothesis.dir} R:R 1:${state.hypothesis.rr?.toFixed(1) || '?'} · TP $${Math.round(state.hypothesis.tp || 0).toLocaleString()}`
+    : 'STANDBY — 포지션을 설정하세요';
+
+  // Initialize sprite positions in circular formation
+  function initCharSprites() {
+    const total = activeAgents.length;
+    charSprites = {};
+    activeAgents.forEach((ag, i) => {
+      const pos = getFormPos(i, total);
+      charSprites[ag.id] = {
+        charState: 'idle',
+        x: pos.x, y: pos.y,
+        targetX: pos.x, targetY: pos.y,
+        actionEmoji: '', actionLabel: '',
+        flipX: pos.x > 50,
+        hp: 100, energy: 0,
+        showHit: false, hitText: '', hitColor: '',
+      };
+    });
+    // Spawn floating particles
+    arenaParticles = Array.from({length: 12}, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: 2 + Math.random() * 3,
+      speed: 0.5 + Math.random() * 1.5,
+      opacity: 0.1 + Math.random() * 0.2,
+    }));
+  }
+
+  function getFormPos(idx: number, total: number): { x: number; y: number } {
+    if (total <= 0) return { x: 50, y: 50 };
+    const angle = ((idx / total) * 360 - 90) * (Math.PI / 180);
+    return {
+      x: 50 + Math.cos(angle) * 30,
+      y: 50 + Math.sin(angle) * 34
+    };
+  }
+
+  // State machine transition
+  function setCharState(agId: string, newState: CharState, duration = 0) {
+    if (!charSprites[agId]) return;
+    charSprites[agId] = { ...charSprites[agId], charState: newState };
+    charSprites = charSprites; // trigger reactivity
+    if (duration > 0) {
+      const t = setTimeout(() => {
+        if (charSprites[agId]) {
+          charSprites[agId] = { ...charSprites[agId], charState: 'idle' };
+          charSprites = charSprites;
+        }
+      }, duration);
+      turnTimers.push(t);
+    }
+  }
+
+  // Move character to position with animation
+  function moveChar(agId: string, tx: number, ty: number) {
+    if (!charSprites[agId]) return;
+    charSprites[agId] = {
+      ...charSprites[agId],
+      targetX: tx, targetY: ty,
+      x: tx, y: ty,
+      flipX: tx > charSprites[agId].x,
+    };
+    charSprites = charSprites;
+  }
+
+  // Show floating hit text on a character
+  function showCharHit(agId: string, text: string, color: string) {
+    if (!charSprites[agId]) return;
+    charSprites[agId] = { ...charSprites[agId], showHit: true, hitText: text, hitColor: color };
+    charSprites = charSprites;
+    const t = setTimeout(() => {
+      if (charSprites[agId]) {
+        charSprites[agId] = { ...charSprites[agId], showHit: false };
+        charSprites = charSprites;
+      }
+    }, 1200);
+    turnTimers.push(t);
+  }
+
+  // Show action emoji above character
+  function showCharAction(agId: string, emoji: string, label: string) {
+    if (!charSprites[agId]) return;
+    charSprites[agId] = { ...charSprites[agId], actionEmoji: emoji, actionLabel: label };
+    charSprites = charSprites;
+    const t = setTimeout(() => {
+      if (charSprites[agId]) {
+        charSprites[agId] = { ...charSprites[agId], actionEmoji: '', actionLabel: '' };
+        charSprites = charSprites;
+      }
+    }, 1500);
+    turnTimers.push(t);
+  }
+
+  // Combo tracker
+  function trackCombo() {
+    const now = Date.now();
+    if (now - lastHitTime < 2500) {
+      comboCount++;
+      showCombo = true;
+      const t = setTimeout(() => { showCombo = false; }, 1000);
+      turnTimers.push(t);
+    } else {
+      comboCount = 1;
+    }
+    lastHitTime = now;
+  }
+
+  const ATTACK_NAMES: Record<string, string> = {
+    STRUCTURE: '차트 분석', VPA: '거래량 델타', ICT: '유동성 스윕',
+    DERIV: '파생 분석', FLOW: '고래 추적', SENTI: '소셜 스캔',
+    MACRO: '매크로 분석', VALUATION: '온체인 밸류'
+  };
+  const ATTACK_SUPER: Record<string, string> = {
+    STRUCTURE: '강세 브레이크아웃!', VPA: '거래량 폭발!', ICT: '스마트머니 포착!',
+    DERIV: 'OI 급증!', FLOW: '대형 매수!', SENTI: '분위기 폭등!',
+    MACRO: '글로벌 확인!', VALUATION: '저평가 발견!'
+  };
+  const ATTACK_WEAK: Record<string, string> = {
+    STRUCTURE: '패턴 불분명...', VPA: '거래량 약세...', ICT: '유동성 부족...',
+    DERIV: '데이터 혼재...', FLOW: '흐름 불확실...', SENTI: '분위기 혼조...',
+    MACRO: '신호 약함...', VALUATION: '밸류 중립...'
+  };
   let phaseLabel = PHASE_LABELS.DRAFT;
   let pvpVisible = false;
   let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = [];
@@ -315,10 +527,21 @@
     }, 30);
   }
 
+  // Bridge: legacy agent state → char sprite state mapping
+  const AGENT_TO_CHAR_STATE: Record<string, CharState> = {
+    idle: 'idle', walk: 'patrol', think: 'lock', alert: 'lock',
+    charge: 'windup', vote: 'cast', jump: 'celebrate', sad: 'panic',
+  };
   function setAgentState(agentId: string, st: string) {
     if (agentStates[agentId]) {
       agentStates[agentId] = { ...agentStates[agentId], state: st };
       agentStates = { ...agentStates };
+    }
+    // Sync char sprite state
+    const mapped = AGENT_TO_CHAR_STATE[st] || 'idle';
+    if (charSprites[agentId]) {
+      charSprites[agentId] = { ...charSprites[agentId], charState: mapped as CharState };
+      charSprites = charSprites;
     }
   }
 
@@ -326,6 +549,11 @@
     if (agentStates[agentId]) {
       agentStates[agentId] = { ...agentStates[agentId], energy: e };
       agentStates = { ...agentStates };
+    }
+    // Sync to char sprite
+    if (charSprites[agentId]) {
+      charSprites[agentId] = { ...charSprites[agentId], energy: Math.min(100, e) };
+      charSprites = charSprites;
     }
   }
 
@@ -369,6 +597,218 @@
         safeTimeout(() => { floatingWords = floatingWords.filter(w => w.id !== id); }, 2500);
       }, i * 200);
     }
+  }
+
+  // ═══════ GAME JUICE UTILITIES ═══════
+  function juice_shake(intensity: 'light'|'medium'|'heavy' = 'medium') {
+    const el = document.querySelector('.battle-layout');
+    if (!el) return;
+    el.classList.remove('jc-shake-light','jc-shake-medium','jc-shake-heavy');
+    void (el as HTMLElement).offsetHeight;
+    el.classList.add(`jc-shake-${intensity}`);
+    setTimeout(() => el.classList.remove(`jc-shake-${intensity}`), 400);
+  }
+  function juice_flash(color: 'white'|'green'|'red'|'gold' = 'white') {
+    const d = document.createElement('div');
+    d.className = `jc-flash jc-flash-${color}`;
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 400);
+  }
+  function juice_flyNumber(text: string, x: number, y: number, color: string) {
+    const s = document.createElement('span');
+    s.className = 'jc-fly-number';
+    s.textContent = text;
+    s.style.cssText = `left:${x}px;top:${y}px;color:${color}`;
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), 1300);
+  }
+  function juice_confetti(count = 30) {
+    const cols = ['#FF5E7A','#00CC88','#66CCE6','#DCB970','#E8967D','#8b5cf6','#ffcc00'];
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        const d = document.createElement('div');
+        d.className = 'jc-confetti';
+        const sz = 4 + Math.random() * 6;
+        d.style.cssText = `left:${10+Math.random()*80}vw;width:${sz}px;height:${sz}px;background:${cols[i%cols.length]};animation-delay:${Math.random()*0.3}s;animation-duration:${1.5+Math.random()*1}s;border-radius:${Math.random()>0.5?'50%':'2px'}`;
+        document.body.appendChild(d);
+        setTimeout(() => d.remove(), 3000);
+      }, i * 25);
+    }
+  }
+
+  // ═══════ TURN SYSTEM (Character-Centered) ═══════
+  function scheduleBattleTurns(): BattleTurn[] {
+    const lastActions: Record<string, ActionType> = {};
+    return activeAgents.map(ag => {
+      const r = Math.random();
+      const eff: 'super'|'normal'|'weak' = r < 0.2 ? 'super' : r > 0.8 ? 'weak' : 'normal';
+      const crit = Math.random() < 0.12;
+      // Pick action from character's repertoire (anti-repetition)
+      const pool = CHAR_ACTIONS[ag.id] || ['burst', 'dash', 'shield', 'finisher'];
+      let action: ActionType;
+      if (crit || eff === 'super') {
+        action = 'finisher'; // Big moments → finisher
+      } else {
+        const filtered = pool.filter(a => a !== lastActions[ag.id] && a !== 'finisher');
+        action = filtered[Math.floor(Math.random() * filtered.length)] || pool[0];
+      }
+      lastActions[ag.id] = action;
+      const eMult = eff === 'super' ? 1.5 : eff === 'weak' ? 0.5 : 1.0;
+      const cMult = crit ? 2.0 : 1.0;
+      const ds = ag.dir === 'LONG' ? 1 : -1;
+      const baseDamage = (eff === 'super' ? 18 : eff === 'weak' ? 5 : 10) * cMult;
+      return {
+        agent: ag, attackName: ATTACK_NAMES[ag.id]||'분석',
+        action, effectiveness: eff, isCritical: crit,
+        meterShift: ag.conf * 0.3 * ds * eMult * cMult,
+        dirSign: ds, damage: baseDamage,
+      };
+    });
+  }
+
+  // executeTurn with full state machine: windup → cast → impact → recover
+  function executeTurn(turn: BattleTurn, idx: number) {
+    currentTurnIdx = idx;
+    const agId = turn.agent.id;
+    const act = ACTION_CATALOG[turn.action];
+
+    // ── Phase 1: LOCK (0ms) — character focuses
+    setCharState(agId, 'lock');
+    setAgentState(agId, 'alert');
+    battleNarration = `${turn.agent.name} 준비 중...`;
+    battlePhaseLabel = `${turn.agent.name} TURN`;
+
+    // ── Phase 2: WINDUP (400ms) — character charges
+    const t1 = setTimeout(() => {
+      setCharState(agId, 'windup');
+      setAgentState(agId, 'charge');
+      sfx.charge();
+      showCharAction(agId, '⚡', '차징...');
+      battleNarration = `${turn.agent.name}: ${act.label}`;
+      addChatMsg(turn.agent, `${turn.attackName} ${act.emoji} ${act.label}`, true);
+      // Move toward center for attack
+      const homePos = getFormPos(activeAgents.indexOf(turn.agent), activeAgents.length);
+      moveChar(agId, 50 + (homePos.x - 50) * 0.3, 50 + (homePos.y - 50) * 0.3);
+    }, 400);
+    turnTimers.push(t1);
+
+    // ── Phase 3: CAST (900ms) — action executes
+    const t2 = setTimeout(() => {
+      setCharState(agId, 'cast');
+      showCharAction(agId, act.emoji, act.label);
+    }, 900);
+    turnTimers.push(t2);
+
+    // ── Phase 4: IMPACT (1300ms) — damage/effect resolves
+    const t3 = setTimeout(() => {
+      setCharState(agId, 'impact');
+      trackCombo();
+
+      if (turn.isCritical) {
+        juice_shake('heavy'); juice_flash('gold'); sfx.verdict();
+        battleNarration = `💥 CRITICAL! ${turn.agent.name} ${ATTACK_SUPER[agId]||'필살!'}`;
+        showCharHit(agId, `CRITICAL! -${Math.round(turn.damage)}`, '#ffcc00');
+        showCritical = true; criticalText = `💥 ${turn.agent.name} CRITICAL!`;
+        addChatMsg(turn.agent, `급소!! ${ATTACK_SUPER[agId]||''} 🔥`);
+        const tc = setTimeout(() => { showCritical = false; }, 1200);
+        turnTimers.push(tc);
+      } else if (turn.effectiveness === 'super') {
+        juice_shake('medium'); juice_flash('white'); sfx.impact();
+        battleNarration = `⚡ ${turn.attackName}! ${ATTACK_SUPER[agId]||'효과 굉장!'}`;
+        showCharHit(agId, `-${Math.round(turn.damage)}`, '#00ff88');
+        addChatMsg(turn.agent, `${ATTACK_SUPER[agId]||'효과 굉장!'} ⚡`);
+      } else if (turn.effectiveness === 'weak') {
+        sfx.step();
+        battleNarration = `${turn.attackName}... ${ATTACK_WEAK[agId]||'효과 약함'}`;
+        showCharHit(agId, 'WEAK', '#ff5e7a');
+        addChatMsg(turn.agent, `${ATTACK_WEAK[agId]||'효과 약함...'} 😐`);
+      } else {
+        juice_shake('light'); sfx.impact();
+        battleNarration = `${turn.attackName}! 나쁘지 않다!`;
+        showCharHit(agId, `-${Math.round(turn.damage)}`, '#fff');
+        addChatMsg(turn.agent, `나쁘지 않다! 💪`);
+      }
+
+      // Update VS meter
+      vsMeterTarget = Math.max(5, Math.min(95, vsMeterTarget + turn.meterShift));
+      vsMeter = vsMeterTarget;
+      // Update enemy HP
+      enemyHP = Math.max(0, Math.min(100, enemyHP - turn.damage * (turn.dirSign > 0 ? 1 : -1) * 0.5));
+      enemyMomentum = Math.max(0, Math.min(100, enemyMomentum + turn.meterShift * 0.3));
+      // Update character energy
+      const cSprite = charSprites[agId];
+      if (cSprite) {
+        cSprite.energy = Math.min(100, cSprite.energy + 25 + (turn.isCritical ? 20 : 0));
+        charSprites = charSprites;
+      }
+      const en = Math.min(100, (agentStates[agId]?.energy||0) + 30 + (turn.isCritical?20:0));
+      setAgentEnergy(agId, en);
+    }, 1300);
+    turnTimers.push(t3);
+
+    // ── Phase 5: RECOVER (2000ms) — return to position
+    const t4 = setTimeout(() => {
+      setCharState(agId, 'recover');
+      setAgentState(agId, turn.effectiveness === 'super' || turn.isCritical ? 'jump' : 'idle');
+      // Move back to home position
+      const homePos = getFormPos(activeAgents.indexOf(turn.agent), activeAgents.length);
+      moveChar(agId, homePos.x, homePos.y);
+      battlePhaseLabel = 'COMBAT';
+    }, 2000);
+    turnTimers.push(t4);
+
+    // ── Phase 6: IDLE (2500ms) — ready for next turn
+    const t5 = setTimeout(() => {
+      setCharState(agId, 'idle');
+    }, 2500);
+    turnTimers.push(t5);
+  }
+
+  function addChatMsg(ag: typeof AGDEFS[0], text: string, isAction = false) {
+    chatMessages = [...chatMessages, { id: Date.now()+Math.random(), agentId: ag.id, name: ag.name, icon: ag.icon, color: ag.color, text, isAction }].slice(-20);
+  }
+
+  function clearTurnTimers() { turnTimers.forEach(t => clearTimeout(t)); turnTimers = []; }
+
+  function startBattleTurnSequence() {
+    battleTurns = scheduleBattleTurns();
+    vsMeter = 50; vsMeterTarget = 50;
+    currentTurnIdx = -1; chatMessages = []; battleNarration = '';
+    enemyHP = 100; enemyMomentum = 50; comboCount = 0;
+    battlePhaseLabel = 'VS SPLASH';
+    initCharSprites();
+    showVsSplash = true;
+    juice_shake('heavy'); sfx.enter();
+    addChatMsg({ id:'SYS', name:'SYSTEM', icon:'⚔', color:'#ff5e7a' } as any,
+      state.hypothesis?.dir === 'LONG' ? '🔥 LONG SQUAD vs MARKET 🔥' : '🔥 SHORT SQUAD vs MARKET 🔥', true);
+
+    // All characters patrol during splash
+    activeAgents.forEach(ag => setCharState(ag.id, 'patrol', 1500));
+
+    const t0 = setTimeout(() => {
+      showVsSplash = false;
+      battlePhaseLabel = 'COMBAT';
+    }, 1500);
+    turnTimers.push(t0);
+
+    // Execute turns with spacing
+    battleTurns.forEach((turn, i) => {
+      const delay = 1800 + i * 3200;
+      const t = setTimeout(() => executeTurn(turn, i), delay);
+      turnTimers.push(t);
+    });
+
+    // Suspense before result
+    const suspenseDelay = 1800 + battleTurns.length * 3200;
+    const ts = setTimeout(() => {
+      battleNarration = '⏳ 시장이 결정한다...';
+      battlePhaseLabel = 'JUDGMENT';
+      addChatMsg({ id:'SYS', name:'MARKET', icon:'🌑', color:'#ffcc00' } as any, '시장이 결정한다...', true);
+      juice_shake('light');
+      // All characters lock during suspense
+      activeAgents.forEach(ag => setCharState(ag.id, 'lock'));
+    }, suspenseDelay);
+    turnTimers.push(ts);
   }
 
   function clearLiveEventTimer() {
@@ -554,6 +994,7 @@
 
   function initAnalysis() {
     startLiveEventStream('ANALYSIS');
+    initCharSprites(); // Initialize character positions in arena
     initScout();
     initGather();
     initCouncil();
@@ -578,6 +1019,11 @@
     // Show hypothesis panel for user prediction
     hypothesisVisible = true;
     floatDir = null; // Reset floating dir bar
+    // ═══ BET Phase Juice ═══
+    juice_shake('light');
+    sfx.charge();
+    battleNarration = '🎯 포지션을 설정하세요!';
+    addChatMsg({ id:'SYS', name:'SYSTEM', icon:'🎯', color:'#ffcc00' } as any, '배팅 타임! LONG or SHORT?', true);
     const speed = state.speed || 3;
     hypothesisTimer = Math.round(30 / speed);
 
@@ -853,6 +1299,9 @@
       setSpeech(ag.id, DOGE_BATTLE[i % DOGE_BATTLE.length], 400);
     });
 
+    // ═══ Start 4-Mode Battle Turn Sequence ═══
+    startBattleTurnSequence();
+
     // Simulate TP/SL hit
     const fallbackPos = state.hypothesis
       ? {
@@ -894,6 +1343,7 @@
 
   function initResult() {
     clearLiveEventTimer();
+    clearTurnTimers();
     liveEvents = [];
     const myScore = Math.round(state.score);
     const oppScore = Math.round(50 + Math.random() * 35);
@@ -1027,10 +1477,30 @@
     if (win) {
       sfx.win();
       dogeFloat();
-      activeAgents.forEach(ag => { setAgentState(ag.id, 'jump'); setSpeech(ag.id, DOGE_WIN[Math.floor(Math.random() * DOGE_WIN.length)], 800); });
+      juice_confetti(40);
+      juice_flash('green');
+      juice_shake('medium');
+      battleNarration = `🏆 승리! +${lpChange} LP!`;
+      addChatMsg({ id:'SYS', name:'SYSTEM', icon:'🏆', color:'#00ff88' } as any, `승리!! +${lpChange} LP! ${resultTag}`, true);
+      activeAgents.forEach(ag => {
+        setAgentState(ag.id, 'jump');
+        setCharState(ag.id, 'celebrate');
+        showCharAction(ag.id, '🎉', 'WIN!');
+        setSpeech(ag.id, DOGE_WIN[Math.floor(Math.random() * DOGE_WIN.length)], 800);
+      });
     } else {
       sfx.lose();
-      activeAgents.forEach(ag => { setAgentState(ag.id, 'sad'); setSpeech(ag.id, DOGE_LOSE[Math.floor(Math.random() * DOGE_LOSE.length)], 800); });
+      juice_shake('light');
+      juice_flash('red');
+      // Near-miss detection
+      const nearMiss = br === 'sl' && state.hypothesis ? Math.abs(state.prices.BTC - state.hypothesis.tp) / state.hypothesis.tp < 0.003 : false;
+      battleNarration = nearMiss ? `😱 아깝다! TP까지 ${(Math.abs(state.prices.BTC - (state.hypothesis?.tp||0))).toFixed(0)}$ 남았었다!` : `💀 패배... ${resultTag}`;
+      addChatMsg({ id:'SYS', name:'SYSTEM', icon:'💀', color:'#ff5e7a' } as any, nearMiss ? '아깝다!! 거의 TP 도달이었는데...' : `패배... ${resultTag}`, true);
+      activeAgents.forEach(ag => {
+        setAgentState(ag.id, 'sad');
+        setCharState(ag.id, 'panic');
+        setSpeech(ag.id, DOGE_LOSE[Math.floor(Math.random() * DOGE_LOSE.length)], 800);
+      });
     }
 
     addFeed(win ? '🏆' : '💀', 'RESULT', win ? '#00CC88' : '#FF5E7A',
@@ -1264,8 +1734,8 @@
           posTp={chartPosTp}
           posSl={chartPosSl}
           posDir={chartPosDir}
-          agentAnnotations={chartAnnotations}
-          agentMarkers={chartAgentMarkers}
+          agentAnnotations={showMarkers ? chartAnnotations : []}
+          agentMarkers={showMarkers ? chartAgentMarkers : []}
           on:dragTP={onDragTP}
           on:dragSL={onDragSL}
           on:dragEntry={onDragEntry}
@@ -1358,196 +1828,174 @@
               {state.hypothesis.dir} · R:R 1:{state.hypothesis.rr.toFixed(1)}
             </div>
           {/if}
+          <!-- Chart Toggle Buttons -->
+          <div class="chart-toggles">
+            <button class="ct-btn" class:on={showMarkers} on:click={() => showMarkers = !showMarkers} title="에이전트 마커">🏷</button>
+            <button class="ct-btn" class:on={showChartPosition} on:click={() => showChartPosition = !showChartPosition} title="TP/SL 라인">📏</button>
+          </div>
           <button class="mbtn" on:click={goLobby}>↺ LOBBY</button>
         </div>
       </div>
 
-      <!-- ═══════ RIGHT: BATTLE ARENA ═══════ -->
-      <div class="arena-side">
-        <!-- Retro collage background -->
-        <div class="arena-texture arena-stars"></div>
-        <div class="arena-texture arena-rainbow"></div>
-        <div class="arena-texture arena-grid"></div>
-        <div class="arena-texture arena-doodle"></div>
-        <div class="arena-vignette"></div>
-        <ArenaHUD
-          phaseName={phaseLabel.name}
-          timer={state.timer}
-          score={state.score}
-          streak={state.streak}
-          lp={state.lp}
-          mode={modeLabel}
-          phaseProgress={hudPhaseProgress}
-        />
-        {#if liveEvents.length > 0}
-          <div class="live-event-stack">
-            {#each liveEvents as ev (ev.id)}
-              <ArenaEventCard
-                icon={ev.icon}
-                title={ev.title}
-                detail={ev.detail}
-                severity={ev.severity}
-                tint={ev.tint}
-                freshness={Math.max(0, Math.min(1, (ev.expiresAt - Date.now()) / LIVE_EVENT_TTL_MS))}
-              />
-            {/each}
-          </div>
-        {/if}
-        <div class="battle-floor">
-          <span>ARENA SIGNAL PLANE</span>
-        </div>
-
-        <!-- Data Sources -->
-        {#each SOURCES as src}
-          <div class="dsrc" style="left:{src.x * 100}%;top:{src.y * 100}%">
-            <div class="dp"></div>
-            <div class="di" style="border-color:{src.color}">{src.icon}</div>
-            <div class="dl">{src.label}</div>
-          </div>
-        {/each}
-
-        <!-- Council Table -->
-        <div class="ctable" class:on={councilActive}>
-          <span class="cl">COUNCIL</span>
-        </div>
-
-        <!-- Agent Sprites with Inline Findings -->
-        {#each activeAgents as ag, i}
-          {@const defaultX = 50 + (i - Math.floor(activeAgents.length / 2)) * 16}
-          {@const agState = agentStates[ag.id] || { state: 'idle', speech: '', energy: 0, voteDir: '' }}
-          {@const agFinding = findings.find(f => f.def.id === ag.id)}
-          {@const xPos = agState.posX ?? defaultX}
-          {@const yPos = agState.posY ?? 44}
-          <div class="ag {agState.state}" style="left:{xPos}%;top:{yPos}%;--ag-delay:{i * 0.1}s;--ag-color:{ag.color}">
-            <!-- Speech Bubble -->
-            {#if agState.speech}
-              <div class="sp v">
-                <span>{agState.speech}</span>
-              </div>
-            {/if}
-            <!-- Vote Badge -->
-            {#if agState.voteDir}
-              <div class="vb v {agState.voteDir === 'LONG' ? 'long' : agState.voteDir === 'SHORT' ? 'short' : 'neutral'}">{agState.voteDir} 🔥</div>
-            {/if}
-            <div class="sha"></div>
-            <div class="wr">
-              <!-- State Reaction Emoji -->
-              <div class="react">
-                {#if agState.state === 'walk'}SCOUT{:else if agState.state === 'think'}SYNC{:else if agState.state === 'charge'}PULSE{:else if agState.state === 'vote'}VOTE{:else if agState.state === 'jump'}BOOST{:else if agState.state === 'sad'}MISS{:else if agState.state === 'alert'}LOCK{/if}
-              </div>
-
-              <!-- Energy Aura (during charge/vote) -->
-              {#if agState.state === 'charge' || agState.state === 'vote' || agState.state === 'jump'}
-                <div class="energy-aura" style="--aura-color:{ag.color}"></div>
-              {/if}
-
-              <!-- Trail particles (during walk/charge) -->
-              {#if agState.state === 'walk' || agState.state === 'charge'}
-                <div class="trail-particles">
-                  <span class="tp" style="--tp-d:0.2s;--tp-x:-8px">✦</span>
-                  <span class="tp" style="--tp-d:0.5s;--tp-x:6px">✧</span>
-                  <span class="tp" style="--tp-d:0.8s;--tp-x:-4px">✦</span>
-                </div>
-              {/if}
-
-              <div class="agent-sprite" style="border-color:{ag.color};box-shadow:0 0 12px {ag.color}40">
-                {#if ag.img.def}
-                  <img class="sprite-img"
-                    src={agState.state === 'jump' || agState.state === 'vote' ? ag.img.win : agState.state === 'sad' || agState.state === 'alert' ? ag.img.alt : ag.img.def}
-                    alt={ag.name} loading="lazy" />
-                {:else}
-                  <span class="sprite-icon">{ag.icon}</span>
-                {/if}
-              </div>
-              <div class="rbadge" style="background:{ag.color};color:#fff">{ag.icon}</div>
-              <div class="nm" style="color:{ag.color}">{ag.name}</div>
-
-              <!-- Energy Bar -->
-              <div class="ebar">
-                <div class="efill" style="width:{agState.energy}%;background:{ag.color}"></div>
-                {#if agState.energy >= 100}
-                  <div class="ebar-glow" style="background:{ag.color}"></div>
-                {/if}
-              </div>
-
-              <!-- Agent Decision Card (inline below agent) -->
-              {#if agFinding && agFinding.visible}
-                <div class="ag-decision" style="--ag-color:{ag.color}">
-                  <div class="agd-dir {ag.dir.toLowerCase()}">{ag.dir} {ag.conf}%</div>
-                  <div class="agd-finding">{ag.finding.title}</div>
-                  <div class="agd-bar"><div class="agd-fill" style="width:{ag.conf}%;background:{ag.color}"></div></div>
-                </div>
-              {/if}
+      <!-- ═══════ RIGHT: SPATIAL BATTLE ARENA ═══════ -->
+      <div class="arena-sidebar">
+        <!-- ── MISSION BAR + CLOSE ── -->
+        <div class="mission-bar">
+          <div class="mission-top">
+            <div class="mission-phase">
+              <span class="mp-dot" style="background:{phaseLabel.color}"></span>
+              <span class="mp-label" style="color:{phaseLabel.color}">{battlePhaseLabel || phaseLabel.name}</span>
+              {#if state.timer > 0}<span class="mp-timer">{Math.ceil(state.timer)}s</span>{/if}
             </div>
+            <button class="mission-close" on:click={goLobby} title="LOBBY">✕</button>
           </div>
-        {/each}
-
-        <!-- Phase Display -->
-        <div class="phase-display">
-          <div class="phase-dot" style="background:{phaseLabel.color}"></div>
-          <div class="phase-name" style="color:{phaseLabel.color}">{phaseLabel.name}</div>
-          <div class="phase-timer">{state.timer > 0 ? Math.ceil(state.timer) + 's' : '--'}</div>
+          <div class="mission-text">{missionText}</div>
         </div>
 
-        <!-- Right Rail (reference UI - partial) -->
-        <aside class="arena-rail">
-          <div class="rail-head">
-            <div class="rail-pair">{state.pair} · {formatTimeframeLabel(state.squadConfig.timeframe)}</div>
-            <div class="rail-price">${Number.isFinite(state.prices.BTC) ? Math.round(state.prices.BTC).toLocaleString() : '--'}</div>
+        <!-- ── COMBAT HUD ── -->
+        <div class="combat-hud">
+          <!-- VS Meter -->
+          <div class="hud-vs">
+            <span class="hud-side long-side">LONG</span>
+            <div class="hud-vs-track">
+              <div class="hud-vs-fill" style="width:{vsMeter}%"></div>
+              <div class="hud-vs-pip" style="left:{vsMeter}%">⚡</div>
+            </div>
+            <span class="hud-side short-side">SHORT</span>
           </div>
-          <div class="rail-tabs">
-            <button class:active={arenaRailTab === 'rank'} on:click={() => arenaRailTab = 'rank'}>RANK</button>
-            <button class:active={arenaRailTab === 'log'} on:click={() => arenaRailTab = 'log'}>LOG</button>
-            <button class:active={arenaRailTab === 'map'} on:click={() => arenaRailTab = 'map'}>MAP</button>
+          <!-- Enemy HP -->
+          <div class="hud-enemy">
+            <span class="hud-enemy-label">MARKET</span>
+            <div class="hud-hp-track">
+              <div class="hud-hp-fill" style="width:{enemyHP}%;background:linear-gradient(90deg,#ff5e7a,{enemyHP > 50 ? '#ffaa00' : '#ff2d55'})"></div>
+            </div>
+            <span class="hud-hp-num">{Math.round(enemyHP)}</span>
           </div>
-          <div class="rail-body">
-            {#if arenaRailTab === 'rank'}
-              {#if railRank.length === 0}
-                <div class="rail-empty">No agents in this round</div>
-              {:else}
-                {#each railRank as ag, idx}
-                  <div class="rail-row">
-                    <span class="rail-rank">{idx + 1}</span>
-                    <span class="rail-name" style="color:{ag.color}">{ag.name}</span>
-                    <span class="rail-dir {ag.dir.toLowerCase()}">{ag.dir}</span>
-                    <span class="rail-conf">{ag.conf}%</span>
-                  </div>
-                {/each}
-              {/if}
-            {:else if arenaRailTab === 'log'}
-              {#if feedMessages.length === 0}
-                <div class="rail-empty">No logs yet</div>
-              {:else}
-                {#each feedMessages.slice(0, 10) as msg}
-                  <div class="rail-log">
-                    <span class="rl-name" style="color:{msg.color}">{msg.name}</span>
-                    <span class="rl-text">{msg.text}</span>
-                  </div>
-                {/each}
-              {/if}
-            {:else}
-              <div class="rail-map">
-                <div class="rm-item"><span>MODE</span><b>{modeLabel}</b></div>
-                <div class="rm-item"><span>AGENTS</span><b>{activeAgents.length}</b></div>
-                <div class="rm-item"><span>SCORE</span><b>{Math.round(state.score)}</b></div>
-                <div class="rm-item"><span>LP</span><b>{state.lp}</b></div>
-              </div>
-            {/if}
-          </div>
-        </aside>
+          <!-- Price -->
+          <div class="hud-price">${Number.isFinite(state.prices.BTC) ? Math.round(state.prices.BTC).toLocaleString() : '--'}</div>
+        </div>
 
-        <!-- Feed Log -->
-        <div class="feed-panel">
-          {#each feedMessages as msg}
-            <div class="feed-msg" class:feed-new={msg.isNew}>
-              <span class="feed-icon">{msg.icon}</span>
-              <span class="feed-name" style="color:{msg.color}">{msg.name}</span>
-              <span class="feed-text">{msg.text}{#if msg.isNew}<span class="feed-cursor">|</span>{/if}</span>
-              {#if msg.dir}
-                <span class="feed-dir {msg.dir.toLowerCase()}">{msg.dir}</span>
+        <!-- ═══ SPATIAL ARENA (THE GAME WORLD) ═══ -->
+        <div class="game-arena">
+          <!-- Grid background -->
+          <div class="arena-grid-bg"></div>
+
+          <!-- Floating particles -->
+          {#each arenaParticles as p (p.id)}
+            <div class="arena-particle"
+              style="left:{p.x}%;top:{p.y}%;width:{p.size}px;height:{p.size}px;opacity:{p.opacity};animation-duration:{p.speed * 4}s">
+            </div>
+          {/each}
+
+          <!-- SVG Connection lines between agents and center -->
+          <svg class="arena-connections" viewBox="0 0 100 100" preserveAspectRatio="none">
+            {#each activeAgents as ag}
+              {@const cs = charSprites[ag.id]}
+              {#if cs}
+                <line x1={cs.x} y1={cs.y} x2="50" y2="50"
+                  stroke={ag.color} stroke-width="0.3" stroke-opacity="0.2"
+                  stroke-dasharray="1 1" />
+              {/if}
+            {/each}
+          </svg>
+
+          <!-- Center battle node -->
+          <div class="arena-center-node">
+            <div class="acn-icon">⚔</div>
+            <div class="acn-price">${Number.isFinite(state.prices.BTC) ? Math.round(state.prices.BTC).toLocaleString() : '--'}</div>
+          </div>
+
+          <!-- CHARACTER SPRITES -->
+          {#each activeAgents as ag, i}
+            {@const cs = charSprites[ag.id] || { charState: 'idle', x: 50, y: 50, actionEmoji: '', actionLabel: '', flipX: false, hp: 100, energy: 0, showHit: false, hitText: '', hitColor: '' }}
+            {@const isActiveTurn = currentTurnIdx >= 0 && battleTurns[currentTurnIdx]?.agent.id === ag.id}
+            <div class="char-sprite cs-{cs.charState}"
+              class:active-turn={isActiveTurn}
+              style="left:{cs.x}%;top:{cs.y}%;--ag-color:{ag.color};--ag-delay:{i * 0.15}s;{cs.flipX ? 'transform:translate(-50%,-50%) scaleX(-1)' : ''}"
+            >
+              <!-- Action emoji popup -->
+              {#if cs.actionEmoji}
+                <div class="char-action-popup">
+                  <span class="cap-emoji">{cs.actionEmoji}</span>
+                  <span class="cap-label">{cs.actionLabel}</span>
+                </div>
+              {/if}
+
+              <!-- Hit text flyout -->
+              {#if cs.showHit}
+                <div class="char-hit-fly" style="color:{cs.hitColor}">{cs.hitText}</div>
+              {/if}
+
+              <!-- Character body -->
+              <div class="char-body">
+                {#if isActiveTurn}
+                  <div class="char-turn-ring"></div>
+                {/if}
+                <div class="char-img-wrap" style="border-color:{ag.color}">
+                  {#if ag.img.def}
+                    <img src={ag.img.def} alt={ag.name} class="char-img" />
+                  {:else}
+                    <span class="char-emoji">{ag.icon}</span>
+                  {/if}
+                </div>
+                <!-- Energy aura -->
+                <div class="char-aura" style="--aura-color:{ag.color};opacity:{cs.energy > 50 ? 0.3 : 0.1}"></div>
+              </div>
+
+              <!-- Name tag -->
+              <div class="char-nametag" style="border-color:{ag.color}">{ag.name}</div>
+
+              <!-- HP + Energy bars -->
+              <div class="char-bars">
+                <div class="char-hpbar"><div class="char-hpfill" style="width:{cs.hp}%;background:{cs.hp > 50 ? '#00ff88' : cs.hp > 25 ? '#ffaa00' : '#ff2d55'}"></div></div>
+                <div class="char-ebar"><div class="char-efill" style="width:{cs.energy}%;background:{ag.color}"></div></div>
+              </div>
+
+              <!-- Vote direction badge -->
+              {#if agentStates[ag.id]?.voteDir}
+                <div class="char-vote-badge {agentStates[ag.id].voteDir.toLowerCase()}">{agentStates[ag.id].voteDir === 'LONG' ? '▲' : '▼'}</div>
               {/if}
             </div>
           {/each}
+
+          <!-- VS SPLASH OVERLAY -->
+          {#if showVsSplash}
+            <div class="arena-vs-splash">
+              <span class="avs-team long">LONG</span>
+              <span class="avs-x">⚔</span>
+              <span class="avs-team short">SHORT</span>
+            </div>
+          {/if}
+
+          <!-- CRITICAL POPUP -->
+          {#if showCritical}
+            <div class="arena-critical-popup">{criticalText}</div>
+          {/if}
+
+          <!-- COMBO COUNTER -->
+          {#if showCombo && comboCount >= 2}
+            <div class="arena-combo">COMBO x{comboCount}</div>
+          {/if}
+        </div>
+
+        <!-- ── NARRATION BAR ── -->
+        <div class="sb-narration">
+          <div class="narr-icon">⚡</div>
+          <div class="narr-text">{battleNarration || '에이전트 대기 중...'}</div>
+        </div>
+
+        <!-- ── BATTLE LOG (mini chat) ── -->
+        <div class="battle-log">
+          {#each chatMessages.slice(-5) as msg (msg.id)}
+            <div class="bl-line" class:action={msg.isAction}>
+              <span class="bl-icon" style="color:{msg.color}">{msg.icon}</span>
+              <span class="bl-name" style="color:{msg.color}">{msg.name}</span>
+              <span class="bl-text">{msg.text}</span>
+            </div>
+          {/each}
+          {#if chatMessages.length === 0}
+            <div class="bl-empty">대기 중...</div>
+          {/if}
         </div>
 
         <!-- ═══════ COMPARE OVERLAY ═══════ -->
@@ -1719,50 +2167,17 @@
           </div>
         {/if}
 
-        <!-- Floating Doge Words -->
+        <!-- Floating Doge Words (Game Juice) -->
         {#each floatingWords as w (w.id)}
           <div class="doge-float" style="left:{w.x}%;color:{w.color};animation-duration:{w.dur}s">{w.text}</div>
         {/each}
-
-        <!-- History Button -->
-        <button class="hist-btn" on:click={() => historyOpen = !historyOpen}>📜 {matchHistory.length}</button>
-
-        <!-- History Panel -->
-        {#if historyOpen}
-          <div class="hist-panel">
-            <div class="hist-header">
-              <span>MATCH HISTORY</span>
-              <button class="hist-close" on:click={() => historyOpen = false}>✕</button>
-            </div>
-            {#each matchHistory as h}
-              <div class="hitem">
-                <span class="hnum">M{h.n}</span>
-                <span class="hres" class:w={h.win} class:l={!h.win}>{h.win ? 'WIN' : 'LOSE'}</span>
-                <span class="hlp" class:pos={h.lp >= 0} class:neg={h.lp < 0}>{h.lp >= 0 ? '+' : ''}{h.lp} LP</span>
-                <span class="hscore">{h.score}</span>
-                {#if h.streak >= 3}<span class="hstreak">🔥{h.streak}</span>{/if}
-              </div>
-            {/each}
-            {#if matchHistory.length === 0}
-              <div class="hist-empty">No matches yet</div>
-            {/if}
-          </div>
-        {/if}
-
-        <div class="arena-balance">
-          <span>LONG</span>
-          <div class="ab-track">
-            <div class="ab-fill" style="width:{longBalance}%"></div>
-          </div>
-          <span>SHORT</span>
-        </div>
       </div>
     </div>
   {/if}
 </div>
 
 <style>
-  .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; }
+  .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; display: flex; flex-direction: column; }
   .arena-space-theme {
     --space-line: rgba(232, 150, 125, 0.25);
     --space-line-strong: rgba(232, 150, 125, 0.45);
@@ -1803,7 +2218,7 @@
     to { transform: translate3d(2%, -2%, 0) scale(1.03); }
   }
 
-  .battle-layout { display: grid; grid-template-columns: 45% 1fr; height: 100%; overflow: hidden; }
+  .battle-layout { display: grid; grid-template-columns: 1fr 380px; flex: 1; min-height: 0; overflow: hidden; }
 
   .arena-topbar {
     position: relative;
@@ -1971,14 +2386,416 @@
   }
   .mh-toggle:hover { background: #e8967d; }
   .chart-side { display: flex; flex-direction: column; background: #07130d; overflow: hidden; border-right: 1px solid rgba(232,150,125,.15); position: relative; }
-  .arena-side {
+
+  /* ═══════ SPATIAL BATTLE ARENA ═══════ */
+  .arena-sidebar {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(180deg, #0a0a12 0%, #0d0a14 50%, #0a0a12 100%);
+    border-left: 1px solid rgba(255,105,180,.15);
+  }
+
+  /* ── MISSION BAR ── */
+  .mission-bar {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,105,180,.2);
+    background: linear-gradient(90deg, rgba(255,105,180,.06), rgba(255,105,180,.02));
+    flex-shrink: 0;
+  }
+  .mission-top {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;
+  }
+  .mission-phase {
+    display: flex; align-items: center; gap: 6px;
+    font: 800 9px/1 var(--fd); letter-spacing: 1.5px;
+  }
+  .mp-dot { width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 8px currentColor; flex-shrink: 0; }
+  .mp-label { text-transform: uppercase; }
+  .mp-timer { color: rgba(255,255,255,.4); font-size: 8px; margin-left: 8px; }
+  .mission-close {
+    width: 24px; height: 24px; border-radius: 6px;
+    border: 1px solid rgba(255,105,180,.35);
+    background: rgba(255,105,180,.1);
+    color: rgba(255,255,255,.7);
+    font-size: 12px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s; flex-shrink: 0;
+  }
+  .mission-close:hover { background: rgba(255,105,180,.25); color: #fff; }
+  .mission-text {
+    font: 700 8px/1.3 var(--fm); color: rgba(255,255,255,.5);
+    letter-spacing: 0.5px;
+  }
+
+  /* ── COMBAT HUD ── */
+  .combat-hud {
+    padding: 6px 10px;
+    border-bottom: 1px solid rgba(255,105,180,.15);
+    background: rgba(0,0,0,.3);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .hud-vs {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .hud-side {
+    font: 900 9px/1 var(--fd); letter-spacing: 2px; width: 42px; text-align: center;
+    text-shadow: 0 0 8px currentColor;
+  }
+  .hud-side.long-side { color: #00ff88; }
+  .hud-side.short-side { color: #ff5e7a; }
+  .hud-vs-track {
+    flex: 1; height: 8px; background: rgba(255,94,122,.15); border-radius: 4px;
+    position: relative; overflow: visible; border: 1px solid rgba(255,105,180,.2);
+  }
+  .hud-vs-fill {
+    height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66);
+    border-radius: 4px 0 0 4px; transition: width .5s cubic-bezier(.4,0,.2,1);
+  }
+  .hud-vs-pip {
+    position: absolute; top: 50%; transform: translate(-50%,-50%);
+    font-size: 9px;
+    filter: drop-shadow(0 0 4px rgba(255,200,0,.6));
+    transition: left .5s cubic-bezier(.4,0,.2,1);
+    z-index: 2;
+  }
+  .hud-enemy {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .hud-enemy-label {
+    font: 800 6px/1 var(--fd); letter-spacing: 1.5px; color: #ff5e7a; width: 36px;
+  }
+  .hud-hp-track {
+    flex: 1; height: 6px; background: rgba(255,94,122,.1); border-radius: 3px;
+    overflow: hidden; border: 1px solid rgba(255,94,122,.2);
+  }
+  .hud-hp-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+  .hud-hp-num {
+    font: 800 8px/1 var(--fd); color: #ff5e7a; width: 24px; text-align: right;
+  }
+  .hud-price {
+    font: 900 10px/1 var(--fd); color: rgba(255,255,255,.5); text-align: center; letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+
+  /* ═══ GAME ARENA (THE SPATIAL WORLD) ═══ */
+  .game-arena {
+    flex: 1;
     position: relative;
     overflow: hidden;
+    min-height: 200px;
     background:
-      radial-gradient(circle at 45% 25%, rgba(232, 150, 125, .1), transparent 40%),
-      radial-gradient(circle at 80% 70%, rgba(0, 204, 136, .06), transparent 45%),
-      linear-gradient(180deg, #07130d 0%, #08150e 56%, #0a1a12 100%);
+      radial-gradient(circle at 50% 45%, rgba(255,105,180,.06), transparent 50%),
+      radial-gradient(circle at 20% 80%, rgba(0,255,136,.04), transparent 40%),
+      radial-gradient(circle at 80% 20%, rgba(102,204,230,.04), transparent 40%);
   }
+  .arena-grid-bg {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255,105,180,.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,105,180,.06) 1px, transparent 1px);
+    background-size: 28px 28px;
+    opacity: .4;
+  }
+  .arena-particle {
+    position: absolute; border-radius: 50%;
+    background: rgba(255,105,180,.3);
+    animation: particleFloat linear infinite alternate;
+    pointer-events: none;
+  }
+  @keyframes particleFloat {
+    0% { transform: translateY(0) translateX(0); opacity: .1; }
+    50% { transform: translateY(-15px) translateX(8px); opacity: .3; }
+    100% { transform: translateY(5px) translateX(-5px); opacity: .15; }
+  }
+  .arena-connections {
+    position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;
+  }
+  /* Center battle node */
+  .arena-center-node {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    z-index: 5; text-align: center;
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,105,180,.3);
+    background: rgba(10,10,20,.8);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: 0 0 20px rgba(255,105,180,.15);
+    animation: centerPulse 2s ease-in-out infinite alternate;
+  }
+  @keyframes centerPulse {
+    from { box-shadow: 0 0 12px rgba(255,105,180,.1); }
+    to { box-shadow: 0 0 28px rgba(255,105,180,.25); }
+  }
+  .acn-icon { font-size: 16px; }
+  .acn-price { font: 800 7px/1 var(--fd); color: rgba(255,255,255,.5); letter-spacing: 0.5px; }
+
+  /* ── CHARACTER SPRITES ── */
+  .char-sprite {
+    position: absolute; z-index: 10;
+    transform: translate(-50%, -50%);
+    transition: left .6s cubic-bezier(.4,0,.2,1), top .6s cubic-bezier(.4,0,.2,1);
+    cursor: pointer;
+    text-align: center;
+  }
+  .char-body { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
+  .char-img-wrap {
+    width: 52px; height: 52px; border-radius: 14px;
+    border: 3px solid; overflow: hidden;
+    background: #fff;
+    box-shadow: 3px 3px 0 rgba(0,0,0,.5);
+    transition: all .15s;
+  }
+  .char-img {
+    width: 100%; height: 100%; object-fit: cover; border-radius: 11px;
+    filter: hue-rotate(330deg) saturate(1.2);
+  }
+  .char-emoji { font-size: 28px; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+  .char-aura {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 72px; height: 72px; border-radius: 50%;
+    background: radial-gradient(circle, var(--aura-color) 0%, transparent 70%);
+    z-index: -1; pointer-events: none;
+    animation: charAuraPulse 1.5s ease-in-out infinite;
+  }
+  @keyframes charAuraPulse {
+    0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .15; }
+    50% { transform: translate(-50%,-50%) scale(1.3); opacity: .3; }
+  }
+  .char-turn-ring {
+    position: absolute; inset: -6px; border-radius: 18px;
+    border: 2px solid var(--ag-color, #ff69b4);
+    animation: turnRingSpin 1s linear infinite;
+    box-shadow: 0 0 12px var(--ag-color, #ff69b4);
+  }
+  @keyframes turnRingSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .char-nametag {
+    margin-top: 3px;
+    font: 900 7px/1 var(--fd); letter-spacing: 1.5px;
+    background: rgba(0,0,0,.7); color: #fff;
+    padding: 2px 6px; border-radius: 4px;
+    border: 1px solid; white-space: nowrap;
+  }
+  .char-bars {
+    display: flex; flex-direction: column; gap: 1px; margin-top: 2px; width: 42px;
+  }
+  .char-hpbar {
+    height: 4px; background: rgba(255,255,255,.1); border-radius: 2px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.15);
+  }
+  .char-hpfill { height: 100%; border-radius: 2px; transition: width .5s; }
+  .char-ebar {
+    height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; overflow: hidden;
+  }
+  .char-efill { height: 100%; border-radius: 2px; transition: width .3s; }
+  .char-vote-badge {
+    position: absolute; top: -4px; right: -8px;
+    font: 900 8px/1 var(--fd); padding: 2px 4px; border-radius: 4px;
+    border: 1px solid #000; z-index: 15;
+  }
+  .char-vote-badge.long { background: #00ff88; color: #000; }
+  .char-vote-badge.short { background: #ff2d55; color: #fff; }
+
+  /* ── Action popup (above character) ── */
+  .char-action-popup {
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    animation: actionPopIn .3s ease;
+    z-index: 20; pointer-events: none;
+  }
+  @keyframes actionPopIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(8px) scale(.7); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  }
+  .cap-emoji { font-size: 20px; filter: drop-shadow(0 0 8px rgba(255,200,0,.6)); }
+  .cap-label {
+    font: 900 8px/1 var(--fd); letter-spacing: 1px; color: #ffcc00;
+    background: rgba(0,0,0,.7); padding: 2px 6px; border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  /* ── Hit text flyout ── */
+  .char-hit-fly {
+    position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+    font: 900 14px/1 var(--fd); letter-spacing: 2px;
+    text-shadow: 0 2px 6px rgba(0,0,0,.7);
+    animation: hitFlyUp 1.2s ease-out forwards;
+    z-index: 25; pointer-events: none; white-space: nowrap;
+  }
+  @keyframes hitFlyUp {
+    0% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-40px) scale(1.3); }
+  }
+
+  /* ── CHARACTER STATE ANIMATIONS ── */
+  /* IDLE: gentle float */
+  .cs-idle .char-body { animation: csIdle 1.4s ease-in-out infinite; animation-delay: var(--ag-delay, 0s); }
+  @keyframes csIdle {
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  /* PATROL: walking bounce */
+  .cs-patrol .char-body { animation: csPatrol .4s ease-in-out infinite; }
+  @keyframes csPatrol {
+    0%,100% { transform: translateY(0) rotate(0); }
+    25% { transform: translateY(-5px) rotate(-2deg); }
+    75% { transform: translateY(-3px) rotate(2deg); }
+  }
+  /* LOCK: focused stillness + glow */
+  .cs-lock .char-body { animation: csLock .6s ease infinite; }
+  .cs-lock .char-img-wrap { box-shadow: 0 0 16px var(--ag-color, #ff69b4) !important; }
+  @keyframes csLock {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+  }
+  /* WINDUP: charging vibrate */
+  .cs-windup .char-body { animation: csWindup .08s linear infinite; }
+  .cs-windup .char-img-wrap { box-shadow: 0 0 22px var(--ag-color, #ffcc00) !important; }
+  @keyframes csWindup {
+    0% { transform: translate(-2px, 1px); }
+    25% { transform: translate(2px, -1px); }
+    50% { transform: translate(-1px, -2px); }
+    75% { transform: translate(1px, 2px); }
+  }
+  /* CAST: lunge forward */
+  .cs-cast .char-body { animation: csCast .4s ease; }
+  .cs-cast .char-img-wrap { box-shadow: 0 0 28px var(--ag-color, #ff5e7a) !important; border-color: #fff !important; }
+  @keyframes csCast {
+    0% { transform: scale(1); }
+    30% { transform: scale(1.15) translateY(-8px); }
+    60% { transform: scale(1.1) translateY(-4px); }
+    100% { transform: scale(1); }
+  }
+  /* IMPACT: flash + bounce */
+  .cs-impact .char-body { animation: csImpact .3s ease; }
+  @keyframes csImpact {
+    0% { transform: scale(1.2); filter: brightness(2); }
+    50% { transform: scale(0.95); filter: brightness(1.5); }
+    100% { transform: scale(1); filter: brightness(1); }
+  }
+  /* RECOVER: shrink back */
+  .cs-recover .char-body { animation: csRecover .4s ease; }
+  @keyframes csRecover {
+    0% { transform: scale(.9); opacity: .7; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  /* CELEBRATE: happy jump */
+  .cs-celebrate .char-body { animation: csCelebrate .4s ease-in-out infinite; }
+  @keyframes csCelebrate {
+    0%,100% { transform: translateY(0) rotate(0) scale(1); }
+    25% { transform: translateY(-14px) rotate(-5deg) scale(1.08); }
+    75% { transform: translateY(-6px) rotate(3deg) scale(1.04); }
+  }
+  /* PANIC: shaky sad */
+  .cs-panic .char-body { animation: csPanic .2s ease infinite; }
+  .cs-panic .char-img-wrap { filter: saturate(.4) brightness(.7); }
+  @keyframes csPanic {
+    0%,100% { transform: translateX(0) rotate(0); }
+    25% { transform: translateX(-3px) rotate(-3deg); }
+    75% { transform: translateX(3px) rotate(3deg); }
+  }
+
+  /* ── VS Splash (in-arena overlay) ── */
+  .arena-vs-splash {
+    position: absolute; inset: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    background: rgba(0,0,0,.85);
+    animation: vsSplashIn .4s ease;
+  }
+  .avs-team {
+    font: 900 24px/1 var(--fc); letter-spacing: 4px;
+    text-shadow: 0 0 20px currentColor;
+  }
+  .avs-team.long { color: #00ff88; }
+  .avs-team.short { color: #ff5e7a; }
+  .avs-x { font-size: 28px; animation: vsXPulse .3s ease infinite alternate; }
+  @keyframes vsSplashIn { from { opacity: 0; transform: scale(1.5); } to { opacity: 1; transform: scale(1); } }
+  @keyframes vsXPulse { from { transform: scale(1) rotate(-5deg); } to { transform: scale(1.2) rotate(5deg); } }
+
+  /* ── Critical + Combo popups ── */
+  .arena-critical-popup {
+    position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
+    z-index: 60; pointer-events: none;
+    font: 900 18px/1 var(--fc); color: #ffcc00; letter-spacing: 3px;
+    text-shadow: 0 0 16px rgba(255,200,0,.8), 0 4px 8px rgba(0,0,0,.5);
+    animation: criticalBoom .8s ease forwards;
+  }
+  @keyframes criticalBoom {
+    0% { opacity: 0; transform: translateX(-50%) scale(2); }
+    20% { opacity: 1; transform: translateX(-50%) scale(1); }
+    80% { opacity: 1; transform: translateX(-50%) scale(1.05); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(.8); }
+  }
+  .arena-combo {
+    position: absolute; top: 32%; right: 8%; z-index: 55; pointer-events: none;
+    font: 900 14px/1 var(--fc); color: #ff69b4; letter-spacing: 2px;
+    text-shadow: 0 0 12px rgba(255,105,180,.6);
+    animation: comboPopIn .4s ease;
+  }
+  @keyframes comboPopIn {
+    from { opacity: 0; transform: scale(2) rotate(-10deg); }
+    to { opacity: 1; transform: scale(1) rotate(0); }
+  }
+
+  /* ═══ NARRATION BOX ═══ */
+  .sb-narration {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px;
+    border-top: 1px solid rgba(255,105,180,.15);
+    background: rgba(255,105,180,.04);
+    flex-shrink: 0; min-height: 32px;
+  }
+  .narr-icon { font-size: 11px; flex-shrink: 0; }
+  .narr-text {
+    font: 700 9px/1.3 var(--fm); color: rgba(255,255,255,.7);
+    flex: 1; animation: narrFade .3s ease;
+  }
+  @keyframes narrFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ═══ BATTLE LOG (mini chat) ═══ */
+  .battle-log {
+    max-height: 80px; overflow-y: auto; padding: 4px 8px;
+    border-top: 1px solid rgba(255,105,180,.1);
+    background: rgba(0,0,0,.2); flex-shrink: 0;
+  }
+  .battle-log::-webkit-scrollbar { width: 2px; }
+  .battle-log::-webkit-scrollbar-thumb { background: rgba(255,105,180,.2); }
+  .bl-line {
+    display: flex; align-items: center; gap: 4px;
+    font: 600 8px/1.3 var(--fm); color: rgba(255,255,255,.5);
+    padding: 2px 0; animation: blSlideIn .3s ease;
+  }
+  .bl-line.action { color: rgba(255,105,180,.7); }
+  @keyframes blSlideIn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+  .bl-icon { font-size: 9px; flex-shrink: 0; }
+  .bl-name { font: 800 7px/1 var(--fd); letter-spacing: .5px; flex-shrink: 0; }
+  .bl-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bl-empty { text-align: center; color: rgba(255,255,255,.15); font: 600 8px/1 var(--fm); padding: 8px 0; }
+
+  /* ═══ GAME JUICE KEYFRAMES ═══ */
+  :global(.jc-shake-light) { animation: jcShakeL .3s ease; }
+  :global(.jc-shake-medium) { animation: jcShakeM .35s ease; }
+  :global(.jc-shake-heavy) { animation: jcShakeH .4s ease; }
+  @keyframes jcShakeL { 0%,100% { transform: none; } 25% { transform: translate(-2px, 1px); } 75% { transform: translate(2px, -1px); } }
+  @keyframes jcShakeM { 0%,100% { transform: none; } 20% { transform: translate(-4px, 2px) rotate(-0.5deg); } 40% { transform: translate(3px, -2px); } 60% { transform: translate(-3px, 1px) rotate(0.3deg); } 80% { transform: translate(2px, -1px); } }
+  @keyframes jcShakeH { 0%,100% { transform: none; } 10% { transform: translate(-6px, 3px) rotate(-1deg); } 30% { transform: translate(5px, -4px) rotate(0.8deg); } 50% { transform: translate(-4px, 2px) rotate(-0.5deg); } 70% { transform: translate(6px, -3px) rotate(1deg); } 90% { transform: translate(-3px, 1px); } }
+  :global(.jc-flash) { position: fixed; inset: 0; z-index: 9999; pointer-events: none; animation: jcFlash .35s ease forwards; }
+  :global(.jc-flash-white) { background: rgba(255,255,255,.6); }
+  :global(.jc-flash-green) { background: rgba(0,255,136,.4); }
+  :global(.jc-flash-red) { background: rgba(255,50,80,.4); }
+  :global(.jc-flash-gold) { background: rgba(255,200,0,.5); }
+  @keyframes jcFlash { from { opacity: 1; } to { opacity: 0; } }
+  :global(.jc-fly-number) { position: fixed; z-index: 9998; pointer-events: none; font: 900 18px/1 var(--fd); letter-spacing: 2px; text-shadow: 0 2px 6px rgba(0,0,0,.5); animation: jcFly 1.2s ease-out forwards; }
+  @keyframes jcFly { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-60px) scale(1.3); } }
+  :global(.jc-confetti) { position: fixed; top: -10px; z-index: 9997; pointer-events: none; animation: jcConfettiFall ease-out forwards; }
+  @keyframes jcConfettiFall { 0% { opacity: 1; transform: translateY(0) rotate(0deg); } 100% { opacity: 0; transform: translateY(100vh) rotate(720deg); } }
 
   /* ═══════ HYPOTHESIS SIDEBAR ═══════ */
   .hypo-sidebar {
@@ -2041,6 +2858,33 @@
   .hypo-badge.long { background: rgba(0,255,136,.15); border-color: #00ff88; color: #00ff88; }
   .hypo-badge.short { background: rgba(255,45,85,.15); border-color: #ff2d55; color: #ff2d55; }
   .hypo-badge.neutral { background: rgba(255,170,0,.15); border-color: #ffaa00; color: #ffaa00; }
+
+  /* Chart Toggle Buttons */
+  .chart-toggles {
+    display: flex;
+    gap: 3px;
+    margin-left: 4px;
+  }
+  .ct-btn {
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba(255,105,180,.2);
+    border-radius: 6px;
+    background: rgba(255,105,180,.05);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .15s;
+    opacity: .5;
+  }
+  .ct-btn.on {
+    border-color: rgba(255,105,180,.5);
+    background: rgba(255,105,180,.15);
+    opacity: 1;
+  }
+  .ct-btn:hover { opacity: .8; background: rgba(255,105,180,.1); }
 
   .mbtn { padding: 6px 16px; border-radius: 16px; background: #E8967D; border: 3px solid #000; color: #000; font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
   .mbtn:hover { background: #d07a64; }
