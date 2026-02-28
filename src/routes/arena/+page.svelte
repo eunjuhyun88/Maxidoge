@@ -11,12 +11,10 @@
   import Lobby from '../../components/arena/Lobby.svelte';
   import ChartPanel from '../../components/arena/ChartPanel.svelte';
   import HypothesisPanel from '../../components/arena/HypothesisPanel.svelte';
-  import ArenaHUD from '../../components/arena/ArenaHUD.svelte';
   import ArenaEventCard from '../../components/arena/ArenaEventCard.svelte';
   import ArenaRewardModal from '../../components/arena/ArenaRewardModal.svelte';
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
   import MatchHistory from '../../components/arena/MatchHistory.svelte';
-  import SpeechBubble from '../../components/arena/SpeechBubble.svelte';
   import { pushFeedItem, clearFeed } from '$lib/stores/battleFeedStore';
   import { addMatchRecord, type MatchRecord } from '$lib/stores/matchHistoryStore';
   import { matchRecordToReplayData, generateReplaySteps, createReplayState, type ReplayStep } from '$lib/engine/replay';
@@ -28,7 +26,15 @@
   import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket } from '$lib/api/arenaApi';
   import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
   import type { DraftSelection } from '$lib/engine/types';
+  import { createBattleResolver, type BattleTickState } from '$lib/engine/battleResolver';
   import { mapAnalysisToC02, buildChartAnnotations, buildAgentMarkers } from '../../components/arena/arenaState';
+  import ViewPicker from '../../components/arena/ViewPicker.svelte';
+  import PhaseGuide from '../../components/arena/PhaseGuide.svelte';
+  import ResultPanel from '../../components/arena/ResultPanel.svelte';
+  import ChartWarView from '../../components/arena/views/ChartWarView.svelte';
+  import AgentArenaView from '../../components/arena/views/AgentArenaView.svelte';
+  import MissionControlView from '../../components/arena/views/MissionControlView.svelte';
+  import CardDuelView from '../../components/arena/views/CardDuelView.svelte';
 
   $: walletOk = $isWalletConnected;
 
@@ -361,6 +367,8 @@
   let hypothesisTimer = 45;
   let hypothesisInterval: ReturnType<typeof setInterval> | null = null;
   let _battleInterval: ReturnType<typeof setInterval> | null = null;
+  let _battleResolver: ReturnType<typeof createBattleResolver> | null = null;
+  let _battleResolverUnsub: (() => void) | null = null;
 
   // ═══════ REPLAY STATE ═══════
   let replayState = createReplayState();
@@ -909,8 +917,8 @@
         .catch(err => console.warn('[Arena] Hypothesis sync failed:', err));
     }
 
-    // HYPOTHESIS -> BATTLE
-    advancePhase();
+    // HYPOTHESIS -> PREVIEW -> BATTLE
+    initPreview();
   }
 
   // Floating direction bar handler
@@ -1302,7 +1310,7 @@
     // ═══ Start 4-Mode Battle Turn Sequence ═══
     startBattleTurnSequence();
 
-    // Simulate TP/SL hit
+    // ═══ Real-time Battle Resolution (via Binance WebSocket) ═══
     const fallbackPos = state.hypothesis
       ? {
         entry: state.hypothesis.entry,
@@ -1321,24 +1329,95 @@
       return;
     }
 
-    let elapsed = 0;
-    if (_battleInterval) clearInterval(_battleInterval);
-    _battleInterval = setInterval(() => {
-      elapsed += 500;
-      gameState.update(s => {
-        const price = s.prices.BTC * (1 + (Math.random() - 0.48) * 0.0015);
-        const isLong = pos.dir === 'LONG';
-        const tpHit = isLong ? price >= pos.tp : price <= pos.tp;
-        const slHit = isLong ? price <= pos.sl : price >= pos.sl;
-        if (tpHit || slHit || elapsed >= 8000) {
-          if (_battleInterval) { clearInterval(_battleInterval); _battleInterval = null; }
-          const result = tpHit ? 'tp' : slHit ? 'sl' : (price > pos.entry ? 'time_win' : 'time_loss');
-          safeTimeout(() => advancePhase(), 500);
-          return { ...s, prices: { ...s.prices, BTC: price }, battleResult: result };
+    // Clean up any previous resolver
+    if (_battleResolverUnsub) { _battleResolverUnsub(); _battleResolverUnsub = null; }
+    if (_battleResolver) { _battleResolver.destroy(); _battleResolver = null; }
+
+    _battleResolver = createBattleResolver({
+      entryPrice: pos.entry,
+      tpPrice: pos.tp,
+      slPrice: pos.sl,
+      direction: pos.dir === 'LONG' || pos.dir === 'SHORT' ? pos.dir : 'LONG',
+      speed: state.speed || 3,
+    });
+
+    gameState.update(s => ({
+      ...s,
+      battleTick: null,
+      battlePriceHistory: [],
+      battleEntryTime: Date.now(),
+      battleExitTime: 0,
+      battleExitPrice: 0,
+    }));
+
+    _battleResolverUnsub = _battleResolver.subscribe((tick: BattleTickState) => {
+      if (_arenaDestroyed) return;
+
+      // Update gameState with live battle tick
+      gameState.update(s => ({
+        ...s,
+        battleTick: tick,
+        battlePriceHistory: tick.priceHistory,
+      }));
+
+      // Tie agent animations to price movement
+      if (tick.pnlPercent > 0) {
+        // Price moving favorably — agents in positive states
+        const topAgent = activeAgents[Math.floor(Math.random() * activeAgents.length)];
+        if (topAgent && tick.distToTP > 50 && Math.random() < 0.15) {
+          setAgentState(topAgent.id, 'jump');
+          setSpeech(topAgent.id, tick.distToTP > 80 ? 'Almost there!' : 'Looking good!', 300);
         }
-        return { ...s, prices: { ...s.prices, BTC: price } };
-      });
-    }, 500);
+      } else if (tick.pnlPercent < -0.3) {
+        // Price moving against — agents show concern
+        const worriedAgent = activeAgents[Math.floor(Math.random() * activeAgents.length)];
+        if (worriedAgent && tick.distToSL > 50 && Math.random() < 0.1) {
+          setAgentState(worriedAgent.id, 'sad');
+          setSpeech(worriedAgent.id, tick.distToSL > 80 ? 'Danger zone!' : 'Hold steady...', 300);
+        }
+      }
+
+      // Update VS meter based on real price movement
+      const tpWeight = tick.distToTP;
+      const slWeight = tick.distToSL;
+      const total = tpWeight + slWeight;
+      if (total > 0) {
+        vsMeter = 50 + ((tpWeight - slWeight) / total) * 45;
+        vsMeterTarget = vsMeter;
+      }
+
+      // Update enemy HP inversely to TP progress
+      enemyHP = Math.max(0, 100 - tick.distToTP);
+
+      // Battle resolved!
+      if (tick.status !== 'running' && tick.result) {
+        const result = tick.result === 'timeout_win' ? 'time_win'
+          : tick.result === 'timeout_loss' ? 'time_loss'
+          : tick.result;
+
+        gameState.update(s => ({
+          ...s,
+          battleResult: result,
+          battleExitTime: tick.exitTime || Date.now(),
+          battleExitPrice: tick.exitPrice || tick.currentPrice,
+        }));
+
+        // Clean up resolver
+        if (_battleResolverUnsub) { _battleResolverUnsub(); _battleResolverUnsub = null; }
+        _battleResolver = null;
+
+        addFeed(
+          result === 'tp' ? '🎯' : result === 'sl' ? '🛑' : '⏱',
+          'RESULT',
+          result === 'tp' || result === 'time_win' ? '#00ff88' : '#ff5e7a',
+          result === 'tp' ? `TP HIT at $${Math.round(tick.exitPrice || 0).toLocaleString()}`
+            : result === 'sl' ? `SL HIT at $${Math.round(tick.exitPrice || 0).toLocaleString()}`
+            : `Time expired at $${Math.round(tick.exitPrice || 0).toLocaleString()}`
+        );
+
+        safeTimeout(() => advancePhase(), 1500);
+      }
+    });
   }
 
   function initResult() {
@@ -1527,18 +1606,13 @@
   }
 
   function goLobby() {
-    clearArenaDynamics();
+    initCooldown();
     serverMatchId = null;
     serverAnalysis = null;
     apiError = null;
     pvpVisible = false;
-    resultVisible = false;
-    verdictVisible = false;
     hypothesisVisible = false;
-    compareVisible = false;
-    previewVisible = false;
     floatDir = null;
-    showChartPosition = false;
     if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
     gameState.update(s => ({
       ...s,
@@ -1557,18 +1631,13 @@
   }
 
   function playAgain() {
-    clearArenaDynamics();
+    initCooldown();
     serverMatchId = null;
     serverAnalysis = null;
     apiError = null;
     pvpVisible = false;
-    resultVisible = false;
-    verdictVisible = false;
     hypothesisVisible = false;
-    compareVisible = false;
-    previewVisible = false;
     floatDir = null;
-    showChartPosition = false;
     findings = [];
     resetPhaseInit();
     engineStartMatch();
@@ -1594,7 +1663,7 @@
   }
 
   // Load bracket when switching to MAP tab in tournament mode
-  $: if (arenaRailTab === 'map' && state.arenaMode === 'TOURNAMENT') {
+  $: if ((arenaRailTab as string) === 'map' && state.arenaMode === 'TOURNAMENT') {
     loadBracket();
   }
 
@@ -1640,6 +1709,8 @@
     _arenaDestroyed = true;
     if (hypothesisInterval) clearInterval(hypothesisInterval);
     if (_battleInterval) clearInterval(_battleInterval);
+    if (_battleResolverUnsub) { _battleResolverUnsub(); _battleResolverUnsub = null; }
+    if (_battleResolver) { _battleResolver.destroy(); _battleResolver = null; }
     if (previewAutoTimer) clearTimeout(previewAutoTimer);
     if (replayTimer) clearTimeout(replayTimer);
     if (feedCursorTimer) clearTimeout(feedCursorTimer);
@@ -1655,8 +1726,8 @@
 </script>
 
 <div class="arena-page arena-space-theme">
-  <!-- Wallet Gate Overlay -->
-  {#if !walletOk}
+  <!-- Wallet Gate Overlay (temporarily disabled for dev) -->
+  {#if false && !walletOk}
     <div class="wallet-gate">
       <div class="wg-card">
         <div class="wg-icon">🔗</div>
@@ -1725,6 +1796,83 @@
     </div>
     <MatchHistory visible={matchHistoryOpen} onclose={() => matchHistoryOpen = false} />
 
+    <!-- ═══════ PHASE GUIDE (all views) ═══════ -->
+    <div class="phase-guide-wrap">
+      <PhaseGuide phase={state.phase} pair={state.pair} timeframe={state.timeframe} />
+    </div>
+
+    <!-- ═══════ VIEW SWITCHING ═══════ -->
+    {#if state.arenaView !== 'arena' && (state.phase === 'BATTLE' || state.phase === 'RESULT')}
+      <div class="view-container">
+        {#if state.arenaView === 'chart'}
+          <ChartWarView
+            phase={state.phase}
+            battleTick={state.battleTick}
+            hypothesis={state.hypothesis}
+            prices={{ BTC: state.prices.BTC }}
+            battleResult={state.battleResult}
+            battlePriceHistory={state.battlePriceHistory}
+            activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
+            {vsMeter}
+            {enemyHP}
+            {battleNarration}
+          />
+        {:else if state.arenaView === 'mission'}
+          <MissionControlView
+            phase={state.phase}
+            battleTick={state.battleTick}
+            hypothesis={state.hypothesis}
+            prices={{ BTC: state.prices.BTC }}
+            battleResult={state.battleResult}
+            battlePriceHistory={state.battlePriceHistory}
+            activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
+            {vsMeter}
+            {enemyHP}
+            {battleNarration}
+          />
+        {:else if state.arenaView === 'card'}
+          <CardDuelView
+            phase={state.phase}
+            battleTick={state.battleTick}
+            hypothesis={state.hypothesis}
+            prices={{ BTC: state.prices.BTC }}
+            battleResult={state.battleResult}
+            battlePriceHistory={state.battlePriceHistory}
+            activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
+            {vsMeter}
+            {enemyHP}
+            {battleNarration}
+          />
+        {/if}
+
+        <!-- Result Panel for new views -->
+        {#if state.phase === 'RESULT' && resultVisible}
+          <div class="result-panel-wrap">
+            <ResultPanel
+              win={resultData.win}
+              battleResult={state.battleResult || ''}
+              entryPrice={state.hypothesis?.entry || state.bases.BTC}
+              exitPrice={state.battleExitPrice || state.prices.BTC}
+              tpPrice={state.hypothesis?.tp || 0}
+              slPrice={state.hypothesis?.sl || 0}
+              direction={state.hypothesis?.dir || 'LONG'}
+              priceHistory={state.battlePriceHistory}
+              duration={state.battleTick?.elapsed || 0}
+              maxRunup={state.battleTick?.maxRunup || 0}
+              maxDrawdown={state.battleTick?.maxDrawdown || 0}
+              rAchieved={state.battleTick?.rAchieved || 0}
+              fbScore={state.fbScore}
+              lpChange={resultData.lp}
+              streak={state.streak}
+              agents={activeAgents.map(a => ({ name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
+              actualDirection={determineActualDirection(state.prices.BTC > (state.hypothesis?.entry || 0) ? 0.01 : -0.01)}
+              onPlayAgain={playAgain}
+              onLobby={goLobby}
+            />
+          </div>
+        {/if}
+      </div>
+    {:else}
       <div class="battle-layout">
       <!-- ═══════ LEFT: CHART ═══════ -->
       <div class="chart-side">
@@ -2173,10 +2321,44 @@
         {/each}
       </div>
     </div>
+    {/if}
   {/if}
 </div>
 
 <style>
+  /* ═══ View Switching + New Components ═══ */
+  .lobby-view-picker {
+    position: relative;
+    z-index: 20;
+    padding: 0 16px 16px;
+  }
+  .phase-guide-wrap {
+    position: relative;
+    z-index: 35;
+    padding: 0 10px;
+  }
+  .view-container {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+    gap: 12px;
+  }
+  .result-panel-wrap {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,.7);
+    backdrop-filter: blur(8px);
+  }
+
   .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; display: flex; flex-direction: column; }
   .arena-space-theme {
     --space-line: rgba(232, 150, 125, 0.25);
@@ -3717,22 +3899,6 @@
     border-top: 1px solid var(--arena-line-soft);
     border-bottom: 1px solid var(--arena-line-soft);
   }
-  .rail-tabs button {
-    height: 28px;
-    border: none;
-    background: transparent;
-    color: var(--arena-text-muted);
-    font-family: var(--fd);
-    font-size: 7px;
-    letter-spacing: 1px;
-    font-weight: 900;
-    cursor: pointer;
-  }
-  .rail-tabs button.active {
-    color: var(--arena-text);
-    background: rgba(232, 150, 125, 0.15);
-    box-shadow: inset 0 -2px 0 rgba(232, 150, 125, 0.95);
-  }
   .rail-body {
     flex: 1;
     overflow-y: auto;
@@ -3835,12 +4001,6 @@
     color: var(--arena-text-muted);
     letter-spacing: 1px;
   }
-  .rm-item b {
-    font-family: var(--fd);
-    font-size: 8px;
-    color: var(--arena-text);
-    letter-spacing: 1px;
-  }
   .rail-empty {
     padding: 18px 10px;
     text-align: center;
@@ -3859,12 +4019,6 @@
     grid-template-columns: auto 1fr auto;
     align-items: center;
     gap: 8px;
-  }
-  .arena-balance > span {
-    font-family: var(--fm);
-    font-size: 7px;
-    letter-spacing: 1px;
-    color: var(--arena-text-muted);
   }
   .ab-track {
     height: 6px;

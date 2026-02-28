@@ -138,3 +138,6 @@ export const authVerifyLimiter = createRateLimiter({ windowMs: 60_000, max: 10 }
 
 /** Market snapshot (heavy fan-out): 20 per minute per IP */
 export const marketSnapshotLimiter = createRateLimiter({ windowMs: 60_000, max: 20 });
+
+// War Room
+export const emergencyMeetingLimiter = createRateLimiter({ windowMs: 60_000, max: 5 });
