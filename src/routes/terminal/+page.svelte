@@ -1390,8 +1390,10 @@
                 {chatTradeReady}
                 chatTradeDir={chatSuggestedDir}
                 {activeTradeSetup}
+                hasScanned={!!latestScan}
                 on:scanrequest={handleChartScanRequest}
                 on:chatrequest={handleChartChatRequest}
+                on:clearTradeSetup={() => { activeTradeSetup = null; }}
               />
             </div>
             <button
@@ -1528,6 +1530,7 @@
               {activeTradeSetup}
               on:scanrequest={handleChartScanRequest}
               on:chatrequest={handleChartChatRequest}
+              on:clearTradeSetup={() => { activeTradeSetup = null; }}
             />
           </div>
           <button
@@ -1678,6 +1681,7 @@
               {activeTradeSetup}
               on:scanrequest={handleChartScanRequest}
               on:chatrequest={handleChartChatRequest}
+              on:clearTradeSetup={() => { activeTradeSetup = null; }}
             />
           </div>
         </div>

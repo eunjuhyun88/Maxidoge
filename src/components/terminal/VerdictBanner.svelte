@@ -16,16 +16,17 @@
   const { verdict, scanning = false }: { verdict: VerdictData | null; scanning?: boolean } = $props();
 
   let expanded = $state(false);
+  let justArrived = $state(false);
 
   const dirColor = $derived(
-    verdict?.consensus === 'long' ? '#00cc88'
-    : verdict?.consensus === 'short' ? '#ff4466'
-    : '#888'
+    verdict?.consensus === 'long' ? 'var(--grn, #00ff88)'
+    : verdict?.consensus === 'short' ? 'var(--red, #ff2d55)'
+    : 'rgba(240,237,228,.4)'
   );
-  const dirEmoji = $derived(
+  const dirArrow = $derived(
     verdict?.consensus === 'long' ? '▲'
     : verdict?.consensus === 'short' ? '▼'
-    : '◆'
+    : '—'
   );
   const agreeCount = $derived(
     verdict?.highlights
@@ -33,6 +34,17 @@
       : 0
   );
   const totalCount = $derived(verdict?.highlights?.length ?? 0);
+
+  // Auto-expand + glow on new scan result
+  $effect(() => {
+    if (verdict) {
+      justArrived = true;
+      expanded = true;
+      const t = setTimeout(() => { justArrived = false; }, 2500);
+      const t2 = setTimeout(() => { expanded = false; }, 6000);
+      return () => { clearTimeout(t); clearTimeout(t2); };
+    }
+  });
 
   function timeSinceShort(ts: number): string {
     const sec = Math.floor((Date.now() - ts) / 1000);
@@ -46,20 +58,23 @@
 {#if scanning}
   <div class="verdict-banner verdict-loading">
     <span class="verdict-pulse"></span>
-    <span class="verdict-label">SCANNING · analyzing market data...</span>
+    <span class="verdict-label">SCANNING — analyzing market data</span>
   </div>
 {:else if verdict}
   <button
     type="button"
     class="verdict-banner"
     class:expanded
+    class:just-arrived={justArrived}
     style="--vdir:{dirColor}"
     onclick={() => expanded = !expanded}
   >
     <div class="verdict-row">
-      <span class="verdict-dir" style="color:{dirColor}">{dirEmoji} {verdict.consensus.toUpperCase()}</span>
+      <span class="verdict-dir" style="color:{dirColor}">{dirArrow} {verdict.consensus.toUpperCase()}</span>
       <span class="verdict-conf">{Math.round(verdict.avgConfidence)}%</span>
-      <span class="verdict-meta">{verdict.pair} · {verdict.timeframe.toUpperCase()} · {agreeCount}/{totalCount} agree</span>
+      <span class="verdict-pair">{verdict.pair}</span>
+      <span class="verdict-sep">·</span>
+      <span class="verdict-meta">{verdict.timeframe.toUpperCase()} · {agreeCount}/{totalCount} agree</span>
       <span class="verdict-time">{timeSinceShort(verdict.createdAt)}</span>
       <span class="verdict-chevron">{expanded ? '▾' : '▸'}</span>
     </div>
@@ -68,7 +83,7 @@
         <p class="verdict-summary">{verdict.summary}</p>
         <div class="verdict-agents">
           {#each verdict.highlights as h}
-            {@const vColor = h.vote === 'long' ? '#00cc88' : h.vote === 'short' ? '#ff4466' : '#888'}
+            {@const vColor = h.vote === 'long' ? 'var(--grn, #00ff88)' : h.vote === 'short' ? 'var(--red, #ff2d55)' : 'rgba(240,237,228,.4)'}
             <div class="verdict-agent">
               <span class="va-name">{h.agent}</span>
               <span class="va-vote" style="color:{vColor}">{h.vote.toUpperCase()} {h.conf}%</span>
@@ -83,8 +98,8 @@
 
 <style>
   .verdict-banner {
-    font-family: var(--fb, 'Space Grotesk', sans-serif);
-    background: rgba(10, 26, 13, 0.92);
+    font-family: var(--fm, 'JetBrains Mono', monospace);
+    background: rgba(10, 9, 8, 0.92);
     border: none;
     border-bottom: 1px solid rgba(232, 150, 125, 0.15);
     padding: 6px 12px;
@@ -93,12 +108,19 @@
     width: 100%;
     text-align: left;
     color: inherit;
-    transition: background 0.15s;
+    transition: background 0.15s, box-shadow 0.3s;
     z-index: 5;
     flex-shrink: 0;
   }
   .verdict-banner:hover {
-    background: rgba(15, 38, 20, 0.95);
+    background: rgba(10, 9, 8, 0.98);
+  }
+  .verdict-banner.just-arrived {
+    animation: verdictGlow 2.5s ease-out;
+  }
+  @keyframes verdictGlow {
+    0% { box-shadow: inset 0 0 20px rgba(232,150,125,.25), 0 0 12px rgba(232,150,125,.15); }
+    100% { box-shadow: none; }
   }
   .verdict-loading {
     display: flex;
@@ -107,95 +129,105 @@
     cursor: default;
   }
   .verdict-pulse {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #E8967D;
     animation: vpulse 1s ease infinite;
   }
   @keyframes vpulse {
     0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(0.8); }
+    50% { opacity: 0.3; transform: scale(0.7); }
   }
   .verdict-label {
-    font-size: 10px;
+    font-size: 9px;
+    font-weight: 700;
     letter-spacing: 1px;
-    color: rgba(240, 237, 228, 0.6);
+    color: rgba(240, 237, 228, 0.5);
     text-transform: uppercase;
-    font-family: var(--fd, 'Press Start 2P', monospace);
   }
   .verdict-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
   }
   .verdict-dir {
-    font-family: var(--fd, 'Press Start 2P', monospace);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 900;
     letter-spacing: 1px;
   }
   .verdict-conf {
-    font-family: var(--fm, 'JetBrains Mono', monospace);
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 11px;
+    font-weight: 800;
     color: var(--vdir);
     background: rgba(255, 255, 255, 0.05);
     padding: 1px 6px;
     border-radius: 4px;
+    border: 1px solid rgba(255,255,255,.06);
+  }
+  .verdict-pair {
+    font-size: 10px;
+    font-weight: 900;
+    color: #F0EDE4;
+    letter-spacing: .5px;
+  }
+  .verdict-sep {
+    font-size: 9px;
+    color: rgba(240,237,228,.2);
   }
   .verdict-meta {
-    font-size: 10px;
-    color: rgba(240, 237, 228, 0.5);
+    font-size: 9px;
+    color: rgba(240, 237, 228, 0.4);
     letter-spacing: 0.5px;
   }
   .verdict-time {
-    font-size: 9px;
-    color: rgba(240, 237, 228, 0.35);
+    font-size: 8px;
+    color: rgba(240, 237, 228, 0.25);
     margin-left: auto;
   }
   .verdict-chevron {
-    font-size: 10px;
-    color: rgba(240, 237, 228, 0.3);
+    font-size: 9px;
+    color: rgba(240, 237, 228, 0.25);
   }
   /* Expanded detail */
   .verdict-detail {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(232, 150, 125, 0.1);
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(232, 150, 125, 0.08);
   }
   .verdict-summary {
-    font-size: 11px;
-    color: rgba(240, 237, 228, 0.7);
+    font-size: 10px;
+    color: rgba(240, 237, 228, 0.6);
     line-height: 1.5;
-    margin: 0 0 8px;
+    margin: 0 0 6px;
   }
   .verdict-agents {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
   }
   .verdict-agent {
     display: flex;
     align-items: baseline;
     gap: 8px;
-    font-size: 10px;
+    font-size: 9px;
   }
   .va-name {
-    font-family: var(--fm, 'JetBrains Mono', monospace);
-    color: rgba(240, 237, 228, 0.5);
-    min-width: 72px;
+    color: rgba(240, 237, 228, 0.4);
+    min-width: 68px;
     text-transform: uppercase;
-    font-size: 9px;
+    font-size: 8px;
+    font-weight: 700;
     letter-spacing: 0.5px;
   }
   .va-vote {
-    font-weight: 700;
-    min-width: 80px;
+    font-weight: 800;
+    min-width: 72px;
+    font-size: 9px;
   }
   .va-note {
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.35);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
