@@ -133,6 +133,7 @@
   let _ratioDragPointerId: number | null = null;
   let _ratioDragBound = false;
   let isDrawing = false;
+  let drawingsVisible = true;
   let chartNotice = '';
   let _chartNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1152,6 +1153,10 @@
     unbindGlobalDrawingMouseUp();
     renderDrawings();
   }
+  function toggleDrawingsVisible() {
+    drawingsVisible = !drawingsVisible;
+    renderDrawings();
+  }
   function clearAllDrawings() {
     drawings = [];
     currentDrawing = null;
@@ -1285,7 +1290,15 @@
     ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
     drawPatternOverlays(ctx);
     // Agent trade overlay (TP/SL zones from scan signals)
-    if (activeTradeSetup) drawAgentTradeOverlay(ctx, activeTradeSetup);
+    if (activeTradeSetup && drawingsVisible) drawAgentTradeOverlay(ctx, activeTradeSetup);
+    if (!drawingsVisible) {
+      // Still render active drag preview even when drawings hidden
+      if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade')) {
+        const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
+        if (preview) drawTradePreview(ctx, preview);
+      }
+      return;
+    }
     for (const d of drawings) {
       ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.5;
       if (d.type === 'hline') {
@@ -1975,6 +1988,7 @@
         else if (k === '-' || k === '_') zoomChart(-1);
         else if (k === '0') resetChartScale();
         else if (k === 'f') fitChartRange();
+        else if (k === 'v') toggleDrawingsVisible();
         else if (k === 'h') setDrawingMode('hline');
         else if (k === 't') setDrawingMode('trendline');
         else if (enableTradeLineEntry && k === 'r') setDrawingMode('trade');
@@ -2432,6 +2446,11 @@
             {/if}
             {#if enableTradeLineEntry}
               <button class="draw-btn trade-tool" class:active={drawingMode === 'trade' || drawingMode === 'longentry' || drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'trade' ? 'none' : 'trade')} title="Position Tool (R) · 드래그 아래=LONG 위=SHORT">⬡</button>
+            {/if}
+            {#if drawings.length > 0 || activeTradeSetup}
+              <button class="draw-btn eye-btn" class:hidden-state={!drawingsVisible} on:click={toggleDrawingsVisible} title={drawingsVisible ? 'Hide drawings (V)' : 'Show drawings (V)'}>
+                {drawingsVisible ? '👁' : '👁‍🗨'}
+              </button>
             {/if}
             <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
           </div>
@@ -3282,6 +3301,8 @@
   .draw-btn.trade-tool { font-size: 10px; color: #E8967D; border-color: rgba(232,150,125,.25); width: 26px; }
   .draw-btn.trade-tool:hover { background: rgba(232,150,125,.15); color: #f0a88e; border-color: rgba(232,150,125,.45); }
   .draw-btn.trade-tool.active { background: rgba(232,150,125,.2); color: #f5c0a8; border-color: rgba(232,150,125,.6); box-shadow: 0 0 8px rgba(232,150,125,.35); }
+  .draw-btn.eye-btn { font-size: 11px; width: 24px; }
+  .draw-btn.eye-btn.hidden-state { opacity: 0.4; }
   .draw-btn.clear-btn:hover { background: rgba(255,45,85,.15); color: #ff2d55; border-color: rgba(255,45,85,.4); }
 
   .indicator-strip {

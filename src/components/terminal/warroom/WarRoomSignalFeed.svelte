@@ -75,7 +75,7 @@
         <div class="wr-conf-bar">
           <div class="wr-conf-fill {sig.vote}" style="width:{Math.min(sig.conf, 100)}%"></div>
         </div>
-        <div class="wr-msg-text">{sig.text}</div>
+        <div class="wr-msg-text" title={sig.text}>{sig.text}</div>
         <div class="wr-msg-signal-row">
           <span class="wr-msg-entry">{fmtPrice(sig.entry)}</span>
           <span class="wr-msg-arrow-price">→</span>
@@ -83,11 +83,11 @@
           <span class="wr-msg-sl">SL {fmtPrice(sig.sl)}</span>
         </div>
         <div class="wr-msg-actions">
-          <span class="wr-msg-src">{sig.src}</span>
           <button class="wr-act-btn chart" on:click|stopPropagation={() => onShowOnChart(sig)} title="Show entry/TP/SL on chart">📊</button>
           <button class="wr-act-btn long" on:click|stopPropagation={() => onQuickTrade('LONG', sig)} title="Quick Trade: open LONG position">▲ LONG</button>
           <button class="wr-act-btn short" on:click|stopPropagation={() => onQuickTrade('SHORT', sig)} title="Quick Trade: open SHORT position">▼ SHORT</button>
           <button class="wr-act-btn track" on:click|stopPropagation={() => onTrack(sig)}>TRACK</button>
+          <span class="wr-msg-src">{sig.src}</span>
         </div>
       </div>
     </div>

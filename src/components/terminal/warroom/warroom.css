@@ -58,8 +58,8 @@
   /* ═══ Compact Derivatives (Row 2: single line) ═══ */
   .wr-deriv-compact {
     display: flex; align-items: center; gap: 8px; flex-shrink: 0;
-    padding: 4px 12px; position: relative; z-index: 2;
-    background: rgba(0,0,0,.45); border-bottom: 1px solid rgba(255,255,255,.05);
+    padding: 5px 12px; position: relative; z-index: 2;
+    background: rgba(0,0,0,.45); border-bottom: 1px solid rgba(255,255,255,.08);
     overflow-x: auto; overflow-y: hidden;
     scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
@@ -119,19 +119,20 @@
     background: rgba(255,255,255,.02);
     color: rgba(255,255,255,.6);
     border-radius: 999px;
-    padding: 3px 10px;
+    padding: 4px 12px;
     font-family: var(--fm);
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 800;
-    letter-spacing: .6px;
+    letter-spacing: .5px;
     cursor: pointer;
     transition: all .15s;
   }
-  .scan-tab:hover { color: rgba(255,255,255,.8); border-color: rgba(255,255,255,.15); }
+  .scan-tab:hover { color: rgba(255,255,255,.85); border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.04); }
   .scan-tab.active {
     color: #E8967D;
-    border-color: rgba(232,150,125,.4);
-    background: rgba(232,150,125,.08);
+    border-color: rgba(232,150,125,.5);
+    background: rgba(232,150,125,.12);
+    box-shadow: 0 0 6px rgba(232,150,125,.15);
   }
   .scan-tab-token {
     color: rgba(255,255,255,.85);
@@ -236,12 +237,13 @@
   .wr-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 3px; }
   .wr-msgs::-webkit-scrollbar-track { background: transparent; }
   .wr-msg {
-    display: flex; gap: 0; border-bottom: 1px solid rgba(255,255,255,.04);
-    margin-bottom: 2px;
-    transition: background .1s; cursor: pointer;
+    display: flex; gap: 0; border-bottom: 1px solid rgba(255,255,255,.06);
+    margin-bottom: 6px;
+    border-radius: 4px;
+    transition: background .12s; cursor: pointer;
   }
-  .wr-msg:hover { background: rgba(255,255,255,.02); }
-  .wr-msg.selected { background: rgba(232,150,125,.03); border-left: 2px solid #E8967D; }
+  .wr-msg:hover { background: rgba(255,255,255,.035); }
+  .wr-msg.selected { background: rgba(232,150,125,.05); border-left: 2px solid #E8967D; }
 
   @supports (animation-timeline: view()) {
     .wr-msg {
@@ -314,20 +316,23 @@
   .wr-msg-arrow-price { color: rgba(255,255,255,.3); font-size: 9px; }
   .wr-msg-tp { color: var(--grn); }
   .wr-msg-sl { color: var(--red); }
-  .wr-msg-src { font-family: var(--fm); font-size: 9px; color: rgba(232,150,125,.6); }
-  .wr-msg-actions { display: flex; align-items: center; gap: 5px; margin-top: 6px; }
+  .wr-msg-src { font-family: var(--fm); font-size: 8px; color: rgba(232,150,125,.4); margin-left: auto; opacity: 0; transition: opacity .15s; }
+  .wr-msg:hover .wr-msg-src { opacity: 1; }
+  .wr-msg-actions { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
   .wr-act-btn {
     font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: .5px;
-    padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: background .12s; border: 1px solid;
+    padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all .12s; border: 1px solid;
   }
-  .wr-act-btn.long { color: var(--grn); border-color: rgba(0,255,136,.25); background: rgba(0,255,136,.05); }
-  .wr-act-btn.long:hover { background: rgba(0,255,136,.15); }
-  .wr-act-btn.short { color: var(--red); border-color: rgba(255,45,85,.25); background: rgba(255,45,85,.05); }
-  .wr-act-btn.short:hover { background: rgba(255,45,85,.15); }
-  .wr-act-btn.track { color: #00ccff; border-color: rgba(0,204,255,.25); background: rgba(0,204,255,.05); }
+  .wr-act-btn.long { color: var(--grn); border-color: rgba(0,255,136,.25); background: rgba(0,255,136,.05); flex: 1; text-align: center; }
+  .wr-act-btn.long:hover { background: rgba(0,255,136,.18); border-color: rgba(0,255,136,.45); }
+  .wr-act-btn.short { color: var(--red); border-color: rgba(255,45,85,.25); background: rgba(255,45,85,.05); flex: 1; text-align: center; }
+  .wr-act-btn.short:hover { background: rgba(255,45,85,.18); border-color: rgba(255,45,85,.45); }
+  .wr-act-btn.track { color: #00ccff; border-color: rgba(0,204,255,.2); background: rgba(0,204,255,.04); opacity: 0; transition: opacity .15s; }
   .wr-act-btn.track:hover { background: rgba(0,204,255,.15); }
-  .wr-act-btn.chart { color: #E8967D; border-color: rgba(232,150,125,.25); background: rgba(232,150,125,.05); padding: 2px 5px; }
+  .wr-msg:hover .wr-act-btn.track { opacity: 1; }
+  .wr-act-btn.chart { color: #E8967D; border-color: rgba(232,150,125,.25); background: rgba(232,150,125,.05); padding: 5px 6px; opacity: 0; transition: opacity .15s; }
   .wr-act-btn.chart:hover { background: rgba(232,150,125,.15); border-color: rgba(232,150,125,.5); }
+  .wr-msg:hover .wr-act-btn.chart { opacity: 1; }
 
   /* ═══ Empty State ═══ */
   .wr-empty {
@@ -335,29 +340,30 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    min-height: 160px;
-    padding: 32px 20px;
+    gap: 10px;
+    min-height: 180px;
+    padding: 36px 24px;
     color: rgba(255,255,255,.35);
   }
   .wr-empty-title {
     font-family: var(--fd);
-    font-size: 12px;
-    letter-spacing: 2px;
-    color: rgba(232,150,125,.6);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 2.5px;
+    color: rgba(232,150,125,.7);
   }
   .wr-empty-text {
     font-family: var(--fm);
-    font-size: 10px;
+    font-size: 11px;
     text-align: center;
-    max-width: 240px;
+    max-width: 260px;
     line-height: 1.6;
-    color: rgba(255,255,255,.3);
+    color: rgba(255,255,255,.35);
   }
   .wr-empty-icon {
-    font-size: 32px;
-    opacity: .5;
-    margin-bottom: 6px;
+    font-size: 40px;
+    opacity: .6;
+    margin-bottom: 8px;
   }
   .wr-empty-scan-btn {
     margin-top: 12px;
@@ -482,7 +488,7 @@
   }
   .wr-conf-fill.long { background: linear-gradient(90deg, rgba(0,255,136,.3), rgba(0,255,136,.7)); }
   .wr-conf-fill.short { background: linear-gradient(90deg, rgba(255,45,85,.3), rgba(255,45,85,.7)); }
-  .wr-conf-fill.neutral { background: linear-gradient(90deg, rgba(255,255,255,.1), rgba(255,255,255,.25)); }
+  .wr-conf-fill.neutral { background: linear-gradient(90deg, rgba(255,255,255,.15), rgba(255,255,255,.35)); }
 
   /* ═══ Desktop resizable zones ═══ */
   @media (min-width: 1024px) and (pointer: fine) {
