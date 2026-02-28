@@ -588,117 +588,165 @@
   // Clean, minimal: just colored zones + inside labels. No price lines on axis.
   function drawAgentTradeOverlay(ctx: CanvasRenderingContext2D, setup: AgentTradeSetup) {
     if (!drawingCanvas || !chart) return;
-    const entryY = toChartY(setup.entry);
-    const tpY = toChartY(setup.tp);
-    const slY = toChartY(setup.sl);
-    if (entryY === null || tpY === null || slY === null) return;
+    const rawEntryY = toChartY(setup.entry);
+    const rawTpY = toChartY(setup.tp);
+    const rawSlY = toChartY(setup.sl);
+    if (rawEntryY === null || rawTpY === null || rawSlY === null) return;
 
     const W = drawingCanvas.width;
-    const rightPad = 72; // price axis width
+    const rightPad = 72;
     const R = W - rightPad;
     const isLong = setup.dir === 'LONG';
-    const tpPct = ((Math.abs(setup.tp - setup.entry) / setup.entry) * 100).toFixed(2);
-    const slPct = ((Math.abs(setup.entry - setup.sl) / setup.entry) * 100).toFixed(2);
+    const tpPct = ((Math.abs(setup.tp - setup.entry) / setup.entry) * 100).toFixed(1);
+    const slPct = ((Math.abs(setup.entry - setup.sl) / setup.entry) * 100).toFixed(1);
+
+    // ── Enforce minimum zone heights so overlay is always visible ──
+    const MIN_ZONE = 22;
+    const entryY = rawEntryY;
+    let tpY = rawTpY;
+    let slY = rawSlY;
+    if (Math.abs(tpY - entryY) < MIN_ZONE) {
+      tpY = isLong ? entryY - MIN_ZONE : entryY + MIN_ZONE;
+    }
+    if (Math.abs(slY - entryY) < MIN_ZONE) {
+      slY = isLong ? entryY + MIN_ZONE : entryY - MIN_ZONE;
+    }
 
     ctx.save();
 
-    // ── TP zone (profit) ──
+    const GREEN = '#26a69a';
+    const RED = '#ef5350';
+
+    // ── TP zone (profit) — visible fill + boundary ──
     const tpTop = Math.min(entryY, tpY);
-    const tpH = Math.max(Math.abs(tpY - entryY), 1);
-    ctx.fillStyle = withAlpha('#26a69a', 0.08);
+    const tpH = Math.abs(tpY - entryY);
+    ctx.fillStyle = withAlpha(GREEN, 0.15);
     ctx.fillRect(0, tpTop, R, tpH);
-    // top border only
-    ctx.strokeStyle = withAlpha('#26a69a', 0.5);
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = withAlpha(GREEN, 0.7);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
     ctx.beginPath();
     ctx.moveTo(0, tpY);
     ctx.lineTo(R, tpY);
     ctx.stroke();
 
-    // ── SL zone (risk) ──
+    // ── SL zone (risk) — visible fill + boundary ──
     const slTop = Math.min(entryY, slY);
-    const slH = Math.max(Math.abs(slY - entryY), 1);
-    ctx.fillStyle = withAlpha('#ef5350', 0.08);
+    const slH = Math.abs(slY - entryY);
+    ctx.fillStyle = withAlpha(RED, 0.15);
     ctx.fillRect(0, slTop, R, slH);
-    // bottom border only
-    ctx.strokeStyle = withAlpha('#ef5350', 0.5);
+    ctx.strokeStyle = withAlpha(RED, 0.7);
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(0, slY);
     ctx.lineTo(R, slY);
     ctx.stroke();
 
-    // ── Entry line (solid, subtle) ──
-    ctx.strokeStyle = withAlpha('#fff', 0.35);
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    // ── Entry line — dashed, prominent ──
+    ctx.strokeStyle = withAlpha('#fff', 0.6);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
     ctx.beginPath();
     ctx.moveTo(0, entryY);
     ctx.lineTo(R, entryY);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // ── Right-side info panel (TradingView style) ──
-    const panelW = 150;
-    const panelX = R - panelW - 8;
-    const totalH = Math.abs(tpY - slY);
-    const panelTop = Math.min(tpY, slY);
-    const panelH = totalH;
-    if (panelH > 30) {
-      // TP label inside TP zone
-      ctx.font = "bold 10px 'JetBrains Mono', monospace";
-      ctx.textBaseline = 'middle';
-      const tpLabelY = (tpTop + Math.min(entryY, tpY) + tpH / 2);
-      const tpLabel = `Target: $${formatPrice(setup.tp)} (+${tpPct}%)`;
-      ctx.fillStyle = withAlpha('#26a69a', 0.85);
-      ctx.fillText(tpLabel, panelX, Math.min(entryY, tpY) + tpH / 2);
-
-      // SL label inside SL zone
-      const slLabel = `Stop: $${formatPrice(setup.sl)} (-${slPct}%)`;
-      ctx.fillStyle = withAlpha('#ef5350', 0.85);
-      ctx.fillText(slLabel, panelX, Math.min(entryY, slY) + slH / 2);
-    }
-
-    // ── Entry label (on entry line) ──
-    const srcLabel = setup.source === 'consensus' ? 'CONSENSUS' : (setup.agentName ?? 'AGENT');
-    const entryLabel = `${srcLabel} ${setup.dir} · $${formatPrice(setup.entry)}`;
-    ctx.font = "bold 9px 'JetBrains Mono', monospace";
-    const entryTW = ctx.measureText(entryLabel).width;
-    const eLabelX = 8;
-    const eLabelH = 16;
-    const eLabelY = entryY - eLabelH - 2;
-    ctx.fillStyle = withAlpha('#000', 0.7);
-    _roundRect(ctx, eLabelX, eLabelY, entryTW + 12, eLabelH, 3);
-    ctx.fill();
-    ctx.fillStyle = withAlpha('#E8967D', 0.95);
+    // ── Right-edge price axis tags (TradingView colored labels) ──
+    const tagW = rightPad - 2;
+    const tagH = 18;
+    const tagX = R + 1;
+    ctx.font = "bold 10px 'JetBrains Mono', monospace";
     ctx.textBaseline = 'middle';
-    ctx.fillText(entryLabel, eLabelX + 6, eLabelY + eLabelH / 2);
-
-    // ── R:R + Confidence compact badge (bottom-right of entry) ──
-    const rrLabel = `R:R 1:${setup.rr.toFixed(1)} · ${setup.conf}%`;
-    ctx.font = "bold 9px 'JetBrains Mono', monospace";
-    const rrTW = ctx.measureText(rrLabel).width;
-    const rrX = eLabelX + entryTW + 12 + 6;
-    ctx.fillStyle = withAlpha('#000', 0.7);
-    _roundRect(ctx, rrX, eLabelY, rrTW + 12, eLabelH, 3);
+    ctx.textAlign = 'center';
+    // TP price tag
+    ctx.fillStyle = GREEN;
+    _roundRect(ctx, tagX, tpY - tagH / 2, tagW, tagH, 2);
     ctx.fill();
-    ctx.fillStyle = withAlpha(isLong ? '#26a69a' : '#ef5350', 0.95);
-    ctx.fillText(rrLabel, rrX + 6, eLabelY + eLabelH / 2);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(formatPrice(setup.tp), tagX + tagW / 2, tpY);
+    // SL price tag
+    ctx.fillStyle = RED;
+    _roundRect(ctx, tagX, slY - tagH / 2, tagW, tagH, 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(formatPrice(setup.sl), tagX + tagW / 2, slY);
+    ctx.textAlign = 'left';
 
-    // ── Live P&L badge ──
+    // ── Zone labels (always visible inside zones) ──
+    ctx.font = "bold 10px 'JetBrains Mono', monospace";
+    ctx.textBaseline = 'middle';
+    // TP label
+    const tpZoneMid = tpTop + tpH / 2;
+    const tpLabel = `Take Profit  ${tpPct}%`;
+    const tpLabelW = ctx.measureText(tpLabel).width;
+    ctx.fillStyle = withAlpha('#000', 0.55);
+    _roundRect(ctx, 10, tpZoneMid - 9, tpLabelW + 14, 18, 3);
+    ctx.fill();
+    ctx.fillStyle = GREEN;
+    ctx.fillText(tpLabel, 17, tpZoneMid);
+    // SL label
+    const slZoneMid = slTop + slH / 2;
+    const slLabel = `Stop Loss  ${slPct}%`;
+    const slLabelW = ctx.measureText(slLabel).width;
+    ctx.fillStyle = withAlpha('#000', 0.55);
+    _roundRect(ctx, 10, slZoneMid - 9, slLabelW + 14, 18, 3);
+    ctx.fill();
+    ctx.fillStyle = RED;
+    ctx.fillText(slLabel, 17, slZoneMid);
+
+    // ── Entry info bar (above entry line) ──
+    const srcLabel = setup.source === 'consensus' ? 'CONSENSUS' : (setup.agentName?.toUpperCase() ?? 'AGENT');
+    const dirArrow = isLong ? '▲' : '▼';
+    ctx.font = "bold 10px 'JetBrains Mono', monospace";
+    const eLabelH = 18;
+    const eLabelY = entryY - eLabelH - 3;
+
+    // Badge 1: Direction + Source + Entry price (colored)
+    const b1Text = `${dirArrow} ${srcLabel} ${setup.dir} · $${formatPrice(setup.entry)}`;
+    const b1W = ctx.measureText(b1Text).width + 14;
+    const b1X = 8;
+    ctx.fillStyle = withAlpha(isLong ? GREEN : RED, 0.85);
+    _roundRect(ctx, b1X, eLabelY, b1W, eLabelH, 3);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(b1Text, b1X + 7, eLabelY + eLabelH / 2);
+
+    // Badge 2: R:R ratio (dark)
+    const b2Text = `R:R 1:${setup.rr.toFixed(1)}`;
+    const b2W = ctx.measureText(b2Text).width + 14;
+    const b2X = b1X + b1W + 4;
+    ctx.fillStyle = withAlpha('#000', 0.65);
+    _roundRect(ctx, b2X, eLabelY, b2W, eLabelH, 3);
+    ctx.fill();
+    ctx.fillStyle = withAlpha('#fff', 0.9);
+    ctx.fillText(b2Text, b2X + 7, eLabelY + eLabelH / 2);
+
+    // Badge 3: Confidence
+    const b3Text = `${setup.conf}%`;
+    const b3W = ctx.measureText(b3Text).width + 14;
+    const b3X = b2X + b2W + 4;
+    ctx.fillStyle = withAlpha('#000', 0.65);
+    _roundRect(ctx, b3X, eLabelY, b3W, eLabelH, 3);
+    ctx.fill();
+    ctx.fillStyle = withAlpha(isLong ? GREEN : RED, 0.9);
+    ctx.fillText(b3Text, b3X + 7, eLabelY + eLabelH / 2);
+
+    // Badge 4: Live P&L (colored)
     if (livePrice > 0) {
       const pnl = isLong
         ? ((livePrice - setup.entry) / setup.entry) * 100
         : ((setup.entry - livePrice) / setup.entry) * 100;
-      const pnlColor = pnl >= 0 ? '#26a69a' : '#ef5350';
+      const pnlColor = pnl >= 0 ? GREEN : RED;
       const pnlText = `P&L ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`;
-      ctx.font = "bold 9px 'JetBrains Mono', monospace";
-      const pnlTW = ctx.measureText(pnlText).width;
-      const pnlX = rrX + rrTW + 12 + 6;
-      ctx.fillStyle = withAlpha('#000', 0.7);
-      _roundRect(ctx, pnlX, eLabelY, pnlTW + 12, eLabelH, 3);
+      const b4W = ctx.measureText(pnlText).width + 14;
+      const b4X = b3X + b3W + 4;
+      ctx.fillStyle = withAlpha(pnlColor, 0.85);
+      _roundRect(ctx, b4X, eLabelY, b4W, eLabelH, 3);
       ctx.fill();
-      ctx.fillStyle = withAlpha(pnlColor, 0.95);
-      ctx.fillText(pnlText, pnlX + 6, eLabelY + eLabelH / 2);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(pnlText, b4X + 7, eLabelY + eLabelH / 2);
     }
 
     ctx.restore();
