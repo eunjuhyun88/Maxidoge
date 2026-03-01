@@ -186,6 +186,14 @@ See `.env.example` for all required keys:
 
 C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 
+### Arena War (AI 대전 모드)
+- **통합 설계서**: `STOCKCLAW_UNIFIED_DESIGN.md` (프로젝트 루트)
+- **핵심 원칙**: "같은 데이터, 다른 해석" — AI와 인간이 동일 48팩터를 보고 다르게 판단 → 시장이 판정
+- **데이터 파이프라인**: GameRecord → OrpoPair (ORPO 학습) + RAGEntry (AI 기억)
+- **DB 테이블**: `arena_war_records` (마이그레이션: `frontend/src/lib/server/migrations/001_arena_war_records.sql`)
+- **API**: `/api/arena-war` (POST: GameRecord 저장, GET: 기록 목록 + 통계)
+- **현재 상태**: Phase 1 완성 (UI + 상태머신 + 서버 저장), Phase 2 미착수 (RAG + AI 개선)
+
 ---
 
 ## UIUX Optimization (Loox Reference)
