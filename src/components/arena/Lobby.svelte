@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { gameState } from '$lib/stores/gameState';
+  import { gameState, type ArenaView } from '$lib/stores/gameState';
   import { sfx } from '$lib/audio/sfx';
   import { startMatch as engineStartMatch, resetPhaseInit } from '$lib/engine/gameLoop';
   import { AGDEFS } from '$lib/data/agents';
@@ -63,6 +63,19 @@
     { id: `#${Math.max(1, $gameState.matchN - 1)}`, result: 'WIN', lp: 12, pair: 'ETH', dir: 'LONG', tag: 'UNANIMOUS', fbs: 87, age: '5h' },
     { id: `#${Math.max(1, $gameState.matchN - 2)}`, result: 'LOSS', lp: -8, pair: 'SOL', dir: 'SHORT', tag: 'DISSENT', fbs: 52, age: '8h' },
   ]);
+
+  // ── View Picker ──
+  const viewOptions: { key: ArenaView; icon: string; name: string; desc: string }[] = [
+    { key: 'chart',   icon: '◎', name: 'CHART WAR',       desc: '차트 중심 배틀' },
+    { key: 'arena',   icon: '⚔', name: 'AGENT ARENA',     desc: 'RPG 에이전트 배틀' },
+    { key: 'mission', icon: '▦', name: 'MISSION CONTROL', desc: '블룸버그 터미널' },
+    { key: 'card',    icon: '▧', name: 'CARD DUEL',       desc: '카드 대결' },
+  ];
+
+  function pickView(v: ArenaView) {
+    sfx.step();
+    gameState.update(s => ({ ...s, arenaView: v }));
+  }
 
   function modeStart(mode: 'pve' | 'pvp' | 'tournament', tournament: TournamentActiveRecord | null = null) {
     sfx.enter();
@@ -501,6 +514,24 @@
               <span class="feed-age">{r.age}</span>
             </div>
           </div>
+        {/each}
+      </div>
+    </section>
+
+    <!-- ═══ VIEW PICKER: 4 Game Views ═══ -->
+    <section class="view-picker-section">
+      <div class="section-tag">BATTLE VIEW</div>
+      <div class="view-cards">
+        {#each viewOptions as opt}
+          <button
+            class="view-card"
+            class:active={$gameState.arenaView === opt.key}
+            onclick={() => pickView(opt.key)}
+          >
+            <span class="vc-icon">{opt.icon}</span>
+            <span class="vc-name">{opt.name}</span>
+            <span class="vc-desc">{opt.desc}</span>
+          </button>
         {/each}
       </div>
     </section>
@@ -1365,5 +1396,60 @@
     .status-bar { gap: 8px; font-size: 9px; }
     .mode-select-header { flex-direction: column; align-items: flex-start; }
     .panel-head { flex-direction: column; align-items: flex-start; }
+  }
+
+  /* ── View Picker ── */
+  .view-picker-section {
+    margin-top: 24px;
+    padding: 0 24px 16px;
+  }
+  .view-cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .view-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 8px;
+    border: 1px solid rgba(232, 150, 125, 0.2);
+    border-radius: 10px;
+    background: rgba(10, 26, 18, 0.6);
+    color: var(--txt60);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    font-family: var(--fm);
+  }
+  .view-card:hover {
+    border-color: rgba(232, 150, 125, 0.5);
+    background: rgba(10, 26, 18, 0.85);
+    transform: translateY(-2px);
+    color: var(--txt);
+  }
+  .view-card.active {
+    border-color: var(--coral);
+    background: rgba(232, 150, 125, 0.1);
+    color: var(--txt);
+    box-shadow: 0 0 16px rgba(232, 150, 125, 0.15), inset 0 0 8px rgba(232, 150, 125, 0.06);
+  }
+  .vc-icon {
+    font-size: 22px;
+    line-height: 1;
+  }
+  .vc-name {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+  .vc-desc {
+    font-size: 9px;
+    opacity: 0.55;
+  }
+  @media (max-width: 700px) {
+    .view-cards { grid-template-columns: repeat(2, 1fr); }
   }
 </style>

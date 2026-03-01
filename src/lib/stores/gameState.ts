@@ -5,12 +5,14 @@
 import { writable, derived } from 'svelte/store';
 import type { CanonicalTimeframe } from '$lib/utils/timeframe';
 import type { OrpoOutput, CtxBelief, CommanderVerdict, GuardianCheck, FBScore } from '$lib/engine/types';
+import type { BattleTickState, BattlePriceTick } from '$lib/engine/battleResolver';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
 import { btcPrice, ethPrice, solPrice } from './priceStore';
 
 export type Phase = 'DRAFT' | 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE' | 'RESULT';
 export type ViewMode = 'arena' | 'terminal' | 'passport';
+export type ArenaView = 'chart' | 'arena' | 'mission' | 'card';
 export type Direction = 'LONG' | 'SHORT' | 'NEUTRAL';
 export type RiskLevel = 'low' | 'mid' | 'aggro';
 export type SquadTimeframe = CanonicalTimeframe;
@@ -108,6 +110,16 @@ export interface GameState {
   bases: { BTC: number; ETH: number; SOL: number };
   pair: string;
   timeframe: CanonicalTimeframe;
+
+  // Arena view selection
+  arenaView: ArenaView;
+
+  // Real-time battle state (from battleResolver)
+  battleTick: BattleTickState | null;
+  battlePriceHistory: BattlePriceTick[];
+  battleEntryTime: number;
+  battleExitTime: number;
+  battleExitPrice: number;
 }
 
 const defaultState: GameState = {
@@ -148,7 +160,13 @@ const defaultState: GameState = {
   prices: { BTC: 97420, ETH: 3481, SOL: 198.46 },
   bases: { BTC: 97420, ETH: 3481, SOL: 198.46 },
   pair: 'BTC/USDT',
-  timeframe: '4h'
+  timeframe: '4h',
+  arenaView: 'arena',
+  battleTick: null,
+  battlePriceHistory: [],
+  battleEntryTime: 0,
+  battleExitTime: 0,
+  battleExitPrice: 0,
 };
 
 // Load from localStorage
@@ -218,7 +236,8 @@ gameState.subscribe(s => {
     selectedAgents: s.selectedAgents,
     pair: s.pair,
     timeframe: s.timeframe,
-    squadConfig: s.squadConfig
+    squadConfig: s.squadConfig,
+    arenaView: s.arenaView
   };
   const json = JSON.stringify(persist);
   // Skip if nothing changed

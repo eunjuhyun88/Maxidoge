@@ -876,6 +876,19 @@
     avgConfidence: number;
     summary: string;
     highlights: ScanHighlight[];
+    signals: Array<{ vote: string; conf: number; entry: number; tp: number; sl: number; name: string; pair: string }>;
+  };
+
+  type AgentTradeSetup = {
+    source: 'consensus' | 'agent';
+    agentName?: string;
+    dir: 'LONG' | 'SHORT';
+    entry: number;
+    tp: number;
+    sl: number;
+    rr: number;
+    conf: number;
+    pair: string;
   };
 
   let chatMessages: ChatMsg[] = [
@@ -891,6 +904,7 @@
   let chatTradeReady = false;
   let chatSuggestedDir: ChatTradeDirection = 'LONG';
   let chatFocusKey = 0;
+  let activeTradeSetup: AgentTradeSetup | null = null;
 
   // Agent/error/direction helpers — imported from terminalHelpers.ts
   const AGENT_META = buildAgentMeta();
@@ -1242,41 +1256,70 @@
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // 1) 스캔 시작 시스템 메시지
+    // 1) 스캔 완료 시스템 메시지
     chatMessages = [...chatMessages, {
       from: 'SYSTEM', icon: '⚡', color: '#E8967D',
       text: `SCAN COMPLETE — ${d.pair} ${d.timeframe.toUpperCase()} (${d.label})`,
       time, isUser: false, isSystem: true,
     }];
 
-    // 2) 각 에이전트 하이라이트를 개별 메시지로
-    for (const h of d.highlights) {
-      const meta = AGENT_META[h.agent] || { icon: '🤖', color: '#888' };
-      const voteEmoji = h.vote === 'long' ? '🟢' : h.vote === 'short' ? '🔴' : '⚪';
-      chatMessages = [...chatMessages, {
-        from: h.agent,
-        icon: meta.icon,
-        color: meta.color,
-        text: `${voteEmoji} ${h.vote.toUpperCase()} ${h.conf}%\n${h.note}`,
-        time, isUser: false,
-      }];
-    }
-
-    // 3) COMMANDER 종합 판정
+    // 2) COMMANDER 종합 판정만 표시 (개별 에이전트는 WarRoom에서 확인)
     const dirEmoji = d.consensus === 'long' ? '🟢' : d.consensus === 'short' ? '🔴' : '⚪';
     chatMessages = [...chatMessages, {
       from: 'COMMANDER',
       icon: '🧠',
       color: '#ff2d9b',
-      text: `${dirEmoji} VERDICT: ${d.consensus.toUpperCase()} — Confidence ${d.avgConfidence}%\n${d.summary}`,
+      text: `${dirEmoji} VERDICT: ${d.consensus.toUpperCase()} — Confidence ${d.avgConfidence}%\n${d.summary}\n📊 차트에 TP/SL 표시됨 · 왼쪽 시그널 카드에서 개별 에이전트 확인`,
       time, isUser: false,
     }];
+
+    // 3) consensus 방향 에이전트들의 평균 entry/tp/sl → 차트 오버레이
+    if (d.signals && d.signals.length > 0 && d.consensus !== 'neutral') {
+      const dirSignals = d.signals.filter(s => s.vote === d.consensus);
+      if (dirSignals.length > 0) {
+        const avgEntry = dirSignals.reduce((sum, s) => sum + s.entry, 0) / dirSignals.length;
+        const avgTp = dirSignals.reduce((sum, s) => sum + s.tp, 0) / dirSignals.length;
+        const avgSl = dirSignals.reduce((sum, s) => sum + s.sl, 0) / dirSignals.length;
+        const risk = Math.abs(avgEntry - avgSl);
+        const reward = Math.abs(avgTp - avgEntry);
+        activeTradeSetup = {
+          source: 'consensus',
+          dir: d.consensus === 'long' ? 'LONG' : 'SHORT',
+          entry: avgEntry,
+          tp: avgTp,
+          sl: avgSl,
+          rr: risk > 0 ? reward / risk : 2,
+          conf: d.avgConfidence,
+          pair: d.pair,
+        };
+      }
+    } else {
+      activeTradeSetup = null;
+    }
 
     // 방향 추론 → 트레이드 버튼 활성화
     if (d.consensus === 'long' || d.consensus === 'short') {
       chatSuggestedDir = d.consensus === 'long' ? 'LONG' : 'SHORT';
       chatTradeReady = true;
     }
+  }
+
+  function handleShowOnChart(e: CustomEvent<{ signal: { vote: string; conf: number; entry: number; tp: number; sl: number; name: string; pair: string } }>) {
+    const sig = e.detail.signal;
+    if (sig.vote === 'neutral' || !sig.entry || !sig.tp || !sig.sl) return;
+    const risk = Math.abs(sig.entry - sig.sl);
+    const reward = Math.abs(sig.tp - sig.entry);
+    activeTradeSetup = {
+      source: 'agent',
+      agentName: sig.name,
+      dir: sig.vote === 'long' ? 'LONG' : 'SHORT',
+      entry: sig.entry,
+      tp: sig.tp,
+      sl: sig.sl,
+      rr: risk > 0 ? reward / risk : 2,
+      conf: sig.conf,
+      pair: sig.pair,
+    };
   }
 </script>
 
@@ -1310,7 +1353,7 @@
     <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
       {#if mobileTab === 'warroom'}
         <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('warroom')}>
-          <WarRoom bind:this={warRoomRef} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} />
+          <WarRoom bind:this={warRoomRef} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} on:showonchart={handleShowOnChart} />
           <button
             type="button"
             class="mob-resize-handle mob-resize-handle-x"
@@ -1346,8 +1389,11 @@
                 chatFirstMode
                 {chatTradeReady}
                 chatTradeDir={chatSuggestedDir}
+                {activeTradeSetup}
+                hasScanned={!!latestScan}
                 on:scanrequest={handleChartScanRequest}
                 on:chatrequest={handleChartChatRequest}
+                on:clearTradeSetup={() => { activeTradeSetup = null; }}
               />
             </div>
             <button
@@ -1435,7 +1481,7 @@
       <div class="tab-left">
         <div class="tab-panel-resizable" style={getTabletPanelStyle('left')}>
           <div class="tab-panel-body">
-            <WarRoom bind:this={warRoomRef} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} />
+            <WarRoom bind:this={warRoomRef} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} on:showonchart={handleShowOnChart} />
           </div>
           <button
             type="button"
@@ -1481,8 +1527,10 @@
               chatFirstMode
               {chatTradeReady}
               chatTradeDir={chatSuggestedDir}
+              {activeTradeSetup}
               on:scanrequest={handleChartScanRequest}
               on:chatrequest={handleChartChatRequest}
+              on:clearTradeSetup={() => { activeTradeSetup = null; }}
             />
           </div>
           <button
@@ -1570,7 +1618,7 @@
       <div class="tl" on:wheel={(e) => resizePanelByWheel('left', e)}>
         <div class="desk-panel-resizable" style={getDesktopPanelStyle('left')}>
           <div class="desk-panel-body">
-            <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} />
+            <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} on:showonchart={handleShowOnChart} />
           </div>
           <button
             type="button"
@@ -1630,8 +1678,10 @@
               chatFirstMode
               {chatTradeReady}
               chatTradeDir={chatSuggestedDir}
+              {activeTradeSetup}
               on:scanrequest={handleChartScanRequest}
               on:chatrequest={handleChartChatRequest}
+              on:clearTradeSetup={() => { activeTradeSetup = null; }}
             />
           </div>
         </div>
