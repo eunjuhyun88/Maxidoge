@@ -10,9 +10,6 @@
   export let battleResult: string | null = null;
   export let battlePriceHistory: BattlePriceTick[] = [];
   export let activeAgents: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }> = [];
-  export let vsMeter: number = 50;
-  export let enemyHP: number = 100;
-  export let battleNarration: string = '';
 
   const dispatch = createEventDispatcher();
 

@@ -161,7 +161,7 @@ const defaultState: GameState = {
   bases: { BTC: 97420, ETH: 3481, SOL: 198.46 },
   pair: 'BTC/USDT',
   timeframe: '4h',
-  arenaView: 'chart',
+  arenaView: 'arena',
   battleTick: null,
   battlePriceHistory: [],
   battleEntryTime: 0,

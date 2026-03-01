@@ -239,14 +239,14 @@
         charSprites[agId] = { ...charSprites[agId], actionEmoji: '', actionLabel: '' };
         charSprites = charSprites;
       }
-    }, 1500);
+    }, 1300);
     turnTimers.push(t);
   }
 
   // Combo tracker
   function trackCombo() {
     const now = Date.now();
-    if (now - lastHitTime < 2500) {
+    if (now - lastHitTime < 3000) {
       comboCount++;
       showCombo = true;
       const t = setTimeout(() => { showCombo = false; }, 1000);
@@ -754,10 +754,11 @@
     }, 1300);
     turnTimers.push(t3);
 
-    // ── Phase 5: RECOVER (2000ms) — return to position
+    // ── Phase 5: RECOVER (2000ms) — return to position (celebrate on big hits)
+    const bigHit = turn.effectiveness === 'super' || turn.isCritical;
     const t4 = setTimeout(() => {
-      setCharState(agId, 'recover');
-      setAgentState(agId, turn.effectiveness === 'super' || turn.isCritical ? 'jump' : 'idle');
+      setCharState(agId, bigHit ? 'celebrate' : 'recover');
+      setAgentState(agId, bigHit ? 'jump' : 'idle');
       // Move back to home position
       const homePos = getFormPos(activeAgents.indexOf(turn.agent), activeAgents.length);
       moveChar(agId, homePos.x, homePos.y);
@@ -801,13 +802,13 @@
 
     // Execute turns with spacing
     battleTurns.forEach((turn, i) => {
-      const delay = 1800 + i * 3200;
+      const delay = 1800 + i * 2800;
       const t = setTimeout(() => executeTurn(turn, i), delay);
       turnTimers.push(t);
     });
 
     // Suspense before result
-    const suspenseDelay = 1800 + battleTurns.length * 3200;
+    const suspenseDelay = 1800 + battleTurns.length * 2800;
     const ts = setTimeout(() => {
       battleNarration = '⏳ 시장이 결정한다...';
       battlePhaseLabel = 'JUDGMENT';
@@ -979,6 +980,7 @@
     pvpVisible = false;
     councilActive = false;
     hypothesisVisible = false;
+    gameState.update(s => ({ ...s, arenaView: 'arena' }));
     compareVisible = false;
     previewVisible = false;
     floatDir = null;
@@ -1134,43 +1136,37 @@
       const targetSource = pair?.source || SOURCES[i % SOURCES.length];
 
       safeTimeout(() => {
-        // Phase 1: Walk toward data source — move agent position
+        // Phase 1: Walk toward data source — move character sprite
         setAgentState(ag.id, 'walk');
         if (targetSource) {
-          agentStates[ag.id] = {
-            ...agentStates[ag.id],
-            posX: targetSource.x * 100,
-            posY: targetSource.y * 100
-          };
-          agentStates = { ...agentStates };
+          moveChar(ag.id, targetSource.x * 100, targetSource.y * 100);
         }
         sfx.scan();
+        battleNarration = `🔍 ${ag.name}가 데이터를 스캔 중...`;
+        addChatMsg(ag, `📡 ${targetSource?.label || 'data source'} 스캔 중...`);
 
         safeTimeout(() => {
           // Phase 2: Arrive at source + charge up energy
           setAgentState(ag.id, 'charge');
           setAgentEnergy(ag.id, 30);
           setSpeech(ag.id, ag.speech.scout, 800 / speed);
+          showCharAction(ag.id, '🔍', 'SCAN');
 
           safeTimeout(() => {
-            // Phase 3: Energy full → show finding (at source)
+            // Phase 3: Energy full → show finding
             setAgentEnergy(ag.id, 75);
             addFeed(ag.icon, ag.name, ag.color, ag.finding.title, ag.dir);
+            battleNarration = `📊 ${ag.name}: ${ag.finding.title}`;
+            addChatMsg(ag, `${ag.finding.title} · ${ag.finding.detail}`);
+            showCharAction(ag.id, ag.icon, ag.finding.title.slice(0, 12));
 
             safeTimeout(() => {
-              // Phase 4: Full charge + decision — return to original position
+              // Phase 4: Full charge + decision — return to formation
               setAgentEnergy(ag.id, 100);
               sfx.charge();
               setAgentState(ag.id, 'alert');
-
-              // Return to home position
-              const homeX = 50 + (i - Math.floor(activeAgents.length / 2)) * 16;
-              agentStates[ag.id] = {
-                ...agentStates[ag.id],
-                posX: homeX,
-                posY: 44
-              };
-              agentStates = { ...agentStates };
+              const homePos = getFormPos(i, activeAgents.length);
+              moveChar(ag.id, homePos.x, homePos.y);
 
               findings = [...findings, { def: ag, visible: true }];
 
@@ -1188,16 +1184,19 @@
   function initGather() {
     councilActive = true;
     addFeed('📊', 'GATHER', '#66CCE6', 'Gathering analysis data...');
+    battleNarration = '📊 에이전트들이 분석 데이터를 수집 중...';
     activeAgents.forEach((ag, i) => {
       safeTimeout(() => {
         setAgentState(ag.id, 'vote');
         setSpeech(ag.id, DOGE_GATHER[i % DOGE_GATHER.length], 400);
+        addChatMsg(ag, `${ag.finding.detail}`);
       }, i * 150);
     });
   }
 
   function initCouncil() {
     addFeed('🗳', 'COUNCIL', '#E8967D', 'Agents voting on direction...');
+    battleNarration = '🗳 에이전트 투표 시작!';
     activeAgents.forEach((ag, i) => {
       safeTimeout(() => {
         const dir = ag.dir;
@@ -1206,6 +1205,8 @@
         setSpeech(ag.id, ag.speech.vote, 600);
         sfx.vote();
         addFeed(ag.icon, ag.name, ag.color, `Vote: ${dir} (${ag.conf}%)`, dir);
+        battleNarration = `🗳 ${ag.name}: ${dir} (${ag.conf}% 확신)`;
+        addChatMsg(ag, `${ag.speech.vote} · ${dir} ${ag.conf}%`);
       }, i * 400 / (state.speed || 3));
     });
   }
@@ -1801,8 +1802,13 @@
       <PhaseGuide phase={state.phase} pair={state.pair} timeframe={state.timeframe} />
     </div>
 
+    <!-- ═══════ VIEW PICKER (always visible) ═══════ -->
+    <div class="view-picker-bar">
+      <ViewPicker current={state.arenaView} on:select={(e) => gameState.update(s => ({ ...s, arenaView: e.detail }))} />
+    </div>
+
     <!-- ═══════ VIEW SWITCHING ═══════ -->
-    {#if state.arenaView !== 'arena' && (state.phase === 'BATTLE' || state.phase === 'RESULT')}
+    {#if state.arenaView !== 'arena'}
       <div class="view-container">
         {#if state.arenaView === 'chart'}
           <ChartWarView
@@ -1813,9 +1819,6 @@
             battleResult={state.battleResult}
             battlePriceHistory={state.battlePriceHistory}
             activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
-            {vsMeter}
-            {enemyHP}
-            {battleNarration}
           />
         {:else if state.arenaView === 'mission'}
           <MissionControlView
@@ -1826,9 +1829,6 @@
             battleResult={state.battleResult}
             battlePriceHistory={state.battlePriceHistory}
             activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
-            {vsMeter}
-            {enemyHP}
-            {battleNarration}
           />
         {:else if state.arenaView === 'card'}
           <CardDuelView
@@ -1839,9 +1839,6 @@
             battleResult={state.battleResult}
             battlePriceHistory={state.battlePriceHistory}
             activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
-            {vsMeter}
-            {enemyHP}
-            {battleNarration}
           />
         {/if}
 
@@ -2331,6 +2328,12 @@
     position: relative;
     z-index: 20;
     padding: 0 16px 16px;
+  }
+  .view-picker-bar {
+    position: relative;
+    z-index: 20;
+    padding: 0 12px;
+    border-bottom: 1px solid rgba(255,105,180,.08);
   }
   .phase-guide-wrap {
     position: relative;
