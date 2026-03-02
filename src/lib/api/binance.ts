@@ -1,13 +1,21 @@
 // ═══════════════════════════════════════════════════════════════
 // MAXI⚡DOGE — Binance API Service (Public Market Data)
 // ═══════════════════════════════════════════════════════════════
-// Uses public endpoints — no API key required
-// Base: https://api.binance.com or https://data-api.binance.vision
+// REST calls go through /api/binance proxy to bypass CORS/geo blocks.
+// WebSocket connects directly to Binance (not subject to CORS),
+// with fallback to REST polling when WS is unavailable.
 
 import { toBinanceInterval } from '$lib/utils/timeframe';
 
-const BASE = 'https://api.binance.com';
-const DATA_BASE = 'https://data-api.binance.vision';
+const PROXY = '/api/binance';
+const DIRECT_BASE = 'https://api.binance.com/api/v3';
+
+// WS endpoints — tried in order. stream.binance.com is primary,
+// fstream.binance.com is futures but same kline format for spot pairs.
+const WS_ENDPOINTS = [
+  'wss://stream.binance.com:9443',
+  'wss://stream.binance.com:443',
+];
 
 // ─── Types ───────────────────────────────────────────────────
 export interface BinanceKline {
@@ -56,6 +64,22 @@ export function pairToSymbol(pair: string): string {
   return pair.replace('/', '');
 }
 
+// ─── Internal: fetch via proxy, fallback to direct ───────────
+async function proxyFetch(endpoint: string, params: Record<string, string>): Promise<Response> {
+  const qs = new URLSearchParams({ endpoint, ...params }).toString();
+
+  // Try server proxy first (bypasses CORS & geo-blocks)
+  const proxyRes = await fetch(`${PROXY}?${qs}`);
+  if (proxyRes.ok) return proxyRes;
+
+  // Fallback: call Binance directly (works if CORS is allowed)
+  const directQs = new URLSearchParams(params).toString();
+  const directRes = await fetch(`${DIRECT_BASE}/${endpoint}?${directQs}`);
+  if (directRes.ok) return directRes;
+
+  throw new Error(`Binance ${endpoint} error: proxy=${proxyRes.status}, direct=${directRes.status}`);
+}
+
 // ─── Fetch Klines (Candlestick Data) ─────────────────────────
 export async function fetchKlines(
   symbol: string,
@@ -64,11 +88,14 @@ export async function fetchKlines(
   endTime?: number // ms timestamp — fetch candles BEFORE this time
 ): Promise<BinanceKline[]> {
   const normalizedInterval = toBinanceInterval(interval);
-  let url = `${BASE}/api/v3/klines?symbol=${symbol}&interval=${normalizedInterval}&limit=${limit}`;
-  if (endTime) url += `&endTime=${endTime}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Binance klines error: ${res.status}`);
+  const params: Record<string, string> = {
+    symbol,
+    interval: normalizedInterval,
+    limit: String(limit),
+  };
+  if (endTime) params.endTime = String(endTime);
 
+  const res = await proxyFetch('klines', params);
   const data: any[][] = await res.json();
 
   return data.map((k) => ({
@@ -83,19 +110,14 @@ export async function fetchKlines(
 
 // ─── Fetch Current Price ─────────────────────────────────────
 export async function fetchPrice(symbol: string): Promise<number> {
-  const url = `${BASE}/api/v3/ticker/price?symbol=${symbol}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Binance price error: ${res.status}`);
+  const res = await proxyFetch('ticker/price', { symbol });
   const data: BinanceTicker = await res.json();
   return parseFloat(data.price);
 }
 
 // ─── Fetch Multiple Prices ───────────────────────────────────
 export async function fetchPrices(symbols: string[]): Promise<Record<string, number>> {
-  const query = symbols.map(s => `"${s}"`).join(',');
-  const url = `${BASE}/api/v3/ticker/price?symbols=[${query}]`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Binance prices error: ${res.status}`);
+  const res = await proxyFetch('ticker/price', { symbols: `[${symbols.map(s => `"${s}"`).join(',')}]` });
   const data: BinanceTicker[] = await res.json();
 
   const result: Record<string, number> = {};
@@ -107,22 +129,17 @@ export async function fetchPrices(symbols: string[]): Promise<Record<string, num
 
 // ─── Fetch 24hr Ticker ───────────────────────────────────────
 export async function fetch24hr(symbol: string): Promise<Binance24hr> {
-  const url = `${BASE}/api/v3/ticker/24hr?symbol=${symbol}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Binance 24hr error: ${res.status}`);
+  const res = await proxyFetch('ticker/24hr', { symbol });
   return await res.json();
 }
 
 // ─── Fetch Multiple 24hr Tickers ─────────────────────────────
 export async function fetch24hrMulti(symbols: string[]): Promise<Binance24hr[]> {
-  const query = symbols.map(s => `"${s}"`).join(',');
-  const url = `${BASE}/api/v3/ticker/24hr?symbols=[${query}]`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Binance 24hr multi error: ${res.status}`);
+  const res = await proxyFetch('ticker/24hr', { symbols: `[${symbols.map(s => `"${s}"`).join(',')}]` });
   return await res.json();
 }
 
-// ─── WebSocket for Real-time Klines (with auto-reconnect) ───
+// ─── WebSocket for Real-time Klines (with auto-reconnect + WS fallback) ───
 export function subscribeKlines(
   symbol: string,
   interval: string,
@@ -130,19 +147,31 @@ export function subscribeKlines(
 ): () => void {
   const wsSymbol = symbol.toLowerCase();
   const wsInterval = toBinanceInterval(interval);
-  const url = `wss://stream.binance.com:9443/ws/${wsSymbol}@kline_${wsInterval}`;
+  let wsEndpointIdx = 0;
 
   let ws: WebSocket | null = null;
   let destroyed = false;
   let retryDelay = 1000;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let wsFailCount = 0;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
 
   function connect() {
     if (destroyed) return;
+
+    // After 3 consecutive WS failures, fall back to REST polling
+    if (wsFailCount >= 3) {
+      startPolling();
+      return;
+    }
+
+    const base = WS_ENDPOINTS[wsEndpointIdx % WS_ENDPOINTS.length];
+    const url = `${base}/ws/${wsSymbol}@kline_${wsInterval}`;
     ws = new WebSocket(url);
 
     ws.onopen = () => {
-      retryDelay = 1000; // reset backoff on success
+      retryDelay = 1000;
+      wsFailCount = 0;
     };
 
     ws.onmessage = (event) => {
@@ -160,11 +189,13 @@ export function subscribeKlines(
       }
     };
 
-    ws.onerror = (err) => console.error('[Binance WS] Error:', err);
+    ws.onerror = () => {
+      wsFailCount++;
+    };
 
     ws.onclose = () => {
       if (destroyed) return;
-      // Auto-reconnect with exponential backoff (max 30s)
+      wsEndpointIdx++;
       retryTimer = setTimeout(() => {
         retryDelay = Math.min(retryDelay * 2, 30000);
         connect();
@@ -172,34 +203,57 @@ export function subscribeKlines(
     };
   }
 
+  // REST polling fallback — fetches latest candle every 5s via proxy
+  function startPolling() {
+    if (destroyed || pollTimer) return;
+    console.warn('[Binance] WebSocket unavailable, falling back to REST polling');
+    pollTimer = setInterval(async () => {
+      if (destroyed) return;
+      try {
+        const klines = await fetchKlines(symbol, interval, 1);
+        if (klines.length > 0) onKline(klines[klines.length - 1]);
+      } catch { /* silent — will retry next interval */ }
+    }, 5000);
+  }
+
   connect();
 
-  // Return cleanup function
   return () => {
     destroyed = true;
     if (retryTimer) clearTimeout(retryTimer);
+    if (pollTimer) clearInterval(pollTimer);
     if (ws) ws.close();
   };
 }
 
-// ─── WebSocket for Real-time Mini Ticker (with auto-reconnect) ─
+// ─── WebSocket for Real-time Mini Ticker (with auto-reconnect + fallback) ─
 export function subscribeMiniTicker(
   symbols: string[],
   onUpdate: (prices: Record<string, number>) => void
 ): () => void {
   const streams = symbols.map(s => `${s.toLowerCase()}@miniTicker`).join('/');
-  const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+  let wsEndpointIdx = 0;
 
   let ws: WebSocket | null = null;
   let destroyed = false;
   let retryDelay = 1000;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let wsFailCount = 0;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
 
   function connect() {
     if (destroyed) return;
+
+    if (wsFailCount >= 3) {
+      startPolling();
+      return;
+    }
+
+    const base = WS_ENDPOINTS[wsEndpointIdx % WS_ENDPOINTS.length];
+    const url = `${base}/stream?streams=${streams}`;
     ws = new WebSocket(url);
 
-    ws.onopen = () => { retryDelay = 1000; };
+    ws.onopen = () => { retryDelay = 1000; wsFailCount = 0; };
 
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -208,10 +262,11 @@ export function subscribeMiniTicker(
       }
     };
 
-    ws.onerror = (err) => console.error('[Binance WS Ticker] Error:', err);
+    ws.onerror = () => { wsFailCount++; };
 
     ws.onclose = () => {
       if (destroyed) return;
+      wsEndpointIdx++;
       retryTimer = setTimeout(() => {
         retryDelay = Math.min(retryDelay * 2, 30000);
         connect();
@@ -219,11 +274,25 @@ export function subscribeMiniTicker(
     };
   }
 
+  // REST polling fallback — fetches ticker prices every 5s via proxy
+  function startPolling() {
+    if (destroyed || pollTimer) return;
+    console.warn('[Binance] Ticker WS unavailable, falling back to REST polling');
+    pollTimer = setInterval(async () => {
+      if (destroyed) return;
+      try {
+        const prices = await fetchPrices(symbols);
+        onUpdate(prices);
+      } catch { /* silent — will retry next interval */ }
+    }, 5000);
+  }
+
   connect();
 
   return () => {
     destroyed = true;
     if (retryTimer) clearTimeout(retryTimer);
+    if (pollTimer) clearInterval(pollTimer);
     if (ws) ws.close();
   };
 }
