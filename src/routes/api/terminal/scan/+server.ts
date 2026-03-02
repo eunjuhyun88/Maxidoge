@@ -6,6 +6,8 @@ import { runTerminalScan } from '$lib/services/scanService';
 import { scanLimiter } from '$lib/server/rateLimit';
 import { runIpRateLimitGuard } from '$lib/server/authSecurity';
 import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
+import { computeTerminalScanEmbedding } from '$lib/engine/ragEmbedding';
+import { saveTerminalScanRAG } from '$lib/server/ragService';
 
 function parseValidationMessage(message: string): string | null {
   if (message.startsWith('pair must be like')) return message;
@@ -37,7 +39,8 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
       timeframe: body?.timeframe,
     });
 
-    await query(
+    // Fire-and-forget: activity_events
+    query(
       `
         INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
         VALUES ($1, 'scan_run', 'terminal', $2, 'info', $3::jsonb)
@@ -55,6 +58,34 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
         }),
       ]
     ).catch(() => undefined);
+
+    // Fire-and-forget: RAG entry 저장 (Terminal 스캔 → 256d 임베딩)
+    try {
+      const scanSignals = (result.data.highlights ?? []).map((h: any) => ({
+        agentId: h.agent ?? '',
+        vote: h.vote ?? 'neutral',
+        confidence: h.conf ?? 50,
+      }));
+
+      if (scanSignals.length > 0) {
+        const embedding = computeTerminalScanEmbedding(
+          scanSignals,
+          result.data.timeframe ?? '4h'
+        );
+
+        saveTerminalScanRAG(user.id, {
+          scanId: result.scanId,
+          pair: result.data.pair,
+          timeframe: result.data.timeframe,
+          consensus: result.data.consensus,
+          avgConfidence: result.data.avgConfidence,
+          highlights: result.data.highlights,
+          embedding,
+        }).catch(() => undefined);
+      }
+    } catch {
+      // RAG 저장 실패는 스캔 결과에 영향 없음
+    }
 
     return json({
       success: true,

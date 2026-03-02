@@ -24,8 +24,15 @@ import type {
   C02Result,
   DraftSelection,
 } from './types';
+import type { RAGRecall } from './arenaWarTypes';
 import { runAgentPipeline, type PipelineResult, type PipelineInput } from './agentPipeline';
 import type { MarketContext } from './factorEngine';
+import {
+  buildFewShotExamples,
+  buildCommanderMessages,
+  parseCommanderResponse,
+} from './fewShotBuilder';
+import type { SimilarGame } from '$lib/server/ragService';
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -294,6 +301,110 @@ function resolveCommander(
   };
 }
 
+// ─── COMMANDER WITH RAG: Layer 3+ ────────────────────────────
+
+/**
+ * RAG + Few-Shot 강화 Commander.
+ * 충돌 발생 + RAG 데이터 존재 시 LLM 호출하여 판단.
+ * LLM 실패 시 heuristic fallback (resolveCommander).
+ *
+ * 비용: 충돌 없으면 $0, 충돌 시 ~$0.003-0.008 (500-800 토큰)
+ */
+async function resolveCommanderWithRAG(
+  orpo: OrpoOutput,
+  ctx: CtxBelief[],
+  guardian: GuardianCheck,
+  ragRecall: RAGRecall | null,
+  similarGames: SimilarGame[],
+  pair: string,
+  regime: string,
+  timeframe: string
+): Promise<CommanderVerdict | null> {
+  // Guardian halt → immediate NEUTRAL (no LLM needed)
+  if (guardian.halt) {
+    return {
+      finalDirection: 'NEUTRAL',
+      entryScore: 0,
+      reasoning: 'Guardian HALT — data source unreliable. Blocking entry.',
+      conflictResolved: false,
+      cost: 0,
+    };
+  }
+
+  // Check for conflict
+  const greenCount = ctx.filter(c => c.flag === 'GREEN').length;
+  const redCount = ctx.filter(c => c.flag === 'RED').length;
+  const ctxConsensus: Direction =
+    greenCount > redCount ? 'LONG' :
+    redCount > greenCount ? 'SHORT' : 'NEUTRAL';
+
+  const orpoNonNeutral = orpo.direction !== 'NEUTRAL';
+  const ctxNonNeutral = ctxConsensus !== 'NEUTRAL';
+  const hasConflict = orpoNonNeutral && ctxNonNeutral && orpo.direction !== ctxConsensus;
+
+  if (!hasConflict) {
+    // No conflict → pass through, no LLM needed
+    // But still apply RAG confidence adjustment if available
+    if (ragRecall && ragRecall.confidenceAdjustment !== 0) {
+      return {
+        finalDirection: orpo.direction,
+        entryScore: Math.max(0, Math.min(100, orpo.confidence + ragRecall.confidenceAdjustment)),
+        reasoning: `No ORPO/CTX conflict. RAG adjustment: ${ragRecall.confidenceAdjustment > 0 ? '+' : ''}${ragRecall.confidenceAdjustment} (${ragRecall.similarGamesFound} similar games, ${(ragRecall.historicalWinRate * 100).toFixed(0)}% win rate).`,
+        conflictResolved: false,
+        cost: 0,
+      };
+    }
+    return null;
+  }
+
+  // CONFLICT exists — try LLM with few-shot if we have RAG data
+  const hasFewShot = similarGames.length > 0;
+
+  if (hasFewShot) {
+    try {
+      const fewShotExamples = buildFewShotExamples(similarGames, 3);
+      const messages = buildCommanderMessages(
+        orpo, ctx, guardian, ragRecall, fewShotExamples,
+        pair, regime, timeframe
+      );
+
+      // Dynamic import to avoid server-only module in client context
+      const { callLLM } = await import('$lib/server/llmService');
+
+      const llmResult = await callLLM({
+        messages,
+        maxTokens: 200,
+        temperature: 0.3, // Low temp for consistent decisions
+        timeoutMs: 10000,
+      });
+
+      const parsed = parseCommanderResponse(
+        llmResult.text,
+        orpo.direction,  // fallback direction
+        orpo.confidence  // fallback confidence
+      );
+
+      // Apply RAG confidence adjustment on top
+      const ragAdj = ragRecall?.confidenceAdjustment ?? 0;
+      const entryScore = Math.max(0, Math.min(100, parsed.confidence + ragAdj));
+
+      return {
+        finalDirection: parsed.direction,
+        entryScore,
+        reasoning: `LLM Commander: ${parsed.reasoning}${ragAdj ? ` (RAG adj: ${ragAdj > 0 ? '+' : ''}${ragAdj})` : ''}`,
+        conflictResolved: true,
+        cost: (llmResult.usage?.promptTokens ?? 0) + (llmResult.usage?.completionTokens ?? 0),
+      };
+    } catch (llmError) {
+      console.warn('[c02Pipeline] LLM Commander failed, falling back to heuristic:', llmError);
+      // Fall through to heuristic
+    }
+  }
+
+  // Heuristic fallback (same as original resolveCommander)
+  return resolveCommander(orpo, ctx, guardian);
+}
+
 // ─── Main C02 Pipeline ──────────────────────────────────────
 
 export interface C02PipelineInput {
@@ -301,6 +412,10 @@ export interface C02PipelineInput {
   userId?: string;
   matchId?: string;
   userRR?: number;               // User's R:R for guardian check
+  regime?: string;               // Market regime (trending_up, trending_down, ranging, volatile)
+  // RAG Context (optional — graceful degradation if absent)
+  ragRecall?: RAGRecall | null;
+  similarGames?: SimilarGame[];
 }
 
 /**
@@ -360,8 +475,22 @@ export async function runC02Pipeline(input: C02PipelineInput): Promise<{
     rawPipeline.meta.dataCompleteness
   );
 
-  // Layer 3: Commander
-  const commander = resolveCommander(orpo, ctx, guardian);
+  // Layer 3: Commander (RAG-enhanced if available, heuristic fallback)
+  const hasRAGContext = input.similarGames && input.similarGames.length > 0;
+  let commander: CommanderVerdict | null;
+
+  if (hasRAGContext || input.ragRecall) {
+    commander = await resolveCommanderWithRAG(
+      orpo, ctx, guardian,
+      input.ragRecall ?? null,
+      input.similarGames ?? [],
+      input.marketContext.pair,
+      input.regime ?? 'ranging',
+      input.marketContext.timeframe ?? '4h'
+    );
+  } else {
+    commander = resolveCommander(orpo, ctx, guardian);
+  }
 
   const c02: C02Result = {
     orpo,
