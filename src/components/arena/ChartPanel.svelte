@@ -1412,6 +1412,7 @@
         const pairBase = (state.pair.split('/')[0] || 'BTC') as keyof typeof state.prices;
         const fallback = state.prices[pairBase] || state.prices.BTC;
         if (Number.isFinite(fallback) && fallback > 0) livePrice = fallback;
+        loadFallbackData();
       }
     }
   }
