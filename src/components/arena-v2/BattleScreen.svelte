@@ -10,6 +10,8 @@
     TickResult,
     AgentBattleState,
     AgentAbilities,
+    SpecBonuses,
+    ActionType,
   } from '$lib/engine/v2BattleTypes';
   import { V2_BATTLE_CONSTANTS as C, TIER_DIFFICULTY } from '$lib/engine/v2BattleTypes';
   import { initBattle, processTick, applyPlayerAction } from '$lib/engine/v2BattleEngine';
@@ -158,6 +160,53 @@
     return roleMap[roleStr] ?? 'CONTEXT';
   }
 
+  // ── Spec Bonuses: role-based action specialization ──
+  function computeSpecBonuses(role: AgentRole, abilities: AgentAbilities): SpecBonuses {
+    switch (role) {
+      case 'OFFENSE':
+        return {
+          primaryActionBonus: 0.05 + (abilities.analysis - 50) / 1000,
+          secondaryActionPenalty: -0.05,
+          critBonus: abilities.instinct > 70 ? 0.03 : 0,
+          targetActions: ['DASH', 'BURST', 'FINISHER'] as ActionType[],
+        };
+      case 'DEFENSE':
+        return {
+          primaryActionBonus: 0.05 + (abilities.accuracy - 50) / 1000,
+          secondaryActionPenalty: -0.08,
+          critBonus: 0,
+          targetActions: ['SHIELD', 'HOOK'] as ActionType[],
+        };
+      case 'CONTEXT':
+        return {
+          primaryActionBonus: 0.04 + (abilities.speed - 50) / 1000,
+          secondaryActionPenalty: -0.05,
+          critBonus: abilities.instinct > 75 ? 0.02 : 0,
+          targetActions: ['PING', 'ASSIST', 'HOOK'] as ActionType[],
+        };
+    }
+  }
+
+  // ── Dynamic ATR estimate based on findings context ──
+  function estimateATR(btcPrice: number, findings: import('$lib/stores/arenaV2State').Finding[]): number {
+    const baseATR = btcPrice * 0.0015; // 0.15% — realistic BTC 5m ATR
+
+    const hasHighVol = findings.some(f => {
+      const t = f.title.toLowerCase();
+      return t.includes('squeeze') || t.includes('breakout') || t.includes('liquidation');
+    });
+    const hasLowVol = findings.some(f => {
+      const t = f.title.toLowerCase();
+      return t.includes('range') || t.includes('consolidat');
+    });
+
+    const volMult = hasHighVol ? 1.5 : hasLowVol ? 0.7 : 1.0;
+    return baseATR * volMult;
+  }
+
+  // ── Normalize agent ID to uppercase ──
+  const normalizeId = (id: string) => id.toUpperCase() as AgentId;
+
   // ── VS sparkline SVG path ──
   function vsSparkline(history: number[]): string {
     if (history.length < 2) return '';
@@ -181,7 +230,7 @@
 
     // Build V2BattleAgent array (convert lowercase IDs → uppercase)
     const agents: V2BattleAgent[] = state.selectedAgents.map(lowerId => {
-      const upperId = lowerId.toUpperCase() as AgentId;
+      const upperId = normalizeId(lowerId);
       const def = AGDEFS.find(a => a.id === lowerId);
       const weight = state.weights[lowerId] ?? 33;
       const role: AgentRole = getRole(def?.role ?? '');
@@ -191,7 +240,7 @@
         role,
         weight,
         abilities,
-        specBonuses: { primaryActionBonus: 0, secondaryActionPenalty: 0, critBonus: 0, targetActions: [] },
+        specBonuses: computeSpecBonuses(role, abilities),
       };
     });
 
@@ -201,12 +250,12 @@
     // Finding directions from analysis
     const findingDirections: Record<string, Direction> = {};
     for (const f of state.findings) {
-      findingDirections[f.agentId.toUpperCase()] = f.direction;
+      findingDirections[normalizeId(f.agentId)] = f.direction;
     }
 
-    // ATR estimate (0.1% of price)
-    const atr1m = state.btcPrice * 0.001;
-    const tier = TIER_DIFFICULTY['BRONZE'];
+    // Dynamic ATR based on findings context
+    const atr1m = estimateATR(state.btcPrice, state.findings);
+    const tier = TIER_DIFFICULTY[state.squadConfig.tier ?? 'BRONZE'];
 
     const config: V2BattleConfig = {
       entryPrice: hyp.entry || state.btcPrice,

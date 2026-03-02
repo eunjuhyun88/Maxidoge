@@ -289,8 +289,8 @@ export function calculateActionEffect(
   // Council + hypothesis buffs
   const contextBuff = battleState.councilBuff + battleState.hypothesisRRBuff;
 
-  // Spec bonuses
-  const specBonus = getSpecBonus(action, agent);
+  // Spec bonuses (role-based action specialization)
+  const specBonus = getSpecBonus(action, agent, battleState);
 
   // Tactical focus
   let focusBuff = 0;
@@ -363,10 +363,23 @@ function getBaseEffect(action: ActionType, synergy: SynergyBonuses): number {
   return base;
 }
 
-function getSpecBonus(action: ActionType, agent: AgentBattleState): number {
-  // SpecBonuses are stored in the config — access through agent state
-  // This is a simplified version; real spec bonuses come from V2BattleAgent
-  return 0; // Spec bonuses are applied during init and stored in agent state
+function getSpecBonus(action: ActionType, agent: AgentBattleState, battleState: V2BattleState): number {
+  const configAgent = battleState.config.agents.find(a => a.agentId === agent.agentId);
+  if (!configAgent) return 0;
+  const spec = configAgent.specBonuses;
+
+  // Primary action bonus for target actions
+  if (spec.targetActions.includes(action)) {
+    return spec.primaryActionBonus;
+  }
+
+  // Penalty for non-target offensive actions
+  const offenseActions: ActionType[] = ['DASH', 'BURST', 'FINISHER'];
+  if (offenseActions.includes(action) && !spec.targetActions.includes(action)) {
+    return spec.secondaryActionPenalty;
+  }
+
+  return 0;
 }
 
 function getAnimForAction(action: ActionType, isCritical: boolean): AgentAnimState {
@@ -429,6 +442,10 @@ export function calculateCritRate(
 
   // + finding accuracy bonus
   if (agent.findingValidated === true) rate += 0.033;
+
+  // + spec bonus crit rate from agent config
+  const configAgent = battleState.config.agents.find(a => a.agentId === agent.agentId);
+  if (configAgent) rate += configAgent.specBonuses.critBonus;
 
   // Clamp
   return Math.max(C.CRIT_MIN_RATE, Math.min(C.CRIT_MAX_RATE, rate));

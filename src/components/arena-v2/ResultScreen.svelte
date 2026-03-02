@@ -4,6 +4,8 @@
   import { AGDEFS } from '$lib/data/agents';
   import type { V2BattleResult, AgentBattleReport } from '$lib/engine/v2BattleTypes';
   import type { FBScore, Badge } from '$lib/engine/types';
+  import { arenaV2State } from '$lib/stores/arenaV2State';
+  import { saveV2ToRAG } from '$lib/engine/v2RagBridge';
 
   export let battleResult: V2BattleResult | null = null;
   export let lpDelta: number = 0;
@@ -179,6 +181,28 @@
 
     // Enable skip after 1s
     setTimeout(() => { skipEnabled = true; }, 1000);
+
+    // Fire-and-forget RAG save
+    if (battleResult) {
+      const state = $arenaV2State;
+      if (state.hypothesis && state.matchId && !state.ragSaved) {
+        saveV2ToRAG(
+          {
+            selectedAgents: state.selectedAgents,
+            findings: state.findings,
+            hypothesis: { dir: state.hypothesis.dir, conf: state.hypothesis.conf },
+            btcPrice: state.btcPrice,
+            tier: state.squadConfig.tier,
+            timeframe: state.squadConfig.timeframe,
+            consensusType: state.consensusType,
+          },
+          battleResult,
+          state.matchId,
+        ).then(() => {
+          arenaV2State.update(s => ({ ...s, ragSaved: true }));
+        });
+      }
+    }
   });
 
   onDestroy(() => {

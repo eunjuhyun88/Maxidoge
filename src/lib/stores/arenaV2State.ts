@@ -68,10 +68,13 @@ export interface V2Hypothesis {
   rr: number;
 }
 
+export type V2Tier = 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'MASTER';
+
 export interface V2SquadConfig {
   riskLevel: 'low' | 'mid' | 'aggro';
   timeframe: string;
   leverage: number;
+  tier: V2Tier;
 }
 
 // ── Main State Interface ────────────────────────────────────────
@@ -120,6 +123,10 @@ export interface ArenaV2State {
   running: boolean;
   speed: number;
 
+  // RAG
+  ragRecall: import('$lib/engine/arenaWarTypes').RAGRecall | null;
+  ragSaved: boolean;
+
   // Price (live feed)
   btcPrice: number;
 }
@@ -138,6 +145,7 @@ const DEFAULT_STATE: ArenaV2State = {
     riskLevel: 'mid',
     timeframe: '5m',
     leverage: 1,
+    tier: 'BRONZE',
   },
 
   findings: [],
@@ -164,6 +172,9 @@ const DEFAULT_STATE: ArenaV2State = {
   matchId: null,
   running: false,
   speed: 3,
+
+  ragRecall: null,
+  ragSaved: false,
 
   btcPrice: 0,
 };

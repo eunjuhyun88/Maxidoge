@@ -3,12 +3,14 @@
   import type { Direction, AgentId } from '$lib/engine/types';
   import { AGDEFS, type AgentDef } from '$lib/data/agents';
   import {
+    arenaV2State,
     v2SetHypothesis,
     v2SetPhase,
     type V2Hypothesis,
     type Finding,
     type Vote,
   } from '$lib/stores/arenaV2State';
+  import { searchV2SimilarGames, recallToHint, type V2RAGHint } from '$lib/engine/v2RagBridge';
 
   export let hypothesis: V2Hypothesis | null = null;
   export let btcPrice: number = 0;
@@ -18,6 +20,37 @@
   export let findings: Finding[] = [];
   export let councilVotes: Vote[] = [];
   export let selectedAgents: AgentId[] = [];
+
+  // ── RAG hint ──
+  let ragHint: V2RAGHint | null = null;
+  let ragLoading = false;
+
+  // Search for similar games on mount
+  async function loadRAGHint() {
+    ragLoading = true;
+    try {
+      const state = $arenaV2State;
+      const recall = await searchV2SimilarGames({
+        selectedAgents: state.selectedAgents,
+        findings: state.findings,
+        hypothesis: { dir: consensusDir, conf: consensusConf },
+        btcPrice,
+        tier: state.squadConfig.tier,
+        timeframe: state.squadConfig.timeframe,
+        consensusType: state.consensusType,
+      });
+      ragHint = recallToHint(recall);
+      if (recall) {
+        arenaV2State.update(s => ({ ...s, ragRecall: recall }));
+      }
+    } catch {
+      // Graceful — no hint if search fails
+    }
+    ragLoading = false;
+  }
+
+  // Fire on component init
+  loadRAGHint();
 
   // ── Local state ──
   let dir: Direction = consensusDir;
@@ -313,6 +346,22 @@
         </div>
       {/if}
 
+      <!-- RAG Hint -->
+      {#if ragHint}
+        <div class="rag-hint">
+          <span class="rag-icon">🔮</span>
+          <div class="rag-info">
+            <span class="rag-count">{ragHint.similarCount} similar found</span>
+            <span class="rag-rate">{ragHint.suggestedDir === 'LONG' ? '▲' : '▼'} {ragHint.suggestedDir} {Math.round(ragHint.winRate * 100)}% win</span>
+          </div>
+        </div>
+      {:else if ragLoading}
+        <div class="rag-hint rag-loading">
+          <span class="rag-icon">🔮</span>
+          <span class="rag-text">searching past games...</span>
+        </div>
+      {/if}
+
       <!-- EXECUTE Button -->
       <button class="btn-execute"
         class:disabled={dir === 'NEUTRAL' || btcPrice <= 0 || executing}
@@ -545,6 +594,21 @@
     background:rgba(240,237,228,.02); border-radius:6px; border:1px solid rgba(240,237,228,.04);
   }
   .rm-row { display:flex; justify-content:space-between; font-size:9px; font-weight:700; color:rgba(240,237,228,.5); font-family:var(--fm,'JetBrains Mono',monospace); }
+
+  /* ── RAG Hint ── */
+  .rag-hint {
+    display:flex; align-items:center; gap:8px;
+    padding:6px 10px; margin-bottom:6px;
+    background:rgba(170,102,255,.06); border:1px solid rgba(170,102,255,.2);
+    border-radius:6px; font-family:var(--fm,'JetBrains Mono',monospace);
+  }
+  .rag-hint.rag-loading { opacity:.5; }
+  .rag-icon { font-size:14px; }
+  .rag-info { display:flex; flex-direction:column; gap:1px; }
+  .rag-count { font-size:8px; color:rgba(240,237,228,.5); letter-spacing:0.5px; }
+  .rag-rate { font-size:10px; font-weight:700; color:#aa66ff; }
+  .rag-text { font-size:8px; color:rgba(240,237,228,.4); animation:blink 2s ease-in-out infinite; }
+  @keyframes blink { 0%,100% { opacity:.3; } 50% { opacity:.8; } }
 
   .btn-execute {
     width:100%; padding:16px; border:2px solid rgba(240,237,228,.15); border-radius:12px;

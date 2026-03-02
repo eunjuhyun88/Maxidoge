@@ -8,12 +8,21 @@
     v2SetSquadConfig,
     v2SetPhase,
     type V2SquadConfig,
+    type V2Tier,
   } from '$lib/stores/arenaV2State';
   import { getSynergyPreview } from '$lib/engine/teamSynergy';
 
   export let selectedAgents: AgentId[] = [];
   export let weights: Record<string, number> = {};
-  export let squadConfig: V2SquadConfig = { riskLevel: 'mid', timeframe: '5m', leverage: 1 };
+  export let squadConfig: V2SquadConfig = { riskLevel: 'mid', timeframe: '5m', leverage: 1, tier: 'BRONZE' };
+
+  const TIER_INFO: Record<V2Tier, { icon: string; desc: string }> = {
+    BRONZE:  { icon: '🥉', desc: 'VS 55 · 24 ticks' },
+    SILVER:  { icon: '🥈', desc: 'VS 50 · 24 ticks' },
+    GOLD:    { icon: '🥇', desc: 'VS 50 · 20 ticks · AI +5%' },
+    DIAMOND: { icon: '💎', desc: 'VS 45 · 20 ticks · AI +10%' },
+    MASTER:  { icon: '👑', desc: 'VS 45 · 16 ticks · AI +15%' },
+  };
 
   const agents = AGDEFS;
   const ROLE_COLORS: Record<string, string> = { OFFENSE: '#ff4466', DEFENSE: '#4488ff', CONTEXT: '#aa66ff' };
@@ -121,6 +130,21 @@
           {/each}
         </div>
       </div>
+      <div class="spec-row tier-row">
+        <span class="spec-label">TIER</span>
+        <div class="spec-btns tier-btns">
+          {#each (['BRONZE', 'SILVER', 'GOLD', 'DIAMOND', 'MASTER'] as V2Tier[]) as tier}
+            <button class="spec-btn tier-btn" class:active={squadConfig.tier === tier}
+              on:click={() => v2SetSquadConfig({ tier })}
+              title={TIER_INFO[tier].desc}>
+              {TIER_INFO[tier].icon}
+            </button>
+          {/each}
+        </div>
+      </div>
+      {#if squadConfig.tier}
+        <div class="tier-desc">{TIER_INFO[squadConfig.tier].desc}</div>
+      {/if}
 
       {#if activeSynergies.length > 0}
         <div class="synergy-banner">
@@ -213,6 +237,10 @@
   .spec-btn { padding:3px 8px; border:1px solid rgba(240,237,228,.1); border-radius:4px; background:rgba(240,237,228,.03); color:rgba(240,237,228,.5); font-size:8px; font-weight:700; font-family:var(--fm,'JetBrains Mono',monospace); cursor:pointer; transition:all .15s; }
   .spec-btn:hover { background:rgba(232,150,125,.08); border-color:rgba(232,150,125,.2); }
   .spec-btn.active { background:rgba(232,150,125,.12); border-color:#E8967D; color:#E8967D; }
+
+  .tier-btns { gap:2px !important; }
+  .tier-btn { font-size:14px !important; padding:3px 6px !important; }
+  .tier-desc { font-size:8px; color:rgba(240,237,228,.4); font-family:var(--fm,'JetBrains Mono',monospace); letter-spacing:0.5px; margin-top:-2px; margin-left:42px; }
 
   .synergy-banner { padding:8px 12px; background:rgba(0,255,136,.06); border:1px solid rgba(0,255,136,.2); border-radius:8px; display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
   .synergy-item { font-size:10px; font-weight:700; color:#00ff88; font-family:var(--fm,'JetBrains Mono',monospace); }
