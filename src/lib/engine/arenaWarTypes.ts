@@ -183,6 +183,55 @@ export interface RAGRecall {
   confidenceAdjustment: number;
 }
 
+// ─── Decision Memory Types (Paper 1 + Paper 2 기반) ────────
+
+/** 모든 RAG 소스 유형 */
+export type DecisionMemorySource =
+  | 'arena_war'
+  | 'terminal_scan'
+  | 'opportunity_scan'
+  | 'quick_trade_open'
+  | 'quick_trade_close'
+  | 'signal_action';
+
+/** 에이전트별 세분화 시그널 (Paper 2: fine-grained) */
+export interface AgentSignal {
+  vote: string;           // 'long' | 'short' | 'neutral'
+  confidence: number;     // 0-100
+  note?: string;
+}
+
+/** Decision Chain maturation 결과 */
+export interface ChainMatureResult {
+  updatedCount: number;
+  chainId: string;
+  outcomeType: string;
+  outcomeValue: number;
+}
+
+/** QuickTrade RAG 저장 입력 */
+export interface QuickTradeRAGInput {
+  tradeId: string;
+  pair: string;
+  dir: 'LONG' | 'SHORT';
+  entry: number;
+  currentPrice: number;
+  tp: number | null;
+  sl: number | null;
+  source: string;
+  note?: string;
+}
+
+/** Signal Action RAG 저장 입력 */
+export interface SignalActionRAGInput {
+  actionId: string;
+  pair: string;
+  dir: string;
+  actionType: string;
+  source: string;
+  confidence: number | null;
+}
+
 // ─── Factor Conflict ────────────────────────────────────────
 
 export interface FactorConflict {

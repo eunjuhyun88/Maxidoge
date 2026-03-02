@@ -9,6 +9,7 @@ import {
   toBoundedInt,
   UUID_RE,
 } from '$lib/server/apiValidation';
+import { saveSignalActionRAG } from '$lib/server/ragService';
 
 const ACTIONS = new Set(['track', 'untrack', 'convert_to_trade', 'copy_trade', 'quick_long', 'quick_short']);
 
@@ -131,6 +132,16 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       `,
       [user.id, insert.rows[0].id, JSON.stringify({ actionType, pair, dir: dir || 'NEUTRAL' })]
     ).catch(() => undefined);
+
+    // Decision Memory: Signal Action → RAG (fire-and-forget)
+    saveSignalActionRAG(user.id, {
+      actionId: insert.rows[0].id,
+      pair,
+      dir: dir || 'NEUTRAL',
+      actionType,
+      source,
+      confidence,
+    }).catch(() => undefined);
 
     return json({ success: true, action: mapRow(insert.rows[0]) });
   } catch (error: any) {

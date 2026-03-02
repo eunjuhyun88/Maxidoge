@@ -1,14 +1,21 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — RAG Service: Save, Search, Analyze
+// STOCKCLAW — RAG Service: Decision Memory Save, Search, Analyze
 // ═══════════════════════════════════════════════════════════════
 //
-// Arena War 게임 + Terminal 스캔 등 모든 활동을 256d 벡터로 저장/검색.
+// 모든 의사결정 활동을 256d 벡터로 저장/검색.
 // pgvector 코사인 거리(<=>)로 similarity 측정.
 //
-// Sources:
+// Sources (DecisionMemorySource):
 //   - arena_war: Arena War 게임 결과
 //   - terminal_scan: Terminal 8-agent 스캔 결과
 //   - opportunity_scan: Opportunity Scanner 결과
+//   - quick_trade_open: QuickTrade 진입 (chain_step=1)
+//   - quick_trade_close: QuickTrade 청산 + chain maturation (chain_step=2)
+//   - signal_action: Signal tracking 액션 (chain_step=0)
+//
+// Decision Chain (Paper 2: 계층적 구조):
+//   scan(step=0) → trade_open(step=1) → trade_close(step=2)
+//   Close 시 matureDecisionChain()으로 체인 전체 outcome 확정
 //
 // Graceful Degradation:
 //   - 테이블 미존재: warning 반환, 크래시 없음
@@ -19,8 +26,20 @@
 // 비용: $0 (LLM 미사용, 순수 DB 쿼리)
 
 import { query } from './db';
-import type { RAGEntry, RAGRecall } from '$lib/engine/arenaWarTypes';
+import type {
+  RAGEntry,
+  RAGRecall,
+  AgentSignal,
+  ChainMatureResult,
+  QuickTradeRAGInput,
+  SignalActionRAGInput,
+} from '$lib/engine/arenaWarTypes';
 import type { Direction } from '$lib/engine/types';
+import {
+  computeQuickTradeEmbedding,
+  computeSignalActionEmbedding,
+  computeDedupeHash,
+} from '$lib/engine/ragEmbedding';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -51,6 +70,8 @@ export interface RAGSearchOptions {
   regime?: string;
   limit?: number;
   minQuality?: 'strong' | 'medium' | 'boundary' | 'weak';
+  /** Paper 1: confirmed outcome에 2x 가중 (search_arena_war_rag_v2) */
+  preferConfirmedOutcomes?: boolean;
 }
 
 /** RAG 저장 결과 */
@@ -87,8 +108,14 @@ function isFunctionMissing(e: unknown): boolean {
 
 // ─── Save ──────────────────────────────────────────────────
 
-/** RAG source type */
-export type RAGSource = 'arena_war' | 'terminal_scan' | 'opportunity_scan';
+/** RAG source type (DecisionMemorySource와 동일) */
+export type RAGSource =
+  | 'arena_war'
+  | 'terminal_scan'
+  | 'opportunity_scan'
+  | 'quick_trade_open'
+  | 'quick_trade_close'
+  | 'signal_action';
 
 /**
  * RAG 엔트리를 arena_war_rag 테이블에 저장.
@@ -176,6 +203,8 @@ export interface TerminalScanRAGInput {
     note: string;
   }>;
   embedding: number[];
+  /** Paper 2: 에이전트별 세분화 시그널 */
+  agentSignals?: Record<string, AgentSignal>;
 }
 
 /**
@@ -209,6 +238,32 @@ export async function saveTerminalScanRAG(
     else if (shortVotes >= 5 && input.avgConfidence >= 65) regime = 'trending_down';
     else if (confSpread > 40) regime = 'volatile';
 
+    // Paper 2: agent_signals JSONB — 에이전트별 세분화
+    const agentSignals = input.agentSignals ?? Object.fromEntries(
+      input.highlights.map(h => [
+        h.agent.toUpperCase(),
+        { vote: h.vote, confidence: h.conf, note: h.note },
+      ])
+    );
+
+    // Decision Chain: chain_id = 'scan-{scanId}'
+    const chainId = `scan-${input.scanId}`;
+
+    // Paper 1: Semantic dedup 해시
+    const dedupeHash = computeDedupeHash({
+      pair: input.pair,
+      timeframe: input.timeframe,
+      direction: input.consensus.toUpperCase(),
+      regime,
+      source: 'terminal_scan',
+    });
+
+    // Paper 1: 중복 체크
+    const isDuplicate = await checkDedupe(userId, dedupeHash);
+    if (isDuplicate) {
+      return { success: true, warning: 'Duplicate scan detected — skipped' };
+    }
+
     await query(
       `INSERT INTO arena_war_rag (
         id, user_id, source, pair, timeframe, regime, pattern_signature,
@@ -216,20 +271,25 @@ export async function saveTerminalScanRAG(
         human_direction, human_confidence, human_reason_tags,
         ai_direction, ai_confidence, ai_top_factors,
         winner, human_fbs, ai_fbs, price_change,
-        quality, lesson, created_at
+        quality, lesson,
+        chain_id, chain_step, agent_signals, dedupe_hash,
+        created_at
       ) VALUES (
         $1, $2, 'terminal_scan', $3, $4, $5, $6,
         $7::vector,
         $8, $9, '[]'::jsonb,
         $10, $11, $12,
         'pending', 0, 0, 0,
-        $13, $14, NOW()
+        $13, $14,
+        $15, 0, $16::jsonb, $17,
+        NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
         embedding = EXCLUDED.embedding,
-        ai_confidence = EXCLUDED.ai_confidence`,
+        ai_confidence = EXCLUDED.ai_confidence,
+        agent_signals = EXCLUDED.agent_signals`,
       [
-        `scan-${input.scanId}`,
+        chainId,
         userId,
         input.pair,
         input.timeframe,
@@ -247,6 +307,9 @@ export async function saveTerminalScanRAG(
         input.avgConfidence >= 70 ? 'medium' :
         input.avgConfidence >= 55 ? 'boundary' : 'weak',
         `Terminal scan: ${input.pair} ${input.timeframe} → ${input.consensus} ${input.avgConfidence}%`,
+        chainId,
+        JSON.stringify(agentSignals),
+        dedupeHash,
       ]
     );
 
@@ -272,11 +335,29 @@ export async function searchSimilarGames(
   userId: string,
   options: RAGSearchOptions = {}
 ): Promise<SimilarGame[]> {
-  const { pair, regime, limit = 5, minQuality = 'weak' } = options;
+  const { pair, regime, limit = 5, minQuality = 'weak', preferConfirmedOutcomes } = options;
   const embeddingStr = `[${embedding.join(',')}]`;
 
   try {
-    // SQL 함수 사용 시도
+    // Paper 1: preferConfirmedOutcomes → v2 함수 사용 (outcome-weighted scoring)
+    if (preferConfirmedOutcomes) {
+      try {
+        const result = await query<SimilarGame>(
+          `SELECT * FROM search_arena_war_rag_v2($1::vector, $2::uuid, $3, $4, $5, $6, $7)`,
+          [embeddingStr, userId, pair ?? null, regime ?? null, minQuality, limit, true]
+        );
+        return result.rows;
+      } catch (e2) {
+        if (isFunctionMissing(e2)) {
+          console.warn('[ragService] search_arena_war_rag_v2() not found — falling back to v1');
+          // fall through to v1
+        } else {
+          throw e2;
+        }
+      }
+    }
+
+    // SQL 함수 v1 사용 시도
     const result = await query<SimilarGame>(
       `SELECT * FROM search_arena_war_rag($1::vector, $2::uuid, $3, $4, $5, $6)`,
       [embeddingStr, userId, pair ?? null, regime ?? null, minQuality, limit]
@@ -428,6 +509,100 @@ export function computeRAGRecall(
   };
 }
 
+// ─── RAG Recall V2 (Paper 1 + Paper 2 가중) ────────────────
+
+/** Paper 2: Agent retrieval weights (ablation 기반) */
+const AGENT_WEIGHTS: Record<string, number> = {
+  STRUCTURE: 1.3, VPA: 1.2, ICT: 1.2, DERIV: 1.1,
+  FLOW: 1.0, SENTI: 0.8, MACRO: 0.7,
+};
+
+/**
+ * RAGRecall v2: confirmed outcome 2x 가중, Paper 2 에이전트 가중치 적용.
+ *
+ * Paper 1: outcome_type != 'pending' → 2x 신뢰 가중
+ * Paper 2: agent_signals에서 STRUCTURE/VPA/ICT 높은 에이전트의 방향 추천
+ */
+export function computeRAGRecallV2(
+  similarGames: SimilarGame[],
+  currentDirection: Direction,
+  currentConfidence: number
+): RAGRecall | null {
+  if (similarGames.length === 0) return null;
+
+  const queriedPatterns = [
+    ...new Set(similarGames.map(g => g.pattern_signature).filter(Boolean)),
+  ];
+
+  // 방향별 가중 점수 (confirmed outcomes 2x, agent weights 적용)
+  const directionScores: Record<string, number> = {};
+  let totalWeight = 0;
+  let successWeight = 0;
+
+  for (const g of similarGames) {
+    const outcomeType = (g as any).outcome_type ?? 'pending';
+    const outcomeBonus = outcomeType !== 'pending' ? 2.0 : 1.0;
+    const agentSignals = (g as any).agent_signals as Record<string, { vote: string; confidence: number }> | undefined;
+
+    // 기본 weight
+    let weight = outcomeBonus * g.similarity;
+
+    // Paper 2: agent_signals 가중치 (있으면 적용)
+    if (agentSignals && Object.keys(agentSignals).length > 0) {
+      let agentScore = 0;
+      let agentTotal = 0;
+      for (const [agent, sig] of Object.entries(agentSignals)) {
+        const w = AGENT_WEIGHTS[agent] ?? 0.5;
+        const dirMatch = sig.vote?.toUpperCase() === currentDirection ? 1 : 0;
+        agentScore += w * dirMatch * (sig.confidence / 100);
+        agentTotal += w;
+      }
+      if (agentTotal > 0) {
+        weight *= (0.7 + 0.3 * (agentScore / agentTotal)); // agent alignment bonus
+      }
+    }
+
+    // 승리 방향 집계
+    const isSuccess = g.winner === 'ai' ||
+      ((g as any).outcome_type === 'pnl' && Number((g as any).outcome_value ?? 0) > 0);
+    const winDir = isSuccess ? g.ai_direction : g.human_direction;
+    directionScores[winDir] = (directionScores[winDir] ?? 0) + weight;
+
+    // 같은 방향 성공률 계산
+    if (g.ai_direction === currentDirection) {
+      totalWeight += weight;
+      if (isSuccess) successWeight += weight;
+    }
+  }
+
+  const historicalWinRate = totalWeight > 0 ? successWeight / totalWeight : 0.5;
+
+  const suggestedDirection = (
+    Object.entries(directionScores).sort((a, b) => b[1] - a[1])[0]?.[0] ?? currentDirection
+  ) as Direction;
+
+  // Confidence adjustment (5+ 게임부터)
+  let confidenceAdjustment = 0;
+  if (similarGames.length >= 5) {
+    if (historicalWinRate >= 0.7) {
+      confidenceAdjustment = Math.min(10, Math.round((historicalWinRate - 0.5) * 20));
+    } else if (historicalWinRate <= 0.3) {
+      confidenceAdjustment = Math.max(-10, Math.round((historicalWinRate - 0.5) * 20));
+    }
+    if (suggestedDirection !== currentDirection && historicalWinRate < 0.4) {
+      confidenceAdjustment = Math.min(confidenceAdjustment, -5);
+    }
+  }
+
+  return {
+    queriedPatterns,
+    similarGamesFound: similarGames.length,
+    historicalWinRate: Math.round(historicalWinRate * 100) / 100,
+    suggestedDirection,
+    confidenceAdjustment,
+  };
+}
+
 // ─── Combined Search + Analyze ──────────────────────────────
 
 /**
@@ -442,7 +617,364 @@ export async function searchAndAnalyze(
   options: RAGSearchOptions = {}
 ): Promise<RAGSearchResult> {
   const games = await searchSimilarGames(embedding, userId, options);
-  const recall = computeRAGRecall(games, currentDirection, currentConfidence);
+  // Paper 1+2: preferConfirmedOutcomes 시 v2 recall 사용
+  const recall = options.preferConfirmedOutcomes
+    ? computeRAGRecallV2(games, currentDirection, currentConfidence)
+    : computeRAGRecall(games, currentDirection, currentConfidence);
 
   return { games, recall };
+}
+
+// ─── Decision Memory: Dedup Check ───────────────────────────
+
+/**
+ * Paper 1: Semantic deduplication 체크.
+ * 같은 user + dedupe_hash 존재 여부 확인.
+ */
+export async function checkDedupe(
+  userId: string,
+  dedupeHash: string
+): Promise<boolean> {
+  try {
+    // SQL 함수 시도
+    const result = await query<{ check_rag_dedupe: boolean }>(
+      `SELECT check_rag_dedupe($1::uuid, $2)`,
+      [userId, dedupeHash]
+    );
+    return result.rows[0]?.check_rag_dedupe ?? false;
+  } catch (e) {
+    if (isFunctionMissing(e)) {
+      // fallback: 직접 쿼리
+      try {
+        const result = await query<{ exists: boolean }>(
+          `SELECT EXISTS (
+            SELECT 1 FROM arena_war_rag
+            WHERE user_id = $1 AND dedupe_hash = $2
+          ) AS exists`,
+          [userId, dedupeHash]
+        );
+        return result.rows[0]?.exists ?? false;
+      } catch (e2) {
+        if (isTableMissing(e2)) return false;
+        throw e2;
+      }
+    }
+    if (isTableMissing(e)) return false;
+    console.error('[ragService] Dedupe check failed:', e);
+    return false;
+  }
+}
+
+// ─── Decision Memory: QuickTrade Open ───────────────────────
+
+/**
+ * QuickTrade 진입을 RAG에 저장.
+ * chain_step=1, outcome='pending', quality='boundary'.
+ *
+ * chainId: scan에서 유래 시 'scan-{scanId}', 직접 개설 시 'trade-{tradeId}'.
+ */
+export async function saveQuickTradeOpenRAG(
+  userId: string,
+  input: QuickTradeRAGInput,
+  chainId: string
+): Promise<RAGSaveResult> {
+  try {
+    const embedding = computeQuickTradeEmbedding({
+      pair: input.pair,
+      direction: input.dir,
+      entryPrice: input.entry,
+      currentPrice: input.currentPrice,
+      tp: input.tp,
+      sl: input.sl,
+      source: input.source,
+    });
+    const embeddingStr = `[${embedding.join(',')}]`;
+
+    const dedupeHash = computeDedupeHash({
+      pair: input.pair,
+      timeframe: '1h', // trade는 기본 1h window
+      direction: input.dir,
+      regime: 'unknown',
+      source: 'quick_trade_open',
+      windowMinutes: 30, // 30분 내 동일 trade dedup
+    });
+
+    const isDuplicate = await checkDedupe(userId, dedupeHash);
+    if (isDuplicate) {
+      return { success: true, warning: 'Duplicate trade open detected — skipped' };
+    }
+
+    await query(
+      `INSERT INTO arena_war_rag (
+        id, user_id, source, pair, timeframe, regime, pattern_signature,
+        embedding,
+        human_direction, human_confidence, human_reason_tags,
+        ai_direction, ai_confidence, ai_top_factors,
+        winner, human_fbs, ai_fbs, price_change,
+        quality, lesson,
+        chain_id, chain_step, outcome_type, dedupe_hash,
+        created_at
+      ) VALUES (
+        $1, $2, 'quick_trade_open', $3, '1h', 'unknown', $4,
+        $5::vector,
+        $6, 50, '[]'::jsonb,
+        $6, 50, '[]'::jsonb,
+        'pending', 0, 0, 0,
+        'boundary', $7,
+        $8, 1, 'pending', $9,
+        NOW()
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        embedding = EXCLUDED.embedding`,
+      [
+        `trade-open-${input.tradeId}`,
+        userId,
+        input.pair,
+        `TRADE:OPEN:${input.dir}:${input.source}`,
+        embeddingStr,
+        input.dir,
+        `QuickTrade open: ${input.pair} ${input.dir} @ ${input.entry}${input.note ? ` — ${input.note}` : ''}`,
+        chainId,
+        dedupeHash,
+      ]
+    );
+
+    return { success: true };
+  } catch (e) {
+    if (isTableMissing(e)) {
+      console.warn('[ragService] arena_war_rag table does not exist — skipping trade open save');
+      return { success: false, warning: 'arena_war_rag table not found' };
+    }
+    console.error('[ragService] Failed to save trade open RAG:', e);
+    return { success: false, warning: String(e) };
+  }
+}
+
+// ─── Decision Memory: QuickTrade Close ──────────────────────
+
+/**
+ * QuickTrade 청산을 RAG에 저장.
+ * chain_step=2, outcome_type='pnl', outcome_value=PnL%.
+ *
+ * ⭐ 가장 높은 가치의 훅: PnL이 체인 전체를 성숙시킴.
+ * 저장 후 matureDecisionChain() 호출 → 체인 내 모든 pending 엔트리 업데이트.
+ */
+export async function saveQuickTradeCloseRAG(
+  userId: string,
+  input: QuickTradeRAGInput & { pnlPercent: number; exitPrice: number },
+  chainId: string
+): Promise<RAGSaveResult> {
+  try {
+    const embedding = computeQuickTradeEmbedding({
+      pair: input.pair,
+      direction: input.dir,
+      entryPrice: input.entry,
+      currentPrice: input.exitPrice,
+      tp: input.tp,
+      sl: input.sl,
+      source: input.source,
+    });
+    const embeddingStr = `[${embedding.join(',')}]`;
+
+    // PnL 기반 quality 분류 (Paper 1: outcome quality)
+    const absPnl = Math.abs(input.pnlPercent);
+    const quality = absPnl >= 5 ? 'strong'
+      : absPnl >= 2 ? 'medium'
+      : absPnl >= 0.5 ? 'boundary'
+      : 'weak';
+
+    await query(
+      `INSERT INTO arena_war_rag (
+        id, user_id, source, pair, timeframe, regime, pattern_signature,
+        embedding,
+        human_direction, human_confidence, human_reason_tags,
+        ai_direction, ai_confidence, ai_top_factors,
+        winner, human_fbs, ai_fbs, price_change,
+        quality, lesson,
+        chain_id, chain_step,
+        outcome_type, outcome_value, outcome_at,
+        created_at
+      ) VALUES (
+        $1, $2, 'quick_trade_close', $3, '1h', 'unknown', $4,
+        $5::vector,
+        $6, 50, '[]'::jsonb,
+        $6, 50, '[]'::jsonb,
+        'pending', 0, 0, $7,
+        $8, $9,
+        $10, 2,
+        'pnl', $11, NOW(),
+        NOW()
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        embedding = EXCLUDED.embedding,
+        outcome_type = 'pnl',
+        outcome_value = EXCLUDED.outcome_value,
+        outcome_at = NOW(),
+        quality = EXCLUDED.quality`,
+      [
+        `trade-close-${input.tradeId}`,
+        userId,
+        input.pair,
+        `TRADE:CLOSE:${input.dir}:${input.pnlPercent > 0 ? 'PROFIT' : 'LOSS'}`,
+        embeddingStr,
+        input.dir,
+        input.pnlPercent,
+        quality,
+        `QuickTrade close: ${input.pair} ${input.dir} PnL ${input.pnlPercent > 0 ? '+' : ''}${input.pnlPercent.toFixed(2)}%`,
+        chainId,
+        input.pnlPercent,
+      ]
+    );
+
+    // ⭐ Decision Chain Maturation — 체인 전체 outcome 확정
+    await matureDecisionChain(chainId, 'pnl', input.pnlPercent).catch(err => {
+      console.warn('[ragService] Chain maturation failed (non-fatal):', err);
+    });
+
+    return { success: true };
+  } catch (e) {
+    if (isTableMissing(e)) {
+      console.warn('[ragService] arena_war_rag table does not exist — skipping trade close save');
+      return { success: false, warning: 'arena_war_rag table not found' };
+    }
+    console.error('[ragService] Failed to save trade close RAG:', e);
+    return { success: false, warning: String(e) };
+  }
+}
+
+// ─── Decision Memory: Signal Action ─────────────────────────
+
+/**
+ * Signal tracking 액션(convert_to_trade, track, dismiss 등)을 RAG에 저장.
+ * chain_step=0, quality='weak' (가장 약한 신호).
+ */
+export async function saveSignalActionRAG(
+  userId: string,
+  input: SignalActionRAGInput
+): Promise<RAGSaveResult> {
+  try {
+    const embedding = computeSignalActionEmbedding({
+      pair: input.pair,
+      direction: input.dir,
+      actionType: input.actionType,
+      confidence: input.confidence ?? 50,
+      source: input.source,
+    });
+    const embeddingStr = `[${embedding.join(',')}]`;
+
+    const dedupeHash = computeDedupeHash({
+      pair: input.pair,
+      timeframe: '1h',
+      direction: input.dir,
+      regime: 'unknown',
+      source: 'signal_action',
+      windowMinutes: 60,
+    });
+
+    const isDuplicate = await checkDedupe(userId, dedupeHash);
+    if (isDuplicate) {
+      return { success: true, warning: 'Duplicate signal action detected — skipped' };
+    }
+
+    await query(
+      `INSERT INTO arena_war_rag (
+        id, user_id, source, pair, timeframe, regime, pattern_signature,
+        embedding,
+        human_direction, human_confidence, human_reason_tags,
+        ai_direction, ai_confidence, ai_top_factors,
+        winner, human_fbs, ai_fbs, price_change,
+        quality, lesson,
+        chain_id, chain_step, outcome_type, dedupe_hash,
+        created_at
+      ) VALUES (
+        $1, $2, 'signal_action', $3, '1h', 'unknown', $4,
+        $5::vector,
+        $6, $7, '[]'::jsonb,
+        $6, $7, '[]'::jsonb,
+        'pending', 0, 0, 0,
+        'weak', $8,
+        $9, 0, 'pending', $10,
+        NOW()
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        embedding = EXCLUDED.embedding`,
+      [
+        `signal-${input.actionId}`,
+        userId,
+        input.pair,
+        `SIGNAL:${input.actionType.toUpperCase()}:${input.dir}`,
+        embeddingStr,
+        input.dir,
+        input.confidence ?? 50,
+        `Signal ${input.actionType}: ${input.pair} ${input.dir} from ${input.source}`,
+        `signal-${input.actionId}`, // chainId = self
+        dedupeHash,
+      ]
+    );
+
+    return { success: true };
+  } catch (e) {
+    if (isTableMissing(e)) {
+      console.warn('[ragService] arena_war_rag table does not exist — skipping signal action save');
+      return { success: false, warning: 'arena_war_rag table not found' };
+    }
+    console.error('[ragService] Failed to save signal action RAG:', e);
+    return { success: false, warning: String(e) };
+  }
+}
+
+// ─── Decision Chain Maturation ──────────────────────────────
+
+/**
+ * Decision Chain 전체를 성숙시킴.
+ *
+ * Paper 1: pending → confirmed. KB 품질 1순위.
+ * Paper 2: 계층적 구조 — chain 전체가 하나의 의사결정 흐름.
+ *
+ * PnL 기반 quality 재분류:
+ *   |PnL| >= 5% → 'strong'
+ *   |PnL| >= 2% → 'medium'
+ *   |PnL| >= 0.5% → 'boundary'
+ *   else → 'weak'
+ */
+export async function matureDecisionChain(
+  chainId: string,
+  outcomeType: string,
+  outcomeValue: number
+): Promise<ChainMatureResult> {
+  const absPnl = Math.abs(outcomeValue);
+  const quality = absPnl >= 5 ? 'strong'
+    : absPnl >= 2 ? 'medium'
+    : absPnl >= 0.5 ? 'boundary'
+    : 'weak';
+
+  try {
+    const result = await query(
+      `UPDATE arena_war_rag
+       SET
+         outcome_type = $2,
+         outcome_value = $3,
+         outcome_at = NOW(),
+         quality = CASE
+           WHEN quality = 'strong' THEN quality  -- 이미 strong이면 유지
+           ELSE $4
+         END
+       WHERE chain_id = $1 AND outcome_type = 'pending'`,
+      [chainId, outcomeType, outcomeValue, quality]
+    );
+
+    const updatedCount = result.rowCount ?? 0;
+    if (updatedCount > 0) {
+      console.log(`[ragService] Chain ${chainId} matured: ${updatedCount} entries → ${outcomeType}=${outcomeValue}, quality=${quality}`);
+    }
+
+    return { updatedCount, chainId, outcomeType, outcomeValue };
+  } catch (e) {
+    if (isTableMissing(e)) {
+      console.warn('[ragService] arena_war_rag table does not exist — skipping maturation');
+      return { updatedCount: 0, chainId, outcomeType, outcomeValue };
+    }
+    console.error('[ragService] Chain maturation failed:', e);
+    return { updatedCount: 0, chainId, outcomeType, outcomeValue };
+  }
 }

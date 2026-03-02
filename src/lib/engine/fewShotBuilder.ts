@@ -64,6 +64,120 @@ export function buildFewShotExamples(
   ].join('\n');
 }
 
+// ─── Paper 2: Agent Retrieval Weights (Ablation Study) ──────
+// STRUCTURE(Technical) 가장 높은 가치, MACRO/NEWS는 노이즈 경향.
+// 검색 결과 가중 및 few-shot 예시 우선순위에 사용.
+
+export const AGENT_RETRIEVAL_WEIGHTS: Record<string, number> = {
+  STRUCTURE: 1.3,
+  VPA: 1.2,
+  ICT: 1.2,
+  DERIV: 1.1,
+  FLOW: 1.0,
+  SENTI: 0.8,
+  MACRO: 0.7,
+};
+
+// ─── Multi-Source Few-Shot Builder (Paper 1 + 2) ────────────
+
+/**
+ * Decision Memory 멀티소스 few-shot 예시 생성.
+ *
+ * Paper 1: confirmed outcome 우선, quality 기반 선택.
+ * Paper 2: 소스 다양성 (같은 source 최대 2개), agent_signals 포함.
+ *
+ * trade outcome은 "LONG closed +3.5% PnL" 형식으로 포맷.
+ */
+export function buildMultiSourceFewShotExamples(
+  similarGames: SimilarGame[],
+  maxExamples: number = 3
+): string {
+  if (similarGames.length === 0) return '';
+
+  const qualityOrder: Record<string, number> = {
+    strong: 0, medium: 1, boundary: 2, weak: 3,
+  };
+
+  // 1. Quality + similarity 정렬
+  const sorted = [...similarGames].sort((a, b) => {
+    const qa = qualityOrder[a.quality] ?? 4;
+    const qb = qualityOrder[b.quality] ?? 4;
+    if (qa !== qb) return qa - qb;
+    return b.similarity - a.similarity;
+  });
+
+  // 2. Source diversity: 같은 source에서 최대 2개
+  const selected: SimilarGame[] = [];
+  const sourceCounts: Record<string, number> = {};
+
+  for (const g of sorted) {
+    if (selected.length >= maxExamples) break;
+    const src = (g as any).source ?? 'arena_war';
+    const count = sourceCounts[src] ?? 0;
+    if (count >= 2) continue;
+    selected.push(g);
+    sourceCounts[src] = count + 1;
+  }
+
+  // 3. 각 예시 포맷팅
+  const examples = selected.map((g, i) => {
+    const similarity = (g.similarity * 100).toFixed(0);
+    const src = (g as any).source ?? 'arena_war';
+    const outcomeType = (g as any).outcome_type ?? '';
+    const outcomeValue = (g as any).outcome_value ?? 0;
+    const agentSignals = (g as any).agent_signals as Record<string, { vote: string; confidence: number }> | undefined;
+
+    // Source 라벨
+    const sourceLabel = src === 'arena_war' ? 'Game'
+      : src === 'terminal_scan' ? 'Scan'
+      : src === 'quick_trade_open' ? 'TradeOpen'
+      : src === 'quick_trade_close' ? 'TradeClose'
+      : src === 'signal_action' ? 'Signal'
+      : src;
+
+    // Outcome 포맷
+    let resultLine: string;
+    if (outcomeType === 'pnl') {
+      const pnl = Number(outcomeValue);
+      resultLine = `${g.ai_direction} closed ${pnl > 0 ? '+' : ''}${pnl.toFixed(1)}% PnL`;
+    } else if (g.winner && g.winner !== 'pending') {
+      const winLabel = g.winner === 'ai' ? 'AI won' :
+                       g.winner === 'human' ? 'Human won' : 'Draw';
+      resultLine = `${winLabel} (AI FBS: ${g.ai_fbs.toFixed(1)}, ΔP: ${g.price_change.toFixed(2)}%)`;
+    } else {
+      resultLine = 'Pending';
+    }
+
+    const lines = [
+      `Example ${i + 1} [${sourceLabel}] (${similarity}% sim, ${g.quality}):`,
+      `  ${g.pair} ${g.timeframe} ${g.regime} → ${g.ai_direction} ${g.ai_confidence}%`,
+      `  Result: ${resultLine}`,
+    ];
+
+    // Paper 2: agent_signals 상세 (있을 때만, 가중치 높은 에이전트 우선)
+    if (agentSignals && Object.keys(agentSignals).length > 0) {
+      const agentSummary = Object.entries(agentSignals)
+        .sort(([a], [b]) =>
+          (AGENT_RETRIEVAL_WEIGHTS[b] ?? 0.5) - (AGENT_RETRIEVAL_WEIGHTS[a] ?? 0.5)
+        )
+        .slice(0, 4) // top 4 agents only
+        .map(([agent, sig]) => `${agent}:${sig.vote}(${sig.confidence}%)`)
+        .join(' ');
+      lines.push(`  Agents: ${agentSummary}`);
+    }
+
+    if (g.lesson) lines.push(`  Lesson: ${g.lesson}`);
+
+    return lines.join('\n');
+  });
+
+  return [
+    '--- Past Decision Memory ---',
+    ...examples,
+    '--- End Decision Memory ---',
+  ].join('\n');
+}
+
 // ─── Commander LLM Message Builder ──────────────────────────
 
 export interface LLMMessage {

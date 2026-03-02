@@ -4,6 +4,7 @@ import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { normalizePair, normalizeTradeDir, PAIR_RE, toPositiveNumber } from '$lib/server/apiValidation';
 import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
+import { saveQuickTradeOpenRAG } from '$lib/server/ragService';
 
 interface QuickTradeRow {
   id: string;
@@ -98,6 +99,22 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
         },
       },
     });
+
+    // Decision Memory: QuickTrade Open → RAG (fire-and-forget)
+    // chainId: scan 기반이면 scan-{note}, 아니면 trade-{id}
+    const chainId = trade.source === 'terminal_scan' && trade.note
+      ? `scan-${trade.note}` : `trade-${trade.id}`;
+    saveQuickTradeOpenRAG(user.id, {
+      tradeId: trade.id,
+      pair: trade.pair,
+      dir: trade.dir,
+      entry: trade.entry,
+      currentPrice: trade.currentPrice,
+      tp: trade.tp,
+      sl: trade.sl,
+      source: trade.source,
+      note: trade.note,
+    }, chainId).catch(() => undefined);
 
     return json({ success: true, trade });
   } catch (error: any) {

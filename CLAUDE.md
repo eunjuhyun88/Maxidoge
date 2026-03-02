@@ -50,9 +50,9 @@ export PATH="$HOME/.local/bin:$HOME/.local/node-v22.14.0-darwin-arm64/bin:$PATH"
 src/
 ├── lib/
 │   ├── api/          # 클라이언트 API 래퍼 (CoinGecko, DefiLlama, CoinCap, FearGreed)
-│   ├── engine/       # 핵심 로직 (26 모듈 — 팩터, 에이전트, 배틀, 스코어링)
+│   ├── engine/       # 핵심 로직 (28 모듈 — 팩터, 에이전트, 배틀, 스코어링, RAG, Few-Shot)
 │   ├── server/       # 서버 전용 (52 모듈 — DB, 인증, LLM, 시장데이터, ORPO, RAG)
-│   │   ├── migrations/ # SQL 마이그레이션 (001_arena_war_records, 002_arena_war_rag)
+│   │   ├── migrations/ # SQL 마이그레이션 (001_arena_war_records, 002_arena_war_rag, 003_decision_memory)
 │   │   ├── orpo/       # ORPO 트레이닝 파이프라인 (4 모듈)
 │   │   └── providers/  # 데이터 소스 추상화 (cache, registry, types)
 │   ├── services/     # 클라이언트 서비스 (scanService, providers)
@@ -69,7 +69,7 @@ src/
 │   ├── arena-war/    # 아레나 워 7-phase (7)
 │   ├── terminal/     # 터미널 패널 (10 + 3 warroom)
 │   ├── modals/       # 모달 (5: CopyTrade, Oracle, Passport, Settings, Wallet)
-│   ├── shared/       # 공용 (6: ContextBanner, EmptyState, Toast, P0Banner, TokenDropdown, NotificationTray)
+│   ├── shared/       # 공용 (11: ContextBanner, EmptyState, Toast, P0Banner, TokenDropdown, NotificationTray, PokemonFrame, TypewriterBox, HPBar, PhaseTransition, PartyTray)
 │   ├── layout/       # 레이아웃 (2: Header, BottomBar)
 │   ├── home/         # 홈 (1: HomeBackground)
 │   ├── community/    # 커뮤니티 (1: OracleLeaderboard)
@@ -112,8 +112,8 @@ src/
 | **factorEngine** | 48-factor 스코어링 (8 에이전트 × 6 팩터) | 909 |
 | **agentPipeline** | 8-에이전트 예측 파이프라인 오케스트레이션 | 289 |
 | **c02Pipeline** | C02 4-layer + RAG-enhanced Commander (few-shot LLM, heuristic fallback) | ~520 |
-| **ragEmbedding** | 결정론적 256d 임베딩 생성 ($0, 외부 API 없음). Arena War 48팩터 + Terminal 8에이전트 지원 | ~280 |
-| **fewShotBuilder** | Few-shot 프롬프트 빌더 (유사 게임→예시 포맷, Commander LLM 메시지, 응답 파싱) | ~170 |
+| **ragEmbedding** | 결정론적 256d 임베딩 생성 ($0). Arena War 48팩터 + Terminal 8에이전트 + QuickTrade + SignalAction + DedupeHash 지원 | ~600 |
+| **fewShotBuilder** | Few-shot 프롬프트 빌더 (유사 게임→예시 포맷, 멀티소스 few-shot, AGENT_RETRIEVAL_WEIGHTS, Commander LLM 메시지) | ~320 |
 | **agents** | 8-에이전트 풀 정의 (STRUCTURE, VPA, ICT, DERIV, VALUATION, FLOW, SENTI, MACRO) | 232 |
 | **types** | 엔진 전체 타입 레지스트리 (100+ types) | 605 |
 | **v2BattleEngine** | 게임 메카닉 배틀 (틱 분류, 에너지, 콤보, 크리티컬) | 1,483 |
@@ -122,7 +122,7 @@ src/
 | **battleResolver** | 배틀 해결 (가격 히스토리 기반 TP/SL 판정) | 241 |
 | **exitOptimizer** | 최적 SL/TP 계산 (ATR, Fibonacci, Kelly 사이징) | 616 |
 | **scoring** | FBS 스코어 (0.5·DS + 0.3·RE + 0.2·CI) + LP 정책 | 339 |
-| **arenaWarTypes** | Arena War 타입 (GameRecord, OrpoPair, RAGEntry, ReasonTags) | 411 |
+| **arenaWarTypes** | Arena War 타입 (GameRecord, OrpoPair, RAGEntry, Decision Memory types: ChainMatureResult, QuickTradeRAGInput, SignalActionRAGInput) | ~460 |
 | **mockArenaData** | 48팩터/C02/캔들 목업 생성기 | 518 |
 | **gameRecordStore** | Arena War 서버 API 클라이언트 (저장/조회/RAG 검색/RAG 저장) | ~160 |
 | **specs** | 32 Spec 변형 (8 에이전트 × 4 specs, 팩터 가중치) | 573 |
@@ -155,8 +155,8 @@ llmService (Groq→Gemini→DeepSeek 폴백), llmConfig, agentPersonaService (�
 **ORPO 파이프라인 (`server/orpo/`, 4):**
 pairBuilder, contextContract, utilityScore, exportJsonl
 
-**RAG 메모리 (1):**
-ragService (save/search/analyze — pgvector 256d 코사인 거리, Arena War + Terminal 통합 RAG)
+**RAG Decision Memory (1):**
+ragService (save/search/analyze — pgvector 256d 코사인 거리, Decision Chain + Quality Maturation + Dedup. Sources: Arena War, Terminal Scan, QuickTrade Open/Close, Signal Action. Paper 1+2 준수)
 
 **DB & 인프라 (7):**
 db (`getPool`, `query`, `withTransaction`), session, rateLimit (단순), distributedRateLimit (분산), passportOutbox (이벤트 아웃박스), passportMlPipeline, secretCrypto
@@ -172,8 +172,8 @@ All routes: `src/routes/api/[group]/+server.ts`
 | **Auth & Session** | 7 | `/api/auth/{nonce,verify-wallet,wallet,login,register,session,logout}` |
 | **Market Data** | 14 | `/api/market/{snapshot,flow,derivatives/[pair],events,news,trending}`, `/api/market/dex/{search,pairs,tokens,token-pairs,orders,ads,community-takeovers,token-boosts,token-profiles}` |
 | **Terminal Scanner** | 8 | `/api/terminal/{scan,scan/[id],scan/[id]/signals,scan/history,compare}`, `/api/terminal/{intel-agent-shadow,intel-policy,opportunity-scan}` — scan POST에 RAG fire-and-forget 저장 통합 |
-| **Signals** | 5 | `/api/signals`, `/api/signals/[id]`, `/api/signals/[id]/convert`, `/api/signals/track`, `/api/signal-actions` |
-| **Quick Trades** | 4 | `/api/quick-trades`, `/api/quick-trades/{open,[id]/close,prices}` |
+| **Signals** | 5 | `/api/signals`, `/api/signals/[id]`, `/api/signals/[id]/convert`, `/api/signals/track`, `/api/signal-actions` — signal-actions POST에 RAG fire-and-forget 저장 통합 |
+| **Quick Trades** | 4 | `/api/quick-trades`, `/api/quick-trades/{open,[id]/close,prices}` — open/close에 Decision Memory RAG + Chain Maturation fire-and-forget 통합 |
 | **GMX V2** | 6 | `/api/gmx/{balance,markets,positions,prepare,close,confirm}` |
 | **Polymarket** | 8 | `/api/polymarket/{markets,orderbook}`, `/api/positions/polymarket/{auth,prepare,submit,[id]/close,status/[id]}` |
 | **Unified Positions** | 1 | `/api/positions/unified` |
@@ -387,15 +387,15 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **RAG 파이프라인**: AI_ANALYZE 시 256d 임베딩→유사게임 검색→Few-shot 주입→Commander LLM, RESULT 시 RAG 저장
 - 핵심 파일: `arenaWarStore`(~830줄), `arenaWarTypes`, `mockArenaData`, `gameRecordStore`, `ragEmbedding`, `fewShotBuilder`
 - 컴포넌트: `components/arena-war/` (7: Setup, Analyze, HumanCall, Reveal, Battle, Judge, Result)
-- **현재 상태**: ✅ Phase 1 완성 (UI + 상태머신 + mock + 서버 저장) | ✅ Phase 2 RAG + Few-Shot 완성
-- ⬚ DB 마이그레이션 미적용 (`001_arena_war_records.sql`, `002_arena_war_rag.sql`)
+- **현재 상태**: ✅ Phase 1 완성 (UI + 상태머신 + mock + 서버 저장) | ✅ Phase 2 RAG + Few-Shot 완성 | ✅ Phase 3 Decision Memory 완성
+- ⬚ DB 마이그레이션 미적용 (`001_arena_war_records.sql`, `002_arena_war_rag.sql`, `003_decision_memory.sql`)
 
 ### 4. Terminal (마켓 스캐너 — `/terminal`, 3,333줄)
 - 3패널 리사이즈: War Room(200-450px) | Chart | Intel(220-500px)
 - War Room: 채팅 기반 시장 분석 → 패턴 감지 → 에이전트 추론
 - QuickTrade: LONG/SHORT 포지션 + PnL 추적
 - Copy Trade: War Room 시그널 → 트레이드 변환
-- **RAG 통합**: 스캔 완료 시 8에이전트 시그널→256d 임베딩→`arena_war_rag` 테이블 저장 (source='terminal_scan', fire-and-forget)
+- **RAG Decision Memory**: 스캔 완료 시 8에이전트 시그널→256d 임베딩→`arena_war_rag` 테이블 저장 (source='terminal_scan', agent_signals JSONB, chain_id, semantic dedup, fire-and-forget)
 - Intel Agent Shadow: 백그라운드 분석 에이전트 (`/api/terminal/intel-agent-shadow`)
 - Intel Policy: 정책 기반 인텔 런타임 (`/api/terminal/intel-policy`)
 - Opportunity Scan: 멀티자산 기회 스캔 (`/api/terminal/opportunity-scan`)
@@ -447,7 +447,7 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 | Home (`/`) | 🔶 부분 적용 | ORPO GTM 구조, UIUX 리뷰 필요 |
 | Passport (`/passport`) | ⬚ 미착수 | 2,688줄 — 기능 풍부하나 테마 미적용 |
 | Settings (`/settings`) | ⬚ 미착수 | |
-| Arena v2 (`/arena-v2`) | ⬚ 미착수 | |
+| Arena v2 (`/arena-v2`) | 🔶 Sprint 1 완료 | Pokemon UI: BattleScreen arena view + 5 shared components |
 
 ---
 
@@ -476,6 +476,10 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **Terminal vs Arena War 벡터 호환**: 동일 256d 공간을 공유. Terminal 8에이전트 시그널은 Arena War 48팩터 중 6개 슬롯씩 매핑 (center-heavy gradient)
 - **Graceful degradation**: `arena_war_rag` 테이블 미존재 시 `isTableMissing()` → warning 반환, 크래시 없음. `search_arena_war_rag()` 함수 미존재 시 직접 쿼리 fallback
 - **Commander LLM 호출**: `callLLM`은 서버 전용 (`$lib/server/llmService`), c02Pipeline에서 동적 import. 실패 시 heuristic fallback (비용 $0)
+- **Decision Chain 패턴**: scan→trade_open→trade_close를 `chain_id`로 연결. trade_close 시 `matureDecisionChain()`이 체인 전체 pending→confirmed. chainId 추론: source='terminal_scan'이면 `scan-{note}`, 아니면 `trade-{id}`
+- **Semantic Dedup**: `computeDedupeHash()` → pair+tf+dir+regime+source+time_bucket 해시. 같은 시간창(기본 60분) 내 구조적 동일 → 중복 스킵
+- **search_arena_war_rag_v2**: `preferConfirmedOutcomes=true` 시 v2 함수 사용. quality_weight × cosine_sim × recency_decay × outcome_bonus(confirmed 2x) 가중 스코어링. v2 미존재 시 v1 fallback
+- **Agent Retrieval Weights (Paper 2)**: STRUCTURE=1.3, VPA=1.2, ICT=1.2 > SENTI=0.8, MACRO=0.7. `buildMultiSourceFewShotExamples()`와 `computeRAGRecallV2()`에서 사용
 
 ---
 
@@ -498,9 +502,10 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - [ ] AW-05: DB 마이그레이션 적용 (001_arena_war_records.sql)
 - [x] AW-06: RAG 저장 + 유사도 검색 구현 (ragEmbedding, ragService, /api/arena-war/rag, 002_arena_war_rag.sql)
 - [x] AW-07: AI confidence RAG 기반 조정 (fewShotBuilder, c02Pipeline RAG-enhanced Commander)
-- [ ] AW-08: Passport 기본 (승률 추이, 레짐별 성과)
-- [ ] AW-09: 잭팟 + 배지 + 일일 미션
-- [ ] AW-10: 실제 C02 파이프라인 연결 (mock → real)
+- [x] AW-08: Decision Memory Architecture (Paper 1+2 기반, Decision Chain + Quality Maturation + Dedup + Agent Signals)
+- [ ] AW-09: Passport 기본 (승률 추이, 레짐별 성과)
+- [ ] AW-10: 잭팟 + 배지 + 일일 미션
+- [ ] AW-11: 실제 C02 파이프라인 연결 (mock → real)
 
 ### UIUX Phase (Loox 테마 적용)
 - [x] UX-01: Terminal 다크 포레스트 전환 (PR #43)
@@ -511,6 +516,15 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - [ ] UX-06: Passport 테마 적용 (2,688줄 — 대규모)
 - [ ] UX-07: Settings 테마 적용
 - [ ] UX-08: Arena v2 테마 적용
+
+### Arena v2 Pokemon UI Phase
+- [x] PKM-00: Sprint 0 엔진 갭 수정 (SpecBonuses, ATR, Tier, Agent ID, RAG 연동)
+- [x] PKM-01: Sprint 1 공유 컴포넌트 + BattleScreen Pokemon UI (PokemonFrame, TypewriterBox, HPBar, PhaseTransition, PartyTray)
+- [ ] PKM-02: Sprint 2 DraftScreen Pokemon 파티 선택 UI
+- [ ] PKM-03: Sprint 3 HypothesisScreen 기술 선택 UI
+- [ ] PKM-04: Sprint 4 ResultScreen 승리/패배 연출
+- [ ] PKM-05: Sprint 5 AnalysisScreen 탐험 이펙트
+- [ ] PKM-06: Sprint 6 PhaseTransition + PhaseBar 통합
 
 ### Integration Phase
 - [ ] INT-01: Polymarket 실 연동 테스트

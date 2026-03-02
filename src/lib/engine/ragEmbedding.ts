@@ -386,6 +386,183 @@ export function computeTerminalScanEmbedding(
   return emb;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// QuickTrade Embedding — 트레이드 결정을 256d 벡터로 (벡터 공간 호환)
+// ═══════════════════════════════════════════════════════════════
+
+export function computeQuickTradeEmbedding(params: {
+  pair: string;
+  direction: 'LONG' | 'SHORT';
+  entryPrice: number;
+  currentPrice: number;
+  tp: number | null;
+  sl: number | null;
+  source: string;
+  confidence?: number;
+  timeframe?: string;
+}): number[] {
+  const emb = new Array(256).fill(0);
+  const { direction, entryPrice, currentPrice, tp, sl, confidence = 50, timeframe = '4h' } = params;
+  const dirSign = direction === 'LONG' ? 1 : -1;
+  const confNorm = clamp(confidence, 0, 100) / 100;
+
+  // Dims [0-47]: Direction signal across agent slots
+  // OFFENSE agents (0-17): strong signal in direction
+  for (let i = 0; i < 18; i++) {
+    const gradient = 1.0 - (i / 18) * 0.4; // center-heavy: 1.0→0.6
+    emb[i] = dirSign * confNorm * gradient * 0.6;
+  }
+  // DEFENSE agents (18-35): mild directional signal
+  for (let i = 18; i < 36; i++) {
+    emb[i] = dirSign * confNorm * 0.2;
+  }
+  // CONTEXT agents (36-47): entry/current price momentum
+  const momentum = entryPrice > 0
+    ? clamp((currentPrice - entryPrice) / entryPrice, -0.1, 0.1) * 10
+    : 0;
+  for (let i = 36; i < 48; i++) {
+    emb[i] = momentum * 0.3;
+  }
+
+  // Dims [48-95]: Magnitude
+  for (let i = 0; i < 48; i++) {
+    emb[48 + i] = Math.abs(emb[i]);
+  }
+
+  // Dims [96-143]: Role-weighted (OFFENSE×1.2, DEFENSE×1.0, CONTEXT×0.8)
+  for (let i = 0; i < 18; i++) emb[96 + i] = clamp(emb[i] * 1.2, -1.2, 1.2);
+  for (let i = 18; i < 36; i++) emb[96 + i] = emb[i];
+  for (let i = 36; i < 48; i++) emb[96 + i] = clamp(emb[i] * 0.8, -1, 1);
+
+  // Dims [144-147]: Regime one-hot (infer from momentum)
+  if (momentum > 0.3) emb[144] = 1;       // trending_up
+  else if (momentum < -0.3) emb[145] = 1;  // trending_down
+  else emb[146] = 1;                        // ranging
+
+  // Dims [148-152]: Timeframe one-hot
+  const tfIdx = TF_MAP[timeframe];
+  if (tfIdx) {
+    for (let i = 0; i < tfIdx.length && i < 5; i++) {
+      emb[148 + i] = tfIdx[i];
+    }
+  } else {
+    emb[152] = 1; // other
+  }
+
+  // Dims [153-162]: TP/SL risk-reward ratio signal
+  if (tp && sl && entryPrice > 0) {
+    const tpDist = Math.abs(tp - entryPrice) / entryPrice;
+    const slDist = Math.abs(sl - entryPrice) / entryPrice;
+    const rrRatio = slDist > 0 ? clamp(tpDist / slDist, 0, 5) / 5 : 0.5;
+    emb[153] = rrRatio;
+    emb[154] = clamp(tpDist * 10, 0, 1);
+    emb[155] = clamp(slDist * 10, 0, 1);
+  }
+  emb[156] = confNorm;
+
+  // Dims [163-170]: Pattern flags
+  if (confidence >= 75) emb[163] = 1;  // TREND_CONTINUATION hint
+  if (tp && entryPrice > 0) {
+    const tpDir = direction === 'LONG' ? tp > entryPrice : tp < entryPrice;
+    if (tpDir) emb[165] = 1; // BREAKOUT hint
+  }
+
+  // Dims [171-254]: sparse (no factor interaction data for trades)
+  // Dim [255]: Data completeness = 0.3 (sparse compared to full 48-factor)
+  emb[255] = 0.3;
+
+  return emb;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Signal Action Embedding — 시그널 행동을 256d 벡터로
+// ═══════════════════════════════════════════════════════════════
+
+const ACTION_INTENSITY: Record<string, number> = {
+  convert_to_trade: 1.0,
+  copy_trade: 0.8,
+  quick_long: 0.9,
+  quick_short: 0.9,
+  track: 0.5,
+  untrack: 0.2,
+};
+
+export function computeSignalActionEmbedding(params: {
+  pair: string;
+  direction: string;
+  actionType: string;
+  confidence: number | null;
+  source: string;
+  timeframe?: string;
+}): number[] {
+  const emb = new Array(256).fill(0);
+  const { direction, actionType, confidence, timeframe = '4h' } = params;
+  const dirSign = direction === 'LONG' ? 1 : direction === 'SHORT' ? -1 : 0;
+  const confNorm = clamp(confidence ?? 50, 0, 100) / 100;
+  const intensity = ACTION_INTENSITY[actionType] ?? 0.5;
+
+  // Dims [0-47]: Weak directional signal modulated by action intensity
+  for (let i = 0; i < 18; i++) {
+    emb[i] = dirSign * confNorm * intensity * 0.4;
+  }
+  for (let i = 18; i < 36; i++) {
+    emb[i] = dirSign * confNorm * intensity * 0.15;
+  }
+
+  // Dims [48-95]: Magnitude
+  for (let i = 0; i < 48; i++) {
+    emb[48 + i] = Math.abs(emb[i]);
+  }
+
+  // Dims [96-143]: Role-weighted
+  for (let i = 0; i < 18; i++) emb[96 + i] = clamp(emb[i] * 1.2, -1.2, 1.2);
+  for (let i = 18; i < 36; i++) emb[96 + i] = emb[i];
+  for (let i = 36; i < 48; i++) emb[96 + i] = clamp(emb[i] * 0.8, -1, 1);
+
+  // Dims [144-147]: Regime defaults to ranging for signal actions
+  emb[146] = 1;
+
+  // Dims [148-152]: Timeframe
+  const tfIdx = TF_MAP[timeframe];
+  if (tfIdx) {
+    for (let i = 0; i < tfIdx.length && i < 5; i++) {
+      emb[148 + i] = tfIdx[i];
+    }
+  }
+
+  // Dim [156]: Confidence
+  emb[156] = confNorm * intensity;
+
+  // Dim [255]: Data completeness = 0.2 (very sparse)
+  emb[255] = 0.2;
+
+  return emb;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Semantic Dedup Hash — Paper 1: 같은 시간창 내 동일 구조 중복 방지
+// ═══════════════════════════════════════════════════════════════
+
+export function computeDedupeHash(params: {
+  pair: string;
+  timeframe: string;
+  direction: string;
+  regime: string;
+  source: string;
+  windowMinutes?: number;
+}): string {
+  const { pair, timeframe, direction, regime, source, windowMinutes = 60 } = params;
+  const timeBucket = Math.floor(Date.now() / (windowMinutes * 60 * 1000));
+  const parts = [pair, timeframe, direction, regime, source, String(timeBucket)];
+  // Simple hash: join + basic numeric hash
+  const str = parts.join('|');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return `dh_${Math.abs(hash).toString(36)}`;
+}
+
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }

@@ -30,6 +30,11 @@
   import BattleCardView from './BattleCardView.svelte';
   import type { Direction, AgentId, AgentRole } from '$lib/engine/types';
 
+  // Pokemon shared components
+  import HPBar from '../shared/HPBar.svelte';
+  import TypewriterBox from '../shared/TypewriterBox.svelte';
+  import PartyTray from '../shared/PartyTray.svelte';
+
   // ── Props ──
   export let battleState: V2BattleState | null = null;
   export let currentView: V2ArenaView = 'arena';
@@ -104,6 +109,52 @@
   // Latest tick info
   $: latestTick = bs?.tickResults[bs.tickResults.length - 1] ?? null;
   $: tickClass = latestTick?.classifiedTick.tickClass ?? 'NEUTRAL';
+
+  // ── Pokemon-style derived state ──
+  // Active agent = first non-exhausted agent (for player sprite)
+  $: activeAgent = agentStates.find(a => !a.isExhausted) ?? agentStates[0] ?? null;
+  $: activeAgentIdx = activeAgent ? agentStates.indexOf(activeAgent) : 0;
+
+  // Market HP = inverse of VS (100 - vs → market's "health")
+  $: marketHP = 100 - vs;
+
+  // Party tray data
+  $: partyAgents = agentStates.map(a => {
+    const def = getAgentDef(a.agentId);
+    return {
+      agentId: a.agentId,
+      name: getAgentName(a.agentId),
+      icon: getAgentIcon(a.agentId),
+      imgSrc: getAgentImg(a.agentId, a.animState),
+      energy: a.energy,
+      maxEnergy: a.maxEnergy,
+      isActive: a === activeAgent,
+      isExhausted: a.isExhausted,
+    };
+  });
+
+  // Pokemon-style battle messages from log
+  $: pokemonMessages = formatPokemonMessages(latestTick);
+
+  function formatPokemonMessages(tick: TickResult | null): string[] {
+    if (!tick) return ['Waiting for battle to begin...'];
+    const msgs: string[] = [];
+    for (const action of tick.agentActions) {
+      const name = getAgentName(action.agentId);
+      const actionName = action.action.replace(/_/g, ' ');
+      msgs.push(`${name} used ${actionName}!`);
+      if (action.isCritical) msgs.push("A critical hit!");
+      if (action.finalEffect > 8) msgs.push("It's super effective!");
+    }
+    // Market action
+    if (tick.classifiedTick.tickClass === 'STRONG_UNFAVORABLE') {
+      msgs.push("MARKET used SELL PRESSURE!");
+      msgs.push("It's super effective!");
+    } else if (tick.classifiedTick.tickClass === 'UNFAVORABLE') {
+      msgs.push("MARKET used PRICE ACTION!");
+    }
+    return msgs.length > 0 ? msgs.slice(-3) : ['...'];
+  }
 
   // ── Agent lookup helpers ──
   function getAgentDef(agentId: string) {
@@ -466,7 +517,7 @@
   {:else if currentView === 'card'}
     <BattleCardView {battleState} />
   {:else}
-    <!-- ── Arena View (default) ── -->
+    <!-- ══ Pokemon Arena View (default) ══ -->
 
     <!-- VS Meter Bar -->
     <div class="vs-bar">
@@ -483,177 +534,137 @@
       <span class="vs-label-right" class:winning={vs < 45}>MKT</span>
     </div>
 
-    <!-- Main Area (2 columns) -->
-    <div class="main-area">
-    <!-- Left: Price + TP/SL + Sparkline -->
-    <div class="info-panel">
-      <!-- Price info -->
-      <div class="price-block">
-        <div class="price-current">
-          <span class="price-dir">{direction === 'LONG' ? '▲' : '▼'}</span>
-          <span class="price-val">${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
-        </div>
-        <div class="price-entry">
-          Entry: ${entryPrice.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-        </div>
-        <div class="price-pnl" class:positive={pnl >= 0} class:negative={pnl < 0}>
-          {pnl >= 0 ? '+' : ''}{pnl.toFixed(3)}%
-        </div>
-      </div>
+    <!-- Pokemon Battle Arena -->
+    <div class="poke-arena">
+      <!-- ── Battle Field ── -->
+      <div class="poke-field">
 
-      <!-- TP/SL Progress -->
-      <div class="tp-sl-block">
-        <div class="tp-row">
-          <span class="tp-label">TP</span>
-          <div class="tp-track">
-            <div class="tp-fill" style:width="{tpProgress * 100}%" />
-          </div>
-          <span class="tp-val">{tpDistPct.toFixed(2)}%</span>
-        </div>
-        <div class="sl-row">
-          <span class="sl-label">SL</span>
-          <div class="sl-track">
-            <div class="sl-fill" style:width="{slProgress * 100}%" />
-          </div>
-          <span class="sl-val">{slDistPct.toFixed(2)}%</span>
-        </div>
-      </div>
-
-      <!-- VS Sparkline -->
-      <div class="sparkline-block">
-        <span class="sparkline-label">VS TREND</span>
-        <svg class="sparkline-svg" viewBox="0 0 120 28" preserveAspectRatio="none">
-          <line x1="0" y1="14" x2="120" y2="14" stroke="rgba(240,237,228,0.1)" stroke-width="0.5" />
-          <path d={vsSparkline(vsHistory)} fill="none" stroke={vs >= 50 ? '#00ff88' : '#ff2d55'} stroke-width="1.5" />
-        </svg>
-      </div>
-
-      <!-- Player Actions (per-agent buttons in agent cards below) -->
-      <div class="player-actions-summary">
-        <span class="pa-stat">🎯 FOCUS: {focusLeft}</span>
-        <span class="pa-stat">🚨 RECALL: {recallLeft}</span>
-      </div>
-    </div>
-
-    <!-- Right: Battle Zone -->
-    <div class="battle-zone">
-      <!-- Market (Top) -->
-      <div class="market-side">
-        <div class="market-entity" class:market-attacking={tickClass === 'UNFAVORABLE' || tickClass === 'STRONG_UNFAVORABLE'}>
-          <span class="market-icon">📉</span>
-          <span class="market-label">MARKET</span>
-        </div>
-        {#if tickClass === 'UNFAVORABLE' || tickClass === 'STRONG_UNFAVORABLE'}
-          <div class="market-attack-line" />
-        {/if}
-      </div>
-
-      <!-- Center: Combat effects + tick class indicator -->
-      <div class="combat-center">
-        <div class="tick-class-badge"
-          class:fav={tickClass === 'FAVORABLE' || tickClass === 'STRONG_FAVORABLE'}
-          class:unfav={tickClass === 'UNFAVORABLE' || tickClass === 'STRONG_UNFAVORABLE'}
-          class:neutral={tickClass === 'NEUTRAL'}
+        <!-- Enemy: MARKET (top-right) -->
+        <div class="poke-enemy"
+          class:enemy-attacking={tickClass === 'UNFAVORABLE' || tickClass === 'STRONG_UNFAVORABLE'}
         >
-          {#if tickClass === 'STRONG_FAVORABLE'}⚡ STRONG{:else if tickClass === 'FAVORABLE'}▲ FAV{:else if tickClass === 'NEUTRAL'}— HOLD{:else if tickClass === 'UNFAVORABLE'}▼ UNFAV{:else}⚡ DANGER{/if}
-        </div>
-      </div>
-
-      <!-- Agents (Bottom) -->
-      <div class="agent-row">
-        {#each agentStates as agent (agent.agentId)}
-          {@const def = getAgentDef(agent.agentId)}
-          {@const isFocused = activeFocusAgent === agent.agentId}
-          <div
-            class="agent-card"
-            class:agent-attacking={agent.animState === 'CAST' || agent.animState === 'WINDUP'}
-            class:agent-shielding={agent.currentAction === 'SHIELD'}
-            class:agent-exhausted={agent.isExhausted}
-            class:agent-focused={isFocused}
-          >
-            <!-- Action icon -->
-            <div class="agent-action-badge">
-              {getActionIcon(agent.currentAction)}
-              <span class="action-label">{agent.currentAction}</span>
+          <div class="poke-enemy-info">
+            <span class="poke-name enemy-name">MARKET</span>
+            <div class="poke-enemy-hp">
+              <HPBar value={marketHP} max={100} label="HP" showValue={true} size="md" />
             </div>
+            <!-- Price badge -->
+            <div class="price-badge" class:positive={pnl >= 0} class:negative={pnl < 0}>
+              ${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              <span class="price-pnl-mini">{pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}%</span>
+            </div>
+          </div>
+          <div class="poke-enemy-sprite">
+            <img src="/doge/trade-bear.png" alt="MARKET" class="enemy-img" />
+            <!-- Hit flash on favorable tick -->
+            {#if tickClass === 'FAVORABLE' || tickClass === 'STRONG_FAVORABLE'}
+              <div class="hit-flash" />
+            {/if}
+          </div>
+        </div>
 
-            <!-- Speech bubble -->
-            {#each (bs?.tickResults.slice(-1) ?? []) as tr}
-              {#each tr.agentActions.filter(a => a.agentId === agent.agentId && a.speechBubble) as act}
-                <div class="speech-bubble">
-                  {act.speechBubble}
-                </div>
-              {/each}
-            {/each}
+        <!-- Center: Tick class + effects -->
+        <div class="poke-center">
+          <div class="tick-class-badge"
+            class:fav={tickClass === 'FAVORABLE' || tickClass === 'STRONG_FAVORABLE'}
+            class:unfav={tickClass === 'UNFAVORABLE' || tickClass === 'STRONG_UNFAVORABLE'}
+            class:neutral={tickClass === 'NEUTRAL'}
+          >
+            {#if tickClass === 'STRONG_FAVORABLE'}⚡ SUPER EFFECTIVE{:else if tickClass === 'FAVORABLE'}▲ EFFECTIVE{:else if tickClass === 'NEUTRAL'}— STANDBY{:else if tickClass === 'UNFAVORABLE'}▼ RESISTED{:else}⚡ DEVASTATING{/if}
+          </div>
 
-            <!-- Damage numbers -->
-            {#each damageNumbers.filter(d => d.agentId === agent.agentId) as dmg (dmg.id)}
-              <div class="damage-number" class:dmg-green={dmg.color === 'green'} class:dmg-red={dmg.color === 'red'} class:dmg-gold={dmg.color === 'gold'}>
-                {dmg.color === 'red' ? '-' : '+'}{dmg.value.toFixed(1)}
-              </div>
-            {/each}
+          <!-- Floating damage numbers (centered) -->
+          {#each damageNumbers as dmg (dmg.id)}
+            <div class="damage-number" class:dmg-green={dmg.color === 'green'} class:dmg-red={dmg.color === 'red'} class:dmg-gold={dmg.color === 'gold'}>
+              {dmg.color === 'red' ? '-' : '+'}{dmg.value.toFixed(1)}
+            </div>
+          {/each}
+        </div>
 
-            <!-- Character image -->
-            <div class="agent-sprite" style:border-color={getRoleColor(agent.role)}>
+        <!-- Player: Active Agent (bottom-left) -->
+        {#if activeAgent}
+          <div class="poke-player"
+            class:player-attacking={activeAgent.animState === 'CAST' || activeAgent.animState === 'WINDUP'}
+            class:player-shielding={activeAgent.currentAction === 'SHIELD'}
+          >
+            <div class="poke-player-sprite">
               <img
-                src={getAgentImg(agent.agentId, agent.animState)}
-                alt={agent.agentId}
-                class="agent-img"
-                class:img-attacking={agent.animState === 'CAST'}
-                class:img-windup={agent.animState === 'WINDUP'}
-                class:img-shielding={agent.currentAction === 'SHIELD'}
-                class:img-recover={agent.animState === 'RECOVER'}
-                class:img-exhausted={agent.isExhausted}
+                src={getAgentImg(activeAgent.agentId, activeAgent.animState)}
+                alt={activeAgent.agentId}
+                class="player-img"
+                class:img-attacking={activeAgent.animState === 'CAST'}
+                class:img-windup={activeAgent.animState === 'WINDUP'}
               />
-              {#if agent.currentAction === 'SHIELD'}
+              {#if activeAgent.currentAction === 'SHIELD'}
                 <div class="shield-overlay" />
               {/if}
-              {#if agent.findingValidated === true}
+              <!-- Action badge over sprite -->
+              <div class="player-action-icon">
+                {getActionIcon(activeAgent.currentAction)}
+              </div>
+              <!-- Validation badge -->
+              {#if activeAgent.findingValidated === true}
                 <div class="validated-badge">✓</div>
-              {:else if agent.findingValidated === false}
+              {:else if activeAgent.findingValidated === false}
                 <div class="challenged-badge">✗</div>
               {/if}
             </div>
-
-            <!-- Name + role -->
-            <div class="agent-name">{agent.agentId}</div>
-
-            <!-- Energy bar -->
-            <div class="energy-bar">
-              <div class="energy-fill"
-                style:width="{(agent.energy / agent.maxEnergy) * 100}%"
-                class:energy-low={agent.energy < 25}
-                class:energy-crit={agent.energy < 10}
-              />
-            </div>
-            <div class="energy-val">{Math.round(agent.energy)}</div>
-
-            <!-- Focus/Recall target buttons -->
-            {#if status === 'running'}
-              <div class="agent-target-btns">
-                {#if focusLeft > 0 && !focusCooldown}
-                  <button class="micro-btn" on:click={() => handleTacticalFocus(agent.agentId)} title="Focus">🎯</button>
-                {/if}
-                {#if recallLeft > 0 && agent.energy < 40}
-                  <button class="micro-btn recall" on:click={() => handleEmergencyRecall(agent.agentId)} title="Recall">🚨</button>
-                {/if}
+            <div class="poke-player-info">
+              <span class="poke-name player-name">{getAgentIcon(activeAgent.agentId)} {getAgentName(activeAgent.agentId)}</span>
+              <div class="poke-player-hp">
+                <HPBar value={activeAgent.energy} max={activeAgent.maxEnergy} label="EN" showValue={true} size="md" />
               </div>
+              <!-- TP/SL mini bars -->
+              <div class="tp-sl-mini">
+                <div class="tp-sl-row">
+                  <span class="tp-sl-lbl tp">TP</span>
+                  <div class="tp-sl-track"><div class="tp-sl-fill tp" style:width="{tpProgress * 100}%" /></div>
+                </div>
+                <div class="tp-sl-row">
+                  <span class="tp-sl-lbl sl">SL</span>
+                  <div class="tp-sl-track"><div class="tp-sl-fill sl" style:width="{slProgress * 100}%" /></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Player action buttons (bottom-center) -->
+        {#if status === 'running'}
+          <div class="poke-actions">
+            {#if focusLeft > 0 && !focusCooldown && activeAgent}
+              <button class="poke-btn focus" on:click={() => handleTacticalFocus(activeAgent.agentId)}>
+                🎯 FOCUS ({focusLeft})
+              </button>
+            {/if}
+            {#if recallLeft > 0 && activeAgent && activeAgent.energy < 40}
+              <button class="poke-btn recall" on:click={() => handleEmergencyRecall(activeAgent.agentId)}>
+                🚨 RECALL ({recallLeft})
+              </button>
             {/if}
           </div>
-        {/each}
+        {/if}
+      </div>
+
+      <!-- ── Party Tray (right side) ── -->
+      <div class="poke-party">
+        <PartyTray
+          agents={partyAgents}
+          activeIndex={activeAgentIdx}
+          orientation="vertical"
+        />
+        <!-- VS Sparkline mini -->
+        <div class="sparkline-mini">
+          <svg class="sparkline-svg" viewBox="0 0 60 20" preserveAspectRatio="none">
+            <line x1="0" y1="10" x2="60" y2="10" stroke="rgba(240,237,228,0.08)" stroke-width="0.5" />
+            <path d={vsSparkline(vsHistory)} fill="none" stroke={vs >= 50 ? '#48d868' : '#f85858'} stroke-width="1.5" />
+          </svg>
+        </div>
       </div>
     </div>
-  </div>
 
-    <!-- Battle Log -->
-    <div class="battle-log">
-      {#each log as entry (entry.timestamp + entry.message)}
-        <div class="log-entry" style:color={entry.color ?? '#F0EDE4'}>
-          {#if entry.icon}<span class="log-icon">{entry.icon}</span>{/if}
-          <span class="log-msg">{entry.message}</span>
-        </div>
-      {/each}
-    </div>
+    <!-- ── Typewriter Box (bottom) ── -->
+    <TypewriterBox messages={pokemonMessages} speed={25} />
   {/if}
   <!-- ═══ END VIEW CONTENT ═══ -->
 
@@ -863,500 +874,375 @@
     50% { opacity: 0.6; }
   }
 
-  /* ── Main Area ── */
-  .main-area {
+  /* ══ Pokemon Arena Layout ══ */
+  .poke-arena {
     flex: 1;
     display: flex;
     overflow: hidden;
     min-height: 0;
   }
 
-  /* ── Info Panel (Left) ── */
-  .info-panel {
-    width: 240px;
+  /* ── Battle Field ── */
+  .poke-field {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    position: relative;
     padding: 12px 16px;
-    border-right: 1px solid rgba(240,237,228,0.06);
-    flex-shrink: 0;
-    overflow-y: auto;
+    /* Grass-pattern background */
+    background:
+      radial-gradient(ellipse 120% 30% at 50% 95%, rgba(72,216,104,0.06) 0%, transparent 70%),
+      linear-gradient(180deg, #0a0a14 0%, #0e1218 100%);
+    min-width: 0;
   }
 
-  .price-block {
+  /* ── Enemy (MARKET) — top-right ── */
+  .poke-enemy {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 4px 0;
+    transition: all 300ms;
+  }
+  .poke-enemy.enemy-attacking {
+    animation: enemyAttack 400ms ease;
+  }
+  .poke-enemy-info {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    align-items: flex-end;
+    min-width: 160px;
   }
-  .price-current {
+  .poke-enemy-sprite {
+    width: 80px;
+    height: 80px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .enemy-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 12px rgba(248,88,88,0.3));
+    image-rendering: auto;
+    transition: all 200ms;
+  }
+  .poke-enemy.enemy-attacking .enemy-img {
+    filter: drop-shadow(0 4px 20px rgba(248,88,88,0.6)) brightness(1.2);
+  }
+
+  .poke-name {
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .enemy-name { color: #f85858; }
+  .player-name { color: #48d868; }
+
+  .poke-enemy-hp, .poke-player-hp {
+    width: 100%;
+  }
+
+  .price-badge {
+    font-size: 10px;
+    font-weight: 800;
+    color: #e0e0e0;
+    font-variant-numeric: tabular-nums;
+    font-family: 'JetBrains Mono', monospace;
     display: flex;
     align-items: baseline;
     gap: 6px;
   }
-  .price-dir {
-    font-size: 14px;
-    color: #00ff88;
-  }
-  .price-val {
-    font-size: 20px;
-    font-weight: 900;
-    color: #F0EDE4;
-    font-variant-numeric: tabular-nums;
-  }
-  .price-entry {
+  .price-pnl-mini {
     font-size: 9px;
-    color: rgba(240,237,228,0.3);
-  }
-  .price-pnl {
-    font-size: 16px;
     font-weight: 900;
-    font-variant-numeric: tabular-nums;
   }
-  .price-pnl.positive { color: #00ff88; }
-  .price-pnl.negative { color: #ff2d55; }
+  .price-badge.positive .price-pnl-mini { color: #48d868; }
+  .price-badge.negative .price-pnl-mini { color: #f85858; }
 
-  /* TP/SL bars */
-  .tp-sl-block {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .tp-row, .sl-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .tp-label, .sl-label {
-    font-size: 8px;
-    font-weight: 900;
-    letter-spacing: 1px;
-    width: 18px;
-  }
-  .tp-label { color: #00ff88; }
-  .sl-label { color: #ff2d55; }
-  .tp-track, .sl-track {
-    flex: 1;
-    height: 6px;
-    background: rgba(240,237,228,0.06);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  .tp-fill {
-    height: 100%;
-    background: #00ff88;
-    border-radius: 3px;
-    transition: width 400ms;
-  }
-  .sl-fill {
-    height: 100%;
-    background: #ff2d55;
-    border-radius: 3px;
-    transition: width 400ms;
-  }
-  .tp-val, .sl-val {
-    font-size: 9px;
-    font-weight: 700;
-    color: rgba(240,237,228,0.4);
-    width: 42px;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Sparkline */
-  .sparkline-block {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 8px;
-    background: rgba(240,237,228,0.02);
-    border-radius: 6px;
-    border: 1px solid rgba(240,237,228,0.04);
-  }
-  .sparkline-label {
-    font-size: 7px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: rgba(240,237,228,0.3);
-  }
-  .sparkline-svg {
-    width: 100%;
-    height: 28px;
-  }
-
-  /* Player Actions Summary */
-  .player-actions-summary {
-    display: flex;
-    gap: 12px;
-    margin-top: auto;
-    padding: 6px 0;
-  }
-  .pa-stat {
-    font-size: 8px;
-    font-weight: 700;
-    color: rgba(240,237,228,0.35);
-    letter-spacing: 1px;
-  }
-
-  /* ── Battle Zone (Right) ── */
-  .battle-zone {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 12px;
-    gap: 8px;
-    min-width: 0;
-  }
-
-  /* Market side */
-  .market-side {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-    padding: 8px;
-    position: relative;
-  }
-  .market-entity {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 16px;
-    border: 1px solid rgba(255,45,85,0.15);
-    border-radius: 8px;
-    background: rgba(255,45,85,0.04);
-    transition: all 300ms;
-  }
-  .market-entity.market-attacking {
-    border-color: rgba(255,45,85,0.5);
-    background: rgba(255,45,85,0.12);
-    box-shadow: 0 0 20px rgba(255,45,85,0.2);
-    animation: marketPulse 300ms ease;
-  }
-  .market-icon { font-size: 20px; }
-  .market-label {
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 3px;
-    color: #ff2d55;
-  }
-  .market-attack-line {
+  /* Hit flash overlay */
+  .hit-flash {
     position: absolute;
-    bottom: -4px;
-    left: 50%;
-    width: 2px;
-    height: 20px;
-    background: linear-gradient(180deg, #ff2d55, transparent);
-    transform: translateX(-50%);
-    animation: attackSlash 300ms ease;
+    inset: 0;
+    background: white;
+    border-radius: 50%;
+    animation: hitFlash 400ms ease forwards;
+    pointer-events: none;
   }
 
-  @keyframes marketPulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-  }
-  @keyframes attackSlash {
-    from { height: 0; opacity: 0; }
-    to { height: 20px; opacity: 1; }
-  }
-
-  /* Combat center */
-  .combat-center {
+  /* ── Center — tick class ── */
+  .poke-center {
+    flex: 1;
     display: flex;
-    justify-content: center;
     align-items: center;
-    padding: 4px;
+    justify-content: center;
+    position: relative;
   }
   .tick-class-badge {
     font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
-    padding: 3px 12px;
+    padding: 4px 16px;
     border-radius: 4px;
-    border: 1px solid rgba(240,237,228,0.1);
+    border: 2px solid rgba(240,237,228,0.1);
+    background: rgba(10,10,20,0.8);
     transition: all 300ms;
+    font-family: 'JetBrains Mono', monospace;
   }
   .tick-class-badge.fav {
-    color: #00ff88;
-    border-color: rgba(0,255,136,0.3);
-    background: rgba(0,255,136,0.06);
+    color: #48d868;
+    border-color: rgba(72,216,104,0.4);
+    background: rgba(72,216,104,0.08);
+    text-shadow: 0 0 8px rgba(72,216,104,0.4);
   }
   .tick-class-badge.unfav {
-    color: #ff2d55;
-    border-color: rgba(255,45,85,0.3);
-    background: rgba(255,45,85,0.06);
+    color: #f85858;
+    border-color: rgba(248,88,88,0.4);
+    background: rgba(248,88,88,0.08);
+    text-shadow: 0 0 8px rgba(248,88,88,0.4);
   }
   .tick-class-badge.neutral {
-    color: rgba(240,237,228,0.4);
+    color: rgba(240,237,228,0.35);
     border-color: rgba(240,237,228,0.08);
   }
 
-  /* Agent row */
-  .agent-row {
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-    flex: 1;
-    align-items: flex-end;
-    padding-bottom: 8px;
-  }
-
-  .agent-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    position: relative;
-    padding: 8px;
-    border-radius: 10px;
-    border: 1px solid rgba(240,237,228,0.06);
-    background: rgba(240,237,228,0.02);
-    transition: all 300ms;
-    width: 120px;
-  }
-  .agent-card.agent-attacking {
-    border-color: rgba(0,255,136,0.3);
-    background: rgba(0,255,136,0.04);
-    box-shadow: 0 0 12px rgba(0,255,136,0.1);
-  }
-  .agent-card.agent-shielding {
-    border-color: rgba(68,136,255,0.4);
-    background: rgba(68,136,255,0.06);
-    box-shadow: 0 0 12px rgba(68,136,255,0.15);
-  }
-  .agent-card.agent-exhausted {
-    border-color: rgba(255,45,85,0.2);
-    opacity: 0.5;
-  }
-  .agent-card.agent-focused {
-    border-color: rgba(255,215,0,0.5);
-    box-shadow: 0 0 16px rgba(255,215,0,0.15);
-  }
-
-  .agent-action-badge {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 10px;
-  }
-  .action-label {
-    font-size: 7px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    color: rgba(240,237,228,0.5);
-  }
-
-  .speech-bubble {
-    position: absolute;
-    top: -24px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(10,9,8,0.9);
-    border: 1px solid rgba(240,237,228,0.15);
-    border-radius: 6px;
-    padding: 3px 8px;
-    font-size: 7px;
-    color: rgba(240,237,228,0.7);
-    white-space: nowrap;
-    max-width: 160px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    animation: speechPop 300ms ease;
-    z-index: 10;
-    pointer-events: none;
-  }
-  @keyframes speechPop {
-    from { opacity: 0; transform: translateX(-50%) translateY(4px) scale(0.9); }
-    to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-  }
-
+  /* Floating damage numbers */
   .damage-number {
     position: absolute;
-    top: 10px;
+    top: 30%;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 14px;
+    font-size: 18px;
     font-weight: 900;
     pointer-events: none;
     animation: dmgFloat 1.2s ease-out forwards;
     z-index: 20;
-    text-shadow: 0 0 8px currentColor;
+    text-shadow: 0 0 12px currentColor;
+    font-family: 'JetBrains Mono', monospace;
   }
-  .dmg-green { color: #00ff88; }
-  .dmg-red { color: #ff2d55; }
-  .dmg-gold { color: #FFD700; }
+  .dmg-green { color: #48d868; }
+  .dmg-red { color: #f85858; }
+  .dmg-gold { color: #f8d030; }
   @keyframes dmgFloat {
-    0% { opacity: 1; transform: translateX(-50%) translateY(0); }
+    0% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.2); }
     80% { opacity: 0.8; }
-    100% { opacity: 0; transform: translateX(-50%) translateY(-40px); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-50px) scale(0.8); }
   }
 
-  .agent-sprite {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    border: 2px solid rgba(240,237,228,0.15);
-    overflow: hidden;
-    position: relative;
-    background: rgba(240,237,228,0.03);
-    transition: all 200ms;
+  /* ── Player — Active Agent — bottom-left ── */
+  .poke-player {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    padding: 4px 0;
+    transition: all 300ms;
   }
-  .agent-img {
+  .poke-player.player-attacking {
+    animation: playerAttack 400ms ease;
+  }
+  .poke-player.player-shielding .player-img {
+    filter: drop-shadow(0 0 16px rgba(68,136,255,0.5)) brightness(0.9) hue-rotate(200deg);
+  }
+  .poke-player-sprite {
+    width: 96px;
+    height: 96px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .player-img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 12px rgba(72,216,104,0.2));
+    image-rendering: auto;
     transition: all 200ms;
   }
   .img-attacking {
-    transform: scale(1.1);
-    filter: brightness(1.3);
+    filter: drop-shadow(0 4px 20px rgba(72,216,104,0.5)) brightness(1.3) !important;
+    transform: scale(1.05);
   }
   .img-windup {
     animation: windupPulse 400ms ease infinite;
   }
-  .img-shielding {
-    filter: brightness(0.8) saturate(1.5) hue-rotate(200deg);
-  }
-  .img-recover {
-    filter: brightness(0.7) saturate(0.5);
-    animation: recoverGlow 800ms ease infinite;
-  }
-  .img-exhausted {
-    filter: grayscale(0.8) brightness(0.5);
-  }
   @keyframes windupPulse {
     0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.15); filter: brightness(1.5); }
+    50% { transform: scale(1.1); filter: brightness(1.3); }
   }
-  @keyframes recoverGlow {
-    0%, 100% { filter: brightness(0.7) saturate(0.5); }
-    50% { filter: brightness(0.9) saturate(0.7); }
+
+  .player-action-icon {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    font-size: 18px;
+    filter: drop-shadow(0 0 6px rgba(0,0,0,0.8));
+    animation: actionPop 300ms ease;
+  }
+  @keyframes actionPop {
+    0% { transform: scale(0); }
+    60% { transform: scale(1.3); }
+    100% { transform: scale(1); }
   }
 
   .shield-overlay {
     position: absolute;
-    inset: -4px;
+    inset: -6px;
     border-radius: 50%;
-    border: 2px solid rgba(68,136,255,0.6);
-    background: rgba(68,136,255,0.1);
+    border: 3px solid rgba(68,136,255,0.6);
+    background: rgba(68,136,255,0.08);
     animation: shieldPulse 600ms ease infinite;
   }
   @keyframes shieldPulse {
-    0%, 100% { opacity: 0.6; }
-    50% { opacity: 1; }
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.05); }
   }
 
   .validated-badge, .challenged-badge {
     position: absolute;
-    top: 0;
-    right: 0;
+    bottom: 2px;
+    right: 2px;
     font-size: 10px;
     font-weight: 900;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 2px solid #0a0a14;
   }
-  .validated-badge {
-    background: #00ff88;
-    color: #0A0908;
-  }
-  .challenged-badge {
-    background: #ff2d55;
-    color: #0A0908;
-  }
+  .validated-badge { background: #48d868; color: #0a0a14; }
+  .challenged-badge { background: #f85858; color: #0a0a14; }
 
-  .agent-name {
-    font-size: 8px;
-    font-weight: 900;
-    letter-spacing: 2px;
-    color: rgba(240,237,228,0.6);
-  }
-
-  .energy-bar {
-    width: 100%;
-    height: 4px;
-    background: rgba(240,237,228,0.06);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-  .energy-fill {
-    height: 100%;
-    background: #00ff88;
-    border-radius: 2px;
-    transition: width 300ms;
-  }
-  .energy-fill.energy-low {
-    background: #ffaa00;
-  }
-  .energy-fill.energy-crit {
-    background: #ff2d55;
-    animation: energyBlink 400ms ease infinite;
-  }
-  @keyframes energyBlink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-  .energy-val {
-    font-size: 7px;
-    font-weight: 700;
-    color: rgba(240,237,228,0.3);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .agent-target-btns {
-    display: flex;
-    gap: 4px;
-    margin-top: 2px;
-  }
-  .micro-btn {
-    font-size: 10px;
-    padding: 2px 6px;
-    border: 1px solid rgba(255,215,0,0.2);
-    border-radius: 4px;
-    background: rgba(255,215,0,0.04);
-    cursor: pointer;
-    transition: all 150ms;
-  }
-  .micro-btn:hover {
-    border-color: rgba(255,215,0,0.5);
-    background: rgba(255,215,0,0.1);
-  }
-  .micro-btn.recall {
-    border-color: rgba(255,107,107,0.2);
-    background: rgba(255,107,107,0.04);
-  }
-  .micro-btn.recall:hover {
-    border-color: rgba(255,107,107,0.5);
-    background: rgba(255,107,107,0.1);
-  }
-
-  /* ── Battle Log ── */
-  .battle-log {
+  .poke-player-info {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 6px 16px;
-    border-top: 1px solid rgba(240,237,228,0.06);
-    max-height: 80px;
-    overflow-y: auto;
-    flex-shrink: 0;
+    gap: 4px;
+    min-width: 160px;
   }
-  .log-entry {
+
+  /* TP/SL mini bars */
+  .tp-sl-mini {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 2px;
+  }
+  .tp-sl-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 9px;
-    font-weight: 600;
-    animation: logSlide 200ms ease;
+    gap: 4px;
   }
-  .log-icon { font-size: 11px; }
-  .log-msg { opacity: 0.8; }
-  @keyframes logSlide {
-    from { opacity: 0; transform: translateX(-8px); }
-    to { opacity: 1; transform: translateX(0); }
+  .tp-sl-lbl {
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    width: 14px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .tp-sl-lbl.tp { color: #48d868; }
+  .tp-sl-lbl.sl { color: #f85858; }
+  .tp-sl-track {
+    flex: 1;
+    height: 4px;
+    background: #303030;
+    border-radius: 1px;
+    overflow: hidden;
+  }
+  .tp-sl-fill {
+    height: 100%;
+    border-radius: 1px;
+    transition: width 400ms;
+  }
+  .tp-sl-fill.tp { background: #48d868; }
+  .tp-sl-fill.sl { background: #f85858; }
+
+  /* ── Player Action Buttons ── */
+  .poke-actions {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+  }
+  .poke-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    padding: 6px 14px;
+    border: 2px solid;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 150ms;
+    background: rgba(10,10,20,0.8);
+  }
+  .poke-btn.focus {
+    color: #f8d030;
+    border-color: rgba(248,208,48,0.4);
+  }
+  .poke-btn.focus:hover {
+    background: rgba(248,208,48,0.15);
+    border-color: rgba(248,208,48,0.7);
+    box-shadow: 0 0 12px rgba(248,208,48,0.2);
+  }
+  .poke-btn.recall {
+    color: #f85858;
+    border-color: rgba(248,88,88,0.4);
+  }
+  .poke-btn.recall:hover {
+    background: rgba(248,88,88,0.15);
+    border-color: rgba(248,88,88,0.7);
+    box-shadow: 0 0 12px rgba(248,88,88,0.2);
+  }
+
+  /* ── Party Tray (right sidebar) ── */
+  .poke-party {
+    width: 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 4px;
+    border-left: 2px solid #2a2a44;
+    background: #0e0e1a;
+    flex-shrink: 0;
+    align-items: center;
+  }
+
+  .sparkline-mini {
+    width: 100%;
+    padding: 4px;
+  }
+  .sparkline-svg {
+    width: 100%;
+    height: 20px;
+  }
+
+  /* ══ Pokemon Battle Animations ══ */
+  @keyframes playerAttack {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(40px) scale(1.05); }
+    50% { transform: translateX(40px); }
+    100% { transform: translateX(0); }
+  }
+  @keyframes enemyAttack {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-30px) scale(1.05); }
+    50% { transform: translateX(-30px); }
+    100% { transform: translateX(0); }
+  }
+  @keyframes hitFlash {
+    0%, 40%, 80% { opacity: 0; }
+    20%, 60% { opacity: 0.5; }
+    100% { opacity: 0; }
+  }
+  @keyframes critFlash {
+    0% { opacity: 0; background: white; }
+    15% { opacity: 0.7; }
+    100% { opacity: 0; }
   }
 
   /* ── Milestone Banner ── */

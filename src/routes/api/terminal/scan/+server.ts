@@ -60,6 +60,7 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
     ).catch(() => undefined);
 
     // Fire-and-forget: RAG entry 저장 (Terminal 스캔 → 256d 임베딩)
+    // Paper 2: 에이전트별 세분화 시그널 (agentSignals JSONB)
     try {
       const scanSignals = (result.data.highlights ?? []).map((h: any) => ({
         agentId: h.agent ?? '',
@@ -73,6 +74,16 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
           result.data.timeframe ?? '4h'
         );
 
+        // Paper 2: Fine-grained agent signals → JSONB
+        const agentSignals: Record<string, { vote: string; confidence: number; note: string }> = {};
+        for (const h of result.data.highlights ?? []) {
+          agentSignals[(h.agent ?? '').toUpperCase()] = {
+            vote: h.vote ?? 'neutral',
+            confidence: h.conf ?? 50,
+            note: h.note ?? '',
+          };
+        }
+
         saveTerminalScanRAG(user.id, {
           scanId: result.scanId,
           pair: result.data.pair,
@@ -81,6 +92,7 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
           avgConfidence: result.data.avgConfidence,
           highlights: result.data.highlights,
           embedding,
+          agentSignals,
         }).catch(() => undefined);
       }
     } catch {
