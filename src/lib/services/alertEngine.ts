@@ -1,8 +1,14 @@
 // ═══════════════════════════════════════════════════════════════
 // STOCKCLAW — Background Alert Engine (client-side)
 // ═══════════════════════════════════════════════════════════════
-// Periodically polls the opportunity scan API, detects changes,
-// and fires notifications + toasts via the notification store.
+// Periodically polls the opportunity scan API + onchain alerts,
+// detects changes, and fires notifications + toasts.
+//
+// Onchain alerts (텔레그램 봇 스타일):
+//   - MVRV zone transitions (@bitcoin_mvrv)
+//   - Whale activity spikes (@BinanceWhaleVolumeAlerts)
+//   - Liquidation cascades (@REKTbinance)
+//   - Exchange flow surges
 //
 // Usage: import { alertEngine } from '$lib/services/alertEngine';
 //        alertEngine.start();   // called from +layout.svelte or terminal page
@@ -52,6 +58,27 @@ const INIT_JITTER_MAX_MS = 60_000;               // randomize initial delay 30s-
 const INTERVAL_JITTER_PCT = 0.15;                // ±15% jitter on each polling interval
 const HIDDEN_INTERVAL_MS = 15 * 60 * 1000;       // hidden tab에서는 폴링 빈도 축소
 
+// ── Onchain Alert Types ──────────────────────────────────────
+
+interface OnchainAlertItem {
+  id: string;
+  category: 'mvrv' | 'whale' | 'liquidation' | 'flow';
+  severity: 'info' | 'alert' | 'critical';
+  title: string;
+  body: string;
+  value: number | null;
+  timestamp: number;
+}
+
+interface OnchainSnapshot {
+  mvrv: { value: number | null; zone: string | null; nupl: number | null };
+  whale: { count: number; netflow: number; ratio: number };
+  liquidation: { longTotal1h: number; shortTotal1h: number; total1h: number; dominance: string };
+  exchangeFlow: { netflow24h: number | null; direction: string };
+  alerts: OnchainAlertItem[];
+  fetchedAt: number;
+}
+
 // ── State ────────────────────────────────────────────────────
 
 let _timer: ReturnType<typeof setTimeout> | null = null;
@@ -60,6 +87,7 @@ let _startLoopTimer: ReturnType<typeof setTimeout> | null = null;
 let _running = false;
 let _intervalMs = DEFAULT_INTERVAL_MS;
 let _previousSnapshot: ScanSnapshot | null = null;
+let _previousOnchainAlertIds = new Set<string>();  // dedup onchain alerts
 let _scanCount = 0;
 let _lastScanAt = 0;
 let _visibilityHandler: (() => void) | null = null;
@@ -180,23 +208,106 @@ function detectChanges(prev: ScanSnapshot, curr: ScanSnapshot): void {
   }
 }
 
+// ── Onchain Alert Fetch ──────────────────────────────────────
+
+async function fetchOnchainAlerts(): Promise<OnchainSnapshot | null> {
+  try {
+    const res = await fetch('/api/market/alerts/onchain', {
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json?.ok || !json?.data) return null;
+    return json.data as OnchainSnapshot;
+  } catch (err) {
+    console.warn('[AlertEngine] onchain fetch error:', err);
+    return null;
+  }
+}
+
+function processOnchainAlerts(snapshot: OnchainSnapshot): void {
+  for (const alert of snapshot.alerts) {
+    // Dedup: don't fire the same alert id twice within a session
+    if (_previousOnchainAlertIds.has(alert.id)) continue;
+    _previousOnchainAlertIds.add(alert.id);
+
+    // Map severity → notification type
+    const notifType = alert.severity === 'critical' ? 'critical'
+      : alert.severity === 'alert' ? 'alert' : 'info';
+
+    // Critical alerts (cascade, extreme MVRV) → persistent notification
+    // Info/alert → toast for non-critical, notification for critical
+    if (alert.severity === 'critical') {
+      notifications.addNotification({
+        type: notifType,
+        title: alert.title,
+        body: alert.body,
+        dismissable: true,
+      });
+    } else if (alert.severity === 'alert') {
+      notifications.addNotification({
+        type: 'alert',
+        title: alert.title,
+        body: alert.body,
+        dismissable: true,
+      });
+      toasts.addToast({
+        level: 'high',
+        title: alert.title,
+        score: Math.min(100, Math.abs(alert.value ?? 50)),
+      });
+    } else {
+      // info → toast only
+      toasts.addToast({
+        level: 'medium',
+        title: alert.title,
+        score: 0,
+      });
+    }
+  }
+
+  // Clean up old dedup entries (keep last 200)
+  if (_previousOnchainAlertIds.size > 200) {
+    const arr = [..._previousOnchainAlertIds];
+    _previousOnchainAlertIds = new Set(arr.slice(-100));
+  }
+}
+
+// ── Scan Cycle ───────────────────────────────────────────────
+
 async function runScanCycle(): Promise<void> {
-  const snapshot = await fetchScanData();
-  if (!snapshot || snapshot.coins.length === 0) return;
+  // Parallel: opportunity scan + onchain alerts
+  const [snapshotRes, onchainRes] = await Promise.allSettled([
+    fetchScanData(),
+    fetchOnchainAlerts(),
+  ]);
+
+  const snapshot = snapshotRes.status === 'fulfilled' ? snapshotRes.value : null;
+  const onchain = onchainRes.status === 'fulfilled' ? onchainRes.value : null;
 
   _scanCount++;
   _lastScanAt = Date.now();
 
-  // Compare with previous (skip first scan — just establishes baseline)
-  if (_previousSnapshot && _previousSnapshot.coins.length > 0) {
-    try {
-      detectChanges(_previousSnapshot, snapshot);
-    } catch (err) {
-      console.warn('[AlertEngine] detectChanges error:', err);
+  // Process opportunity scan changes
+  if (snapshot && snapshot.coins.length > 0) {
+    if (_previousSnapshot && _previousSnapshot.coins.length > 0) {
+      try {
+        detectChanges(_previousSnapshot, snapshot);
+      } catch (err) {
+        console.warn('[AlertEngine] detectChanges error:', err);
+      }
     }
+    _previousSnapshot = snapshot;
   }
 
-  _previousSnapshot = snapshot;
+  // Process onchain alerts (MVRV, Whale, Liquidation, Flow)
+  if (onchain) {
+    try {
+      processOnchainAlerts(onchain);
+    } catch (err) {
+      console.warn('[AlertEngine] onchain alert error:', err);
+    }
+  }
 }
 
 function isDocumentVisible(): boolean {

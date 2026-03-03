@@ -11,6 +11,7 @@ import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt } from '$lib/server/apiValidation';
 import { errorContains } from '$lib/utils/errorUtils';
+import { saveRAGEntry } from '$lib/server/ragService';
 
 // ─── POST: GameRecord 저장 ──────────────────────────────────
 
@@ -79,6 +80,12 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
         consensusType: gameRecord.outcome?.consensusType,
       })]
     ).catch(() => undefined);
+
+    // Fire-and-forget: RAG entry 저장 (서버 사이드 redundant)
+    const ragEntry = gameRecord.derived?.ragEntry;
+    if (ragEntry && ragEntry.embedding?.length === 256 && ragEntry.embedding.some((v: number) => v !== 0)) {
+      saveRAGEntry(user.id, gameRecord.id, ragEntry).catch(() => undefined);
+    }
 
     return json({ success: true, id: gameRecord.id });
 

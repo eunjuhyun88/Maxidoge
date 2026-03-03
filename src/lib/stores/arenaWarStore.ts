@@ -33,7 +33,7 @@ import {
   computeDisagreedFactors,
   classifyPairQuality,
 } from '$lib/engine/arenaWarTypes';
-import { saveGameRecord } from '$lib/engine/gameRecordStore';
+import { saveGameRecord, searchRAG, saveRAGEntry as saveRAGEntryAPI } from '$lib/engine/gameRecordStore';
 import {
   generateMockMarketContext,
   generateMock48Factors,
@@ -45,6 +45,8 @@ import {
   type MockAIDecision,
 } from '$lib/engine/mockArenaData';
 import { computeFBS } from '$lib/engine/scoring';
+import { computeEmbedding } from '$lib/engine/ragEmbedding';
+import type { RAGRecall } from '$lib/engine/arenaWarTypes';
 
 // ─── State Interface ────────────────────────────────────────
 
@@ -100,6 +102,9 @@ export interface ArenaWarState {
   lpDelta: number;
   gameRecord: GameRecord | null;
 
+  // RAG Context
+  ragRecall: RAGRecall | null;
+
   // Global
   matchId: string;
   isActive: boolean;
@@ -154,6 +159,8 @@ const DEFAULT_STATE: ArenaWarState = {
   fbsMargin: 0,
   lpDelta: 0,
   gameRecord: null,
+
+  ragRecall: null,
 
   matchId: '',
   isActive: false,
@@ -238,9 +245,37 @@ export function startMatch(setup?: Partial<ArenaWarSetup>) {
     }
   }, 200);
 
-  // After 4 seconds, transition to HUMAN_CALL
-  setTimeout(() => {
+  // After 4 seconds, transition to HUMAN_CALL (with RAG search)
+  setTimeout(async () => {
     clearInterval(progressInterval);
+
+    // ── RAG Search (fire-and-forget style — doesn't block phase transition) ──
+    let ragRecall: RAGRecall | null = null;
+    try {
+      const detectedPatterns = detectPatterns(factors);
+      const embedding = computeEmbedding(
+        factors, regime, state.setup.timeframe, detectedPatterns, 0.85
+      );
+
+      const ragResult = await searchRAG(
+        embedding,
+        aiDecision.direction,
+        aiDecision.confidence,
+        { pair: state.setup.pair, regime }
+      );
+      ragRecall = ragResult.recall;
+
+      if (ragRecall && ragRecall.similarGamesFound > 0) {
+        console.log(
+          `[ArenaWar] RAG found ${ragRecall.similarGamesFound} similar games, ` +
+          `win rate: ${(ragRecall.historicalWinRate * 100).toFixed(0)}%, ` +
+          `confidence adj: ${ragRecall.confidenceAdjustment}`
+        );
+      }
+    } catch (e) {
+      console.warn('[ArenaWar] RAG search failed (non-blocking):', e);
+    }
+
     arenaWarStore.update(s => ({
       ...s,
       phase: 'HUMAN_CALL',
@@ -258,6 +293,7 @@ export function startMatch(setup?: Partial<ArenaWarSetup>) {
         ? Math.round((currentPrice * 0.985) * 100) / 100
         : Math.round((currentPrice * 1.015) * 100) / 100,
       thinkingStartedAt: Date.now(),
+      ragRecall,
     }));
 
     // Start 45-second timer for HUMAN_CALL
@@ -573,7 +609,7 @@ function showResult(exitPrice: number, priceChange: number, actualDirection: Dir
       entryPrice: state.aiDecision?.entryPrice ?? state.currentPrice,
       tp: state.aiDecision?.tp ?? 0,
       sl: state.aiDecision?.sl ?? 0,
-      ragRecall: null,
+      ragRecall: state.ragRecall ?? null,
       factorConflicts: state.aiDecision?.c02Result.commander
         ? {
             orpoSays: state.aiDecision.c02Result.orpo.direction,
@@ -658,7 +694,13 @@ function showResult(exitPrice: number, priceChange: number, actualDirection: Dir
       },
       ragEntry: {
         patternSignature: detectPatterns(state.factors).join('_') || 'UNKNOWN',
-        embedding: new Array(256).fill(0),
+        embedding: computeEmbedding(
+          state.factors,
+          state.regime,
+          state.setup.timeframe,
+          detectPatterns(state.factors),
+          0.85
+        ),
         regime: state.regime,
         pair: state.setup.pair,
         timeframe: state.setup.timeframe,
@@ -708,7 +750,14 @@ function showResult(exitPrice: number, priceChange: number, actualDirection: Dir
   }));
 
   // 서버에 GameRecord 저장 (fire-and-forget)
-  saveGameRecord(gameRecord).catch(e =>
+  saveGameRecord(gameRecord).then(result => {
+    if (result.success && gameRecord.derived.ragEntry) {
+      // RAG 저장 (fire-and-forget — GameRecord 저장 성공 후에만)
+      saveRAGEntryAPI(gameRecord.id, gameRecord.derived.ragEntry).catch(e =>
+        console.warn('[ArenaWar] Failed to persist RAG entry:', e)
+      );
+    }
+  }).catch(e =>
     console.warn('[ArenaWar] Failed to persist GameRecord:', e)
   );
 }

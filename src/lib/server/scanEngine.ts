@@ -2,7 +2,7 @@
 // Stockclaw — Server-side Scan Engine (B-02)
 // ═══════════════════════════════════════════════════════════════
 // Replaces client-side warroomScan for server context.
-// 13 data sources → scoring → WarRoomScanResult
+// 15 data sources (13 기존 + Santiment + CoinMetrics) → scoring → WarRoomScanResult
 // All fetch calls use server modules with LRU caching.
 
 import type { BinanceKline } from '$lib/server/binance';
@@ -24,6 +24,8 @@ import { fetchCoinGeckoGlobal } from '$lib/server/coingecko';
 import { fetchGasOracle, estimateExchangeNetflow } from '$lib/server/etherscan';
 import { fetchYahooSeries } from '$lib/server/yahooFinance';
 import { fetchTopicSocial } from '$lib/server/lunarcrush';
+import { fetchSantimentSocial } from '$lib/server/santiment';
+import { fetchCoinMetricsData } from '$lib/server/coinmetrics';
 import {
   fetchFredMacroData,
   fedFundsToScore,
@@ -63,6 +65,8 @@ const CACHE_TTL = {
   lunarcrush: 120_000,  // 2분
   fred: 600_000,        // 10분 (일일 데이터)
   cryptoquant: 300_000, // 5분
+  santiment: 120_000,   // 2분 (LunarCrush 대체)
+  coinmetrics: 300_000, // 5분 (CryptoQuant 대체, 무료 API)
 };
 
 /** 캐시 우선 fetch — 캐시 히트면 API 호출 생략 */
@@ -539,6 +543,7 @@ async function _runServerScanInternal(pair: string, timeframe: string): Promise<
     fngRaw, cgGlobalRaw, ethOnchainRaw,
     macroRaw, socialRaw, oiHistRaw,
     fredRaw, cqRaw,
+    santimentRaw, coinMetricsRaw,
   ] = await Promise.allSettled([
     cachedFetch(`ca:oi:${marketPair}`, () => fetchCurrentOIServer(marketPair), CACHE_TTL.coinalyze, 'Coinalyze OI'),
     cachedFetch(`ca:fr:${marketPair}`, () => fetchCurrentFundingServer(marketPair), CACHE_TTL.coinalyze, 'Coinalyze FR'),
@@ -553,6 +558,10 @@ async function _runServerScanInternal(pair: string, timeframe: string): Promise<
     cachedFetch(`ca:oih:${marketPair}:${tf}`, () => fetchOIHistoryServer(marketPair, tf, 24), CACHE_TTL.coinalyze, 'Coinalyze OIHist'),
     cachedFetch('fred:macro', () => fetchFredMacroData(), CACHE_TTL.fred, 'FRED'),
     cachedFetch(`cq:${cqAsset}`, () => fetchCQServer(cqAsset), CACHE_TTL.cryptoquant, 'CryptoQuant'),
+    // Slot 13: Santiment (LunarCrush 대체 — primary)
+    cachedFetch(`san:${token}`, () => fetchSantimentSocial(token.toLowerCase()), CACHE_TTL.santiment, 'Santiment'),
+    // Slot 14: Coin Metrics (CryptoQuant 대체 — 무료, 키 불필요)
+    cachedFetch(`cm:${cqAsset}`, () => fetchCoinMetricsData(cqAsset), CACHE_TTL.coinmetrics, 'CoinMetrics'),
   ]);
 
   // ── Phase 3: Data Consolidation ──
@@ -598,10 +607,20 @@ async function _runServerScanInternal(pair: string, timeframe: string): Promise<
 
   const ethOnchain = ethOnchainRaw.status === 'fulfilled' ? ethOnchainRaw.value : null;
   const macro = macroRaw.status === 'fulfilled' ? macroRaw.value : null;
-  const social = socialRaw.status === 'fulfilled' ? socialRaw.value : null;
   const oiHist = oiHistRaw.status === 'fulfilled' ? oiHistRaw.value : null;
   const fred = fredRaw.status === 'fulfilled' ? fredRaw.value : null;
-  const cq = cqRaw.status === 'fulfilled' ? cqRaw.value : null;
+
+  // Social: Santiment primary → LunarCrush fallback
+  const santiment = santimentRaw.status === 'fulfilled' ? santimentRaw.value : null;
+  const lunarcrush = socialRaw.status === 'fulfilled' ? socialRaw.value : null;
+  const social = santiment ?? lunarcrush;
+  const socialSource = santiment ? 'SANTIMENT' : (lunarcrush ? 'LUNARCRUSH' : null);
+
+  // On-chain: Coin Metrics primary → CryptoQuant fallback
+  const coinMetrics = coinMetricsRaw.status === 'fulfilled' ? coinMetricsRaw.value : null;
+  const cqFallback = cqRaw.status === 'fulfilled' ? cqRaw.value : null;
+  const cq = (coinMetrics?.onchainMetrics?.mvrv != null) ? coinMetrics : cqFallback;
+  const cqSource = (cq === coinMetrics && coinMetrics != null) ? 'COINMETRICS' : (cq != null ? 'CRYPTOQUANT' : null);
 
   // ═════════════════════════════════════════════════════════════
   // Phase 4: 8-Agent Scoring
@@ -921,7 +940,7 @@ async function _runServerScanInternal(pair: string, timeframe: string): Promise<
         'BINANCE',
         ethOnchain?.exchangeNetflowEth != null ? 'ETHERSCAN' : null,
         ethOnchain?.whaleActivity != null ? 'DUNE' : null,
-        cq ? 'CRYPTOQUANT' : null,
+        cqSource,
       ].filter(Boolean).join('+'),
       time: timeLabel,
       entry: flowPlan.entry,
@@ -964,7 +983,7 @@ async function _runServerScanInternal(pair: string, timeframe: string): Promise<
       ].filter(Boolean).join(' · ') + '.',
       src: [
         fng ? 'F&G' : null,
-        social ? 'LUNARCRUSH' : null,
+        socialSource,
         'PROXY',
       ].filter(Boolean).join('+'),
       time: timeLabel,
@@ -1058,7 +1077,7 @@ async function _runServerScanInternal(pair: string, timeframe: string): Promise<
       ].filter(Boolean).join(' · ') + '.',
       src: [
         ethOnchain?.gas ? 'ETHERSCAN' : null,
-        cq?.onchainMetrics ? 'CRYPTOQUANT' : null,
+        cq?.onchainMetrics ? (cqSource ?? 'ONCHAIN') : null,
         cgGlobal ? 'COINGECKO' : null,
         'VALUATION',
       ].filter(Boolean).join('+'),
