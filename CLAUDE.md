@@ -138,16 +138,19 @@ src/
 | **replay** | 매치 리플레이 엔진 | 76 |
 | **warroomScan** | ⚠️ deprecated — 서버 scanEngine.ts 사용 | 867 |
 
-### Server Modules (50개 — `src/lib/server/`)
+### Server Modules (54개 — `src/lib/server/`)
 
-**데이터 프로바이더 (16):**
-binance (WS+REST), coingecko, coinmarketcap, coinalyze, cryptoquant, defillama, dexscreener, dune, etherscan, feargreed, fred, lunarcrush, yahooFinance, polymarketClob, gmxV2, rssParser
+**데이터 프로바이더 (19):**
+binance (WS+REST), coingecko, coinmarketcap, coinalyze, cryptoquant, coinmetrics (CryptoQuant 대체, 무료), geckoWhale (GeckoTerminal DEX 고래 추적, 무료), defillama, dexscreener, dune, etherscan, feargreed, fred, lunarcrush, santiment (LunarCrush 대체), yahooFinance, polymarketClob, gmxV2, rssParser
+
+**알림 규칙 엔진 (1):**
+alertRules (MVRV zone 전환 + Whale spike + Liquidation cascade + Exchange flow surge — 텔레그램 봇 @bitcoin_mvrv, @BinanceWhaleVolumeAlerts, @REKTbinance 스타일)
 
 **인증 & 보안 (7):**
 authGuard (`getAuthUserFromCookies`), authRepository, authSecurity, walletAuthRepository, originGuard, turnstile, distributedRateLimit
 
 **시장 데이터 & 분석 (6):**
-marketSnapshotService, multiTimeframeContext, scanEngine (13개 소스 집계), marketFeedService, warRoomService (3라운드 LLM 토론), intelPolicyRuntime
+marketSnapshotService (19개 소스), multiTimeframeContext, scanEngine (15개 소스 집계, Santiment+CoinMetrics primary/fallback), marketFeedService, warRoomService (3라운드 LLM 토론), intelPolicyRuntime
 
 **LLM & AI (4):**
 llmService (Groq→Gemini→DeepSeek 폴백), llmConfig, agentPersonaService (한국어 페르소나), intelShadowAgent
@@ -186,6 +189,7 @@ All routes: `src/routes/api/[group]/+server.ts`
 | **Copy Trading** | 3 | `/api/copy-trades/{runs,runs/[id],publish}` |
 | **Tournaments** | 3 | `/api/tournaments/{active,[id]/bracket,[id]/register}` |
 | **Notifications** | 3 | `/api/notifications`, `/api/notifications/[id]`, `/api/notifications/read` |
+| **Market Alerts** | 1 | `/api/market/alerts/onchain` (GET — MVRV zone + Whale + Liquidation + ExFlow 통합 알림, alertEngine이 5분 주기 폴링) |
 | **Proxies & Infra** | 17 | `/api/coingecko/*`, `/api/feargreed`, `/api/yahoo/[symbol]`, `/api/macro/{fred,indicators}`, `/api/senti/social`, `/api/coinalyze`, `/api/etherscan/onchain`, `/api/onchain/cryptoquant`, `/api/chat/messages`, `/api/ui-state`, `/api/pnl`, `/api/pnl/summary` |
 
 ### Server API 패턴 (신규 API 작성 시 참고)
@@ -214,6 +218,8 @@ See `.env.example` for all required keys:
 - `GEMINI_API_KEY` / `GROQ_API_KEY` / `DEEPSEEK_API_KEY` — LLM providers
 - `PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — Supabase
 - `PUBLIC_WALLETCONNECT_PROJECT_ID` — WalletConnect
+- `SANTIMENT_API_KEY` — Santiment social sentiment (LunarCrush 대체, 선택적 — 없으면 LunarCrush fallback)
+- _(Coin Metrics Community API는 키 불필요 — CryptoQuant 대체)_
 
 ## Coding Conventions
 - **Svelte 5 runes only**: Use `$state()`, `$derived()`, `$effect()`. No legacy `$:` reactive statements.
@@ -469,6 +475,21 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - Store 파일은 **Svelte 4 `writable()`** 유지 (다수 컴포넌트에서 import하므로)
 - `.svelte` 컴포넌트에서 store 구독: `let ws = $derived($storeName)`
 - 직접 `$state()`를 store 파일에 쓰지 않는다 (store는 `.ts` 파일이라 rune 사용 불가)
+
+### API 대체 소스 (Primary/Fallback 패턴)
+- **Santiment → LunarCrush fallback**: `SANTIMENT_API_KEY` 없으면 자동으로 LunarCrush 사용. Santiment 무료 티어는 30일 지연, 유료 키 필요. `galaxyScore`는 Santiment에 없어 50 기본값.
+- **Coin Metrics → CryptoQuant fallback**: Community API 무료, 키 불필요. MVRV 직접 제공, NUPL은 MVRV 기반 근사 (CapRealUSD Pro 전용 → `1-(1/MVRV)`). Exchange Flow는 `FlowInExUSD/FlowOutExUSD`로 netflow 계산 (주의: `FlowTfrFromExchNtv`는 무료 티어에 없음). API 파라미터: `page_size`/`paging_from=end` 사용 (`limit_per_asset`/`sort_dir` 미지원). `minerData`는 null (무료 대안 없음, 소비측은 이미 null-safe).
+- **GeckoTerminal DEX 고래 추적** (`geckoWhale.ts`): `coinmetrics.ts`가 내부적으로 호출. WBTC/USDC, WETH/USDC Uniswap V3 풀의 $50K+ 거래를 고래로 판별. 무료 API, 키 불필요. 풀 주소는 `WHALE_POOLS` 상수로 관리 (새 풀 추가 시 여기 수정). Rate limit: ~30 req/min, 5분 캐시.
+- **Primary/Fallback 판별**: `scanEngine.ts`와 `marketSnapshotService.ts`에서 Santiment/CoinMetrics가 primary, 실패 시 LunarCrush/CryptoQuant fallback. API 프록시 (`/api/senti/social`, `/api/onchain/cryptoquant`)도 동일 패턴.
+- **Source 라벨**: 시그널 `src` 필드에 실제 소스 표시 (SANTIMENT vs LUNARCRUSH, COINMETRICS vs CRYPTOQUANT)
+
+### 온체인 알림 시스템 (텔레그램 봇 스타일)
+- **alertRules.ts**: MVRV zone 전환, Whale spike, Liquidation cascade, Exchange flow surge 규칙 엔진. 서버 사이드에서 threshold 평가.
+- **MVRV Zones**: deep_value(<0.8), undervalued(0.8-1.0), fair_value(1.0-1.5), optimism(1.5-2.5), greed(2.5-3.5), extreme_greed(>3.5). Zone **전환** 시에만 알림 발생 (중복 방지, `_prevState` in-memory).
+- **alertEngine.ts**: 기존 opportunity-scan 폴링 + `/api/market/alerts/onchain` 병렬 폴링. `processOnchainAlerts()`로 dedup 후 notification/toast 발생.
+- **Dedup**: `_previousOnchainAlertIds` Set으로 같은 alert id 재발생 방지 (최대 200개 유지).
+- **Liquidation 데이터**: Coinalyze `fetchLiquidationHistoryServer()` 사용. API 키 필요 (`COINALYZE_API_KEY`). 데이터 없을 시 liq=0 (alert 안 뜸).
+- **UI 위치**: IntelPanel > FEED > FLOW 탭의 최상단에 `oc-dashboard` 섹션. 2×2 그리드(MVRV/NUPL/Whale/ExFlow) + Liquidation bar + Alert cards. 2분마다 자동 갱신 (`_onchainTimer`). CSS 클래스: `.oc-*`. `{@const}`는 `{#if}` 블록의 직접 자식이어야 함 (Svelte 제약).
 
 ### RAG + pgvector 관련
 - **임베딩 포맷**: pgvector는 `'[1,2,3,...,256]'` 문자열 포맷, `$N::vector` 캐스팅 필수

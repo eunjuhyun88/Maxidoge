@@ -16,6 +16,8 @@ import { fetchCoinMarketCapQuote } from '$lib/server/coinmarketcap';
 import { fetchCryptoQuantData } from '$lib/server/cryptoquant';
 import { estimateExchangeNetflow } from '$lib/server/etherscan';
 import { fetchTopicSocial } from '$lib/server/lunarcrush';
+import { fetchSantimentSocial } from '$lib/server/santiment';
+import { fetchCoinMetricsData } from '$lib/server/coinmetrics';
 import { withTransaction } from '$lib/server/db';
 import { getCached, setCache } from '$lib/server/providers/cache';
 
@@ -47,6 +49,8 @@ const SRC_TTL = {
   cryptoquant: 300_000,  // 5분
   etherscan: 120_000,    // 2분
   lunarcrush: 120_000,   // 2분
+  santiment: 120_000,    // 2분 (LunarCrush 대체)
+  coinmetrics: 300_000,  // 5분 (CryptoQuant 대체, 무료 API)
 };
 
 function cf<T>(key: string, fetcher: () => Promise<T>, ttl: number, label: string): Promise<T> {
@@ -318,7 +322,7 @@ async function _collectInternal(
 ): Promise<MarketSnapshotResult> {
   const at = Date.now();
 
-  // ── 17개 소스 병렬 (개별 5초 타임아웃 + 소스별 캐시) ──
+  // ── 19개 소스 병렬 (17 기존 + Santiment + CoinMetrics, 개별 5초 타임아웃 + 소스별 캐시) ──
   const [
     klinesRes,
     klines1hRes,
@@ -337,6 +341,8 @@ async function _collectInternal(
     cryptoQuantRes,
     ethNetflowRes,
     lunarCrushRes,
+    santimentRes,
+    coinMetricsRes,
   ] = await Promise.allSettled([
     cf(`bn:k:${symbol}:${timeframe}`, () => fetchKlinesServer(symbol, timeframe, 300), SRC_TTL.binance, 'Binance klines'),
     cf(`bn:k:${symbol}:1h`, () => fetchKlinesServer(symbol, '1h', 300), SRC_TTL.binance, 'Binance 1h'),
@@ -355,6 +361,10 @@ async function _collectInternal(
     cf(`cq:${cqAsset}`, () => fetchCryptoQuantData(cqAsset), SRC_TTL.cryptoquant, 'CryptoQuant'),
     cf('eth:netflow', () => estimateExchangeNetflow(), SRC_TTL.etherscan, 'Etherscan'),
     cf(`lc:${token}`, () => fetchTopicSocial(token.toLowerCase()), SRC_TTL.lunarcrush, 'LunarCrush'),
+    // Santiment (LunarCrush 대체 — primary)
+    cf(`san:${token}`, () => fetchSantimentSocial(token.toLowerCase()), SRC_TTL.santiment, 'Santiment'),
+    // Coin Metrics (CryptoQuant 대체 — 무료, 키 불필요)
+    cf(`cm:${cqAsset}`, () => fetchCoinMetricsData(cqAsset), SRC_TTL.coinmetrics, 'CoinMetrics'),
   ]);
 
   const klines = requireKlines(klinesRes);
@@ -371,9 +381,17 @@ async function _collectInternal(
   const us10y = us10yRes.status === 'fulfilled' ? us10yRes.value : null;
   const news = newsRes.status === 'fulfilled' ? newsRes.value : [];
   const cmc = cmcRes.status === 'fulfilled' ? cmcRes.value : null;
-  const cryptoQuant = cryptoQuantRes.status === 'fulfilled' ? cryptoQuantRes.value : null;
   const ethNetflow = ethNetflowRes.status === 'fulfilled' ? ethNetflowRes.value : null;
-  const lunarCrush = lunarCrushRes.status === 'fulfilled' ? lunarCrushRes.value : null;
+
+  // Social: Santiment primary → LunarCrush fallback
+  const santiment = santimentRes.status === 'fulfilled' ? santimentRes.value : null;
+  const lunarCrushRaw = lunarCrushRes.status === 'fulfilled' ? lunarCrushRes.value : null;
+  const lunarCrush = santiment ?? lunarCrushRaw;
+
+  // On-chain: Coin Metrics primary → CryptoQuant fallback
+  const coinMetrics = coinMetricsRes.status === 'fulfilled' ? coinMetricsRes.value : null;
+  const cryptoQuantRaw = cryptoQuantRes.status === 'fulfilled' ? cryptoQuantRes.value : null;
+  const cryptoQuant = (coinMetrics?.onchainMetrics?.mvrv != null) ? coinMetrics : cryptoQuantRaw;
 
   const stableMcap = llamaStable?.totalMcapUsd ?? geckoStable?.totalMcapUsd ?? null;
   const stableMcapChange24h = llamaStable?.change24hPct ?? geckoStable?.change24hPct ?? null;

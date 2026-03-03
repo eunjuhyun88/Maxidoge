@@ -44,11 +44,11 @@ async function applyExplicitUpdates(userId: string, updates: PriceUpdateItem[]) 
         SET
           current_price = incoming.current_price,
           pnl_percent = ROUND(
-            CASE
+            (CASE
               WHEN qt.entry <= 0 THEN 0
               WHEN qt.dir = 'LONG' THEN ((incoming.current_price - qt.entry) / qt.entry) * 100
               ELSE ((qt.entry - incoming.current_price) / qt.entry) * 100
-            END,
+            END)::numeric,
             4
           )
         FROM incoming
@@ -88,11 +88,11 @@ async function applyTickerMap(userId: string, prices: Record<string, number>) {
         SET
           current_price = incoming.current_price,
           pnl_percent = ROUND(
-            CASE
+            (CASE
               WHEN qt.entry <= 0 THEN 0
               WHEN qt.dir = 'LONG' THEN ((incoming.current_price - qt.entry) / qt.entry) * 100
               ELSE ((qt.entry - incoming.current_price) / qt.entry) * 100
-            END,
+            END)::numeric,
             4
           )
         FROM incoming
