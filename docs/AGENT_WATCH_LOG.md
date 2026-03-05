@@ -1997,5 +1997,7 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `npm run guard:workspace`: PASS (`frontend`)
   - `ALLOW_LEGACY_WORKSPACE` 미설정 상태에서 `frontend-passport` 컨텍스트 guard 실행: BLOCKED (expected)
   - `WARNING_BUDGET=49 npm run check:budget`: PASS (`0 errors, 49 warnings`)
-- Commit / Push: pending at log time
+- Commit / Push:
+  - commit: `c5fc8fe`
+  - push: SUCCESS (`origin/feat/onchain-alerts-dashboard`, force-with-lease)
 - Status: DONE
