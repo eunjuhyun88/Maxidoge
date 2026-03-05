@@ -1,3 +1,13 @@
+# ⛔ DEPRECATED — 이 폴더는 레거시입니다
+
+**`frontend/` 으로 통합되었습니다. 이 폴더에서 작업하지 마세요.**
+**활성 코드베이스: `/Users/ej/Downloads/maxidoge-clones/frontend/`**
+**가이드: `frontend/CLAUDE.md` 참조**
+
+---
+
+# (아래는 레거시 — 참고용으로만 유지)
+
 # STOCKCLAW — Claude Code Project Guide
 > **Last updated: 2026-03-02** | 전체 페이지/모듈 종합 문서화 + Context Engineering 규칙
 
