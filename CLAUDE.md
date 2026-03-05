@@ -9,7 +9,7 @@
 # (아래는 레거시 — 참고용으로만 유지)
 
 # STOCKCLAW — Claude Code Project Guide
-> **Last updated: 2026-03-06** | 워크스페이스 가드 + warning budget CI 게이트 + 경고 우선순위표 추가
+> **Last updated: 2026-03-06** | 전체 페이지/모듈 종합 문서화 + Context Engineering 규칙
 
 ## Project Overview
 **StockHoo / STOCKCLAW** — Crypto Intelligence OS with gamified trading arena.
@@ -22,7 +22,6 @@ SvelteKit 2 full-stack app: prediction arena, terminal scanner, AI agents, on-ch
 - **DB**: Supabase (PostgreSQL) via `pg` + `@supabase/supabase-js`
 - **Wallet**: WalletConnect + Coinbase Wallet SDK (Arbitrum L2)
 - **Charts**: lightweight-charts v5
-- **Battle Rendering**: PixiJS v8 (2D sprites, dynamic import)
 - **LLMs**: Groq, Gemini, DeepSeek (server-side only)
 
 ## Commands
@@ -36,18 +35,19 @@ node node_modules/.bin/vite build
 # Type check
 npm run check
 
-# Type check + warning budget gate (기본 budget=49)
-npm run check:budget
-
-# Workspace guard (deprecated workspace 차단)
-npm run guard:workspace
-
-# Full gate (guard + check:budget + build)
-npm run gate
-
 # Git push (gh CLI at ~/.local/bin/gh)
 export PATH="$HOME/.local/bin:$HOME/.local/node-v22.14.0-darwin-arm64/bin:$PATH"
 ```
+
+## Git/Sync 운영 규칙 (필수, 2026-03-06)
+1. 브랜치별 작업은 clone 폴더를 늘리지 말고 `git worktree`로 분리한다. (예: `.wt-<branch>`)
+2. 기본 동기화는 `merge --ff-only` 또는 명시적 `cherry-pick`만 사용한다. 강제 머지/강제 푸시는 금지한다.
+3. push 전에는 대상 워크트리에서 반드시 `npm run gate`를 통과한다. (`guard:workspace` + `check:budget` + `build`)
+4. pre-push 훅 실패 시 원인을 수정한 뒤 재시도한다. `--no-verify` 사용 금지.
+5. HEAD/브랜치 포인터만 되돌려야 할 때는 `git update-ref`로 ref만 이동하고, 워킹트리 변경사항은 보존한다.
+6. 동기화 직후 `git status`, `git branch -vv`, `git worktree list`로 HEAD 위치/업스트림/워크트리 상태를 확인한다.
+7. 컨텍스트 관리는 `.agent-context` 스냅샷을 유지하고, 의미 있는 결정/절차 변경은 `docs/AGENT_WATCH_LOG.md`에 기록한다.
+
 
 ## Architecture
 
@@ -57,8 +57,7 @@ export PATH="$HOME/.local/bin:$HOME/.local/node-v22.14.0-darwin-arm64/bin:$PATH"
 | `/` (Home) | 랜딩 — 피처 하이라이트, Arena/Terminal 진입 | walletStore, userProfileStore | 262 |
 | `/arena` | 전략형 예측 아레나 — 드래프트→분석→가설→배틀→결과 (5 phases) | gameState, matchHistoryStore, pnlStore, battleFeedStore | 4,236 |
 | `/arena-v2` | 아레나 v2 — 간소화 5-phase + 4가지 뷰 전환 (1=arena,2=chart,3=mission,4=card) | arenaV2State, btcPrice | 262 |
-| `/arena-war` | 스피드형 AI 대전 — 8-phase 상태머신 (SETUP→RESULT), v3 배틀엔진(HP+챌린지), PixiJS 렌더링 | arenaWarStore, arenaWarPhase | 54 |
-| `/agents` | 에이전트 컬렉션 (Pokedex 스타일) — 학습레벨, 패턴기억, 레짐적응, 매치업경험, 전적 | agentStats | ~380 |
+| `/arena-war` | 스피드형 AI 대전 — 7-phase 상태머신 (SETUP→RESULT) | arenaWarStore, arenaWarPhase | 54 |
 | `/terminal` | 마켓 스캐너 터미널 — War Room + Chart + Intel 3패널 리사이즈 | gameState, livePrices, copyTradeStore | 3,333 |
 | `/passport` | 유저 프로필 허브 — 보유, 트레이드, 시그널, 에이전트, ORPO 학습 | userProfileStore, matchHistoryStore, quickTradeStore, agentStats | 2,688 |
 | `/signals` | 트레이딩 시그널 허브 — 커뮤니티/추적/오라클 3뷰 + 필터 | gameState, matchHistoryStore, openTrades, activeSignals | 983 |
@@ -87,7 +86,7 @@ src/
 ├── components/       # 72개 Svelte 컴포넌트 (14개 디렉토리)
 │   ├── arena/        # 전략 아레나 (15 + 4 views)
 │   ├── arena-v2/     # 아레나 v2 (8 + 1 shared)
-│   ├── arena-war/    # 아레나 워 8-phase (8) + 비주얼 배틀 (BattleCanvas[PixiJS], ChallengeOverlay, AgentSprite, BattleVisualizer, VSMeterBar, ActionFeed, BattleEffects, DraftPhase)
+│   ├── arena-war/    # 아레나 워 7-phase (7)
 │   ├── terminal/     # 터미널 패널 (10 + 3 warroom)
 │   ├── modals/       # 모달 (5: CopyTrade, Oracle, Passport, Settings, Wallet)
 │   ├── shared/       # 공용 (11: ContextBanner, EmptyState, Toast, P0Banner, TokenDropdown, NotificationTray, PokemonFrame, TypewriterBox, HPBar, PhaseTransition, PartyTray)
@@ -98,12 +97,6 @@ src/
 ├── routes/
 │   ├── api/          # SvelteKit API (99 엔드포인트, 17 카테고리)
 │   └── [pages]/      # 위 Pages 테이블 참조
-scripts/
-├── dev/              # 브랜치/컨텍스트/가드 자동화
-│   ├── guard-active-workspace.sh         # deprecated workspace(frontend-passport) 차단
-│   └── check-svelte-warning-budget.sh    # svelte-check warning budget 게이트
-docs/
-└── warning-priority-2026-03-06.md        # 49 warnings 정리 우선순위표
 ```
 
 ### Stores (23개 — Svelte 4 writable 패턴)
@@ -126,7 +119,7 @@ docs/
 | **positionStore** | 통합 포지션 (QuickTrade + Polymarket + GMX) | 186 |
 | **battleFeedStore** | 실시간 배틀 피드 (최대 50 아이템) | 54 |
 | **communityStore** | 커뮤니티 포스트 (localStorage + 서버 동기화) | 138 |
-| **agentData** | 에이전트 스탯 (레벨, XP, 승/패) + AI 학습 시스템 (PatternMemory, RegimeAdaptation, MatchupExperience, learningLevel) | ~350 |
+| **agentData** | 에이전트 스탯 (레벨, XP, 승/패) | 227 |
 | **warRoomStore** | 3-라운드 War Room 토론 상태 | 246 |
 | **progressionRules** | LP→Tier 매핑 (BRONZE→SILVER→GOLD→DIAMOND→MASTER) | 119 |
 | **hydration** | 전체 스토어 API 하이드레이션 오케스트레이터 | 61 |
@@ -142,12 +135,9 @@ docs/
 | **ragEmbedding** | 결정론적 256d 임베딩 생성 ($0). Arena War 48팩터 + Terminal 8에이전트 + QuickTrade + SignalAction + DedupeHash 지원 | ~600 |
 | **fewShotBuilder** | Few-shot 프롬프트 빌더 (유사 게임→예시 포맷, 멀티소스 few-shot, AGENT_RETRIEVAL_WEIGHTS, Commander LLM 메시지) | ~320 |
 | **agents** | 8-에이전트 풀 정의 (STRUCTURE, VPA, ICT, DERIV, VALUATION, FLOW, SENTI, MACRO) | 232 |
-| **agentCharacter** | 포켓몬 스타일 캐릭터 시스템 — 4타입 상성(TECH/FLOW/SENTI/MACRO), 티어 진화(1-3), 시그니처 무브, XP/레벨 상수, AgentCharacter 정의 | ~350 |
 | **types** | 엔진 전체 타입 레지스트리 (100+ types) | 605 |
-| **v2BattleEngine** | 게임 메카닉 배틀 (틱 분류, 에너지, 콤보, 크리티컬) — v3에서 래핑하여 사용 (수정 없음, canonical) | 1,483 |
+| **v2BattleEngine** | 게임 메카닉 배틀 (틱 분류, 에너지, 콤보, 크리티컬) | 1,483 |
 | **v2BattleTypes** | v2 배틀 타입 (100+ types) | 490 |
-| **v3BattleEngine** | v2 래핑 + 개별 HP, 4타입 상성 데미지, 차트 리딩 챌린지, 리드 교체, 가드 시스템 | ~450 |
-| **v3BattleTypes** | v3 타입 (V3AgentState, ChartChallenge, V3BattleState, HP_CONFIG, CHALLENGE_CONFIG, SWITCH_CONFIG) | ~200 |
 | **battleEngine** | 실시간 배틀 (Binance WS, TP/SL 체크) | 759 |
 | **battleResolver** | 배틀 해결 (가격 히스토리 기반 TP/SL 판정) | 241 |
 | **exitOptimizer** | 최적 SL/TP 계산 (ATR, Fibonacci, Kelly 사이징) | 616 |
@@ -277,7 +267,6 @@ See `.env.example` for all required keys:
 - **Auto-push before edits**: Always commit+push current state before starting modifications
 - **PR merge**: Use `gh pr create` + `gh pr merge` (gh at `~/.local/bin/gh`)
 - **Repo**: `eunjuhyun88/Stockclaw`
-- **Deprecated workspace guard**: `frontend-passport` 로컬 워크스페이스에서 gate/push 차단 (`ALLOW_LEGACY_WORKSPACE=1`로 임시 우회 가능)
 
 ## Active Branches (병렬 작업 현황)
 
@@ -290,7 +279,6 @@ See `.env.example` for all required keys:
 | `feat/chart-trade-overlay` | TradingView 차트 트레이드 오버레이 | 🟡 PR 대기 |
 | `codex/home-backend-live-20260226` | Home + Backend 라이브 연동 | 🟡 PR 대기 |
 | `codex/uiux-frontend` | UIUX 프론트엔드 전반 | 🟡 활성 |
-| `feat/onchain-alerts-dashboard` | CI hardening (workspace guard + warning budget gate) + 문서/컨텍스트 기록 | 🔵 진행 중 (2026-03-06) |
 
 **충돌 가능성 높은 파일:**
 - `arenaWarStore.ts` — Arena War 관련 브랜치에서 동시 수정 가능
@@ -427,18 +415,13 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 
 ### 3. Arena War (스피드형 AI 대전 — `/arena-war`, 54줄)
 **핵심 원칙:** "같은 데이터, 다른 해석" — AI와 인간이 동일 데이터(48팩터+C02)를 보고 다르게 판단
-- **8-Phase**: `SETUP(10s) → DRAFT → AI_ANALYZE(8s) → HUMAN_CALL(45s) → REVEAL(3s) → BATTLE(v3 엔진+PixiJS) → JUDGE(3s) → RESULT`
+- **7-Phase**: `SETUP(10s) → AI_ANALYZE(8s) → HUMAN_CALL(45s) → REVEAL(3s) → BATTLE(2min) → JUDGE(3s) → RESULT`
 - 매 판 = 게임 플레이 + ORPO 학습 신호 + RAG 메모리 포인트
 - 데이터 파이프라인: `GameRecord → OrpoPair → RAGEntry → arena_war_records + arena_war_rag(PostgreSQL)`
 - **RAG 파이프라인**: AI_ANALYZE 시 256d 임베딩→유사게임 검색→Few-shot 주입→Commander LLM, RESULT 시 RAG 저장
-- 핵심 파일: `arenaWarStore`(~830줄), `arenaWarTypes`, `mockArenaData`, `gameRecordStore`, `ragEmbedding`, `fewShotBuilder`, `v3BattleEngine`, `v3BattleTypes`
-- 컴포넌트: `components/arena-war/` (10: Setup, Draft, Analyze, HumanCall, Reveal, Battle[PixiJS], Judge, Result, BattleCanvas, ChallengeOverlay)
-- **v3 배틀 시스템**: v2 엔진 래핑 + 개별 HP + 4타입 상성 데미지 + 차트 리딩 챌린지 4종(direction_call, pattern_recognition, risk_decision, quick_reaction)
-- **BattleCanvas**: PixiJS v8 2D 스프라이트 렌더링 (dynamic import, CSS fallback). 에이전트 아바타, HP바, 데미지넘버, VS미터, 스크린셰이크
-- **ChallengeOverlay**: 배틀 중 차트 리딩 챌린지 UI (3-6초 타이머, 정답 보너스/오답 패널티)
-- **AI 학습**: agentData에 AgentLearning (패턴기억, 레짐적응, 매치업경험, learningLevel=floor(RAG/10))
-- **에이전트 컬렉션**: `/agents` Pokedex 스타일 페이지 (학습 진행도, 패턴 기억, 전적)
-- **현재 상태**: ✅ Phase 1 완성 (UI + 상태머신 + mock + 서버 저장) | ✅ Phase 2 RAG + Few-Shot 완성 | ✅ Phase 3 Decision Memory 완성 | ✅ Phase 4 v3 Battle Engine + PixiJS + AI Learning 완성
+- 핵심 파일: `arenaWarStore`(~830줄), `arenaWarTypes`, `mockArenaData`, `gameRecordStore`, `ragEmbedding`, `fewShotBuilder`
+- 컴포넌트: `components/arena-war/` (7: Setup, Analyze, HumanCall, Reveal, Battle, Judge, Result)
+- **현재 상태**: ✅ Phase 1 완성 (UI + 상태머신 + mock + 서버 저장) | ✅ Phase 2 RAG + Few-Shot 완성 | ✅ Phase 3 Decision Memory 완성
 - ⬚ DB 마이그레이션 미적용 (`001_arena_war_records.sql`, `002_arena_war_rag.sql`, `003_decision_memory.sql`)
 
 ### 4. Terminal (마켓 스캐너 — `/terminal`, 3,333줄)
@@ -511,12 +494,6 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 ### 빌드 관련
 - **node_modules synthetic 파일 깨짐**: `@sveltejs/kit/src/types/synthetic/` 안의 `.md` 파일들이 날짜 접두어로 rename될 수 있음. `npm install` 후에도 안 되면 수동으로 접두어 제거 후 복사.
 - **`npm run build` 실패 시**: `node node_modules/.bin/vite build` 직접 사용.
-- **warning budget 게이트**: `npm run check:budget`는 기본 `WARNING_BUDGET=49`를 초과하면 실패. 경고 총량을 늘리는 PR 금지.
-- **CI check job 규칙**: `guard:workspace` + `check:budget`을 먼저 통과해야 함.
-
-### Workspace / Legacy 운영
-- **`frontend-passport`는 deprecated 로컬 워크스페이스**: `scripts/dev/guard-active-workspace.sh`가 gate/push 전에 차단.
-- **임시 우회**: 꼭 필요한 경우에만 `ALLOW_LEGACY_WORKSPACE=1` 사용 (기본 금지).
 
 ### 서버 API 패턴
 - **DB 테이블 미존재 대응**: API에서 `errorContains(e, 'does not exist')` 체크 → graceful fallback + warning 반환.
@@ -541,12 +518,6 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **Dedup**: `_previousOnchainAlertIds` Set으로 같은 alert id 재발생 방지 (최대 200개 유지).
 - **Liquidation 데이터**: Coinalyze `fetchLiquidationHistoryServer()` 사용. API 키 필요 (`COINALYZE_API_KEY`). 데이터 없을 시 liq=0 (alert 안 뜸).
 - **UI 위치**: IntelPanel > FEED > FLOW 탭의 최상단에 `oc-dashboard` 섹션. 2×2 그리드(MVRV/NUPL/Whale/ExFlow) + Liquidation bar + Alert cards. 2분마다 자동 갱신 (`_onchainTimer`). CSS 클래스: `.oc-*`. `{@const}`는 `{#if}` 블록의 직접 자식이어야 함 (Svelte 제약).
-
-### PixiJS v8 관련
-- **Text API 변경**: v7의 `dropShadow: true, dropShadowColor: 0x000000, dropShadowDistance: 2`는 v8에서 `dropShadow: { color: 0x000000, distance: 2, alpha: 0.8 }` 객체 형태로 변경됨. flat property 사용 시 TS 오류.
-- **Dynamic Import 필수**: PixiJS는 window 객체가 필요하므로 SSR 환경에서 `import('pixi.js')` 동적 import 사용. `onMount()` 또는 `$effect()` 내에서만 로드.
-- **CSS Fallback**: PixiJS 로딩 실패 시 CSS 기반 에이전트 표시 (colored circle + initial text) 사용. `canvasReady` 플래그로 전환.
-- **ParticleContainer 제거**: PixiJS v8에서 `ParticleContainer`가 제거됨. 일반 `Container` + `Sprite` 사용.
 
 ### RAG + pgvector 관련
 - **임베딩 포맷**: pgvector는 `'[1,2,3,...,256]'` 문자열 포맷, `$N::vector` 캐스팅 필수
@@ -581,16 +552,9 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - [x] AW-06: RAG 저장 + 유사도 검색 구현 (ragEmbedding, ragService, /api/arena-war/rag, 002_arena_war_rag.sql)
 - [x] AW-07: AI confidence RAG 기반 조정 (fewShotBuilder, c02Pipeline RAG-enhanced Commander)
 - [x] AW-08: Decision Memory Architecture (Paper 1+2 기반, Decision Chain + Quality Maturation + Dedup + Agent Signals)
-- [x] AW-09: v3 Battle Engine (v2 래핑 + HP + 4타입 상성 + 챌린지 시스템)
-- [x] AW-10: PixiJS BattleCanvas + ChallengeOverlay UI
-- [x] AW-11: arenaWarStore v3 엔진 통합 (startBattle, processTick, submitChallenge, switchLead, activateGuard)
-- [x] AW-12: agentData AI 학습 구조 (PatternMemory, RegimeAdaptation, MatchupExperience)
-- [x] AW-13: 에이전트 컬렉션 페이지 `/agents` (Pokedex 스타일)
-- [x] AW-14: ResultPhase/JudgePhase/DraftPhase v3 데이터 표시
-- [ ] AW-15: Passport 기본 (승률 추이, 레짐별 성과)
-- [ ] AW-16: 잭팟 + 배지 + 일일 미션
-- [ ] AW-17: 실제 C02 파이프라인 연결 (mock → real)
-- [ ] AW-18: 실제 스프라이트 시트 아트 에셋 교체 (현재 colored circle + initial 텍스트)
+- [ ] AW-09: Passport 기본 (승률 추이, 레짐별 성과)
+- [ ] AW-10: 잭팟 + 배지 + 일일 미션
+- [ ] AW-11: 실제 C02 파이프라인 연결 (mock → real)
 
 ### UIUX Phase (Loox 테마 적용)
 - [x] UX-01: Terminal 다크 포레스트 전환 (PR #43)
@@ -601,13 +565,6 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - [ ] UX-06: Passport 테마 적용 (2,688줄 — 대규모)
 - [ ] UX-07: Settings 테마 적용
 - [ ] UX-08: Arena v2 테마 적용
-
-### Quality / Workflow Phase
-- [x] QW-01: deprecated workspace 차단 가드 추가 (`guard-active-workspace.sh`, pre-push/gate 연동)
-- [x] QW-02: Svelte warning budget 게이트 추가 (`check-svelte-warning-budget.sh`, baseline=49)
-- [x] QW-03: CI check job에 guard + warning budget 반영 (`ci-check-build.yml`)
-- [x] QW-04: 경고 정리 우선순위표 문서화 (`docs/warning-priority-2026-03-06.md`)
-- [ ] QW-05: warnings 49→0 단계적 감축 (P1: a11y + deprecated slot 우선)
 
 ### Arena v2 Pokemon UI Phase
 - [x] PKM-00: Sprint 0 엔진 갭 수정 (SpecBonuses, ATR, Tier, Agent ID, RAG 연동)
