@@ -16,7 +16,7 @@
     toBinanceInterval,
     toTradingViewInterval,
   } from '$lib/utils/timeframe';
-  import { openQuickTrade, type TradeDirection } from '$lib/stores/quickTradeStore';
+  import { openQuickTrade } from '$lib/stores/quickTradeStore';
   import {
     detectChartPatterns,
     type ChartPatternDetection,
@@ -39,7 +39,6 @@
     dragTP: { price: number };
     dragSL: { price: number };
     dragEntry: { price: number };
-    clearTradeSetup: void;
   }>();
 
   let chartContainer: HTMLDivElement;
@@ -155,22 +154,6 @@
   export let chatFirstMode = false;
   export let chatTradeReady = false;
   export let chatTradeDir: 'LONG' | 'SHORT' = 'LONG';
-  export let hasScanned = false; // true after first scan completes
-
-  // ═══ Agent Trade Overlay (TradingView-style TP/SL zones) ═══
-  type AgentTradeSetup = {
-    source: 'consensus' | 'agent';
-    agentName?: string;
-    dir: 'LONG' | 'SHORT';
-    entry: number;
-    tp: number;
-    sl: number;
-    rr: number;
-    conf: number;
-    pair: string;
-  };
-  export let activeTradeSetup: AgentTradeSetup | null = null;
-  let agentPriceLines: { tp: any; entry: any; sl: any } = { tp: null, entry: null, sl: null };
 
   // ═══ Agent Trade Overlay (TradingView-style TP/SL zones) ═══
   type AgentTradeSetup = {
@@ -426,14 +409,14 @@
       shortRatio: planned.shortRatio,
     });
     pushChartNotice(
-      `OPEN ${planned.dir} · ${planned.longRatio}:${planned.shortRatio} · ENTRY ${formatPrice(planned.entry)}`
+      `포지션 생성 · ${planned.dir} ${planned.longRatio}:${planned.shortRatio} · ENTRY ${formatPrice(planned.entry)}`
     );
     pendingTradePlan = null;
   }
 
   function cancelTradePlan() {
     pendingTradePlan = null;
-    pushChartNotice('Trade cancelled');
+    pushChartNotice('포지션 생성 취소');
   }
 
   function ratioFromClientX(clientX: number): number | null {
@@ -1186,10 +1169,8 @@
   }
 
   function handleDrawingMouseDown(e: MouseEvent) {
-    if (!drawingCanvas) return;
+    if (drawingMode === 'none' || !drawingCanvas) return;
     const rect = drawingCanvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    if (drawingMode === 'none') return;
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     if (drawingMode === 'hline') {
       const linePrice = toChartPrice(y);
@@ -1257,7 +1238,7 @@
           riskPct: preview.riskPct,
           longRatio: preview.dir === 'LONG' ? 70 : 30,
         };
-        pushChartNotice('Drag complete — adjust ratio and confirm');
+        pushChartNotice('드래그 완료 · 비율 조정 후 포지션 생성 버튼을 누르세요');
       } else {
         openTradeByLine(preview.dir, preview.entry, preview.sl, preview.rr);
       }
@@ -1272,8 +1253,7 @@
 
   let _drawRAF: number | null = null;
   function handleDrawingMouseMove(e: MouseEvent) {
-    if (!drawingCanvas) return;
-    if (!isDrawing) return;
+    if (!isDrawing || !drawingCanvas) return;
     if (_drawRAF) return; // throttle to animation frame
     _drawRAF = requestAnimationFrame(() => {
       _drawRAF = null;
@@ -2331,7 +2311,7 @@
     });
     if (chatTradeReady) {
       void activateTradeDrawing(chatTradeDir);
-      pushChartNotice(`${chatTradeDir} draw mode active`);
+      pushChartNotice(`${chatTradeDir} 드래그 모드 활성화`);
       return;
     }
     dispatch('chatrequest', {
@@ -2500,7 +2480,7 @@
           </button>
 
           {#if advancedMode && indicatorStripState === 'hidden' && !isTvLikePreset}
-            <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>IND ON</button>
+            <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>지표 ON</button>
           {/if}
         {/if}
 
@@ -2557,7 +2537,7 @@
         <button class="legend-chip" on:click={() => setIndicatorStripState('collapsed')}>접기</button>
         <button class="legend-chip danger" on:click={() => setIndicatorStripState('hidden')}>끄기</button>
         {#if enableTradeLineEntry}
-          <span class="ind-hint">L/S drag · +/- zoom · 0 reset</span>
+          <span class="ind-hint">L/S 드래그 · +/- 줌 · 0 리셋</span>
         {/if}
       {:else}
         <div class="collapsed-summary">
@@ -2635,41 +2615,6 @@
         on:mousedown={handleDrawingMouseDown} on:mousemove={handleDrawingMouseMove} on:mouseup={handleDrawingMouseUp}></canvas>
     {/if}
 
-    <!-- ═══ Overlay close button (HTML, always clickable above canvas) ═══ -->
-    {#if activeTradeSetup && drawingsVisible && chartMode === 'agent'}
-      <button class="overlay-close-btn"
-        on:click|stopPropagation={() => { activeTradeSetup = null; _agentCloseBtn = null; dispatch('clearTradeSetup'); renderDrawings(); }}
-        title="Close overlay">&#x2715;</button>
-    {/if}
-
-    <!-- ═══ First-scan CTA (shows before any scan) ═══ -->
-    {#if !hasScanned && !activeTradeSetup && chartMode === 'agent'}
-      <div class="first-scan-cta">
-        <button class="fsc-btn" on:click={requestAgentScan}>
-          <span class="fsc-icon">&#x25C9;</span>
-          <span class="fsc-label">RUN SCAN</span>
-          <span class="fsc-sub">AI agents analyze current market</span>
-        </button>
-      </div>
-    {/if}
-
-    <!-- ═══ Post-scan Trade CTA (shows after scan with active setup) ═══ -->
-    {#if activeTradeSetup && chartMode === 'agent'}
-      <div class="trade-cta-bar">
-        <span class="tcb-dir" class:long={activeTradeSetup.dir === 'LONG'} class:short={activeTradeSetup.dir === 'SHORT'}>
-          {activeTradeSetup.dir === 'LONG' ? '▲' : '▼'} {activeTradeSetup.dir}
-        </span>
-        <span class="tcb-conf">{activeTradeSetup.conf}%</span>
-        <span class="tcb-rr">R:R 1:{activeTradeSetup.rr.toFixed(1)}</span>
-        <button class="tcb-execute" class:long={activeTradeSetup.dir === 'LONG'} class:short={activeTradeSetup.dir === 'SHORT'}
-          on:click={() => {
-            if (activeTradeSetup) openQuickTrade(activeTradeSetup.pair, activeTradeSetup.dir as TradeDirection, activeTradeSetup.entry, activeTradeSetup.tp, activeTradeSetup.sl);
-          }}>
-          EXECUTE {activeTradeSetup.dir}
-        </button>
-      </div>
-    {/if}
-
     {#if drawingMode !== 'none' && chartMode === 'agent'}
       <div class="drawing-indicator">
         {#if drawingMode === 'hline'}
@@ -2694,7 +2639,7 @@
     {#if showPosition && posEntry !== null && posTp !== null && posSl !== null}
       <div class="pos-overlay">
         <div class="pos-badge {posDir.toLowerCase()}">
-          {posDir === 'LONG' ? '▲ LONG' : posDir === 'SHORT' ? '▼ SHORT' : '— NEUTRAL'}
+          {posDir === 'LONG' ? '🚀 LONG' : posDir === 'SHORT' ? '💀 SHORT' : '— NEUTRAL'}
         </div>
         <div class="pos-levels">
           <span class="pos-tp" class:highlight={hoverLine === 'tp' || isDragging === 'tp'}>{hoverLine === 'tp' ? '↕' : ''} TP ${Math.round(posTp).toLocaleString()}</span>
@@ -2743,9 +2688,9 @@
           <button type="button" on:click={() => setTradePlanRatio(20)}>20/80</button>
         </div>
         <div class="plan-actions">
-          <button type="button" class="plan-action ghost" on:click={cancelTradePlan}>CANCEL</button>
+          <button type="button" class="plan-action ghost" on:click={cancelTradePlan}>취소</button>
           <button type="button" class="plan-action primary" class:long={planned.dir === 'LONG'} class:short={planned.dir === 'SHORT'} on:click={openTradeFromPlan}>
-            OPEN {planned.dir}
+            포지션 생성 ({planned.dir})
           </button>
         </div>
       </div>
@@ -3537,61 +3482,6 @@
     pointer-events: none;
     white-space: nowrap;
   }
-
-  /* ═══ Overlay close button (HTML) ═══ */
-  .overlay-close-btn {
-    position: absolute; top: 8px; right: 80px; z-index: 10;
-    width: 22px; height: 22px; border-radius: 4px;
-    background: rgba(10,9,8,.8); border: 1px solid rgba(232,150,125,.35);
-    color: rgba(232,150,125,.9); font-size: 11px; line-height: 1;
-    cursor: pointer; transition: all .15s;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .overlay-close-btn:hover { background: rgba(232,150,125,.15); border-color: #E8967D; color: #E8967D; }
-
-  /* ═══ First-scan CTA overlay ═══ */
-  .first-scan-cta {
-    position: absolute; inset: 0; z-index: 12;
-    display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(ellipse at center, rgba(10,9,8,.6) 0%, transparent 70%);
-    pointer-events: none;
-  }
-  .fsc-btn {
-    pointer-events: auto;
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    padding: 20px 36px; border-radius: 8px;
-    background: rgba(10,9,8,.85); border: 1.5px solid rgba(232,150,125,.35);
-    cursor: pointer; transition: all .2s;
-  }
-  .fsc-btn:hover { border-color: #E8967D; box-shadow: 0 0 20px rgba(232,150,125,.15); background: rgba(10,9,8,.95); }
-  .fsc-icon { font-size: 20px; color: #E8967D; animation: fscPulse 2s ease infinite; }
-  @keyframes fscPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.92)} }
-  .fsc-label { font-family: var(--fm); font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #E8967D; }
-  .fsc-sub { font-family: var(--fm); font-size: 9px; color: rgba(240,237,228,.4); letter-spacing: .5px; }
-
-  /* ═══ Post-scan Trade CTA bar ═══ */
-  .trade-cta-bar {
-    position: absolute; bottom: 0; left: 0; right: 0; z-index: 14;
-    display: flex; align-items: center; gap: 10px;
-    padding: 6px 12px;
-    background: rgba(10,9,8,.9); border-top: 1px solid rgba(232,150,125,.2);
-    backdrop-filter: blur(4px);
-  }
-  .tcb-dir { font-family: var(--fm); font-size: 11px; font-weight: 900; letter-spacing: 1px; }
-  .tcb-dir.long { color: var(--grn, #00ff88); }
-  .tcb-dir.short { color: var(--red, #ff2d55); }
-  .tcb-conf { font-family: var(--fd); font-size: 12px; font-weight: 800; color: rgba(240,237,228,.6); }
-  .tcb-rr { font-family: var(--fm); font-size: 9px; color: rgba(240,237,228,.4); letter-spacing: .5px; }
-  .tcb-execute {
-    margin-left: auto;
-    padding: 5px 16px; border-radius: 4px;
-    font-family: var(--fm); font-size: 10px; font-weight: 900; letter-spacing: 1px;
-    cursor: pointer; transition: all .15s; border: 1px solid;
-  }
-  .tcb-execute.long { color: #0A0908; background: var(--grn, #00ff88); border-color: var(--grn, #00ff88); }
-  .tcb-execute.long:hover { box-shadow: 0 0 12px rgba(0,255,136,.3); }
-  .tcb-execute.short { color: #fff; background: var(--red, #ff2d55); border-color: var(--red, #ff2d55); }
-  .tcb-execute.short:hover { box-shadow: 0 0 12px rgba(255,45,85,.3); }
 
   .tv-container { flex: 1; position: relative; overflow: hidden; background: #0a0a1a; }
   .tv-container :global(iframe) { width: 100% !important; height: 100% !important; border: none !important; }
