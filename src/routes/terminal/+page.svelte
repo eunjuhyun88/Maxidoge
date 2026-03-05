@@ -101,6 +101,13 @@
     intel: { label: 'Intel', icon: '🧠', desc: 'News, community and agent chat' },
   };
   let mobileTab: MobileTab = 'chart';
+  let densityMode: 'essential' | 'pro' = 'essential';
+  let densityLabel = 'ESSENTIAL';
+  let decisionDirectionLabel = 'UNSCANNED';
+  let decisionDirectionClass = 'neutral';
+  let decisionConfidenceLabel = '--';
+  let decisionPrimaryLabel = 'RUN FIRST SCAN';
+  let decisionPrimaryHint = 'Scan current pair to generate agent consensus';
   let mobileViewTracked = false;
   let mobileNavTracked = false;
   type MobilePanelSize = { widthPct: number; heightPct: number };
@@ -547,6 +554,41 @@
     return 'ticker-chip';
   }
 
+  $: densityLabel = densityMode === 'essential' ? 'ESSENTIAL' : 'PRO';
+  $: if (terminalScanning) {
+    decisionDirectionLabel = 'SCANNING';
+    decisionDirectionClass = 'scanning';
+    decisionConfidenceLabel = '--';
+  } else if (latestScan) {
+    decisionDirectionLabel = latestScan.consensus.toUpperCase();
+    decisionDirectionClass = latestScan.consensus;
+    decisionConfidenceLabel = `${Math.round(latestScan.avgConfidence)}%`;
+  } else {
+    decisionDirectionLabel = 'UNSCANNED';
+    decisionDirectionClass = 'neutral';
+    decisionConfidenceLabel = '--';
+  }
+  $: if (!latestScan) {
+    decisionPrimaryLabel = 'RUN FIRST SCAN';
+    decisionPrimaryHint = 'Scan current pair to generate agent consensus';
+  } else if (chatTradeReady) {
+    decisionPrimaryLabel = `TRADE ${chatSuggestedDir}`;
+    decisionPrimaryHint = 'Open chart planner with latest consensus direction';
+  } else {
+    decisionPrimaryLabel = 'OPEN CHAT PLAN';
+    decisionPrimaryHint = 'Ask agents for trade-ready setup first';
+  }
+
+  function toggleDensityMode() {
+    const nextMode = densityMode === 'essential' ? 'pro' : 'essential';
+    densityMode = nextMode;
+    gtmEvent('terminal_density_mode_toggle', {
+      mode: nextMode,
+      pair: $gameState.pair,
+      timeframe: $gameState.timeframe,
+    });
+  }
+
   function setMobileTab(tab: MobileTab) {
     if (mobileTab === tab) return;
     const fromTab = mobileTab;
@@ -847,12 +889,11 @@
     return true;
   }
 
-  function handleChartScanRequest(e: CustomEvent<{ source?: string; pair?: string; timeframe?: string }>) {
-    const detail = e.detail ?? {};
+  function requestTerminalScan(source: string, pairHint?: string, timeframeHint?: string) {
     gtmEvent('terminal_scan_request_shell', {
-      source: detail.source || 'chart-panel',
-      pair: detail.pair || $gameState.pair,
-      timeframe: detail.timeframe || $gameState.timeframe,
+      source,
+      pair: pairHint || $gameState.pair,
+      timeframe: timeframeHint || $gameState.timeframe,
     });
 
     if (tryTriggerWarRoomScan()) return;
@@ -869,6 +910,11 @@
       });
       setMobileTab('warroom');
     }
+  }
+
+  function handleChartScanRequest(e: CustomEvent<{ source?: string; pair?: string; timeframe?: string }>) {
+    const detail = e.detail ?? {};
+    requestTerminalScan(detail.source || 'chart-panel', detail.pair, detail.timeframe);
   }
 
   $: if (pendingChartScan && tryTriggerWarRoomScan()) {
@@ -1130,6 +1176,19 @@
     void triggerTradePlanFromChat('intel-panel');
   }
 
+  async function handleDecisionPrimaryAction() {
+    if (terminalScanning) return;
+    if (!latestScan) {
+      requestTerminalScan('decision-rail');
+      return;
+    }
+    if (chatTradeReady) {
+      await triggerTradePlanFromChat('decision-rail');
+      return;
+    }
+    focusIntelChat('decision-rail-chat');
+  }
+
   async function handleSendChat(e: CustomEvent<{ text: string }>) {
     const text = e.detail.text;
     if (!text.trim()) return;
@@ -1276,10 +1335,10 @@
     terminalScanning = true;
   }
 
-  function handleScanComplete(e: CustomEvent<ScanIntelDetail>) {
+  function handleScanComplete(payload: ScanIntelDetail | CustomEvent<ScanIntelDetail>) {
     terminalScanning = false;
-    latestScan = e.detail;
-    const d = e.detail;
+    const d = 'detail' in payload ? payload.detail : payload;
+    latestScan = d;
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -1331,8 +1390,8 @@
     }
   }
 
-  function handleShowOnChart(e: CustomEvent<{ signal: { vote: string; conf: number; entry: number; tp: number; sl: number; name: string; pair: string } }>) {
-    const sig = e.detail.signal;
+  function handleShowOnChart(payload: { signal: { vote: string; conf: number; entry: number; tp: number; sl: number; name: string; pair: string } } | CustomEvent<{ signal: { vote: string; conf: number; entry: number; tp: number; sl: number; name: string; pair: string } }>) {
+    const sig = 'detail' in payload ? payload.detail.signal : payload.signal;
     if (sig.vote === 'neutral' || !sig.entry || !sig.tp || !sig.sl) return;
     const risk = Math.abs(sig.entry - sig.sl);
     const reward = Math.abs(sig.tp - sig.entry);
@@ -1354,6 +1413,35 @@
   <div class="term-stars" aria-hidden="true"></div>
   <div class="term-stars term-stars-soft" aria-hidden="true"></div>
   <div class="term-grain" aria-hidden="true"></div>
+  {#if isMobile}
+    <button type="button" class="density-toggle" on:click={toggleDensityMode} title="정보 밀도 전환">
+      {densityLabel}
+    </button>
+  {:else}
+    <div class="decision-rail" role="region" aria-label="Trading decision rail">
+      <div class="decision-context">
+        <span class="dc-pair">{pair}</span>
+        <span class="dc-tf">{formatTimeframeLabel($gameState.timeframe)}</span>
+      </div>
+      <div class="decision-verdict">
+        <span class="dv-label">CONSENSUS</span>
+        <span class="dv-dir {decisionDirectionClass}">{decisionDirectionLabel}</span>
+        <span class="dv-conf">{decisionConfidenceLabel}</span>
+      </div>
+      <button
+        type="button"
+        class="decision-primary"
+        class:trade={latestScan && chatTradeReady}
+        on:click={() => void handleDecisionPrimaryAction()}
+      >
+        <span class="dp-text">{decisionPrimaryLabel}</span>
+        <span class="dp-hint">{decisionPrimaryHint}</span>
+      </button>
+      <button type="button" class="decision-mode" on:click={toggleDensityMode} title="정보 밀도 전환">
+        {densityLabel}
+      </button>
+    </div>
+  {/if}
 
   <!-- ═══ MOBILE LAYOUT ═══ -->
   {#if isMobile}
@@ -1380,7 +1468,13 @@
     <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
       {#if mobileTab === 'warroom'}
         <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('warroom')}>
-          <WarRoom bind:this={warRoomRef} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} on:showonchart={handleShowOnChart} />
+          <WarRoom
+            bind:this={warRoomRef}
+            {densityMode}
+            onScanStart={handleScanStart}
+            onScanComplete={handleScanComplete}
+            onShowOnChart={handleShowOnChart}
+          />
           <button
             type="button"
             class="resize-handle resize-handle-x mob-resize-handle mob-resize-handle-x"
@@ -1448,6 +1542,7 @@
       {:else if mobileTab === 'intel'}
         <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('intel')}>
           <IntelPanel
+            {densityMode}
             {chatMessages}
             {isTyping}
             {latestScan}
@@ -1508,7 +1603,13 @@
       <div class="tab-left">
         <div class="tab-panel-resizable" style={getTabletPanelStyle('left')}>
           <div class="tab-panel-body">
-            <WarRoom bind:this={warRoomRef} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} on:showonchart={handleShowOnChart} />
+            <WarRoom
+              bind:this={warRoomRef}
+              {densityMode}
+              onScanStart={handleScanStart}
+              onScanComplete={handleScanComplete}
+              onShowOnChart={handleShowOnChart}
+            />
           </div>
           <button
             type="button"
@@ -1596,6 +1697,7 @@
       <div class="tab-panel-resizable" style={getTabletPanelStyle('bottom')}>
         <div class="tab-panel-body">
           <IntelPanel
+            {densityMode}
             {chatMessages}
             {isTyping}
             {latestScan}
@@ -1653,7 +1755,14 @@
       <div class="tl" on:wheel={(e) => resizePanelByWheel('left', e)}>
         <div class="desk-panel-resizable" style={getDesktopPanelStyle('left')}>
           <div class="desk-panel-body">
-            <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} on:showonchart={handleShowOnChart} />
+            <WarRoom
+              bind:this={warRoomRef}
+              {densityMode}
+              onCollapse={toggleLeft}
+              onScanStart={handleScanStart}
+              onScanComplete={handleScanComplete}
+              onShowOnChart={handleShowOnChart}
+            />
           </div>
           <button
             type="button"
@@ -1755,6 +1864,7 @@
         <div class="desk-panel-resizable" style={getDesktopPanelStyle('right')}>
           <div class="desk-panel-body">
             <IntelPanel
+              {densityMode}
               {chatMessages}
               {isTyping}
               {latestScan}
@@ -1883,6 +1993,152 @@
       );
     opacity: 0.52;
   }
+  .density-toggle {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 30;
+    font: 800 9px/1 var(--fm);
+    letter-spacing: .9px;
+    color: rgba(240,237,228,.9);
+    border: 1px solid rgba(232,150,125,.35);
+    border-radius: 999px;
+    background: rgba(10,9,8,.72);
+    padding: 6px 10px;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: all .12s ease;
+  }
+  .density-toggle:hover {
+    border-color: rgba(232,150,125,.55);
+    background: rgba(232,150,125,.14);
+    color: #fff;
+  }
+  .decision-rail {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    z-index: 28;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border: 1px solid rgba(232,150,125,.28);
+    border-radius: 10px;
+    background: rgba(7, 15, 10, .72);
+    box-shadow: 0 8px 22px rgba(0,0,0,.25);
+    backdrop-filter: blur(6px);
+  }
+  .decision-context {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-family: var(--fm);
+  }
+  .dc-pair {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,.92);
+  }
+  .dc-tf {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    color: rgba(255,255,255,.62);
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 999px;
+    padding: 2px 6px;
+  }
+  .decision-verdict {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--fm);
+    min-width: 0;
+  }
+  .dv-label {
+    font-size: 8px;
+    letter-spacing: .9px;
+    color: rgba(255,255,255,.55);
+  }
+  .dv-dir {
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .9px;
+  }
+  .dv-dir.long { color: #00e676; }
+  .dv-dir.short { color: #ff6b6b; }
+  .dv-dir.neutral { color: #ffd54f; }
+  .dv-dir.scanning { color: #87dcbe; }
+  .dv-conf {
+    font-size: 9px;
+    font-weight: 800;
+    color: rgba(255,255,255,.84);
+  }
+  .decision-primary {
+    margin-left: auto;
+    min-width: 0;
+    border: 1px solid rgba(135,220,190,.34);
+    border-radius: 8px;
+    background: rgba(135,220,190,.14);
+    color: #dff9ef;
+    font-family: var(--fm);
+    padding: 6px 9px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    cursor: pointer;
+    transition: all .12s ease;
+  }
+  .decision-primary.trade {
+    border-color: rgba(0,230,118,.45);
+    background: rgba(0,230,118,.14);
+  }
+  .decision-primary:hover {
+    border-color: rgba(232,150,125,.55);
+    background: rgba(232,150,125,.16);
+    color: #fff;
+  }
+  .dp-text {
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .9px;
+    line-height: 1;
+  }
+  .dp-hint {
+    font-size: 8px;
+    color: rgba(255,255,255,.66);
+    letter-spacing: .4px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  .decision-mode {
+    font: 800 9px/1 var(--fm);
+    letter-spacing: .9px;
+    color: rgba(240,237,228,.9);
+    border: 1px solid rgba(232,150,125,.35);
+    border-radius: 999px;
+    background: rgba(10,9,8,.72);
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all .12s ease;
+    white-space: nowrap;
+  }
+  .decision-mode:hover {
+    border-color: rgba(232,150,125,.55);
+    background: rgba(232,150,125,.14);
+    color: #fff;
+  }
+  @media (max-width: 1180px) {
+    .decision-rail { gap: 6px; padding: 6px 8px; }
+    .dc-pair { font-size: 9px; }
+    .dc-tf { font-size: 8px; padding: 2px 5px; }
+    .dp-hint { display: none; }
+  }
   .term-stars,
   .term-grain {
     position: absolute;
@@ -1956,6 +2212,8 @@
     grid-template-columns: 280px 4px 1fr 4px 300px; /* overridden by inline style */
     grid-template-rows: 1fr auto;
     height: 100%;
+    padding-top: 50px;
+    box-sizing: border-box;
     overflow: hidden;
     overflow-x: clip;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
@@ -2497,6 +2755,8 @@
     display: grid;
     grid-template-rows: minmax(0, 1fr) 6px var(--tab-bottom-height) auto;
     height: 100%;
+    padding-top: 50px;
+    box-sizing: border-box;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
     overflow: hidden;

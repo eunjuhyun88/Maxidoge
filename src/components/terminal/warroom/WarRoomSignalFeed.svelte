@@ -5,6 +5,7 @@
 
   export let filteredSignals: AgentSignal[] = [];
   export let summarySignals: AgentSignal[] = [];
+  export let densityMode: 'essential' | 'pro' = 'essential';
   export let scanTabs: ScanTab[] = [];
   export let selectedIds: Set<string> = new Set();
   export let selectedCount = 0;
@@ -53,6 +54,7 @@
     <div
       class="wr-msg"
       class:selected={isSelected}
+      class:essential={densityMode === 'essential'}
       class:wr-msg-new={hasChange}
       class:wr-msg-vote-flip={diff?.voteChanged}
       on:click={() => onToggleSelect(sig.id)}
@@ -95,17 +97,33 @@
           <span class="wr-msg-tp">TP {fmtPrice(sig.tp)}</span>
           <span class="wr-msg-sl">SL {fmtPrice(sig.sl)}</span>
         </div>
-        <!-- Primary actions -->
-        <div class="wr-msg-actions">
-          <button class="wr-act-btn long" on:click|stopPropagation={() => onQuickTrade('LONG', sig)} title="Quick Trade: open LONG position">{'\u25B2'} LONG</button>
-          <button class="wr-act-btn short" on:click|stopPropagation={() => onQuickTrade('SHORT', sig)} title="Quick Trade: open SHORT position">{'\u25BC'} SHORT</button>
-        </div>
-        <!-- Secondary actions (hover reveal) -->
-        <div class="wr-msg-actions-secondary">
-          <button class="wr-act-btn chart" on:click|stopPropagation={() => onShowOnChart(sig)} title="Show entry/TP/SL on chart">CHART</button>
-          <button class="wr-act-btn track" on:click|stopPropagation={() => onTrack(sig)}>TRACK</button>
-          <span class="wr-msg-src">{sig.src}</span>
-        </div>
+        {#if densityMode === 'essential'}
+          <div class="wr-msg-actions">
+            <button class="wr-act-btn chart" on:click|stopPropagation={() => onShowOnChart(sig)} title="Show entry/TP/SL on chart">CHART</button>
+            {#if sig.vote === 'long' || sig.vote === 'short'}
+              <button
+                class="wr-act-btn {sig.vote === 'long' ? 'long' : 'short'}"
+                on:click|stopPropagation={() => onQuickTrade(sig.vote === 'long' ? 'LONG' : 'SHORT', sig)}
+                title="Quick Trade by current signal direction"
+              >
+                {sig.vote === 'long' ? '\u25B2 LONG' : '\u25BC SHORT'}
+              </button>
+            {/if}
+            <button class="wr-act-btn track" on:click|stopPropagation={() => onTrack(sig)}>TRACK</button>
+          </div>
+        {:else}
+          <!-- Primary actions -->
+          <div class="wr-msg-actions">
+            <button class="wr-act-btn long" on:click|stopPropagation={() => onQuickTrade('LONG', sig)} title="Quick Trade: open LONG position">{'\u25B2'} LONG</button>
+            <button class="wr-act-btn short" on:click|stopPropagation={() => onQuickTrade('SHORT', sig)} title="Quick Trade: open SHORT position">{'\u25BC'} SHORT</button>
+          </div>
+          <!-- Secondary actions (hover reveal) -->
+          <div class="wr-msg-actions-secondary">
+            <button class="wr-act-btn chart" on:click|stopPropagation={() => onShowOnChart(sig)} title="Show entry/TP/SL on chart">CHART</button>
+            <button class="wr-act-btn track" on:click|stopPropagation={() => onTrack(sig)}>TRACK</button>
+            <span class="wr-msg-src">{sig.src}</span>
+          </div>
+        {/if}
       </div>
     </div>
   {/each}

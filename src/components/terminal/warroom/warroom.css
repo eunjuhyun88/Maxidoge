@@ -294,6 +294,9 @@
   }
   .wr-msg:hover { background: rgba(255,255,255,.035); }
   .wr-msg.selected { background: rgba(232,150,125,.05); border-left: 2px solid #E8967D; }
+  .wr-msg.essential .wr-msg-text { -webkit-line-clamp: 1; color: rgba(255,255,255,.7); }
+  .wr-msg.essential .wr-msg-signal-row { gap: 8px; font-size: 9px; }
+  .wr-msg.essential .wr-msg-actions { margin-top: 4px; }
 
   @supports (animation-timeline: view()) {
     .wr-msg {

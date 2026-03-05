@@ -74,6 +74,8 @@
   - 티커 하이라이트
   - 알림 벨 겹침 완화
   - Positions error-empty demo fallback
+  - Decision Rail 추가: 상단에 Pair/TF + Consensus + Primary CTA + Density 토글 통합
+  - Essential 모드에서 Intel 필터/트렌딩 탭 축소(핵심만 노출)
 - 다음:
   - demo fallback을 “마지막 성공 스냅샷” 우선으로 확장
   - CTA 이벤트를 conversion funnel 대시보드에 연결
