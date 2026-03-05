@@ -468,3 +468,138 @@ export interface LiveSession {
 }
 
 export type LiveReaction = '🔥' | '🧊' | '🤔' | '⚡' | '💀';
+
+// ─── Battle Engine (Living Arena) ───────────────────────────
+
+export type BattleMode = 'SPRINT' | 'STANDARD' | 'MARATHON';
+
+export type BattleResolution = 'TP_HIT' | 'SL_HIT' | 'TIME_EXPIRY' | 'USER_CUT';
+
+export type DecisionAction = 'HOLD' | 'CUT' | 'ADD' | 'FLIP';
+
+export interface CheckpointAgentComment {
+  agentId: string;
+  comment: string;
+  recommendation: 'HOLD' | 'CUT' | 'ADD';
+}
+
+export interface Checkpoint {
+  checkpointN: number;
+  timestamp: number;
+  price: number;
+  unrealizedPnL: number;
+  agentComments: CheckpointAgentComment[];
+  dwAction: DecisionAction | null;
+  dwDeadline: number;
+  resolved: boolean;
+}
+
+export interface DWResult {
+  windowN: number;
+  action: DecisionAction;
+  priceAt: number;
+  wasCorrect: boolean | null;
+  pointsEarned: number;
+}
+
+export interface ActiveGame {
+  matchId: string;
+  pair: string;
+  timeframe: string;
+  battleMode: BattleMode;
+  direction: Direction;
+  entryPrice: number;
+  currentPrice: number;
+  tp: number;
+  sl: number;
+  stakedLP: number;
+  positionMultiplier: number;
+  flippedDirection: Direction | null;
+  flippedEntry: number | null;
+  checkpoints: Checkpoint[];
+  resolution: BattleResolution | null;
+  exitPrice: number | null;
+  startedAt: number;
+  expiresAt: number;
+  selectedAgents: string[];
+  agentOutputs: AgentOutput[] | null;
+  hypothesis: { dir: Direction; conf: number; rr: number } | null;
+}
+
+// ─── Battle Mode Helpers ────────────────────────────────────
+
+const BATTLE_MODE_MAP: Record<string, BattleMode> = {
+  '1m': 'SPRINT', '3m': 'SPRINT', '5m': 'SPRINT', '15m': 'SPRINT',
+  '1h': 'STANDARD', '4h': 'STANDARD',
+  '1d': 'MARATHON', '1w': 'MARATHON',
+};
+
+const TIMEFRAME_DURATION_MS: Record<string, number> = {
+  '1m': 60_000, '3m': 3 * 60_000, '5m': 5 * 60_000, '15m': 15 * 60_000,
+  '1h': 60 * 60_000, '4h': 4 * 60 * 60_000,
+  '1d': 24 * 60 * 60_000, '1w': 7 * 24 * 60 * 60_000,
+};
+
+const CHECKPOINT_INTERVAL_MS: Record<string, number> = {
+  '1m': 0, '3m': 0, '5m': 0, '15m': 0,       // SPRINT: no checkpoints
+  '1h': 15 * 60_000,                            // every 15 min
+  '4h': 60 * 60_000,                            // every 1 hour
+  '1d': 4 * 60 * 60_000,                        // every 4 hours
+  '1w': 24 * 60 * 60_000,                       // every 24 hours
+};
+
+export function getBattleMode(timeframe: string): BattleMode {
+  return BATTLE_MODE_MAP[timeframe] ?? 'SPRINT';
+}
+
+export function getTimeframeDurationMs(timeframe: string): number {
+  return TIMEFRAME_DURATION_MS[timeframe] ?? 60_000;
+}
+
+export function getCheckpointIntervalMs(timeframe: string): number {
+  return CHECKPOINT_INTERVAL_MS[timeframe] ?? 0;
+}
+
+// ─── War Room (3-Round Agent LLM Debate) ────────────────────
+
+export type WarRoomRound = 1 | 2 | 3;
+
+export type UserInteractionType = 'agree' | 'challenge' | 'question';
+
+export interface WarRoomUserInteraction {
+  agentId: string;
+  type: UserInteractionType;
+  round: WarRoomRound;
+}
+
+export interface WarRoomDialogue {
+  agentId: string;
+  personaName: string;
+  text: string;
+  direction: Direction;
+  confidence: number;
+  referencedAgent?: string;
+}
+
+export interface WarRoomConfidenceShift {
+  agentId: string;
+  oldConf: number;
+  newConf: number;
+  reason: string;
+}
+
+export interface WarRoomRoundResult {
+  round: WarRoomRound;
+  dialogues: WarRoomDialogue[];
+  confidenceShifts: WarRoomConfidenceShift[];
+  userInteractions: WarRoomUserInteraction[];
+}
+
+export interface AgentVote {
+  mvpAgentId: string | null;
+  traitorAgentId: string | null;
+}
+
+// ─── Agent Tier (MVP Vote UI) ───────────────────────────────
+
+export type AgentTier = 'ROOKIE' | 'VETERAN' | 'EXPERT' | 'LEGEND';

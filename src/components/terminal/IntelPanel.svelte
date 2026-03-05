@@ -96,6 +96,50 @@
   let liveFlows: Array<{ id: string; label: string; addr: string; amt: string; isBuy: boolean; source?: string }> = [];
   let dataLoaded = { headlines: false, events: false, flow: false, trending: false };
 
+  // ═══ Onchain Alerts (텔레그램 봇 스타일 대시보드) ═══
+  interface OnchainData {
+    mvrv: { value: number | null; zone: string | null; nupl: number | null };
+    whale: { count: number; netflow: number; ratio: number };
+    liquidation: { longTotal1h: number; shortTotal1h: number; total1h: number; dominance: string };
+    exchangeFlow: { netflow24h: number | null; direction: string };
+    alerts: Array<{ id: string; category: string; severity: string; title: string; body: string }>;
+    fetchedAt: number;
+  }
+  let onchainData: OnchainData | null = null;
+  let onchainLoading = false;
+  let _onchainTimer: ReturnType<typeof setInterval> | null = null;
+
+  const MVRV_ZONE_LABELS: Record<string, { label: string; emoji: string; color: string }> = {
+    deep_value:    { label: 'Deep Value',    emoji: '🟣', color: '#a855f7' },
+    undervalued:   { label: 'Undervalued',   emoji: '🔵', color: '#3b82f6' },
+    fair_value:    { label: 'Fair Value',    emoji: '🟢', color: '#22c55e' },
+    optimism:      { label: 'Optimism',      emoji: '🟡', color: '#eab308' },
+    greed:         { label: 'Greed',         emoji: '🟠', color: '#f97316' },
+    extreme_greed: { label: 'Extreme Greed', emoji: '🔴', color: '#ef4444' },
+  };
+
+  async function fetchOnchainData() {
+    try {
+      onchainLoading = !onchainData; // only show loading on first fetch
+      const res = await fetch('/api/market/alerts/onchain', { signal: AbortSignal.timeout(12000) });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json?.ok && json?.data) {
+        onchainData = json.data;
+      }
+    } catch { /* silent */ }
+    onchainLoading = false;
+  }
+
+  function fmtUsd(v: number | null): string {
+    if (v == null) return '—';
+    const abs = Math.abs(v);
+    if (abs >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
+    if (abs >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+    if (abs >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
+    return `$${v.toFixed(0)}`;
+  }
+
   // ═══ Trending data ═══
   interface TrendingCoin { rank: number; symbol: string; name: string; price: number; change1h: number; change24h: number; change7d: number; volume24h: number; sentiment?: number | null; socialVolume?: number | null; galaxyScore?: number | null; }
   interface GainerLoser extends TrendingCoin { direction: 'gainer' | 'loser'; }
@@ -790,7 +834,11 @@
       fetchLiveHeadlines(),
       fetchLiveEvents(),
       fetchLiveFlow(),
+      fetchOnchainData(),
     ]);
+
+    // Refresh onchain data every 2 min
+    _onchainTimer = setInterval(() => void fetchOnchainData(), 120_000);
   });
 
   onDestroy(() => {
@@ -798,6 +846,7 @@
     if (_uiStateSaveTimer) clearTimeout(_uiStateSaveTimer);
     if (_positionsPollTimer) clearInterval(_positionsPollTimer);
     if (_positionsRefreshTimer) clearInterval(_positionsRefreshTimer);
+    if (_onchainTimer) clearInterval(_onchainTimer);
     if (_positionVisibilityListener && typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', _positionVisibilityListener);
     }
@@ -1198,6 +1247,75 @@
           {/if}
 
           {#if feedFilter === 'all' || feedFilter === 'flow'}
+            <!-- ═══ Onchain Dashboard (텔레그램 봇 스타일) ═══ -->
+            <div class="oc-dashboard">
+              <div class="oc-header">ON-CHAIN SIGNALS</div>
+              {#if onchainLoading && !onchainData}
+                <div class="oc-loading">Loading on-chain data...</div>
+              {:else if onchainData}
+                {#if onchainData.mvrv}
+                  {@const zoneInfo = MVRV_ZONE_LABELS[onchainData.mvrv.zone ?? ''] ?? { label: '—', emoji: '⚪', color: '#666' }}
+                  {@const nuplVal = onchainData.mvrv.nupl}
+                  {@const nuplColor = nuplVal == null ? '#666' : nuplVal > 0.5 ? '#ef4444' : nuplVal > 0.25 ? '#f97316' : nuplVal > 0 ? '#22c55e' : '#3b82f6'}
+                  {@const wNet = onchainData.whale.netflow}
+                  {@const wBullish = wNet < 0}
+                  {@const ef = onchainData.exchangeFlow.netflow24h}
+                  {@const efOut = ef != null && ef < 0}
+                  <div class="oc-grid">
+                    <div class="oc-card">
+                      <div class="oc-card-lbl">MVRV</div>
+                      <div class="oc-card-val" style="color:{zoneInfo.color}">{onchainData.mvrv.value?.toFixed(3) ?? '—'}</div>
+                      <div class="oc-card-tag" style="background:{zoneInfo.color}20;color:{zoneInfo.color}">{zoneInfo.emoji} {zoneInfo.label}</div>
+                    </div>
+
+                    <div class="oc-card">
+                      <div class="oc-card-lbl">NUPL</div>
+                      <div class="oc-card-val" style="color:{nuplColor}">{nuplVal?.toFixed(3) ?? '—'}</div>
+                      <div class="oc-card-sub">{nuplVal == null ? '' : nuplVal > 0.5 ? 'Euphoria' : nuplVal > 0.25 ? 'Belief' : nuplVal > 0 ? 'Hope' : 'Capitulation'}</div>
+                    </div>
+
+                    <div class="oc-card">
+                      <div class="oc-card-lbl">🐋 WHALE</div>
+                      <div class="oc-card-val" style="color:{wBullish ? '#22c55e' : '#ef4444'}">{onchainData.whale.count}건</div>
+                      <div class="oc-card-sub" style="color:{wBullish ? '#22c55e' : '#ef4444'}">{wBullish ? '순매수' : '순매도'} {fmtUsd(Math.abs(wNet))}</div>
+                    </div>
+
+                    <div class="oc-card">
+                      <div class="oc-card-lbl">🏦 EX FLOW</div>
+                      <div class="oc-card-val" style="color:{ef == null ? '#666' : efOut ? '#22c55e' : '#ef4444'}">{ef != null ? (efOut ? '−' : '+') : ''}{fmtUsd(ef != null ? Math.abs(ef) : null)}</div>
+                      <div class="oc-card-sub">{efOut ? 'Outflow (Bullish)' : ef != null && ef > 0 ? 'Inflow (Bearish)' : '—'}</div>
+                    </div>
+                  </div>
+                {/if}
+
+                <!-- Liquidation bar -->
+                {#if onchainData.liquidation.total1h > 0}
+                  {@const longPct = onchainData.liquidation.total1h > 0 ? (onchainData.liquidation.longTotal1h / onchainData.liquidation.total1h) * 100 : 50}
+                  <div class="oc-liq">
+                    <div class="oc-liq-header">
+                      <span>💀 LIQUIDATIONS (1H)</span>
+                      <span class="oc-liq-total">{fmtUsd(onchainData.liquidation.total1h)}</span>
+                    </div>
+                    <div class="oc-liq-bar">
+                      <div class="oc-liq-long" style="width:{longPct}%"><span>L {longPct.toFixed(0)}%</span></div>
+                      <div class="oc-liq-short" style="width:{100 - longPct}%"><span>S {(100 - longPct).toFixed(0)}%</span></div>
+                    </div>
+                  </div>
+                {/if}
+
+                <!-- Active alerts -->
+                {#if onchainData.alerts.length > 0}
+                  <div class="oc-alerts">
+                    {#each onchainData.alerts.slice(0, 4) as alert (alert.id)}
+                      <div class="oc-alert oc-alert-{alert.severity}">
+                        <span class="oc-alert-title">{alert.title}</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
+            </div>
+
             <div class="flow-list">
               <div class="flow-section-lbl">SMART MONEY FLOWS (24H)</div>
               {#if liveFlows.length === 0}
@@ -1630,6 +1748,32 @@
   .ev-src { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); display: block; margin-top: 3px; }
 
   /* ── Flow ── */
+  /* ── Onchain Dashboard ── */
+  .oc-dashboard { margin-bottom: 8px; }
+  .oc-header { font-family: var(--fm); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #a78bfa; padding: 4px 0 6px; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .oc-loading { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.4); text-align: center; padding: 12px 0; }
+  .oc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; }
+  .oc-card { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); padding: 7px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .oc-card-lbl { font-family: var(--fm); font-size: 8px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,.5); }
+  .oc-card-val { font-family: var(--fm); font-size: 15px; font-weight: 800; line-height: 1.1; }
+  .oc-card-tag { font-family: var(--fm); font-size: 8px; font-weight: 600; padding: 1px 5px; border-radius: 2px; display: inline-block; width: fit-content; letter-spacing: .3px; }
+  .oc-card-sub { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.55); letter-spacing: .3px; }
+
+  .oc-liq { margin-top: 6px; }
+  .oc-liq-header { display: flex; justify-content: space-between; align-items: center; font-family: var(--fm); font-size: 9px; font-weight: 700; color: rgba(255,255,255,.7); letter-spacing: .5px; margin-bottom: 3px; }
+  .oc-liq-total { color: rgba(255,255,255,.5); }
+  .oc-liq-bar { display: flex; height: 16px; border-radius: 2px; overflow: hidden; }
+  .oc-liq-long { background: #ef444480; display: flex; align-items: center; justify-content: center; min-width: 20px; transition: width .3s; }
+  .oc-liq-short { background: #22c55e80; display: flex; align-items: center; justify-content: center; min-width: 20px; transition: width .3s; }
+  .oc-liq-long span, .oc-liq-short span { font-family: var(--fm); font-size: 8px; font-weight: 700; color: #fff; letter-spacing: .3px; }
+
+  .oc-alerts { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+  .oc-alert { font-family: var(--fm); font-size: 9px; padding: 4px 7px; border-radius: 2px; border-left: 2px solid; }
+  .oc-alert-critical { background: rgba(239,68,68,.12); border-color: #ef4444; color: #fca5a5; }
+  .oc-alert-alert { background: rgba(249,115,22,.1); border-color: #f97316; color: #fdba74; }
+  .oc-alert-info { background: rgba(59,130,246,.08); border-color: #3b82f6; color: #93c5fd; }
+  .oc-alert-title { font-weight: 600; letter-spacing: .3px; }
+
   .flow-list { display: flex; flex-direction: column; gap: 4px; }
   .flow-empty { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.4); text-align: center; padding: 16px 0; letter-spacing: .5px; }
   .flow-section-lbl { font-family: var(--fm); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: var(--grn); padding: 4px 0 5px; border-bottom: 1px solid rgba(255,255,255,.1); }

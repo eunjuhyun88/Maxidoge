@@ -75,7 +75,11 @@
       HISTORY
     </button>
     {#each scanTabs as tab (tab.id)}
+      {@const longs = tab.signals.filter(s => s.vote === 'long').length}
+      {@const shorts = tab.signals.filter(s => s.vote === 'short').length}
+      {@const consensus = longs > shorts ? 'long' : shorts > longs ? 'short' : 'neutral'}
       <button class="scan-tab" class:active={activeScanId === tab.id} on:click={() => onActivateScanTab(tab.id)}>
+        <span class="scan-tab-dir {consensus}">{consensus === 'long' ? '▲' : consensus === 'short' ? '▼' : '—'}</span>
         <span class="scan-tab-token">{tab.token}</span>
         <span class="scan-tab-meta">{tab.label}</span>
       </button>

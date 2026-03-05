@@ -1810,3 +1810,161 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Push status:
   - `origin/codex/wallet-only-main-merge-20260227`: SUCCESS
   - `origin/main`: REJECTED (protected branch; PR required)
+
+### W-20260228-0432-frontend-codex (start)
+
+- Start: 2026-02-28 04:32:00 +0900
+- Agent: Codex (GPT-5)
+- Repo path: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/home-backend-live-20260226
+- Base origin/main hash: 97ec968
+- Working tree status:
+  - ## codex/home-backend-live-20260226...origin/codex/home-backend-live-20260226 [ahead 2]
+  - M src/components/modals/WalletModal.svelte
+  - M src/lib/wallet/providers.ts
+- Task summary: Calculate and report last 30-day cumulative DEX volume for token 0x6f8c2Eb585a93B29721B17E050bEabd3125fA937 (single main pool and all pools aggregate).
+- Overlap/conflict check result: No active overlapping entry found in integration log for this token address/30-day volume task.
+- safe:status result: PASS (ran npm run safe:status; ctx:auto snapshot/compact completed).
+- Notes: safe:sync attempted; blocked due existing local modifications in wallet files. User approved continuing with current worktree state.
+
+### W-20260228-1035-frontend-codex (start)
+
+- Start: 2026-02-28 10:35:15 +0900
+- Agent: Codex (GPT-5)
+- Repo path: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/arena-game-feel
+- Base origin/main hash: 97ec968
+- Working tree status:
+  - ## codex/arena-game-feel
+  - M src/routes/arena/+page.svelte
+  - ?? src/components/arena/MVPVote.svelte
+  - ?? src/components/arena/WarRoomPanel.svelte
+  - ?? src/lib/engine/battleEngine.ts
+  - ?? src/lib/server/warRoomService.ts
+  - ?? src/lib/stores/activeGamesStore.ts
+  - ?? src/lib/stores/warRoomStore.ts
+  - ?? src/routes/api/arena/match/[id]/warroom/
+- Task summary: Arena 화면을 더 게임처럼 보이도록(아레나 감성/피드백/상태 표현 강화) UI-UX를 개선한다.
+- Overlap/conflict check result: 현재 워킹트리에 arena/warroom 관련 미커밋 변경이 존재하며 이번 요청 범위와 일부 중첩 가능성이 있음. 관련 파일 범위 내에서만 수정하고 비요청 영역은 건드리지 않는다.
+- safe:status result: PASS (npm run safe:status 실행 완료, ctx:auto snapshot/compact 완료)
+- Notes: safe:sync attempted before edit; blocked because working tree already had uncommitted arena/warroom files.
+
+### W-20260301-0440-frontend-codex (start)
+
+- Start: 2026-03-01 04:40:52 +0900
+- Agent: Codex (GPT-5)
+- Repo path: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/arena-game-feel
+- Base origin/main hash: e07b0935a67f017f2a0740e5d33cbe30418c31f9
+- Working tree status:
+  - ## codex/arena-game-feel
+  - M src/components/arena/views/AgentArenaView.svelte
+  - M src/components/arena/views/CardDuelView.svelte
+  - M src/components/arena/views/ChartWarView.svelte
+  - M src/components/arena/views/MissionControlView.svelte
+  - M src/lib/stores/gameState.ts
+  - M src/routes/arena/+page.svelte
+- Task summary: AI agent tokens/pools are analyzed individually (not aggregated) to show per-token x per-protocol volume and fee-driven revenue flow for 30d/180d/365d.
+- Overlap/conflict check result: Existing local arena-related edits are unrelated to this on-chain analytics task; no file-edit overlap planned.
+- safe:status result: PASS (npm run safe:status completed; ctx:auto snapshot/compact completed).
+- Notes: SSOT path from AGENTS (`/Users/ej/Downloads/maxi-doge-unified/README.md`) was unavailable on this machine, so SSOT section was re-read from `/Users/ej/Downloads/maxidoge-clones/frontend/README.md`.
+
+### W-20260301-0440-frontend-codex (finish)
+
+- End: 2026-03-01 05:05:34 +0900
+- Agent: Codex (GPT-5)
+- What changed:
+  - No repository source files were modified.
+  - Collected and computed per-token x per-protocol volume/fee analytics for AI Agents top pools using live/retired GeckoTerminal API responses.
+  - Generated analysis artifacts:
+    - `/tmp/gt_ai_agents_page1.json`
+    - `/tmp/ai_agents_top20.tsv`
+    - `/tmp/ai_agents_top20_final.json`
+    - `/tmp/ai_agents_top20_final.tsv`
+- Validation results:
+  - `npm run check`: PASS (warnings only)
+  - `npm run build`: PASS (warnings only)
+- Commit hash: N/A (analysis-only task, no repo edits)
+- Push status: N/A (not requested)
+- Final working tree status:
+  - ## codex/arena-game-feel
+  - M src/components/arena/views/AgentArenaView.svelte
+  - M src/components/arena/views/CardDuelView.svelte
+  - M src/components/arena/views/ChartWarView.svelte
+  - M src/components/arena/views/MissionControlView.svelte
+  - M src/lib/stores/gameState.ts
+  - M src/routes/arena/+page.svelte
+- Context compact check: present (`.agent-context/compact/codex-arena-game-feel-latest.md`)
+- Status: DONE
+
+### W-20260301-0710-frontend-codex (start)
+
+- Start: 2026-03-01 07:10:03 +0900
+- Agent: Codex (GPT-5)
+- Repo path: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/arena-game-feel
+- Base origin/main hash: e07b0935a67f017f2a0740e5d33cbe30418c31f9
+- Working tree status:
+  - ## codex/arena-game-feel
+  - M src/components/arena/views/AgentArenaView.svelte
+  - M src/components/arena/views/CardDuelView.svelte
+  - M src/components/arena/views/ChartWarView.svelte
+  - M src/components/arena/views/MissionControlView.svelte
+  - M src/lib/stores/gameState.ts
+  - M src/routes/arena/+page.svelte
+  - ?? src/components/arena-v2/
+  - ?? src/components/arena-war/
+  - ?? src/lib/engine/arenaWarTypes.ts
+  - ?? src/lib/engine/mockArenaData.ts
+  - ?? src/lib/engine/teamSynergy.ts
+  - ?? src/lib/engine/v2BattleEngine.ts
+  - ?? src/lib/engine/v2BattleTypes.ts
+  - ?? src/lib/stores/arenaV2State.ts
+  - ?? src/lib/stores/arenaWarStore.ts
+  - ?? src/routes/arena-v2/
+  - ?? src/routes/arena-war/
+- Task summary: Estimate pippin pool bot/arbitrage share and explain why pippin trading volume is unusually high using current on-chain/market data.
+- Overlap/conflict check result: Unexpected local changes detected in arena-v2/arena-war files; user explicitly approved continuing with analysis-only work and no file edits.
+- safe:status result: PASS (npm run safe:status completed; ctx:auto snapshot/compact completed).
+- Notes: Continue without repository file modifications.
+
+### W-20260301-0710-frontend-codex (finish)
+
+- End: 2026-03-01 08:19:24 +0900
+- Agent: Codex (GPT-5)
+- What changed:
+  - No repository source files were modified.
+  - Completed pippin bot/arbitrage share estimation using live market + trade sample data.
+  - Analysis artifacts generated:
+    - `/tmp/pippin_pool.json`
+    - `/tmp/pippin_trades_p1.json`
+    - `/tmp/pippin_trades_p2.json`
+    - `/tmp/pippin_tickers.json`
+    - `/tmp/pippin_bot_arb_metrics.json`
+- Validation results:
+  - `npm run check`: PASS (warnings only)
+  - `npm run build`: PASS (warnings only)
+- Commit hash: N/A (analysis-only)
+- Push status: N/A (not requested)
+- Final working tree status:
+  - ## codex/arena-game-feel
+  - M src/components/arena/views/AgentArenaView.svelte
+  - M src/components/arena/views/CardDuelView.svelte
+  - M src/components/arena/views/ChartWarView.svelte
+  - M src/components/layout/Header.svelte
+  - M src/components/arena/views/MissionControlView.svelte
+  - M src/lib/stores/gameState.ts
+  - M src/routes/arena/+page.svelte
+  - ?? src/components/arena-v2/
+  - ?? src/components/arena-war/
+  - ?? src/lib/engine/arenaWarTypes.ts
+  - ?? src/lib/engine/mockArenaData.ts
+  - ?? src/lib/engine/teamSynergy.ts
+  - ?? src/lib/engine/v2BattleEngine.ts
+  - ?? src/lib/engine/v2BattleTypes.ts
+  - ?? src/lib/stores/arenaV2State.ts
+  - ?? src/lib/stores/arenaWarStore.ts
+  - ?? src/routes/arena-v2/
+  - ?? src/routes/arena-war/
+- Context compact check: present (`.agent-context/compact/codex-arena-game-feel-latest.md`)
+- Status: DONE

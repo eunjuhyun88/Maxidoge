@@ -21,7 +21,8 @@
   // Navigation items
   const NAV_ITEMS = [
     { path: '/terminal', label: 'TERMINAL', desc: '실시간 차트와 스캔' },
-    { path: '/arena', label: 'ARENA', desc: '드래프트와 배틀', accent: true },
+    { path: '/arena', label: 'ARENA', desc: '드래프트와 배틀' },
+    { path: '/arena-war', label: 'WAR', desc: 'AI와 1:1 분석 대결', accent: true },
     { path: '/signals', label: 'COMMUNITY', desc: '시그널, 오라클 리더보드, 라이브 피드' },
     { path: '/passport', label: 'PASSPORT', desc: '내 기록과 포트폴리오' },
   ];
@@ -56,7 +57,8 @@
   }
 
   function isActive(path: string): boolean {
-    if (path === '/arena') return activePath.startsWith('/arena');
+    if (path === '/arena') return activePath === '/arena' || activePath.startsWith('/arena-v2');
+    if (path === '/arena-war') return activePath.startsWith('/arena-war');
     return activePath.startsWith(path);
   }
 
