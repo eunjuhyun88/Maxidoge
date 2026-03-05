@@ -9,7 +9,7 @@
 # (아래는 레거시 — 참고용으로만 유지)
 
 # STOCKCLAW — Claude Code Project Guide
-> **Last updated: 2026-03-03** | v3 Battle Engine + PixiJS + AI Learning 통합 완료
+> **Last updated: 2026-03-06** | 워크스페이스 가드 + warning budget CI 게이트 + 경고 우선순위표 추가
 
 ## Project Overview
 **StockHoo / STOCKCLAW** — Crypto Intelligence OS with gamified trading arena.
@@ -35,6 +35,15 @@ node node_modules/.bin/vite build
 
 # Type check
 npm run check
+
+# Type check + warning budget gate (기본 budget=49)
+npm run check:budget
+
+# Workspace guard (deprecated workspace 차단)
+npm run guard:workspace
+
+# Full gate (guard + check:budget + build)
+npm run gate
 
 # Git push (gh CLI at ~/.local/bin/gh)
 export PATH="$HOME/.local/bin:$HOME/.local/node-v22.14.0-darwin-arm64/bin:$PATH"
@@ -89,6 +98,12 @@ src/
 ├── routes/
 │   ├── api/          # SvelteKit API (99 엔드포인트, 17 카테고리)
 │   └── [pages]/      # 위 Pages 테이블 참조
+scripts/
+├── dev/              # 브랜치/컨텍스트/가드 자동화
+│   ├── guard-active-workspace.sh         # deprecated workspace(frontend-passport) 차단
+│   └── check-svelte-warning-budget.sh    # svelte-check warning budget 게이트
+docs/
+└── warning-priority-2026-03-06.md        # 49 warnings 정리 우선순위표
 ```
 
 ### Stores (23개 — Svelte 4 writable 패턴)
@@ -262,6 +277,7 @@ See `.env.example` for all required keys:
 - **Auto-push before edits**: Always commit+push current state before starting modifications
 - **PR merge**: Use `gh pr create` + `gh pr merge` (gh at `~/.local/bin/gh`)
 - **Repo**: `eunjuhyun88/Stockclaw`
+- **Deprecated workspace guard**: `frontend-passport` 로컬 워크스페이스에서 gate/push 차단 (`ALLOW_LEGACY_WORKSPACE=1`로 임시 우회 가능)
 
 ## Active Branches (병렬 작업 현황)
 
@@ -274,6 +290,7 @@ See `.env.example` for all required keys:
 | `feat/chart-trade-overlay` | TradingView 차트 트레이드 오버레이 | 🟡 PR 대기 |
 | `codex/home-backend-live-20260226` | Home + Backend 라이브 연동 | 🟡 PR 대기 |
 | `codex/uiux-frontend` | UIUX 프론트엔드 전반 | 🟡 활성 |
+| `feat/onchain-alerts-dashboard` | CI hardening (workspace guard + warning budget gate) + 문서/컨텍스트 기록 | 🔵 진행 중 (2026-03-06) |
 
 **충돌 가능성 높은 파일:**
 - `arenaWarStore.ts` — Arena War 관련 브랜치에서 동시 수정 가능
@@ -494,6 +511,12 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 ### 빌드 관련
 - **node_modules synthetic 파일 깨짐**: `@sveltejs/kit/src/types/synthetic/` 안의 `.md` 파일들이 날짜 접두어로 rename될 수 있음. `npm install` 후에도 안 되면 수동으로 접두어 제거 후 복사.
 - **`npm run build` 실패 시**: `node node_modules/.bin/vite build` 직접 사용.
+- **warning budget 게이트**: `npm run check:budget`는 기본 `WARNING_BUDGET=49`를 초과하면 실패. 경고 총량을 늘리는 PR 금지.
+- **CI check job 규칙**: `guard:workspace` + `check:budget`을 먼저 통과해야 함.
+
+### Workspace / Legacy 운영
+- **`frontend-passport`는 deprecated 로컬 워크스페이스**: `scripts/dev/guard-active-workspace.sh`가 gate/push 전에 차단.
+- **임시 우회**: 꼭 필요한 경우에만 `ALLOW_LEGACY_WORKSPACE=1` 사용 (기본 금지).
 
 ### 서버 API 패턴
 - **DB 테이블 미존재 대응**: API에서 `errorContains(e, 'does not exist')` 체크 → graceful fallback + warning 반환.
@@ -578,6 +601,13 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - [ ] UX-06: Passport 테마 적용 (2,688줄 — 대규모)
 - [ ] UX-07: Settings 테마 적용
 - [ ] UX-08: Arena v2 테마 적용
+
+### Quality / Workflow Phase
+- [x] QW-01: deprecated workspace 차단 가드 추가 (`guard-active-workspace.sh`, pre-push/gate 연동)
+- [x] QW-02: Svelte warning budget 게이트 추가 (`check-svelte-warning-budget.sh`, baseline=49)
+- [x] QW-03: CI check job에 guard + warning budget 반영 (`ci-check-build.yml`)
+- [x] QW-04: 경고 정리 우선순위표 문서화 (`docs/warning-priority-2026-03-06.md`)
+- [ ] QW-05: warnings 49→0 단계적 감축 (P1: a11y + deprecated slot 우선)
 
 ### Arena v2 Pokemon UI Phase
 - [x] PKM-00: Sprint 0 엔진 갭 수정 (SpecBonuses, ATR, Tier, Agent ID, RAG 연동)

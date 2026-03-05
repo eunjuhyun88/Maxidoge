@@ -12,6 +12,11 @@ cd "$ROOT_DIR"
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 echo "[pre-push] branch: $CURRENT_BRANCH"
 
+if [ -x scripts/dev/guard-active-workspace.sh ]; then
+	echo "[pre-push] workspace guard"
+	bash scripts/dev/guard-active-workspace.sh
+fi
+
 if [ -x scripts/dev/context-auto.sh ]; then
 	echo "[pre-push] context auto snapshot"
 	bash scripts/dev/context-auto.sh pre-push || true

@@ -1968,3 +1968,34 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - ?? src/routes/arena-war/
 - Context compact check: present (`.agent-context/compact/codex-arena-game-feel-latest.md`)
 - Status: DONE
+
+## [2026-03-06 00:30:20 +0900] START quality-workflow-guard-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: CLAUDE.md 기준으로 가드/기록/컨텍스트 관리 포함해 정리
+- Initial branch: feat/onchain-alerts-dashboard
+- Overlap check:
+  - `frontend`를 활성 코드베이스로 고정, `frontend-passport`는 deprecated 경로로 취급
+  - 기존 경고 baseline(`0 errors, 49 warnings`)을 기준선으로 설정
+  - 기존 pre-push safe-sync/gate 규칙과 충돌 없이 guard 추가 가능 확인
+
+## [2026-03-06 00:37:00 +0900] FINISH quality-workflow-guard-20260306 (frontend)
+- What changed:
+  - Added workspace guard script: `scripts/dev/guard-active-workspace.sh`
+  - Added warning budget script: `scripts/dev/check-svelte-warning-budget.sh`
+  - Updated npm scripts (`package.json`):
+    - `guard:workspace`
+    - `check:budget`
+    - `gate` = `guard:workspace + check:budget + build`
+  - Updated pre-push hook to run workspace guard first
+  - Updated CI check workflow to run:
+    - `npm run guard:workspace`
+    - `npm run check:budget` with `WARNING_BUDGET=49`
+  - Added warning cleanup priority doc: `docs/warning-priority-2026-03-06.md`
+  - Updated `CLAUDE.md`:
+    - Commands / Directory Structure / Git Workflow / Active Branches / Known Pitfalls / Task Backlog 반영
+- Validation results:
+  - `npm run guard:workspace`: PASS (`frontend`)
+  - `ALLOW_LEGACY_WORKSPACE` 미설정 상태에서 `frontend-passport` 컨텍스트 guard 실행: BLOCKED (expected)
+  - `WARNING_BUDGET=49 npm run check:budget`: PASS (`0 errors, 49 warnings`)
+- Commit / Push: pending at log time
+- Status: DONE
