@@ -13,9 +13,6 @@
   export let derivFunding: number | null = null;
   export let derivPredFunding: number | null = null;
   export let derivLSRatio: number | null = null;
-  // derivLiqLong/Short received from parent but not displayed in compact view
-  export let derivLiqLong: number = 0;  // eslint-disable-line
-  export let derivLiqShort: number = 0; // eslint-disable-line
   export let derivLoading = false;
   export let scanRunning = false;
   export let scanStep = '';

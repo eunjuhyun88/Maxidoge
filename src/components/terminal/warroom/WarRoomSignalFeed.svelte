@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { AgentSignal } from '$lib/data/warroom';
   import type { ScanTab, SignalDiff } from './types';
+  import DirectionBadge from '../DirectionBadge.svelte';
 
   export let filteredSignals: AgentSignal[] = [];
+  export let summarySignals: AgentSignal[] = [];
   export let scanTabs: ScanTab[] = [];
   export let selectedIds: Set<string> = new Set();
   export let selectedCount = 0;
@@ -20,6 +22,17 @@
   let expandedId: string | null = null;
   function toggleExpand(id: string) { expandedId = expandedId === id ? null : id; }
 </script>
+
+{#if summarySignals.length > 0}
+  <div class="wr-agent-pulse" aria-label="Agent pulse summary">
+    {#each summarySignals as sig (sig.id)}
+      <button class="wr-agent-chip" type="button" on:click={() => onShowOnChart(sig)} title={`${sig.name} ${sig.vote.toUpperCase()} ${sig.conf}%`}>
+        <span class="wr-agent-chip-name">{sig.name}</span>
+        <DirectionBadge direction={sig.vote} confidence={sig.conf} showConfidence size="xs" />
+      </button>
+    {/each}
+  </div>
+{/if}
 
 <div class="select-bar">
   <button class="select-all-btn" on:click={onSelectAll}>
@@ -55,8 +68,7 @@
         <div class="wr-msg-head">
           <span class="wr-msg-agent-id" style="color:{sig.color};border-color:{sig.color}">{sig.name.charAt(0)}</span>
           <span class="wr-msg-name" style="color:{sig.color}">{sig.name}</span>
-          <span class="wr-msg-vote {sig.vote}">{sig.vote.toUpperCase()}</span>
-          <span class="wr-msg-conf" class:high={sig.conf >= 80} class:mid={sig.conf >= 60 && sig.conf < 80} class:low={sig.conf < 60}>{sig.conf}%</span>
+          <DirectionBadge direction={sig.vote} confidence={sig.conf} showConfidence size="xs" />
           {#if diff}
             {#if diff.isNew}
               <span class="wr-diff-badge wr-diff-new">NEW</span>

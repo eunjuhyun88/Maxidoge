@@ -238,6 +238,15 @@
     return base;
   });
   let selectedCount = $derived(selectedIds.size);
+  let summarySignals = $derived.by(() => {
+    const source = activeScanTab?.signals?.length ? activeScanTab.signals : signalPool;
+    const ranked = [...source].sort((a, b) => b.conf - a.conf);
+    const dedup = new Map<string, AgentSignal>();
+    for (const sig of ranked) {
+      if (!dedup.has(sig.agentId)) dedup.set(sig.agentId, sig);
+    }
+    return Array.from(dedup.values()).slice(0, 8);
+  });
   let avgConfidence = $derived.by(() => signalPool.length > 0
     ? Math.round(signalPool.reduce((sum, sig) => sum + sig.conf, 0) / signalPool.length)
     : 0);
@@ -248,11 +257,18 @@
     }, 0) / signalPool.length
     : 0);
   let consensusDir = $derived.by(() => {
+    const consensusSource = activeScanTab?.signals?.length ? activeScanTab.signals : signalPool;
     const counts = { long: 0, short: 0, neutral: 0 };
-    signalPool.forEach((sig) => counts[sig.vote]++);
+    consensusSource.forEach((sig) => counts[sig.vote]++);
     if (counts.long > counts.short && counts.long > counts.neutral) return 'LONG';
     if (counts.short > counts.long && counts.short > counts.neutral) return 'SHORT';
     return 'NEUTRAL';
+  });
+  let topActionSignal = $derived.by(() => {
+    const source = activeScanTab?.signals?.length ? activeScanTab.signals : filteredSignals;
+    return [...source]
+      .filter((sig) => sig.vote === 'long' || sig.vote === 'short')
+      .sort((a, b) => b.conf - a.conf)[0] ?? null;
   });
   let trackedCount = $derived($activeSignalCount);
 
@@ -297,6 +313,11 @@
   function openCopyTrade() {
     if (selectedCount === 0) return;
     copyTradeStore.openModal([...selectedIds]);
+  }
+
+  function applyTopSignalToChart() {
+    if (!topActionSignal) return;
+    dispatch('showonchart', { signal: topActionSignal });
   }
 
   function scrollXOnWheel(event: WheelEvent) {
@@ -530,7 +551,7 @@
         avgConfidence: scan.avgConfidence,
         summary: scan.summary,
         highlights: scan.highlights,
-        signals: nextTab.signals,
+        signals: scan.signals,
       });
       scanError = '';
       scanStep = 'DONE';
@@ -661,8 +682,6 @@
     {derivFunding}
     {derivPredFunding}
     {derivLSRatio}
-    {derivLiqLong}
-    {derivLiqShort}
     {derivLoading}
     {scanRunning}
     {scanStep}
@@ -678,6 +697,7 @@
 
   <WarRoomSignalFeed
     {filteredSignals}
+    {summarySignals}
     {scanTabs}
     {selectedIds}
     {selectedCount}
@@ -699,7 +719,10 @@
     {avgConfidence}
     {avgRR}
     {consensusDir}
+    topSignalHint={topActionSignal ? `${topActionSignal.name} ${topActionSignal.vote.toUpperCase()} ${topActionSignal.conf}%` : ''}
+    canApplyTopSignal={!!topActionSignal}
     onOpenCopyTrade={openCopyTrade}
+    onApplyTopSignal={applyTopSignalToChart}
     onGoSignals={goSignals}
   />
 </div>
