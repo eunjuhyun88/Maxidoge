@@ -28,6 +28,16 @@ npm run check
 export PATH="$HOME/.local/bin:$HOME/.local/node-v22.14.0-darwin-arm64/bin:$PATH"
 ```
 
+## Git/Sync 운영 규칙 (필수, 2026-03-06)
+1. 브랜치별 작업은 clone 폴더를 늘리지 말고 `git worktree`로 분리한다. (예: `.wt-<branch>`)
+2. 기본 동기화는 `merge --ff-only` 또는 명시적 `cherry-pick`만 사용한다. 강제 머지/강제 푸시는 금지한다.
+3. push 전에는 대상 워크트리에서 반드시 `npm run gate`를 통과한다. (`guard:workspace` + `check:budget` + `build`)
+4. pre-push 훅 실패 시 원인을 수정한 뒤 재시도한다. `--no-verify` 사용 금지.
+5. HEAD/브랜치 포인터만 되돌려야 할 때는 `git update-ref`로 ref만 이동하고, 워킹트리 변경사항은 보존한다.
+6. 동기화 직후 `git status`, `git branch -vv`, `git worktree list`로 HEAD 위치/업스트림/워크트리 상태를 확인한다.
+7. 컨텍스트 관리는 `.agent-context` 스냅샷을 유지하고, 의미 있는 결정/절차 변경은 `docs/AGENT_WATCH_LOG.md`에 기록한다.
+
+
 ## Architecture
 
 ### Directory Structure
