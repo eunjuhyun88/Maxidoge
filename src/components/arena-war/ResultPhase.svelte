@@ -1,8 +1,20 @@
 <script lang="ts">
   import { arenaWarStore, rematch, resetArenaWar } from '$lib/stores/arenaWarStore';
+  import { getTeamHPPercent } from '$lib/engine/v3BattleEngine';
+  import { getAgentCharacter } from '$lib/engine/agentCharacter';
 
   let ws = $derived($arenaWarStore);
   let record = $derived(ws.gameRecord);
+  let v3 = $derived(ws.v3BattleState);
+
+  // v3 battle stats
+  let challengeScore = $derived(v3?.challengeScore ?? { correct: 0, wrong: 0, timeout: 0, total: 0 });
+  let challengeAccuracy = $derived(
+    challengeScore.total > 0 ? Math.round((challengeScore.correct / challengeScore.total) * 100) : 0
+  );
+  let humanHPPct = $derived(v3 ? Math.round(getTeamHPPercent(v3.humanAgents)) : 100);
+  let aiHPPct = $derived(v3 ? Math.round(getTeamHPPercent(v3.aiAgents)) : 100);
+  let koCount = $derived(v3?.koEvents.length ?? 0);
 
   let winnerLabel = $derived(
     ws.winner === 'human' ? '🏆 YOU WIN!' :
@@ -56,6 +68,42 @@
       <span class="lp-bonus">DISSENT WIN +5!</span>
     {/if}
   </div>
+
+  <!-- v3 Battle Report -->
+  {#if v3}
+    <div class="v3-report">
+      <div class="v3-title">BATTLE REPORT</div>
+      <div class="v3-stats">
+        <div class="v3-stat">
+          <span class="v3-label">Team HP</span>
+          <span class="v3-value" class:positive={humanHPPct > aiHPPct} class:negative={humanHPPct < aiHPPct}>
+            {humanHPPct}% vs {aiHPPct}%
+          </span>
+        </div>
+        <div class="v3-stat">
+          <span class="v3-label">Challenge</span>
+          <span class="v3-value">{challengeScore.correct}/{challengeScore.total} ({challengeAccuracy}%)</span>
+        </div>
+        <div class="v3-stat">
+          <span class="v3-label">KOs</span>
+          <span class="v3-value">{koCount}</span>
+        </div>
+      </div>
+
+      <!-- Agent HP breakdown -->
+      <div class="agent-hp-list">
+        {#each v3.humanAgents as agent}
+          {@const char = getAgentCharacter(agent.agentId)}
+          <div class="agent-hp-item" class:ko={agent.isKO}>
+            <span class="ahp-avatar" style:background={char.gradientCSS}>{agent.agentId.charAt(0)}</span>
+            <span class="ahp-name">{char.nameKR}</span>
+            <span class="ahp-hp">{agent.isKO ? 'KO' : `${Math.ceil(agent.hp)}/${agent.maxHP}`}</span>
+            <span class="ahp-dmg">{Math.round(agent.totalHPDamageDealt)} dmg</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   <!-- Feedback -->
   {#if record}
@@ -367,5 +415,104 @@
     padding-top: 0.5rem;
     border-top: 1px solid var(--arena-line, #1a3d2e);
     width: 100%;
+  }
+
+  /* v3 Battle Report */
+  .v3-report {
+    width: 100%;
+    padding: 0.8rem;
+    background: var(--arena-bg-1, #0d2118);
+    border: 1px solid var(--arena-line, #1a3d2e);
+    border-radius: 6px;
+  }
+
+  .v3-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 900;
+    color: var(--arena-accent, #e8967d);
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .v3-stats {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .v3-stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    text-align: center;
+  }
+
+  .v3-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.5rem;
+    font-weight: 900;
+    color: var(--arena-text-2, #5a7d6e);
+    letter-spacing: 0.5px;
+  }
+
+  .v3-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--arena-text-0, #e0f0e8);
+  }
+
+  .agent-hp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .agent-hp-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    background: rgba(0,0,0,0.15);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+  }
+
+  .agent-hp-item.ko {
+    opacity: 0.4;
+  }
+
+  .ahp-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 900;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .ahp-name {
+    flex: 1;
+    color: var(--arena-text-0, #e0f0e8);
+    font-weight: 600;
+  }
+
+  .ahp-hp {
+    color: var(--arena-text-1, #8ba59e);
+  }
+
+  .ahp-dmg {
+    color: var(--arena-text-2, #5a7d6e);
+    font-size: 0.55rem;
   }
 </style>

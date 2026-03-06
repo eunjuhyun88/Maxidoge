@@ -4,6 +4,7 @@
 
 import { writable, derived } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import { createMatchApi, fetchMatchesApi, type ApiMatchRecord } from '$lib/api/matchesApi';
 
 export interface MatchRecord {
@@ -50,31 +51,15 @@ interface MatchHistoryState {
   records: MatchRecord[];
 }
 
-const STORAGE_KEY = STORAGE_KEYS.matchHistory;
 const MAX_RECORDS = 100;
 let _matchHistoryHydrated = false;
 let _matchHistoryHydratePromise: Promise<void> | null = null;
 
-function loadHistory(): MatchHistoryState {
-  if (typeof window === 'undefined') return { records: [] };
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
-  } catch {}
-  return { records: [] };
-}
+export const matchHistoryStore = writable<MatchHistoryState>(
+  loadFromStorage<MatchHistoryState>(STORAGE_KEYS.matchHistory, { records: [] })
+);
 
-export const matchHistoryStore = writable<MatchHistoryState>(loadHistory());
-
-// Persist to localStorage (debounced)
-let _histSaveTimer: ReturnType<typeof setTimeout> | null = null;
-matchHistoryStore.subscribe(s => {
-  if (typeof window === 'undefined') return;
-  if (_histSaveTimer) clearTimeout(_histSaveTimer);
-  _histSaveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-  }, 500);
-});
+autoSave(matchHistoryStore, STORAGE_KEYS.matchHistory, undefined, 500);
 
 // Derived stores
 export const matchRecords = derived(matchHistoryStore, $s => $s.records);

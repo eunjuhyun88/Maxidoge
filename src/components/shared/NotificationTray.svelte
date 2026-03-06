@@ -131,8 +131,8 @@
   /* ── Bell Button ── */
   .bell-btn {
     position: fixed;
-    bottom: 72px;
-    right: 18px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    right: 12px;
     z-index: 200;
     width: 44px;
     height: 44px;
@@ -172,6 +172,13 @@
     border: 2px solid #000;
     letter-spacing: 0.5px;
     animation: pulse 2s ease infinite;
+  }
+
+  @media (min-width: 1024px) {
+    .bell-btn {
+      bottom: 26px;
+      right: 18px;
+    }
   }
 
   /* ── Overlay ── */

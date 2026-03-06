@@ -100,12 +100,12 @@ async function apiFetch<T>(url: string, init?: RequestInit): Promise<T | null> {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error((err as any)?.error ?? `Request failed (${res.status})`);
+      throw new Error(err instanceof Error ? err.message : 'Unknown error');
     }
 
     return (await res.json()) as T;
-  } catch (err: any) {
-    if (err.name === 'AbortError') throw new Error('Request timed out');
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') throw new Error('Request timed out');
     throw err;
   }
 }

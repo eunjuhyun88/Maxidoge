@@ -1,7 +1,7 @@
 # STOCKCLAW Unified
 
 > Single source of truth: this `README.md` is the canonical collaboration and project guide for all humans and agents.
-> Mandatory gate: every task must log start/end in `docs/AGENT_WATCH_LOG.md` and pass `npm run check` + `npm run build` before push/merge.
+> Mandatory gate: every task must log start/end in `docs/AGENT_WATCH_LOG.md` and pass `npm run docs:check` + `npm run check` + `npm run build` + `npm run ctx:check -- --strict` before push/merge.
 
 AI 에이전트 기반 트레이딩 시뮬레이션 웹앱입니다.  
 SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signals`, `Passport` 경험을 제공합니다.
@@ -12,23 +12,27 @@ SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signa
 
 1. 매 작업(매 요청) 시작 시, 이 `README.md`를 다시 읽는다.
 2. 코드/문서 수정 전에 `docs/AGENT_WATCH_LOG.md`에 시작 기록을 남긴다.
-3. 작업 브랜치에서 `npm run check`와 `npm run build`를 모두 통과시킨다.
-4. 둘 중 하나라도 실패하면 push/merge를 중단하고 먼저 에러를 수정한다.
-5. push/merge 후에도 `docs/AGENT_WATCH_LOG.md`에 완료 기록(검증 결과, commit hash, merge hash, push 상태)을 남긴다.
-6. `main` 머지 후 `main`에서 다시 `npm run check` + `npm run build`를 실행한다.
-7. 한 요청(한 작업 단위)은 **하나의 atomic commit**으로 마감한다.  
+3. 비사소한 작업은 첫 번째 설계 결정 시점에 semantic checkpoint를 남긴다.  
+   `npm run ctx:checkpoint -- --work-id "<W-ID>" --surface "<surface>" --objective "<objective>"`
+4. 작업 브랜치에서 `npm run docs:check`, `npm run check`, `npm run build`를 모두 통과시킨다.
+5. push/merge 직전 `npm run ctx:check -- --strict`까지 통과시킨다.
+6. 하나라도 실패하면 push/merge를 중단하고 먼저 에러를 수정한다.
+7. push/merge 후에도 `docs/AGENT_WATCH_LOG.md`에 완료 기록(검증 결과, commit hash, merge hash, push 상태)을 남긴다.
+8. `main` 머지 후 `main`에서 다시 `npm run check` + `npm run build`를 실행한다.
+9. 한 요청(한 작업 단위)은 **하나의 atomic commit**으로 마감한다.  
    해당 요청에서 바뀐 코드/문서와 `docs/AGENT_WATCH_LOG.md` 기록을 같은 커밋에 포함한다.
-8. 작업 종료 직전에 `git status --short --branch`를 실행해 워킹트리가 clean인지 확인하고, 결과를 로그에 남긴다.
-9. `main` 머지/검증(`npm run check`, `npm run build`)은 **clean 상태의 main worktree**에서만 수행한다.  
+10. 작업 종료 직전에 `git status --short --branch`를 실행해 워킹트리가 clean인지 확인하고, 결과를 로그에 남긴다.
+11. `main` 머지/검증(`npm run check`, `npm run build`)은 **clean 상태의 main worktree**에서만 수행한다.  
    main worktree가 dirty면 기존 변경을 임의로 reset/revert하지 말고, 별도 clean worktree를 만들어 같은 절차를 수행한다.
-9. push 전 워킹트리에 요청과 무관한 변경이 남아 있으면 먼저 정리한다.
+12. push 전 워킹트리에 요청과 무관한 변경이 남아 있으면 먼저 정리한다.
    필요 시 `git stash push -u -m "wip/<task>"`로 백업 후 push하고, 이후 `git stash pop`으로 복원한다.
-10. 모든 구현 작업은 반드시 설계안을 먼저 작성하고, 설계 검토/승인을 받은 뒤에만 실제 구현을 시작한다.
-11. 매 작업 시작 메시지에서 현재 브랜치 위치를 먼저 보고한 뒤 작업을 시작한다.
+13. 모든 구현 작업은 반드시 설계안을 먼저 작성하고, 설계 검토/승인을 받은 뒤에만 실제 구현을 시작한다.
+14. 매 작업 시작 메시지에서 현재 브랜치 위치를 먼저 보고한 뒤 작업을 시작한다.
 
 참고:
 - 에이전트 자동 실행 규칙 파일은 `AGENTS.md`다.
-- `docs/README.md`는 호환성 유지를 위한 리다이렉트 문서다.
+- 루트 아키텍처 맵은 `ARCHITECTURE.md`다.
+- `docs/README.md`는 작업별 문서 라우팅용 컨텍스트 맵이다.
 
 ## 1) Overview
 
@@ -38,6 +42,17 @@ SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signa
   - `Arena`: phase 기반 배틀 루프
   - `Signals`: 시그널 탐색 및 추적
   - `Passport`: 유저/지갑/성과 프로필
+
+## 1.1) Context Routing
+
+긴 작업에서 문서를 많이 여는 것보다, 먼저 올바른 문서를 고르는 것이 더 중요합니다.
+
+1. 협업/실행 규칙은 이 `README.md`와 `AGENTS.md`를 따른다.
+2. 시스템 의도와 상위 구조는 `docs/SYSTEM_INTENT.md`와 `ARCHITECTURE.md`에서 먼저 잡는다.
+3. 설계/스펙/리팩터 계획 탐색은 `docs/README.md`에서 시작한다.
+4. canonical 얇은 진입점은 `docs/DESIGN.md`, `docs/FRONTEND.md`, `docs/PLANS.md`, `docs/PRODUCT_SENSE.md`, `docs/QUALITY_SCORE.md`, `docs/RELIABILITY.md`, `docs/SECURITY.md`다.
+5. `docs/archive/`는 현재 정본이 아니라 과거 참조본이다.
+6. `frontend` 외의 sibling clone 폴더는 레거시/비정본으로 간주하고, 새 작업을 중복 반영하지 않는다.
 
 ## 2) Tech Stack
 
@@ -89,19 +104,23 @@ npm run preview
 ## 4) NPM Scripts
 
 - `npm run dev`: 개발 서버 실행
+- `npm run docs:refresh`: generated route/store/API context 문서 재생성
+- `npm run docs:check`: 컨텍스트 문서 구조/핵심 진입점 검사
 - `npm run check`: Svelte/TypeScript 정적 검사
 - `npm run build`: 프로덕션 빌드
 - `npm run preview`: 빌드 결과 로컬 프리뷰
-- `npm run gate`: `check + build` 통합 게이트
+- `npm run gate`: `docs:check + check + build` 통합 게이트
 - `npm run safe:status`: 현재 브랜치/워크트리/변경 파일 점검
 - `npm run safe:worktree -- <task-name> [base-branch]`: `codex/<task-name>` 브랜치 + 분리 워킹트리 생성
 - `npm run safe:hooks`: 로컬 pre-push/post-merge 훅 설치 (`.githooks/*`)
 - `npm run safe:sync`: 브랜치 동기화 (`main`은 `pull --ff-only`, 작업 브랜치는 `origin/main` rebase + check)
 - `npm run safe:sync:gate`: 동기화 후 `check + build`까지 실행
 - `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`: 현재 작업 컨텍스트 스냅샷 저장
-- `npm run ctx:compact`: 스냅샷을 핵심 요약본으로 압축
+- `npm run ctx:checkpoint -- --work-id "<W-ID>" --surface "<surface>" --objective "<objective>"`: semantic working-memory 체크포인트 저장
+- `npm run ctx:compact`: snapshot + checkpoint를 brief/handoff로 압축
+- `npm run ctx:check -- --strict`: brief/handoff 품질 검사
 - `npm run ctx:pin -- --add "<durable fact>"`: 리셋 시 유실되면 안 되는 고정 사실 저장
-- `npm run ctx:restore -- --mode context|files`: 복구(세션 컨텍스트/파일 복구 의도 분리)
+- `npm run ctx:restore -- --mode brief|handoff|context|files`: 복구(brief/handoff/file-recovery 의도 분리)
 - `npm run ctx:auto -- <stage>`: 자동 저장/컴팩션 오케스트레이션 (hook/safe 스크립트에서 호출)
 
 ### Solo Safety Routine (Recommended)
@@ -125,7 +144,7 @@ npm run preview
    ```
 
 참고:
-- pre-push는 `ctx:auto(pre-push)` + `npm run check` + `npm run build`를 자동 실행합니다.
+- pre-push는 `ctx:auto(pre-push)` + `ctx:check -- --strict` + `npm run gate`를 자동 실행합니다.
 - post-merge는 `npm run check` + `ctx:auto(post-merge)`를 자동 실행합니다.
 - 긴급 상황에서만 `SKIP_PREPUSH=1 git push`로 일시 우회하세요.
 
@@ -143,6 +162,35 @@ npm run preview
 - `CTX_AUTO_DISABLED=1`: 자동 저장/컴팩션 비활성화
 - `CTX_AUTO_MIN_INTERVAL_SEC=300`: stage별 최소 실행 간격(스냅샷 과다 생성 방지)
 - `CTX_AUTO_STRICT=1`: 자동화 실패 시 호출 명령도 실패 처리
+- `CTX_AUTO_SKIP_COMPACT=1`: 자동 저장만 하고 brief/handoff 갱신은 건너뜀
+
+### Context Artifact Model
+
+컨텍스트 시스템은 4계층으로 동작합니다.
+
+1. `snapshot`
+   - git 상태, changed files, recent commits 같은 machine state
+2. `checkpoint`
+   - objective, why now, owned files, open questions, next actions 같은 semantic memory
+3. `brief`
+   - 빠른 재개용 요약본
+4. `handoff`
+   - 다음 세션/다음 에이전트를 위한 fuller transfer artifact
+
+경로:
+
+- `.agent-context/snapshots/`
+- `.agent-context/checkpoints/`
+- `.agent-context/briefs/`
+- `.agent-context/handoffs/`
+- `.agent-context/compact/` (compatibility output)
+
+핵심 규칙:
+
+- `docs/*`는 authority
+- `.agent-context/*`는 runtime memory
+- `docs/AGENT_WATCH_LOG.md`는 evidence
+- watch log는 primary resume surface가 아니다
 
 ### Model Setup (Recommended)
 
@@ -161,21 +209,34 @@ npm run preview
    ```bash
    npm run ctx:save -- --title "task start" --work-id "W-YYYYMMDD-HHMM-<repo>-<agent>" --agent "codex"
    ```
-2. 핵심 결정사항 고정:
+2. semantic checkpoint 작성:
+   ```bash
+   npm run ctx:checkpoint -- \
+     --work-id "W-YYYYMMDD-HHMM-<repo>-<agent>" \
+     --surface "terminal" \
+     --objective "explain the current task in one semantic sentence"
+   ```
+3. 핵심 결정사항 고정:
    ```bash
    npm run ctx:pin -- --add "Do not merge without required write-access approval"
    ```
-3. 핸드오프/푸시 직전 압축:
+4. 핸드오프/푸시 직전 압축:
    ```bash
    npm run ctx:save -- --title "pre-handoff" --work-id "W-..." --agent "codex"
    npm run ctx:compact
    ```
-4. 리셋 후 복구:
+5. 품질 확인:
    ```bash
-   npm run ctx:restore -- --mode context
+   npm run ctx:check -- --strict
    ```
-5. 모호한 `복구` 요청 방지:
-   - 세션/대화 복구: `--mode context`
+6. 리셋 후 복구:
+   ```bash
+   npm run ctx:restore -- --mode brief
+   npm run ctx:restore -- --mode handoff
+   ```
+7. 모호한 `복구` 요청 방지:
+   - 세션/대화 복구: `--mode brief` 또는 `--mode handoff`
+   - 구버전 alias: `--mode context` (`brief`로 해석)
    - 파일 상태 복구: `--mode files`
    - mode 없이 실행하면 실패하도록 설계되어 혼선 방지
 

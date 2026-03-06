@@ -20,7 +20,6 @@
   import { AGENT_POOL } from '$lib/engine/agents';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
-  import { createEventDispatcher } from 'svelte';
   import WarRoomHeaderSection from './warroom/WarRoomHeaderSection.svelte';
   import WarRoomSignalFeed from './warroom/WarRoomSignalFeed.svelte';
   import WarRoomFooterSection from './warroom/WarRoomFooterSection.svelte';
@@ -41,16 +40,25 @@
     signals: AgentSignal[];
   };
 
-  type WarRoomEvents = {
-    collapse: void;
-    tracked: { dir: AgentSignal['vote']; pair: string };
-    quicktrade: { dir: 'LONG' | 'SHORT'; pair: string; price: number };
-    scanstart: void;
-    scancomplete: ScanCompleteDetail;
-    showonchart: { signal: AgentSignal };
+  type WarRoomProps = {
+    densityMode?: 'essential' | 'pro';
+    onCollapse?: () => void;
+    onTracked?: (detail: { dir: AgentSignal['vote']; pair: string }) => void;
+    onQuickTrade?: (detail: { dir: 'LONG' | 'SHORT'; pair: string; price: number }) => void;
+    onScanStart?: () => void;
+    onScanComplete?: (detail: ScanCompleteDetail) => void;
+    onShowOnChart?: (detail: { signal: AgentSignal }) => void;
   };
 
-  const dispatch = createEventDispatcher<WarRoomEvents>();
+  let {
+    densityMode = 'essential',
+    onCollapse,
+    onTracked,
+    onQuickTrade,
+    onScanStart,
+    onScanComplete,
+    onShowOnChart
+  }: WarRoomProps = $props();
 
   const SCAN_STATE_STORAGE_KEY = STORAGE_KEYS.warRoomScan;
   const MAX_SCAN_TABS = 6;
@@ -238,6 +246,15 @@
     return base;
   });
   let selectedCount = $derived(selectedIds.size);
+  let summarySignals = $derived.by(() => {
+    const source = activeScanTab?.signals?.length ? activeScanTab.signals : signalPool;
+    const ranked = [...source].sort((a, b) => b.conf - a.conf);
+    const dedup = new Map<string, AgentSignal>();
+    for (const sig of ranked) {
+      if (!dedup.has(sig.agentId)) dedup.set(sig.agentId, sig);
+    }
+    return Array.from(dedup.values()).slice(0, 8);
+  });
   let avgConfidence = $derived.by(() => signalPool.length > 0
     ? Math.round(signalPool.reduce((sum, sig) => sum + sig.conf, 0) / signalPool.length)
     : 0);
@@ -248,11 +265,18 @@
     }, 0) / signalPool.length
     : 0);
   let consensusDir = $derived.by(() => {
+    const consensusSource = activeScanTab?.signals?.length ? activeScanTab.signals : signalPool;
     const counts = { long: 0, short: 0, neutral: 0 };
-    signalPool.forEach((sig) => counts[sig.vote]++);
+    consensusSource.forEach((sig) => counts[sig.vote]++);
     if (counts.long > counts.short && counts.long > counts.neutral) return 'LONG';
     if (counts.short > counts.long && counts.short > counts.neutral) return 'SHORT';
     return 'NEUTRAL';
+  });
+  let topActionSignal = $derived.by(() => {
+    const source = activeScanTab?.signals?.length ? activeScanTab.signals : filteredSignals;
+    return [...source]
+      .filter((sig) => sig.vote === 'long' || sig.vote === 'short')
+      .sort((a, b) => b.conf - a.conf)[0] ?? null;
   });
   let trackedCount = $derived($activeSignalCount);
 
@@ -297,6 +321,11 @@
   function openCopyTrade() {
     if (selectedCount === 0) return;
     copyTradeStore.openModal([...selectedIds]);
+  }
+
+  function applyTopSignalToChart() {
+    if (!topActionSignal) return;
+    onShowOnChart?.({ signal: topActionSignal });
   }
 
   function scrollXOnWheel(event: WheelEvent) {
@@ -416,7 +445,7 @@
     scanQueued = false;
     scanError = '';
     scanStep = 'ANALYSIS · loading market data';
-    dispatch('scanstart');
+    onScanStart?.();
 
     const pair = currentPair || 'BTC/USDT';
     const timeframe = String(currentTF || '4h');
@@ -520,7 +549,7 @@
       // CopyTrade에서 참조할 수 있도록 현재 시그널 등록
       registerScanSignals(scanTabs.flatMap(t => t.signals));
       selectedIds = new Set();
-      dispatch('scancomplete', {
+      onScanComplete?.({
         pair: scan.pair,
         timeframe: scan.timeframe,
         token: scan.token,
@@ -530,7 +559,7 @@
         avgConfidence: scan.avgConfidence,
         summary: scan.summary,
         highlights: scan.highlights,
-        signals: nextTab.signals,
+        signals: scan.signals,
       });
       scanError = '';
       scanStep = 'DONE';
@@ -570,7 +599,7 @@
     trackSignalStore(sig.pair, sig.vote === 'long' ? 'LONG' : sig.vote === 'short' ? 'SHORT' : 'LONG', sig.entry, sig.name, sig.conf);
     incrementTrackedSignals();
     notifySignalTracked(sig.pair, sig.vote.toUpperCase());
-    dispatch('tracked', { dir: sig.vote, pair: sig.pair });
+    onTracked?.({ dir: sig.vote, pair: sig.pair });
   }
 
   function goArena() {
@@ -589,7 +618,7 @@
     const sl = dir === 'LONG' ? roundPrice(entry - baseRisk) : roundPrice(entry + baseRisk);
     const tp = dir === 'LONG' ? roundPrice(entry + baseRisk * rr) : roundPrice(entry - baseRisk * rr);
     openQuickTrade(sig.pair, dir, entry, tp, sl, sig.name);
-    dispatch('quicktrade', { dir, pair: sig.pair, price: entry });
+    onQuickTrade?.({ dir, pair: sig.pair, price: entry });
   }
 
   function isDocumentVisible() {
@@ -661,8 +690,6 @@
     {derivFunding}
     {derivPredFunding}
     {derivLSRatio}
-    {derivLiqLong}
-    {derivLiqShort}
     {derivLoading}
     {scanRunning}
     {scanStep}
@@ -670,7 +697,7 @@
     {formatOI}
     {formatFunding}
     onWheel={scrollXOnWheel}
-    onCollapse={() => dispatch('collapse')}
+    onCollapse={() => onCollapse?.()}
     onRunScan={runAgentScan}
     onActivateScanTab={activateScanTab}
     onSetActiveToken={(tok) => { activeToken = tok; selectedIds = new Set(); }}
@@ -678,6 +705,8 @@
 
   <WarRoomSignalFeed
     {filteredSignals}
+    {summarySignals}
+    {densityMode}
     {scanTabs}
     {selectedIds}
     {selectedCount}
@@ -689,7 +718,7 @@
     onQuickTrade={quickTrade}
     onTrack={handleTrack}
     onRunScan={runAgentScan}
-    onShowOnChart={(sig) => dispatch('showonchart', { signal: sig })}
+    onShowOnChart={(sig) => onShowOnChart?.({ signal: sig })}
   />
 
   <WarRoomFooterSection
@@ -699,7 +728,10 @@
     {avgConfidence}
     {avgRR}
     {consensusDir}
+    topSignalHint={topActionSignal ? `${topActionSignal.name} ${topActionSignal.vote.toUpperCase()} ${topActionSignal.conf}%` : ''}
+    canApplyTopSignal={!!topActionSignal}
     onOpenCopyTrade={openCopyTrade}
+    onApplyTopSignal={applyTopSignalToChart}
     onGoSignals={goSignals}
   />
 </div>
