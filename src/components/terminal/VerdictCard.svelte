@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import DirectionBadge from './DirectionBadge.svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -14,8 +15,8 @@
   export let model: string | null = null;
   export let loading: boolean = false;
   export let executionEnabled: boolean = false;
+  export let showModelMeta = false;
 
-  $: biasLabel = bias === 'long' ? 'LONG' : bias === 'short' ? 'SHORT' : 'WAIT';
   $: biasColor = bias === 'long' ? '#00e676' : bias === 'short' ? '#ff2d55' : '#E8967D';
 </script>
 
@@ -25,15 +26,20 @@
   </div>
 {:else if bias !== 'wait' || confidence > 0}
   <div class="vc" style="--bc:{biasColor}">
-    <span class="vc-dir" class:long={bias === 'long'} class:short={bias === 'short'} class:wait={bias === 'wait'}>
-      {biasLabel}
-    </span>
+    <DirectionBadge
+      direction={bias === 'wait' ? 'neutral' : bias}
+      confidence={confidence}
+      showArrow
+      showConfidence={false}
+      size="sm"
+      variant="soft"
+    />
     <span class="vc-conf">{confidence.toFixed(0)}%</span>
     <span class="vc-pair">{pair} · {timeframe.toUpperCase()}</span>
     {#if edgePct != null}<span class="vc-meta">E:{edgePct.toFixed(0)}%</span>{/if}
     {#if gateScore != null}<span class="vc-meta">G:{gateScore.toFixed(0)}</span>{/if}
     <span class="vc-reason">{reason || '...'}</span>
-    {#if model}<span class="vc-model">{model}</span>{/if}
+    {#if showModelMeta && model}<span class="vc-model">{model}</span>{/if}
     {#if executionEnabled && shouldExecute}
       <button class="vc-exec" on:click={() => dispatch('execute')}>EXEC</button>
     {/if}
@@ -56,14 +62,6 @@
     background-size: 200% 100%; animation: vcShim 1.5s infinite; border-radius: 3px;
   }
   @keyframes vcShim { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-
-  .vc-dir {
-    font-size: 11px; font-weight: 900; letter-spacing: 1px;
-    padding: 1px 7px; border-radius: 3px; flex-shrink: 0; line-height: 1.3;
-  }
-  .vc-dir.long  { background: rgba(0,230,118,.15); color: #00e676; }
-  .vc-dir.short { background: rgba(255,45,85,.15);  color: #ff2d55; }
-  .vc-dir.wait  { background: rgba(232,150,125,.1);   color: #E8967D; }
 
   .vc-conf {
     font-size: 15px; font-weight: 900; color: #fff;

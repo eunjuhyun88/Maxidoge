@@ -64,7 +64,6 @@ fi
 BASE_DIR="$ROOT_DIR/.agent-context"
 SNAPSHOT_DIR="$BASE_DIR/snapshots/$BRANCH_SAFE"
 COMPACT_DIR="$BASE_DIR/compact"
-PINNED_FILE="$BASE_DIR/pinned-facts.md"
 INDEX_FILE="$BASE_DIR/index.tsv"
 LATEST_FILE="$BASE_DIR/latest-$BRANCH_SAFE.md"
 SNAPSHOT_FILE="$SNAPSHOT_DIR/${TS_KEY}-${TITLE_SAFE}.md"
@@ -90,16 +89,9 @@ RECENT_COMMITS="$(git log --oneline -n 8 || true)"
 [ -n "$RECENT_COMMITS" ] || RECENT_COMMITS="none"
 
 WATCH_LOG="$ROOT_DIR/docs/AGENT_WATCH_LOG.md"
-WATCH_TAIL="none"
+WATCH_LOG_PRESENT="no"
 if [ -f "$WATCH_LOG" ]; then
-	WATCH_TAIL="$(tail -n 40 "$WATCH_LOG" || true)"
-	[ -n "$WATCH_TAIL" ] || WATCH_TAIL="none"
-fi
-
-PINNED_PREVIEW="none"
-if [ -f "$PINNED_FILE" ]; then
-	PINNED_PREVIEW="$(sed -n '1,80p' "$PINNED_FILE" || true)"
-	[ -n "$PINNED_PREVIEW" ] || PINNED_PREVIEW="none"
+	WATCH_LOG_PRESENT="yes"
 fi
 
 {
@@ -155,19 +147,11 @@ fi
 		done <<< "$RECENT_COMMITS"
 	fi
 	echo ""
-	echo "## Pinned Facts Preview"
-	if [ "$PINNED_PREVIEW" = "none" ]; then
-		echo "- none"
-	else
-		echo "$PINNED_PREVIEW" | sed 's/^/> /'
-	fi
-	echo ""
-	echo "## Watch Log Tail"
-	if [ "$WATCH_TAIL" = "none" ]; then
-		echo "- none"
-	else
-		echo "$WATCH_TAIL" | sed 's/^/> /'
-	fi
+	echo "## Runtime Context Flags"
+	echo "- watch_log_present: $WATCH_LOG_PRESENT"
+	echo "- checkpoint_latest: .agent-context/checkpoints/$BRANCH_SAFE-latest.md"
+	echo "- brief_latest: .agent-context/briefs/$BRANCH_SAFE-latest.md"
+	echo "- handoff_latest: .agent-context/handoffs/$BRANCH_SAFE-latest.md"
 	echo ""
 	echo "## Notes"
 	if [ -n "$NOTES" ]; then
@@ -179,7 +163,8 @@ fi
 	echo "## Resume Commands"
 	echo "- npm run safe:status"
 	echo "- npm run ctx:compact"
-	echo "- npm run ctx:restore -- --mode context"
+	echo "- npm run ctx:restore -- --mode brief"
+	echo "- npm run ctx:restore -- --mode handoff"
 	echo "- npm run safe:sync"
 } > "$SNAPSHOT_FILE"
 

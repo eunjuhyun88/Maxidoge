@@ -12,9 +12,19 @@ cd "$ROOT_DIR"
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 echo "[pre-push] branch: $CURRENT_BRANCH"
 
+if [ -x scripts/dev/guard-active-workspace.sh ]; then
+	echo "[pre-push] workspace guard"
+	bash scripts/dev/guard-active-workspace.sh
+fi
+
 if [ -x scripts/dev/context-auto.sh ]; then
 	echo "[pre-push] context auto snapshot"
 	bash scripts/dev/context-auto.sh pre-push || true
+fi
+
+if [ -x scripts/dev/check-context-quality.sh ]; then
+	echo "[pre-push] context quality check"
+	bash scripts/dev/check-context-quality.sh --strict
 fi
 
 echo "[pre-push] fetching origin"
@@ -34,5 +44,14 @@ fi
 
 echo "[pre-push] running npm run gate"
 npm run gate
+
+if [ -x scripts/dev/context-compact.sh ]; then
+	echo "[pre-push] refreshing context artifacts with validation pass state"
+	bash scripts/dev/context-compact.sh \
+		--docs-check pass \
+		--check pass \
+		--build pass \
+		--gate pass >/dev/null || true
+fi
 
 echo "[pre-push] gate passed"

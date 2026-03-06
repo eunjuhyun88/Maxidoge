@@ -22,4 +22,9 @@ if [ -x scripts/dev/context-auto.sh ]; then
 	bash scripts/dev/context-auto.sh post-merge || true
 fi
 
+if [ -x scripts/dev/context-compact.sh ]; then
+	echo "[post-merge] refreshing context artifacts with check pass state"
+	bash scripts/dev/context-compact.sh --check pass || true
+fi
+
 echo "[post-merge] sync check passed"

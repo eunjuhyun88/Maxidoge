@@ -1,120 +1,294 @@
-# Agent Context Compaction Protocol
+# Agent Context Memory Protocol
 
-Last updated: 2026-02-26
-Scope: `/Users/ej/Downloads/maxidoge-clones/backend`
+Last updated: 2026-03-06
+Scope: current git worktree rooted at this repository
 
 ## 1) Why
 
-Long-running multi-agent sessions increase:
+The repo already has strong doc routing and local safety automation.
+The next failure mode is not "missing files"; it is semantic drift:
 
-- API token usage/cost
-- chance of context drift
-- chance of "reset amnesia" after session restart
+- sessions restart with the wrong objective
+- watch logs become implicit memory
+- snapshots preserve state but not intent
+- agents reopen too many files to recover context
 
-This protocol standardizes save/compact/restore so agents can hand off safely.
+This protocol separates:
 
-## 2) Runtime Layout (Local Only)
+- authority
+- machine state
+- semantic working memory
+- handoff artifacts
+- historical evidence
 
-All runtime context files are stored under `.agent-context/` and are gitignored.
+## 2) Context Architecture
 
-- `.agent-context/snapshots/<branch-safe>/*.md`:
-  Raw task snapshots.
-- `.agent-context/compact/<branch-safe>-latest.md`:
-  Latest compact summary for the branch.
-- `.agent-context/pinned-facts.md`:
-  Durable facts that must survive compaction/reset.
-- `.agent-context/index.tsv`:
-  Snapshot index for quick lookup.
+### A. Authority
 
-## 3) Commands
+Stable rules and invariants live in canonical repo-local docs:
 
-### Save current context
+- `README.md`
+- `ARCHITECTURE.md`
+- `docs/README.md`
+- `docs/{DESIGN,FRONTEND,PLANS,PRODUCT_SENSE,QUALITY_SCORE,RELIABILITY,SECURITY}.md`
 
-```bash
-npm run ctx:save -- --title "task start" --work-id "W-YYYYMMDD-HHMM-<repo>-<agent>" --agent "codex"
-```
+These are the source of truth. They are not runtime artifacts.
 
-What it captures:
+### B. Machine Snapshot
 
-- branch/head/upstream/ahead-behind
-- uncommitted changes
+Location:
+
+- `.agent-context/snapshots/<branch-safe>/*.md`
+
+Purpose:
+
+- git/worktree/head/upstream/ahead-behind
 - changed files vs `origin/main`
 - recent commits
-- watch log tail
-- resume command hints
+- runtime flags
+
+Rule:
+
+- snapshots capture state, not semantics
+- do not treat them as the best resume artifact
+
+### C. Semantic Checkpoint
+
+Location:
+
+- `.agent-context/checkpoints/<work-id>.md`
+- `.agent-context/checkpoints/<branch-safe>-latest.md`
+
+Purpose:
+
+- current objective
+- why now
+- scope
+- owned files
+- canonical docs opened
+- decisions made
+- rejected alternatives
+- open questions
+- next actions
+- exit criteria
+
+Rule:
+
+- checkpoints are required for non-trivial work
+- this is the primary working-memory artifact
+
+### D. Brief and Handoff
+
+Location:
+
+- `.agent-context/briefs/<work-id>.md`
+- `.agent-context/briefs/<branch-safe>-latest.md`
+- `.agent-context/handoffs/<work-id>.md`
+- `.agent-context/handoffs/<branch-safe>-latest.md`
+- compatibility path: `.agent-context/compact/<branch-safe>-latest.md`
+
+Purpose:
+
+- `brief`: small, fast resume map
+- `handoff`: fuller transfer artifact for the next agent/session
+
+### E. Evidence
+
+Location:
+
+- `docs/AGENT_WATCH_LOG.md`
+- raw snapshots
+
+Purpose:
+
+- historical evidence
+- validation trail
+- execution chronology
+
+Rule:
+
+- evidence is not authority
+- evidence is not the primary resume surface
+
+## 3) Runtime Layout (Local Only)
+
+All runtime context files are gitignored under `.agent-context/`.
+
+- `.agent-context/snapshots/`
+- `.agent-context/checkpoints/`
+- `.agent-context/briefs/`
+- `.agent-context/handoffs/`
+- `.agent-context/compact/`
+- `.agent-context/state/`
+- `.agent-context/runtime/`
+- `.agent-context/pinned-facts.md`
+- `.agent-context/index.tsv` (legacy snapshot index)
+- `.agent-context/catalog.tsv` (multi-artifact registry)
+
+## 4) Commands
+
+### Save machine snapshot
+
+```bash
+npm run ctx:save -- --title "task start" --work-id "W-YYYYMMDD-HHMM-frontend-codex" --agent "codex"
+```
+
+Captures:
+
+- branch/head/upstream/ahead-behind
+- changed files vs `origin/main`
+- uncommitted files
+- recent commits
+- runtime context flags
+
+### Record semantic checkpoint
+
+```bash
+npm run ctx:checkpoint -- \
+  --work-id "W-YYYYMMDD-HHMM-frontend-codex" \
+  --surface "terminal" \
+  --objective "split semantic checkpoint from raw snapshot flow" \
+  --doc "README.md" \
+  --doc "docs/AGENT_CONTEXT_COMPACTION_PROTOCOL.md" \
+  --file "scripts/dev/context-compact.sh" \
+  --decision "keep .agent-context/compact as compatibility path" \
+  --question "should pre-push fail without checkpoint?" \
+  --next "wire strict context quality check into pre-push"
+```
+
+Use checkpoint when:
+
+- the task is multi-step
+- architecture/state/contracts are changing
+- the work is likely to span sessions
+- a handoff may be needed
 
 ### Pin durable facts
 
 ```bash
-npm run ctx:pin -- --add "Do not merge without one write-access approval"
+npm run ctx:pin -- --add "Do not merge without required write-access approval"
 ```
 
 Use only for durable, high-value facts. Never pin secrets.
 
-### Compact context
+### Build brief and handoff
 
 ```bash
 npm run ctx:compact
 ```
 
-Compaction output includes:
+Produces:
 
-- objective
-- work identity
-- current repo state
-- top changed files
-- blockers/errors from watch log
-- next commands
+- branch brief
+- work-id handoff
+- compatibility compact brief
+- lightweight state json
+
+Optional validation flags:
+
+```bash
+npm run ctx:compact -- \
+  --docs-check pass \
+  --check pass \
+  --build pass \
+  --gate pass
+```
+
+Use these when brief/handoff should record known validation state instead of `unknown`.
+The standard hook paths refresh artifacts after successful `check` or `gate` so the latest branch brief stays truthful.
+
+### Validate context quality
+
+```bash
+npm run ctx:check -- --strict
+```
+
+Strict validation expects:
+
+- checkpoint-backed brief
+- semantic objective
+- open questions section
+- immediate next step
+- read-first docs
+- no watch-log tail copied into brief
 
 ### Restore context
+
+```bash
+npm run ctx:restore -- --mode brief
+npm run ctx:restore -- --mode handoff
+npm run ctx:restore -- --mode files
+```
+
+Compatibility alias:
 
 ```bash
 npm run ctx:restore -- --mode context
 ```
 
-Ambiguity guard:
+`context` resolves to `brief` and exists only for backwards compatibility.
 
-```bash
-npm run ctx:restore -- --mode files
-```
+## 5) Automatic Triggers
 
-`--mode` is mandatory to avoid confusion between conversation restore and file restore.
+Automation runs through `ctx:auto`.
 
-## 4) Automatic Triggers (Default)
+- `safe:status` -> save snapshot, refresh brief/handoff if possible
+- `safe:sync-start` -> save snapshot
+- `safe:sync-end` -> save snapshot, refresh brief/handoff
+- `pre-push` -> save snapshot, refresh brief/handoff, then strict quality check
+- `pre-push` -> after `npm run gate`, refresh brief/handoff with validation state
+- `post-merge` -> save snapshot, refresh brief/handoff, then refresh validation state after `npm run check`
 
-Context save/compact runs automatically in standard workflows:
+Environment controls:
 
-- `safe:status` -> `ctx:auto(safe-status)`
-- `safe:sync` -> `ctx:auto(safe-sync-start/end)`
-- `pre-push` hook -> `ctx:auto(pre-push)`
-- `post-merge` hook -> `ctx:auto(post-merge)`
+- `CTX_AUTO_DISABLED=1`
+- `CTX_AUTO_MIN_INTERVAL_SEC=300`
+- `CTX_AUTO_STRICT=1`
+- `CTX_AUTO_SKIP_COMPACT=1`
+- `CTX_WORK_ID`
+- `CTX_AGENT_ID`
 
-Automation controls:
+## 6) Resume Order
 
-- `CTX_AUTO_DISABLED=1`: disable auto snapshots
-- `CTX_AUTO_MIN_INTERVAL_SEC=300`: per-branch/per-stage throttle
-- `CTX_AUTO_STRICT=1`: fail caller when auto steps fail
-- `CTX_WORK_ID`: optional explicit work id for auto snapshots
-- `CTX_AGENT_ID`: optional agent id label
-## 5) Multi-Agent Handoff Standard
+Use this order on session restart:
 
-1. Agent A before handoff:
-   - `ctx:save` with work id
-   - `ctx:compact`
-2. Agent B at resume:
-   - `ctx:restore -- --mode context`
-   - confirm branch/worktree
-   - continue work with same or new work id
+1. `README.md`
+2. `docs/README.md`
+3. `npm run ctx:restore -- --mode brief`
+4. `npm run ctx:restore -- --mode handoff` if the brief is insufficient
+5. only then inspect snapshots or watch log
 
-## 6) Minimum Cadence
+This preserves progressive disclosure and keeps the hot path small.
 
-- At task start: `safe:status` (auto) or `ctx:save`
-- Before push/PR: pre-push auto path (or manual `ctx:save` + `ctx:compact`)
-- Any major decision change: `ctx:pin -- --add "..."`
-- After session reset: `ctx:restore -- --mode context` (manual trigger)
+## 7) Quality Rules
 
-## 7) Safety Rules
+The context system is healthy only if:
 
-- Do not commit `.agent-context/*` artifacts.
-- Do not place keys/secrets in snapshots or pinned facts.
-- For file recovery, use explicit file recovery flow (`--mode files` guidance) instead of ambiguous restore requests.
+- objective is semantic, not stage-shaped like `auto-safe-status`
+- brief contains open questions
+- brief contains an immediate next step
+- brief points to canonical docs, not random logs
+- watch log is used as evidence only
+
+Bad signs:
+
+- latest compact output is mostly changed-file dump
+- the agent needs watch-log tail to know what to do next
+- checkpoint is missing on long-running work
+- restore opens many files before showing the objective
+
+## 8) Minimum Cadence
+
+- task start: `safe:status`
+- first serious design/implementation decision: `ctx:checkpoint`
+- pre-handoff: `ctx:save` + `ctx:compact`
+- pre-push: hook path (`ctx:auto(pre-push)` + `ctx:check -- --strict`)
+- post-reset: `ctx:restore -- --mode brief`
+
+## 9) Safety Rules
+
+- Do not commit `.agent-context/*`.
+- Do not put secrets into snapshots, checkpoints, or pinned facts.
+- Do not use watch log as the only memory system.
+- Do not rely on external non-repo-local docs for normal resume flow.
+- Keep compatibility outputs until all local workflows are moved off `.agent-context/compact/*-latest.md`.
