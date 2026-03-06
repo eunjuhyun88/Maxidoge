@@ -40,21 +40,21 @@
   import { ACTION_CATALOG, CHAR_ACTIONS, ATTACK_NAMES, ATTACK_SUPER, ATTACK_WEAK, AGENT_TO_CHAR_STATE, getFormPos, createInitialSprites, scheduleBattleTurns } from '$lib/engine/arenaCharacters';
   import { juice_shake, juice_flash, juice_flyNumber, juice_confetti, type ArenaLiveEvent, LIVE_EVENT_TTL_MS, LIVE_EVENT_DECK, pickLiveEvent, getEventCadence } from '$lib/engine/arenaGameJuice';
 
-  $: walletOk = $isWalletConnected;
+  const walletOk = $derived($isWalletConnected);
 
-  $: state = $gameState;
-  $: currentBtcPrice = $btcPrice || state.bases.BTC || 97000;
-  $: modeLabel = state.arenaMode;
-  $: tournamentInfo = state.tournament;
-  $: resultOverlayTitle = state.arenaMode === 'TOURNAMENT'
+  const gs = $derived($gameState);
+  const currentBtcPrice = $derived($btcPrice || gs.bases.BTC || 97000);
+  const modeLabel = $derived(gs.arenaMode);
+  const tournamentInfo = $derived(gs.tournament);
+  const resultOverlayTitle = $derived(gs.arenaMode === 'TOURNAMENT'
     ? (resultData.win ? '🏆 TOURNAMENT WIN 🏆' : '☠ TOURNAMENT LOSS ☠')
-    : state.arenaMode === 'PVP'
+    : gs.arenaMode === 'PVP'
       ? (resultData.win ? '🏆 YOU WIN! 🏆' : '💀 YOU LOSE 💀')
-      : (resultData.win ? '🏁 PVE CLEAR' : '❌ PVE FAILED');
+      : (resultData.win ? '🏁 PVE CLEAR' : '❌ PVE FAILED'));
   // Active agents for this match
-  $: activeAgents = AGDEFS.filter(a => state.selectedAgents.includes(a.id));
-  $: railRank = [...activeAgents].sort((a, b) => b.conf - a.conf);
-  $: longBalance = Math.max(0, Math.min(100, Math.round(state.score)));
+  const activeAgents = $derived(AGDEFS.filter(a => gs.selectedAgents.includes(a.id)));
+  const railRank = $derived([...activeAgents].sort((a, b) => b.conf - a.conf));
+  const longBalance = $derived(Math.max(0, Math.min(100, Math.round(gs.score))));
 
   // UI state
   let findings: Array<{def: typeof AGDEFS[0]; visible: boolean}> = [];
