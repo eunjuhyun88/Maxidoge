@@ -31,6 +31,11 @@
     toTvHex,
     resolveChartTheme,
   } from './ChartTheme';
+  import {
+    getNextPositionWheelPrice,
+    resolvePositionInteractionTarget,
+  } from './chart/chartPositionInteraction';
+  import { bindChartRuntimeInteractions } from './chart/chartRuntimeBindings';
 
   const dispatch = createEventDispatcher<{
     scanrequest: { source: 'chart-bar'; pair: string; timeframe: string };
@@ -1110,6 +1115,24 @@
     }
   }
 
+  function runChartCleanup() {
+    if (cleanup) {
+      const dispose = cleanup;
+      cleanup = null;
+      dispose();
+      return;
+    }
+    if (wsCleanup) { wsCleanup(); wsCleanup = null; }
+    if (priceWsCleanup) { priceWsCleanup(); priceWsCleanup = null; }
+    clearPositionLines();
+    clearPatternLineSeries();
+    destroyTradingView();
+    if (chart) {
+      chart.remove();
+      chart = null;
+    }
+  }
+
   async function setChartMode(mode: 'agent' | 'trading') {
     if (mode === chartMode) return;
     chartMode = mode;
@@ -1829,11 +1852,13 @@
     const y = e.clientY - chartContainer.getBoundingClientRect().top;
     const price = priceFromY(y);
     if (price === null) return;
-    const distTP = Math.abs(price - (posTp || 0)), distSL = Math.abs(price - (posSl || 0)), distEntry = Math.abs(price - (posEntry || 0));
-    const minDist = Math.min(distTP, distSL, distEntry);
-    const threshold = Math.abs((posTp || 0) - (posSl || 0)) * 0.15;
-    if (minDist > threshold) return;
-    isDragging = minDist === distTP ? 'tp' : minDist === distSL ? 'sl' : 'entry';
+    const target = resolvePositionInteractionTarget(price, {
+      entry: posEntry,
+      tp: posTp,
+      sl: posSl,
+    });
+    if (!target) return;
+    isDragging = target;
     chartContainer.style.cursor = 'ns-resize'; e.preventDefault();
   }
 
@@ -1845,10 +1870,12 @@
     if (isDragging) {
       dispatch(isDragging === 'tp' ? 'dragTP' : isDragging === 'sl' ? 'dragSL' : 'dragEntry', { price: Math.round(price) });
     } else if (showPosition && posEntry !== null && posTp !== null && posSl !== null) {
-      const distTP = Math.abs(price - (posTp || 0)), distSL = Math.abs(price - (posSl || 0)), distEntry = Math.abs(price - (posEntry || 0));
-      const minDist = Math.min(distTP, distSL, distEntry);
-      const threshold = Math.abs((posTp || 0) - (posSl || 0)) * 0.15;
-      if (minDist <= threshold) { hoverLine = minDist === distTP ? 'tp' : minDist === distSL ? 'sl' : 'entry'; chartContainer.style.cursor = 'ns-resize'; }
+      const target = resolvePositionInteractionTarget(price, {
+        entry: posEntry,
+        tp: posTp,
+        sl: posSl,
+      });
+      if (target) { hoverLine = target; chartContainer.style.cursor = 'ns-resize'; }
       else { hoverLine = null; chartContainer.style.cursor = ''; }
     }
   }
@@ -1861,10 +1888,13 @@
     if (!target) return;
     e.preventDefault(); e.stopPropagation();
     const basePrice = posEntry || livePrice;
-    const step = basePrice > 10000 ? 10 : basePrice > 1000 ? 1 : basePrice > 100 ? 0.5 : 0.1;
-    const delta = e.deltaY > 0 ? -step : step;
-    const val = target === 'tp' ? posTp : target === 'sl' ? posSl : posEntry;
-    dispatch(target === 'tp' ? 'dragTP' : target === 'sl' ? 'dragSL' : 'dragEntry', { price: Math.round((val || 0) + delta) });
+    const nextPrice = getNextPositionWheelPrice({
+      target,
+      levels: { entry: posEntry, tp: posTp, sl: posSl },
+      basePrice,
+      deltaY: e.deltaY,
+    });
+    dispatch(target === 'tp' ? 'dragTP' : target === 'sl' ? 'dragSL' : 'dragEntry', { price: nextPrice });
   }
 
   function priceFromY(y: number): number | null { if (!series) return null; try { return series.coordinateToPrice(y); } catch { return null; } }
@@ -1989,54 +2019,35 @@
 
       await loadKlines();
 
-      // ═══ Lazy-load: detect scroll to left edge ═══
-      const onVisibleLogicalRangeChange = (range: any) => {
-        if (range && range.from < 20 && !_isLoadingMore && !_noMoreHistory) {
-          loadMoreHistory();
-        }
-        scheduleVisiblePatternScan();
-        renderDrawings();
-      };
-      chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChange);
-      const onCrosshairMove = () => { renderDrawings(); };
-      chart.subscribeCrosshairMove(onCrosshairMove);
-
-      const ro = new ResizeObserver(() => {
-        if (chart && chartMode === 'agent') chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
-        resizeDrawingCanvas();
+      const unbindRuntime = bindChartRuntimeInteractions({
+        chart,
+        chartContainer,
+        isAgentMode: () => chartMode === 'agent',
+        isTradeLineEntryEnabled: () => enableTradeLineEntry,
+        onLoadMoreHistory: () => {
+          void loadMoreHistory();
+        },
+        onScheduleVisiblePatternScan: scheduleVisiblePatternScan,
+        onRenderDrawings: renderDrawings,
+        onResizeDrawingCanvas: resizeDrawingCanvas,
+        onSetDrawingMode: setDrawingMode,
+        onZoomChart: zoomChart,
+        onResetChartScale: resetChartScale,
+        onFitChartRange: fitChartRange,
+        onToggleDrawingsVisible: toggleDrawingsVisible,
       });
-      ro.observe(chartContainer);
-
-      const onKeyDown = (e: KeyboardEvent) => {
-        if (chartMode !== 'agent') return;
-        const target = e.target as HTMLElement | null;
-        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
-        const k = e.key.toLowerCase();
-        if (k === 'escape') setDrawingMode('none');
-        else if (k === '=' || k === '+') zoomChart(1);
-        else if (k === '-' || k === '_') zoomChart(-1);
-        else if (k === '0') resetChartScale();
-        else if (k === 'f') fitChartRange();
-        else if (k === 'v') toggleDrawingsVisible();
-        else if (k === 'h') setDrawingMode('hline');
-        else if (k === 't') setDrawingMode('trendline');
-        else if (enableTradeLineEntry && k === 'r') setDrawingMode('trade');
-        else if (enableTradeLineEntry && k === 'l') setDrawingMode('longentry');
-        else if (enableTradeLineEntry && k === 's') setDrawingMode('shortentry');
-      };
-      window.addEventListener('keydown', onKeyDown);
 
       cleanup = () => {
-        ro.disconnect();
-        window.removeEventListener('keydown', onKeyDown);
-        if (wsCleanup) wsCleanup();
-        if (priceWsCleanup) priceWsCleanup();
+        unbindRuntime();
+        if (wsCleanup) { wsCleanup(); wsCleanup = null; }
+        if (priceWsCleanup) { priceWsCleanup(); priceWsCleanup = null; }
         clearPositionLines();
         clearPatternLineSeries();
-        try { chart?.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChange); } catch {}
-        try { chart?.unsubscribeCrosshairMove(onCrosshairMove); } catch {}
         destroyTradingView();
-        if (chart) chart.remove();
+        if (chart) {
+          chart.remove();
+          chart = null;
+        }
       };
     } catch (e) { error = 'Chart initialization failed'; console.error(e); }
   });
@@ -2381,10 +2392,7 @@
     if (_drawRAF) cancelAnimationFrame(_drawRAF);
     unbindGlobalDrawingMouseUp();
     unbindRatioDrag();
-    if (cleanup) cleanup();
-    if (wsCleanup) wsCleanup();
-    if (priceWsCleanup) priceWsCleanup();
-    destroyTradingView();
+    runChartCleanup();
   });
 </script>
 
