@@ -115,10 +115,11 @@ npm run preview
 - `npm run safe:hooks`: 로컬 pre-push/post-merge 훅 설치 (`.githooks/*`)
 - `npm run safe:sync`: 브랜치 동기화 (`main`은 `pull --ff-only`, 작업 브랜치는 `origin/main` rebase + check)
 - `npm run safe:sync:gate`: 동기화 후 `check + build`까지 실행
-- `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`: 현재 작업 컨텍스트 스냅샷 저장
-- `npm run ctx:checkpoint -- --work-id "<W-ID>" --surface "<surface>" --objective "<objective>"`: semantic working-memory 체크포인트 저장
-- `npm run ctx:compact`: snapshot + checkpoint를 brief/handoff로 압축
-- `npm run ctx:check -- --strict`: brief/handoff 품질 검사
+- `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`: machine snapshot 저장
+- `npm run ctx:checkpoint -- --work-id "<W-ID>" --surface "<surface>" --objective "<objective>"`: semantic working-memory checkpoint 저장
+- `npm run ctx:compact`: snapshot + checkpoint를 branch brief/handoff로 압축
+- `npm run ctx:compact -- --docs-check pass --check pass --build pass --gate pass`: 검증 결과까지 포함해 brief/handoff 갱신
+- `npm run ctx:check -- --strict`: local brief/handoff 품질 검사
 - `npm run ctx:pin -- --add "<durable fact>"`: 리셋 시 유실되면 안 되는 고정 사실 저장
 - `npm run ctx:restore -- --mode brief|handoff|context|files`: 복구(brief/handoff/file-recovery 의도 분리)
 - `npm run ctx:auto -- <stage>`: 자동 저장/컴팩션 오케스트레이션 (hook/safe 스크립트에서 호출)
@@ -225,14 +226,18 @@ npm run preview
    npm run ctx:save -- --title "pre-handoff" --work-id "W-..." --agent "codex"
    npm run ctx:compact
    ```
-5. 품질 확인:
+   검증 결과를 이미 알고 있으면:
    ```bash
-   npm run ctx:check -- --strict
+   npm run ctx:compact -- --docs-check pass --check pass --build pass --gate pass
    ```
-6. 리셋 후 복구:
+5. 리셋 후 복구:
    ```bash
    npm run ctx:restore -- --mode brief
    npm run ctx:restore -- --mode handoff
+   ```
+6. 품질 확인:
+   ```bash
+   npm run ctx:check -- --strict
    ```
 7. 모호한 `복구` 요청 방지:
    - 세션/대화 복구: `--mode brief` 또는 `--mode handoff`

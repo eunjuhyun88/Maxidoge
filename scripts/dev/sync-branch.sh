@@ -50,9 +50,21 @@ fi
 if [ "$RUN_GATE" -eq 1 ]; then
 	echo "[safe-sync] running npm run gate"
 	npm run gate
+	if [ -x scripts/dev/context-compact.sh ]; then
+		echo "[safe-sync] refreshing context artifacts with gate pass state"
+		bash scripts/dev/context-compact.sh \
+			--docs-check pass \
+			--check pass \
+			--build pass \
+			--gate pass || true
+	fi
 else
 	echo "[safe-sync] running npm run check"
 	npm run check
+	if [ -x scripts/dev/context-compact.sh ]; then
+		echo "[safe-sync] refreshing context artifacts with check pass state"
+		bash scripts/dev/context-compact.sh --check pass || true
+	fi
 fi
 
 if [ -x scripts/dev/context-auto.sh ]; then

@@ -3,6 +3,8 @@ set -euo pipefail
 
 usage() {
 	echo "Usage: bash scripts/dev/context-compact.sh [--source <snapshot.md>] [--checkpoint <checkpoint.md>] [--work-id <id>] [--max-lines <n>]"
+	echo "       [--docs-check <pass|fail|warn|unknown>] [--check <pass|fail|warn|unknown>]"
+	echo "       [--build <pass|fail|warn|unknown>] [--gate <pass|fail|warn|unknown>]"
 	echo ""
 	echo "Generates branch-local brief and handoff artifacts from the latest snapshot and semantic checkpoint."
 }
@@ -40,6 +42,10 @@ SOURCE_FILE=""
 CHECKPOINT_FILE=""
 WORK_ID=""
 MAX_LINES=160
+VALIDATION_DOCS_CHECK="unknown"
+VALIDATION_CHECK="unknown"
+VALIDATION_BUILD="unknown"
+VALIDATION_GATE="unknown"
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
@@ -57,6 +63,22 @@ while [ "$#" -gt 0 ]; do
 			;;
 		--max-lines)
 			MAX_LINES="${2:-160}"
+			shift 2
+			;;
+		--docs-check)
+			VALIDATION_DOCS_CHECK="${2:-unknown}"
+			shift 2
+			;;
+		--check)
+			VALIDATION_CHECK="${2:-unknown}"
+			shift 2
+			;;
+		--build)
+			VALIDATION_BUILD="${2:-unknown}"
+			shift 2
+			;;
+		--gate)
+			VALIDATION_GATE="${2:-unknown}"
 			shift 2
 			;;
 		-h|--help)
@@ -195,9 +217,10 @@ fi
 
 VALIDATION_SNAPSHOT=$(
 	cat <<EOF
-- docs:check: unknown
-- check: unknown
-- build: unknown
+- docs:check: $VALIDATION_DOCS_CHECK
+- check: $VALIDATION_CHECK
+- build: $VALIDATION_BUILD
+- gate: $VALIDATION_GATE
 - head: $HEAD_SHA
 - uncommitted_state: $( [ "$UNCOMMITTED" = "- clean" ] && echo clean || echo dirty )
 EOF
@@ -365,9 +388,10 @@ cat > "$STATE_FILE" <<EOF
   "head": "$(json_escape "$HEAD_SHA")",
   "checkpointPresent": $HAS_CHECKPOINT,
   "validation": {
-    "docsCheck": "unknown",
-    "check": "unknown",
-    "build": "unknown"
+    "docsCheck": "$(json_escape "$VALIDATION_DOCS_CHECK")",
+    "check": "$(json_escape "$VALIDATION_CHECK")",
+    "build": "$(json_escape "$VALIDATION_BUILD")",
+    "gate": "$(json_escape "$VALIDATION_GATE")"
   },
   "briefPath": "$(json_escape "${BRIEF_WORK_FILE#$ROOT_DIR/}")",
   "handoffPath": "$(json_escape "${HANDOFF_WORK_FILE#$ROOT_DIR/}")"

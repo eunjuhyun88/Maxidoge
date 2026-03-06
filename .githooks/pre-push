@@ -45,4 +45,13 @@ fi
 echo "[pre-push] running npm run gate"
 npm run gate
 
+if [ -x scripts/dev/context-compact.sh ]; then
+	echo "[pre-push] refreshing context artifacts with validation pass state"
+	bash scripts/dev/context-compact.sh \
+		--docs-check pass \
+		--check pass \
+		--build pass \
+		--gate pass >/dev/null || true
+fi
+
 echo "[pre-push] gate passed"
