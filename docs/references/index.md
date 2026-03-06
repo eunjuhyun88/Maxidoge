@@ -22,8 +22,10 @@ Purpose:
 - `scripts/dev/safe-status.sh`
 - `scripts/dev/sync-branch.sh`
 - `scripts/dev/context-save.sh`
+- `scripts/dev/context-checkpoint.sh`
 - `scripts/dev/context-compact.sh`
 - `scripts/dev/context-restore.sh`
+- `scripts/dev/check-context-quality.sh`
 
 ## Reference Rules
 

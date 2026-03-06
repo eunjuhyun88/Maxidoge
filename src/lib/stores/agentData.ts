@@ -18,12 +18,13 @@ export interface AgentStats {
   curStreak: number;
   avgConf: number;
   bestConf: number;
-  matches: MatchRecord[];
+  matches: AgentMatchRecord[];
   stamps: { win: number; lose: number; streak: number; diamond: number; crown: number };
   learning: AgentLearning;
 }
 
-export interface MatchRecord {
+/** Per-agent match record (distinct from ArenaMatchRecord in matchHistoryStore) */
+export interface AgentMatchRecord {
   matchN: number;
   dir: string;
   conf: number;
@@ -225,7 +226,7 @@ function recalcFromMatches(ag: AgentStats) {
   }
 }
 
-export function recordAgentMatch(agentId: string, match: MatchRecord) {
+export function recordAgentMatch(agentId: string, match: AgentMatchRecord) {
   agentStats.update((stats) => {
     const ag = stats[agentId];
     if (!ag) return stats;

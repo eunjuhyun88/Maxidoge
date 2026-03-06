@@ -12,7 +12,7 @@
     lockHumanDecision,
   } from '$lib/stores/arenaWarStore';
   import { AGENT_POOL } from '$lib/engine/agents';
-  import { REASON_TAGS, ALL_REASON_TAGS, type ReasonTagCategory } from '$lib/engine/arenaWarTypes';
+  import { REASON_TAGS, type ReasonTagCategory } from '$lib/engine/arenaWarTypes';
   import type { Direction, CtxFlag } from '$lib/engine/types';
 
   // Derived from store (use 'ws' to avoid name conflict with $state rune)
@@ -28,14 +28,20 @@
   let showFactorDetail: boolean = $state(false);
   let activeReasonCategory: ReasonTagCategory | null = $state(null);
   let reasonTextInput: string = $state('');
+  const reasonTagCategories = Object.entries(REASON_TAGS) as [ReasonTagCategory, readonly string[]][];
 
   // Agent outputs grouped by role
+  const offenseAgentIds = ['STRUCTURE', 'VPA', 'ICT'] as const;
   let offenseAgents = $derived(
-    c02 ? [
-      { id: 'STRUCTURE', def: AGENT_POOL.STRUCTURE, factors: factors.filter(f => AGENT_POOL.STRUCTURE.factors.some(fd => fd.id === f.factorId)) },
-      { id: 'VPA', def: AGENT_POOL.VPA, factors: factors.filter(f => AGENT_POOL.VPA.factors.some(fd => fd.id === f.factorId)) },
-      { id: 'ICT', def: AGENT_POOL.ICT, factors: factors.filter(f => AGENT_POOL.ICT.factors.some(fd => fd.id === f.factorId)) },
-    ] : []
+    c02
+      ? offenseAgentIds.map(id => {
+        const def = AGENT_POOL[id];
+        const agentFactors = factors.filter(f => def.factors.some(fd => fd.id === f.factorId));
+        const score = agentFactors.reduce((sum, factor) => sum + factor.value, 0);
+        const direction = directionFromScore(score);
+        return { id, def, factors: agentFactors, score, direction };
+      })
+      : []
   );
 
   let canLock = $derived(
@@ -63,10 +69,10 @@
     return 'var(--arena-text-2, #5a7d6e)';
   }
 
-  function factorBar(value: number): string {
-    const pct = Math.abs(value);
-    const color = value > 0 ? 'var(--arena-good, #00cc88)' : 'var(--arena-bad, #ff5e7a)';
-    return `linear-gradient(${value > 0 ? '90deg' : '270deg'}, ${color} ${pct}%, transparent ${pct}%)`;
+  function directionFromScore(score: number): Direction {
+    if (score > 15) return 'LONG';
+    if (score < -15) return 'SHORT';
+    return 'NEUTRAL';
   }
 
   function handleLock() {
@@ -120,8 +126,8 @@
             <div class="agent-row">
               <span class="agent-icon">{agent.def.icon}</span>
               <span class="agent-id">{agent.id}</span>
-              <span class="agent-dir" style="color: {dirColor(agent.factors.reduce((s, f) => s + f.value, 0) > 15 ? 'LONG' : agent.factors.reduce((s, f) => s + f.value, 0) < -15 ? 'SHORT' : 'NEUTRAL')}">
-                {agent.factors.reduce((s, f) => s + f.value, 0) > 15 ? 'LONG' : agent.factors.reduce((s, f) => s + f.value, 0) < -15 ? 'SHORT' : 'NEUTRAL'}
+              <span class="agent-dir" style="color: {dirColor(agent.direction)}">
+                {agent.direction}
               </span>
               <div class="factor-chips">
                 {#each agent.factors as f}
@@ -206,7 +212,7 @@
         </div>
 
         <!-- Factor Detail Toggle -->
-        <button class="factor-toggle" onclick={() => showFactorDetail = !showFactorDetail}>
+        <button type="button" class="factor-toggle" onclick={() => showFactorDetail = !showFactorDetail}>
           {showFactorDetail ? '▲ 48팩터 접기' : '▼ 48팩터 전체 보기'}
         </button>
 
@@ -241,9 +247,10 @@
 
       <!-- Direction -->
       <div class="decision-section">
-        <label class="dec-label">방향</label>
+        <p class="dec-label">방향</p>
         <div class="dir-buttons">
           <button
+            type="button"
             class="dir-btn long"
             class:active={ws.humanDirection === 'LONG'}
             onclick={() => setHumanDirection('LONG')}
@@ -252,6 +259,7 @@
             LONG ▲
           </button>
           <button
+            type="button"
             class="dir-btn neutral"
             class:active={ws.humanDirection === 'NEUTRAL'}
             onclick={() => setHumanDirection('NEUTRAL')}
@@ -260,6 +268,7 @@
             NEUTRAL
           </button>
           <button
+            type="button"
             class="dir-btn short"
             class:active={ws.humanDirection === 'SHORT'}
             onclick={() => setHumanDirection('SHORT')}
@@ -272,8 +281,9 @@
 
       <!-- Confidence -->
       <div class="decision-section">
-        <label class="dec-label">확신도: {ws.humanConfidence}%</label>
+        <label class="dec-label" for="human-confidence">확신도: {ws.humanConfidence}%</label>
         <input
+          id="human-confidence"
           type="range"
           min="10"
           max="95"
@@ -288,8 +298,9 @@
       <!-- TP / SL -->
       <div class="decision-section tp-sl-row">
         <div class="tp-input">
-          <label class="dec-label">TP</label>
+          <label class="dec-label" for="human-tp">TP</label>
           <input
+            id="human-tp"
             type="number"
             value={ws.humanTp}
             oninput={(e) => setHumanTp(Number(e.currentTarget.value))}
@@ -299,8 +310,9 @@
           />
         </div>
         <div class="sl-input">
-          <label class="dec-label">SL</label>
+          <label class="dec-label" for="human-sl">SL</label>
           <input
+            id="human-sl"
             type="number"
             value={ws.humanSl}
             oninput={(e) => setHumanSl(Number(e.currentTarget.value))}
@@ -310,7 +322,7 @@
           />
         </div>
         <div class="rr-display">
-          <label class="dec-label">R:R</label>
+          <span class="dec-label">R:R</span>
           <span class="rr-value" class:good={rr >= 2} class:warn={rr >= 1.5 && rr < 2} class:bad={rr < 1.5}>
             {rr.toFixed(1)}
           </span>
@@ -319,27 +331,29 @@
 
       <!-- Reason Tags -->
       <div class="decision-section">
-        <label class="dec-label">근거 태그 (AI를 왜 따르거나 거부하는가?)</label>
+        <p class="dec-label">근거 태그 (AI를 왜 따르거나 거부하는가?)</p>
         <div class="tag-categories">
-          {#each Object.entries(REASON_TAGS) as [cat, tags]}
+          {#each reasonTagCategories as [cat, tags]}
             <div class="tag-category">
               <button
+                type="button"
                 class="cat-header"
-                style="border-color: {getCategoryColor(cat as ReasonTagCategory)}"
-                onclick={() => activeReasonCategory = activeReasonCategory === cat ? null : cat as ReasonTagCategory}
+                style="border-color: {getCategoryColor(cat)}"
+                onclick={() => activeReasonCategory = activeReasonCategory === cat ? null : cat}
               >
-                <span style="color: {getCategoryColor(cat as ReasonTagCategory)}">{getCategoryLabel(cat as ReasonTagCategory)}</span>
-                <span class="cat-count">{ws.humanReasonTags.filter(t => (tags as readonly string[]).includes(t)).length}</span>
+                <span style="color: {getCategoryColor(cat)}">{getCategoryLabel(cat)}</span>
+                <span class="cat-count">{ws.humanReasonTags.filter(t => tags.includes(t)).length}</span>
               </button>
               {#if activeReasonCategory === cat}
                 <div class="tag-list">
                   {#each tags as tag}
                     <button
+                      type="button"
                       class="reason-tag"
                       class:selected={ws.humanReasonTags.includes(tag)}
                       onclick={() => toggleReasonTag(tag)}
                       disabled={ws.humanLocked}
-                      style="--cat-color: {getCategoryColor(cat as ReasonTagCategory)}"
+                      style="--cat-color: {getCategoryColor(cat)}"
                     >
                       {tag.replace(/_/g, ' ')}
                     </button>
@@ -353,8 +367,9 @@
 
       <!-- Reason Text (optional) -->
       <div class="decision-section">
-        <label class="dec-label">메모 (선택)</label>
+        <label class="dec-label" for="human-reason-text">메모 (선택)</label>
         <textarea
+          id="human-reason-text"
           class="reason-text"
           placeholder="AI의 판단과 다르게 생각하는 이유..."
           maxlength="280"
@@ -365,6 +380,7 @@
 
       <!-- Lock In Button -->
       <button
+        type="button"
         class="lock-btn"
         onclick={handleLock}
         disabled={!canLock}
@@ -452,6 +468,7 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.6rem;
     color: var(--arena-text-2, #5a7d6e);
+    margin: 0;
     margin-bottom: 0.4rem;
     letter-spacing: 1px;
   }
@@ -709,6 +726,7 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.65rem;
     color: var(--arena-accent, #e8967d);
+    margin: 0;
     letter-spacing: 1px;
     text-transform: uppercase;
   }

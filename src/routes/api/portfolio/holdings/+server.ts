@@ -38,7 +38,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
       ok: true,
       data: { holdings, totalValue, totalCost },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[portfolio/holdings/get]', error);
     return json({ error: 'Failed to load holdings' }, { status: 500 });
   }
@@ -93,7 +93,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
         updatedAt: new Date(r.updated_at).getTime(),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });
     console.error('[portfolio/holdings/post]', error);
     return json({ error: 'Failed to save holding' }, { status: 500 });

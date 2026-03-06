@@ -3,20 +3,34 @@
      Displays character illustration + message + CTA for empty data
 ═══════════════════════════════════════════════════════════════ -->
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  const dispatch = createEventDispatcher();
+  type Variant = 'default' | 'purple' | 'cyan' | 'pink' | 'green' | 'orange';
 
-  export let image: string = '/characters/trading-states.jpg';
-  export let title: string = 'Nothing here yet';
-  export let subtitle: string = '';
-  export let ctaText: string = '';
-  export let ctaHref: string = '';
-  export let icon: string = '';
-  export let compact: boolean = false;
-  export let variant: 'default' | 'purple' | 'cyan' | 'pink' | 'green' | 'orange' = 'default';
+  interface Props {
+    image?: string;
+    title?: string;
+    subtitle?: string;
+    ctaText?: string;
+    ctaHref?: string;
+    icon?: string;
+    compact?: boolean;
+    variant?: Variant;
+    onaction?: () => void;
+  }
+
+  let {
+    image = '/characters/trading-states.jpg',
+    title = 'Nothing here yet',
+    subtitle = '',
+    ctaText = '',
+    ctaHref = '',
+    icon = '',
+    compact = false,
+    variant = 'default' as Variant,
+    onaction,
+  }: Props = $props();
 
   function handleCTA() {
-    dispatch('action');
+    onaction?.();
     if (ctaHref) {
       window.location.href = ctaHref;
     }
@@ -30,7 +44,7 @@
     green: { accent: '#00ff88', glow: 'rgba(0,255,136,.15)' },
     orange: { accent: '#ff8c3b', glow: 'rgba(255,140,59,.15)' },
   };
-  $: colors = variantColors[variant] || variantColors.default;
+  const colors = $derived(variantColors[variant] || variantColors.default);
 </script>
 
 <div class="empty" class:compact style="--es-accent:{colors.accent}; --es-glow:{colors.glow}">
@@ -50,7 +64,7 @@
   </div>
 
   {#if ctaText}
-    <button class="empty-cta" on:click={handleCTA}>{ctaText}</button>
+    <button class="empty-cta" onclick={handleCTA}>{ctaText}</button>
   {/if}
 </div>
 

@@ -1,27 +1,43 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import DirectionBadge from './DirectionBadge.svelte';
 
-  const dispatch = createEventDispatcher();
+  interface Props {
+    bias?: 'long' | 'short' | 'wait';
+    confidence?: number;
+    pair?: string;
+    timeframe?: string;
+    reason?: string;
+    edgePct?: number | null;
+    gateScore?: number | null;
+    shouldExecute?: boolean;
+    model?: string | null;
+    loading?: boolean;
+    executionEnabled?: boolean;
+    showModelMeta?: boolean;
+    onexecute?: () => void;
+  }
 
-  export let bias: 'long' | 'short' | 'wait' = 'wait';
-  export let confidence: number = 0;
-  export let pair: string = 'BTC/USDT';
-  export let timeframe: string = '4h';
-  export let reason: string = '';
-  export let edgePct: number | null = null;
-  export let gateScore: number | null = null;
-  export let shouldExecute: boolean = false;
-  export let model: string | null = null;
-  export let loading: boolean = false;
-  export let executionEnabled: boolean = false;
-  export let showModelMeta = false;
+  let {
+    bias = 'wait',
+    confidence = 0,
+    pair = 'BTC/USDT',
+    timeframe = '4h',
+    reason = '',
+    edgePct = null,
+    gateScore = null,
+    shouldExecute = false,
+    model = null,
+    loading = false,
+    executionEnabled = false,
+    showModelMeta = false,
+    onexecute,
+  }: Props = $props();
 
-  $: biasColor = bias === 'long' ? '#00e676' : bias === 'short' ? '#ff2d55' : '#E8967D';
+  const biasColor = $derived(bias === 'long' ? '#00e676' : bias === 'short' ? '#ff2d55' : 'var(--term-accent, #e8967d)');
 </script>
 
 {#if loading}
-  <div class="vc" style="--bc:rgba(232,150,125,.15)">
+  <div class="vc" style="--bc:rgba(var(--t-accent-rgb),.15)">
     <div class="vc-skel"></div>
   </div>
 {:else if bias !== 'wait' || confidence > 0}
@@ -41,7 +57,7 @@
     <span class="vc-reason">{reason || '...'}</span>
     {#if showModelMeta && model}<span class="vc-model">{model}</span>{/if}
     {#if executionEnabled && shouldExecute}
-      <button class="vc-exec" on:click={() => dispatch('execute')}>EXEC</button>
+      <button class="vc-exec" onclick={() => onexecute?.()}>EXEC</button>
     {/if}
   </div>
 {/if}
@@ -51,7 +67,7 @@
     display: flex; align-items: center; gap: 6px;
     padding: 5px 10px;
     background: rgba(255,255,255,.02);
-    border-bottom: 2px solid var(--bc, #E8967D);
+    border-bottom: 2px solid var(--bc, var(--term-accent, #e8967d));
     font-family: var(--fm, 'SF Mono', monospace);
     flex-shrink: 0; min-height: 0;
     overflow: hidden;

@@ -1,0 +1,233 @@
+/* ═══════════════════════════════════════════════════════════════
+   STOCKCLAW Design Token System
+   Single source of truth for all visual properties.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── COLORS: Backgrounds ── */
+  --sc-bg-0: #07130d;          /* deepest background */
+  --sc-bg-1: #0a1a0d;          /* cards, panels */
+  --sc-bg-2: #10271b;          /* elevated surfaces */
+  --sc-surface: #0d2218;       /* interactive surface */
+  --sc-surface-2: #132c20;     /* hover / elevated */
+  --sc-overlay: rgba(2, 8, 5, 0.86); /* modal backdrop */
+
+  /* ── COLORS: Borders & Lines ── */
+  --sc-line: rgba(232, 150, 125, 0.34);
+  --sc-line-soft: rgba(232, 150, 125, 0.2);
+  --sc-line-hard: rgba(232, 150, 125, 0.55);
+
+  /* ── COLORS: Accent ── */
+  --sc-accent: #e8967d;        /* primary accent (salmon pink) */
+  --sc-accent-hover: rgba(232, 150, 125, 0.28);
+  --sc-accent-bg: rgba(232, 150, 125, 0.12);
+  --sc-accent-bg-subtle: rgba(232, 150, 125, 0.06);
+  --sc-accent-2: #66cce6;      /* secondary accent (cyan) */
+
+  /* ── COLORS: Semantic ── */
+  --sc-good: #00cc88;          /* gain, success, long */
+  --sc-good-bg: rgba(0, 204, 136, 0.15);
+  --sc-bad: #ff5e7a;           /* loss, error, short */
+  --sc-bad-bg: rgba(255, 94, 122, 0.15);
+  --sc-warn: #dcb970;          /* warning, caution */
+  --sc-warn-bg: rgba(220, 185, 112, 0.15);
+  --sc-info: #66cce6;          /* informational */
+
+  /* ── COLORS: Text ── */
+  --sc-text-0: #f0ede4;        /* primary text (cream white) */
+  --sc-text-1: rgba(240, 237, 228, 0.84);  /* secondary text */
+  --sc-text-2: rgba(240, 237, 228, 0.64);  /* muted text */
+  --sc-text-3: rgba(240, 237, 228, 0.45);  /* very dim text */
+
+  /* ── TYPOGRAPHY: Font Families ── */
+  --sc-font-display: 'Orbitron', monospace;
+  --sc-font-body: 'Space Grotesk', sans-serif;
+  --sc-font-mono: 'JetBrains Mono', monospace;
+  --sc-font-pixel: 'Press Start 2P', monospace;
+  --sc-font-retro: 'VT323', monospace;
+
+  /* ── TYPOGRAPHY: Font Sizes (WCAG: min 9px) ── */
+  --sc-fs-2xs: 9px;
+  --sc-fs-xs: 10px;
+  --sc-fs-sm: 11px;
+  --sc-fs-base: 12px;
+  --sc-fs-md: 13px;
+  --sc-fs-lg: 15px;
+  --sc-fs-xl: 18px;
+  --sc-fs-2xl: 22px;
+  --sc-fs-3xl: 28px;
+  --sc-fs-4xl: 36px;
+
+  /* ── TYPOGRAPHY: Line Heights ── */
+  --sc-lh-tight: 1.2;
+  --sc-lh-normal: 1.45;
+  --sc-lh-relaxed: 1.6;
+
+  /* ── SPACING (4px base) ── */
+  --sc-sp-0: 0;
+  --sc-sp-px: 1px;
+  --sc-sp-0_5: 2px;
+  --sc-sp-1: 4px;
+  --sc-sp-1_5: 6px;
+  --sc-sp-2: 8px;
+  --sc-sp-3: 12px;
+  --sc-sp-4: 16px;
+  --sc-sp-5: 20px;
+  --sc-sp-6: 24px;
+  --sc-sp-8: 32px;
+  --sc-sp-10: 40px;
+  --sc-sp-12: 48px;
+  --sc-sp-16: 64px;
+
+  /* ── BORDERS ── */
+  --sc-border: 1px solid var(--sc-line);
+  --sc-border-soft: 1px solid var(--sc-line-soft);
+  --sc-radius-sm: 4px;
+  --sc-radius-md: 6px;
+  --sc-radius-lg: 8px;
+  --sc-radius-xl: 12px;
+  --sc-radius-pill: 999px;
+
+  /* ── SHADOWS ── */
+  --sc-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.2);
+  --sc-shadow-md: 0 10px 24px rgba(0, 0, 0, 0.28);
+  --sc-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.4);
+  --sc-shadow-glow: 0 0 16px rgba(232, 150, 125, 0.3);
+
+  /* ── Z-INDEX SCALE ── */
+  --sc-z-base: 1;
+  --sc-z-panel: 10;
+  --sc-z-sticky: 50;
+  --sc-z-header: 100;
+  --sc-z-dropdown: 150;
+  --sc-z-modal-backdrop: 200;
+  --sc-z-modal: 210;
+  --sc-z-notification: 300;
+  --sc-z-toast: 310;
+  --sc-z-tooltip: 400;
+
+  /* ── TRANSITIONS ── */
+  --sc-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --sc-duration-fast: 120ms;
+  --sc-duration-normal: 200ms;
+  --sc-duration-slow: 350ms;
+
+  /* ── LAYOUT ── */
+  --sc-header-h: 44px;
+  --sc-header-h-mobile: 40px;
+  --sc-bottom-bar-h: 28px;
+
+  /* ═══════════════════════════════════════════════════════════
+     BACKWARD COMPATIBILITY MAPPINGS
+     These map old variable names to new tokens.
+     Remove these after full migration is complete.
+     ═══════════════════════════════════════════════════════════ */
+
+  /* app.css legacy → new tokens */
+  --bg: var(--sc-bg-0);
+  --s1: var(--sc-bg-1);
+  --s2: var(--sc-bg-2);
+  --blk: #0A0808;
+  --card: var(--sc-surface);
+  --card2: var(--sc-surface-2);
+  --yel: var(--sc-accent);
+  --pk: #FF2D9B;
+  --grn: var(--sc-good);
+  --red: var(--sc-bad);
+  --ora: #FF8C3B;
+  --blu: var(--sc-accent-2);
+  --pur: #C840FF;
+  --gold: #FFD060;
+  --cyan: var(--sc-accent-2);
+  --lime: #6AFF3B;
+  --chain: #FFBA30;
+  --fg: var(--sc-text-0);
+  --fg-strong: rgba(255, 255, 255, 0.95);
+  --fg-medium: rgba(255, 255, 255, 0.7);
+  --dim: rgba(255, 255, 255, 0.5);
+  --dimmer: rgba(255, 255, 255, 0.18);
+
+  /* Font aliases (old → new) */
+  --fd: var(--sc-font-display);
+  --fb: var(--sc-font-body);
+  --fm: var(--sc-font-mono);
+  --fc: 'Impact', 'Arial Black', var(--sc-font-display);
+  --fcomic: 'Comic Sans MS', 'Chalkboard SE', var(--sc-font-mono);
+  --fdisplay: 'Bebas Neue', sans-serif;
+  --fp: var(--sc-font-pixel);
+  --fv: var(--sc-font-retro);
+
+  /* Font size aliases (old → new) */
+  --fs-xs: var(--sc-fs-2xs);
+  --fs-sm: var(--sc-fs-xs);
+  --fs-base: var(--sc-fs-sm);
+  --fs-md: var(--sc-fs-base);
+  --fs-lg: var(--sc-fs-md);
+  --fs-xl: var(--sc-fs-lg);
+  --fs-2xl: var(--sc-fs-xl);
+  --fs-3xl: var(--sc-fs-2xl);
+  --lh-tight: var(--sc-lh-tight);
+  --lh-normal: var(--sc-lh-normal);
+  --lh-relaxed: var(--sc-lh-relaxed);
+
+  /* Border aliases (comic → clean) */
+  --bdr: var(--sc-border);
+  --bdr-thick: var(--sc-border);
+  --shadow: var(--sc-shadow-sm);
+  --shadow-sm: var(--sc-shadow-sm);
+
+  /* arena-tone.css compatibility */
+  --arena-bg-0: var(--sc-bg-0);
+  --arena-bg-1: var(--sc-bg-1);
+  --arena-bg-2: var(--sc-bg-2);
+  --arena-surface: var(--sc-surface);
+  --arena-surface-2: var(--sc-surface-2);
+  --arena-line: var(--sc-line);
+  --arena-line-soft: var(--sc-line-soft);
+  --arena-accent: var(--sc-accent);
+  --arena-accent-2: var(--sc-accent-2);
+  --arena-good: var(--sc-good);
+  --arena-bad: var(--sc-bad);
+  --arena-warn: var(--sc-warn);
+  --arena-text: var(--sc-text-0);
+  --arena-text-dim: var(--sc-text-1);
+  --arena-text-muted: var(--sc-text-2);
+  --arena-shadow: var(--sc-shadow-md);
+}
+
+/* ── GLOBAL FOCUS STATES (a11y) ── */
+:focus-visible {
+  outline: 2px solid var(--sc-accent);
+  outline-offset: 2px;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+::-webkit-scrollbar-thumb { background: rgba(232, 150, 125, 0.35); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(232, 150, 125, 0.55); }
+
+/* ── ANIMATIONS ── */
+@keyframes sc-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }
+@keyframes sc-slide-up { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes sc-slide-in { from { opacity: 0; transform: translateX(-12px) } to { opacity: 1; transform: translateX(0) } }
+@keyframes sc-fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes sc-shake { 0%, 100% { transform: translateX(0) } 25% { transform: translateX(-3px) } 75% { transform: translateX(3px) } }
+@keyframes sc-float { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+@keyframes sc-spin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+@keyframes sc-ticker { 0% { transform: translateX(0) } 100% { transform: translateX(-50%) } }
+
+/* Legacy animation aliases */
+@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(-20px) } to { opacity: 1; transform: translateX(0) } }
+@keyframes shake { 0%, 100% { transform: translateX(0) } 25% { transform: translateX(-3px) } 75% { transform: translateX(3px) } }
+@keyframes float { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
+@keyframes spin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+@keyframes ticker { 0% { transform: translateX(0) } 100% { transform: translateX(-50%) } }
+
+/* ── SELECTION ── */
+::selection {
+  background: var(--sc-accent);
+  color: #000;
+}

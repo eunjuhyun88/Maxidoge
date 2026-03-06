@@ -12,13 +12,20 @@ import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt } from '$lib/server/apiValidation';
 import { errorContains } from '$lib/utils/errorUtils';
 import { saveRAGEntry } from '$lib/server/ragService';
+import { arenaWarLimiter } from '$lib/server/rateLimit';
+import { fireAndForget } from '$lib/server/taskUtils';
 
 // ─── POST: GameRecord 저장 ──────────────────────────────────
 
-export const POST: RequestHandler = async ({ request, cookies }) => {
+export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
   try {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
+
+    const ip = getClientAddress();
+    if (!arenaWarLimiter.check(ip)) {
+      return json({ error: 'Too many requests' }, { status: 429 });
+    }
 
     const body = await request.json();
     const { gameRecord } = body;
@@ -70,7 +77,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     );
 
     // Fire-and-forget: activity_events
-    query(
+    fireAndForget('arena-war-activity', query(
       `INSERT INTO activity_events (user_id, event_type, payload, created_at)
        VALUES ($1, 'arena_war_complete', $2, NOW())`,
       [user.id, JSON.stringify({
@@ -79,12 +86,12 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
         pair: gameRecord.context?.pair,
         consensusType: gameRecord.outcome?.consensusType,
       })]
-    ).catch(() => undefined);
+    ));
 
     // Fire-and-forget: RAG entry 저장 (서버 사이드 redundant)
     const ragEntry = gameRecord.derived?.ragEntry;
     if (ragEntry && ragEntry.embedding?.length === 256 && ragEntry.embedding.some((v: number) => v !== 0)) {
-      saveRAGEntry(user.id, gameRecord.id, ragEntry).catch(() => undefined);
+      fireAndForget('arena-war-rag', saveRAGEntry(user.id, gameRecord.id, ragEntry));
     }
 
     return json({ success: true, id: gameRecord.id });

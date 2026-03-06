@@ -42,22 +42,22 @@
   const preferredEvmChain = getPreferredEvmChainCode();
   const walletConnectReady = isWalletConnectConfigured();
 
-  $: state = $walletStore;
-  $: step = state.walletModalStep;
+  const walletState = $derived($walletStore);
+  const step = $derived(walletState.walletModalStep);
 
-  let authMode: AuthMode = 'signup';
-  let emailInput = '';
-  let nicknameInput = '';
-  let emailError = '';
-  let actionError = '';
-  let connectingProvider = '';
-  let signingMessage = false;
-  let authSubmitting = false;
-  let signedWalletMessage = '';
-  let signedWalletSignature = '';
-  let trackedModalOpen = false;
+  let authMode: AuthMode = $state<AuthMode>('signup');
+  let emailInput = $state('');
+  let nicknameInput = $state('');
+  let emailError = $state('');
+  let actionError = $state('');
+  let connectingProvider = $state('');
+  let signingMessage = $state(false);
+  let authSubmitting = $state(false);
+  let signedWalletMessage = $state('');
+  let signedWalletSignature = $state('');
+  let trackedModalOpen = $state(false);
 
-  $: headerTitle = STEP_TITLE[step] ?? 'WALLET ACCESS';
+  const headerTitle = $derived(STEP_TITLE[step] ?? 'WALLET ACCESS');
 
   interface GTMWindow extends Window {
     dataLayer?: Array<Record<string, unknown>>;
@@ -135,7 +135,7 @@
   function startAuthFlow(mode: AuthMode) {
     setAuthMode(mode);
 
-    if (state.connected && state.address) {
+    if (walletState.connected && walletState.address) {
       if (hasWalletProof()) {
         setWalletModalStep(mode);
       } else {
@@ -209,7 +209,7 @@
   }
 
   function ensureWalletReadyForAuth(): boolean {
-    if (!state.connected || !state.address) {
+    if (!walletState.connected || !walletState.address) {
       actionError = 'Connect wallet first.';
       setWalletModalStep('wallet-select');
       return false;
@@ -231,20 +231,20 @@
     if (!ensureWalletReadyForAuth()) return;
 
     const walletProof = getSignedWalletProof();
-    if (!walletProof || !state.address) return;
+    if (!walletProof || !walletState.address) return;
 
     authSubmitting = true;
     try {
       const res = await registerAuth({
         ...payload,
-        walletAddress: state.address,
+        walletAddress: walletState.address,
         walletMessage: walletProof.walletMessage,
         walletSignature: walletProof.walletSignature,
       });
       applyAuthenticatedUser(res.user);
       trackWalletFunnel('auth', 'success', {
         auth_mode: 'signup',
-        chain: state.chain,
+        chain: walletState.chain,
       });
     } catch (error) {
       emailError = error instanceof Error ? error.message : 'Failed to create account';
@@ -263,21 +263,21 @@
     if (!ensureWalletReadyForAuth()) return;
 
     const walletProof = getSignedWalletProof();
-    if (!walletProof || !state.address) return;
+    if (!walletProof || !walletState.address) return;
 
     authSubmitting = true;
     try {
       const res = await loginAuth({
         email: payload.email,
         nickname: payload.nickname ?? '',
-        walletAddress: state.address,
+        walletAddress: walletState.address,
         walletMessage: walletProof.walletMessage,
         walletSignature: walletProof.walletSignature,
       });
       applyAuthenticatedUser(res.user);
       trackWalletFunnel('auth', 'success', {
         auth_mode: 'login',
-        chain: state.chain,
+        chain: walletState.chain,
       });
     } catch (error) {
       emailError = error instanceof Error ? error.message : 'Failed to log in';
@@ -340,35 +340,35 @@
     actionError = '';
 
     try {
-      if (!state.address) {
+      if (!walletState.address) {
         throw new Error('Wallet address is missing');
       }
 
-      if (!state.provider || !isWalletProviderKey(state.provider)) {
+      if (!walletState.provider || !isWalletProviderKey(walletState.provider)) {
         throw new Error('Wallet provider is missing');
       }
 
-      const provider = state.provider;
+      const provider = walletState.provider;
 
-      if (!isEvmAddress(state.address)) {
+      if (!isEvmAddress(walletState.address)) {
         throw new Error('Solana wallet auth is temporarily unavailable. Use an EVM wallet.');
       }
 
       const noncePayload = await requestWalletNonce({
-        address: state.address,
+        address: walletState.address,
         provider,
-        chain: state.chain,
+        chain: walletState.chain,
       });
 
-      const signature = await signInjectedEvmMessage(provider, noncePayload.message, state.address);
+      const signature = await signInjectedEvmMessage(provider, noncePayload.message, walletState.address);
 
-      if (state.email) {
+      if (walletState.email) {
         await verifyWalletSignature({
-          address: state.address,
+          address: walletState.address,
           message: noncePayload.message,
           signature,
           provider,
-          chain: state.chain,
+          chain: walletState.chain,
         });
       }
 
@@ -376,9 +376,9 @@
       signedWalletSignature = signature;
       signMessage(signature);
 
-      trackWalletFunnel('sign', 'success', { provider, chain: state.chain });
+      trackWalletFunnel('sign', 'success', { provider, chain: walletState.chain });
 
-      if (state.email) {
+      if (walletState.email) {
         setWalletModalStep('profile');
       } else {
         setWalletModalStep(authMode);
@@ -403,7 +403,7 @@
     disconnectWallet();
     clearAuthenticatedUser();
     trackWalletFunnel('disconnect', 'success', {
-      had_session: Boolean(state.email),
+      had_session: Boolean(walletState.email),
     });
     closeWalletModal();
   }
@@ -413,7 +413,7 @@
   }
 
   function connectStepState(): 'active' | 'done' | 'idle' {
-    if (state.connected) return 'done';
+    if (walletState.connected) return 'done';
     if (step === 'welcome' || step === 'wallet-select' || step === 'connecting') return 'active';
     return 'idle';
   }
@@ -421,41 +421,45 @@
   function signStepState(): 'active' | 'done' | 'idle' {
     if (hasWalletProof()) return 'done';
     if (step === 'sign-message') return 'active';
-    if (!state.connected) return 'idle';
+    if (!walletState.connected) return 'idle';
     return 'idle';
   }
 
   function authStepState(): 'active' | 'done' | 'idle' {
-    if (state.email) return 'done';
+    if (walletState.email) return 'done';
     if (step === 'signup' || step === 'login' || step === 'connected') return 'active';
     return 'idle';
   }
 
-  $: if (state.showWalletModal && !trackedModalOpen) {
-    trackWalletFunnel('modal_open', 'view', { entry_step: step });
-    trackedModalOpen = true;
-  }
+  $effect(() => {
+    if (walletState.showWalletModal && !trackedModalOpen) {
+      trackWalletFunnel('modal_open', 'view', { entry_step: step });
+      trackedModalOpen = true;
+    }
+  });
 
-  $: if (!state.showWalletModal) {
-    authSubmitting = false;
-    signingMessage = false;
-    connectingProvider = '';
-    trackedModalOpen = false;
-  }
+  $effect(() => {
+    if (!walletState.showWalletModal) {
+      authSubmitting = false;
+      signingMessage = false;
+      connectingProvider = '';
+      trackedModalOpen = false;
+    }
+  });
 </script>
 
-{#if state.showWalletModal}
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="modal-overlay" on:click={handleClose}>
-  <div class="wallet-panel" on:click|stopPropagation>
+{#if walletState.showWalletModal}
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="modal-overlay" onclick={handleClose}>
+  <div class="wallet-panel" onclick={(e: MouseEvent) => e.stopPropagation()}>
     <div class="wh">
       <div class="wh-left">
         <span class="wh-tag">//WALLET AUTH</span>
         <span class="wht">{headerTitle}</span>
       </div>
 
-      {#if !state.email}
+      {#if !walletState.email}
         <div class="mode-toggle" role="tablist" aria-label="Auth mode">
           <button
             type="button"
@@ -463,7 +467,7 @@
             class:active={authMode === 'login'}
             role="tab"
             aria-selected={authMode === 'login'}
-            on:click={() => setAuthMode('login')}
+            onclick={() => setAuthMode('login')}
           >
             LOG IN
           </button>
@@ -473,14 +477,14 @@
             class:active={authMode === 'signup'}
             role="tab"
             aria-selected={authMode === 'signup'}
-            on:click={() => setAuthMode('signup')}
+            onclick={() => setAuthMode('signup')}
           >
             SIGN UP
           </button>
         </div>
       {/if}
 
-      <button class="whc" type="button" aria-label="Close wallet modal" on:click={handleClose}>✕</button>
+      <button class="whc" type="button" aria-label="Close wallet modal" onclick={handleClose}>✕</button>
     </div>
 
     {#if actionError}
@@ -507,10 +511,10 @@
           <div class="flow-item">{authMode === 'login' ? 'LOG IN ACCOUNT' : 'CREATE ACCOUNT'}</div>
         </div>
 
-        <button class="btn-primary" type="button" on:click={() => startAuthFlow('signup')}>
+        <button class="btn-primary" type="button" onclick={() => startAuthFlow('signup')}>
           CONTINUE WITH SIGN UP
         </button>
-        <button class="btn-secondary" type="button" on:click={() => startAuthFlow('login')}>
+        <button class="btn-secondary" type="button" onclick={() => startAuthFlow('login')}>
           CONTINUE WITH LOG IN
         </button>
       </div>
@@ -524,7 +528,7 @@
         </div>
 
         <div class="wallet-list">
-          <button class="wopt" type="button" on:click={() => handleConnect('metamask')}>
+          <button class="wopt" type="button" onclick={() => handleConnect('metamask')}>
             <span class="wo-icon">🦊</span>
             <span class="wo-name">MetaMask</span>
             <span class="wo-chain">EVM</span>
@@ -532,7 +536,7 @@
           <button
             class="wopt"
             type="button"
-            on:click={() => handleConnect('walletconnect')}
+            onclick={() => handleConnect('walletconnect')}
             disabled={!walletConnectReady}
             title={!walletConnectReady ? 'Set PUBLIC_WALLETCONNECT_PROJECT_ID in env first.' : undefined}
           >
@@ -540,12 +544,12 @@
             <span class="wo-name">WalletConnect</span>
             <span class="wo-chain">{walletConnectReady ? 'EVM' : 'SETUP REQUIRED'}</span>
           </button>
-          <button class="wopt" type="button" on:click={() => handleConnect('coinbase')}>
+          <button class="wopt" type="button" onclick={() => handleConnect('coinbase')}>
             <span class="wo-icon">🔷</span>
             <span class="wo-name">Coinbase Wallet</span>
             <span class="wo-chain">EVM</span>
           </button>
-          <button class="wopt" type="button" on:click={() => handleConnect('phantom')}>
+          <button class="wopt" type="button" onclick={() => handleConnect('phantom')}>
             <span class="wo-icon">👻</span>
             <span class="wo-name">Phantom</span>
             <span class="wo-chain">SOL/EVM</span>
@@ -573,11 +577,11 @@
         <div class="info-box">
           <div class="info-row">
             <span class="info-k">WALLET</span>
-            <span class="info-v">{state.shortAddr || '-'}</span>
+            <span class="info-v">{walletState.shortAddr || '-'}</span>
           </div>
           <div class="info-row">
             <span class="info-k">CHAIN</span>
-            <span class="info-v">{state.chain}</span>
+            <span class="info-v">{walletState.chain}</span>
           </div>
           <div class="info-row">
             <span class="info-k">MODE</span>
@@ -585,10 +589,10 @@
           </div>
         </div>
 
-        <button class="btn-primary" type="button" on:click={handleSignMessage} disabled={signingMessage}>
+        <button class="btn-primary" type="button" onclick={handleSignMessage} disabled={signingMessage}>
           {#if signingMessage}SIGNING...{:else}SIGN MESSAGE{/if}
         </button>
-        <button class="btn-ghost" type="button" on:click={() => setWalletModalStep('wallet-select')}>
+        <button class="btn-ghost" type="button" onclick={() => setWalletModalStep('wallet-select')}>
           USE DIFFERENT WALLET
         </button>
       </div>
@@ -597,32 +601,32 @@
       <div class="wb">
         <div class="step-hero">
           <span class="hero-kicker">WALLET READY</span>
-          <h3 class="hero-title">{state.shortAddr}</h3>
+          <h3 class="hero-title">{walletState.shortAddr}</h3>
           <p class="hero-sub">{hasWalletProof() ? 'Wallet challenge completed.' : 'Sign challenge is required before authentication.'}</p>
         </div>
 
         <div class="info-box">
           <div class="info-row">
             <span class="info-k">CHAIN</span>
-            <span class="info-v">{state.chain}</span>
+            <span class="info-v">{walletState.chain}</span>
           </div>
           <div class="info-row">
             <span class="info-k">BALANCE</span>
-            <span class="info-v">{state.balance.toLocaleString()} USDT</span>
+            <span class="info-v">{walletState.balance.toLocaleString()} USDT</span>
           </div>
         </div>
 
         {#if hasWalletProof()}
-          <button class="btn-primary" type="button" on:click={() => setWalletModalStep(authMode)}>
+          <button class="btn-primary" type="button" onclick={() => setWalletModalStep(authMode)}>
             CONTINUE TO {authMode === 'login' ? 'LOG IN' : 'SIGN UP'}
           </button>
         {:else}
-          <button class="btn-primary" type="button" on:click={() => setWalletModalStep('sign-message')}>
+          <button class="btn-primary" type="button" onclick={() => setWalletModalStep('sign-message')}>
             SIGN TO CONTINUE
           </button>
         {/if}
 
-        <button class="btn-ghost" type="button" on:click={handleDisconnect}>DISCONNECT WALLET</button>
+        <button class="btn-ghost" type="button" onclick={handleDisconnect}>DISCONNECT WALLET</button>
       </div>
 
     {:else if step === 'signup'}
@@ -647,10 +651,10 @@
           <div class="form-error">{emailError}</div>
         {/if}
 
-        <button class="btn-primary" type="button" on:click={handleSignupSubmit} disabled={authSubmitting}>
+        <button class="btn-primary" type="button" onclick={handleSignupSubmit} disabled={authSubmitting}>
           {#if authSubmitting}CREATING...{:else}CREATE ACCOUNT{/if}
         </button>
-        <button class="btn-ghost" type="button" on:click={() => setWalletModalStep('sign-message')}>BACK TO SIGN</button>
+        <button class="btn-ghost" type="button" onclick={() => setWalletModalStep('sign-message')}>BACK TO SIGN</button>
       </div>
 
     {:else if step === 'login'}
@@ -675,49 +679,49 @@
           <div class="form-error">{emailError}</div>
         {/if}
 
-        <button class="btn-primary" type="button" on:click={handleLoginSubmit} disabled={authSubmitting}>
+        <button class="btn-primary" type="button" onclick={handleLoginSubmit} disabled={authSubmitting}>
           {#if authSubmitting}LOGGING IN...{:else}LOG IN{/if}
         </button>
-        <button class="btn-ghost" type="button" on:click={() => setWalletModalStep('sign-message')}>BACK TO SIGN</button>
+        <button class="btn-ghost" type="button" onclick={() => setWalletModalStep('sign-message')}>BACK TO SIGN</button>
       </div>
 
     {:else}
       <div class="wb">
         <div class="step-hero">
           <span class="hero-kicker">ACCOUNT</span>
-          <h3 class="hero-title">{state.nickname || 'TRADER'}</h3>
+          <h3 class="hero-title">{walletState.nickname || 'TRADER'}</h3>
           <p class="hero-sub">Core profile information only.</p>
         </div>
 
         <div class="info-box">
           <div class="info-row">
             <span class="info-k">EMAIL</span>
-            <span class="info-v">{state.email || '-'}</span>
+            <span class="info-v">{walletState.email || '-'}</span>
           </div>
           <div class="info-row">
             <span class="info-k">NICKNAME</span>
-            <span class="info-v">{state.nickname || '-'}</span>
+            <span class="info-v">{walletState.nickname || '-'}</span>
           </div>
           <div class="info-row">
             <span class="info-k">TIER</span>
-            <span class="info-v">{state.tier.toUpperCase()}</span>
+            <span class="info-v">{walletState.tier.toUpperCase()}</span>
           </div>
           <div class="info-row">
             <span class="info-k">PHASE</span>
-            <span class="info-v">P{state.phase}</span>
+            <span class="info-v">P{walletState.phase}</span>
           </div>
           <div class="info-row">
             <span class="info-k">WALLET</span>
-            <span class="info-v">{state.connected ? state.shortAddr : 'NOT CONNECTED'}</span>
+            <span class="info-v">{walletState.connected ? walletState.shortAddr : 'NOT CONNECTED'}</span>
           </div>
         </div>
 
-        {#if state.connected}
-          <a class="btn-primary passport-link" href="/passport" on:click={handleClose}>VIEW PASSPORT</a>
-          <button class="btn-ghost" type="button" on:click={handleDisconnect}>LOG OUT & DISCONNECT</button>
+        {#if walletState.connected}
+          <a class="btn-primary passport-link" href="/passport" onclick={handleClose}>VIEW PASSPORT</a>
+          <button class="btn-ghost" type="button" onclick={handleDisconnect}>LOG OUT & DISCONNECT</button>
         {:else}
-          <button class="btn-primary" type="button" on:click={() => setWalletModalStep('wallet-select')}>CONNECT WALLET</button>
-          <a class="btn-ghost passport-link" href="/passport" on:click={handleClose}>OPEN PASSPORT</a>
+          <button class="btn-primary" type="button" onclick={() => setWalletModalStep('wallet-select')}>CONNECT WALLET</button>
+          <a class="btn-ghost passport-link" href="/passport" onclick={handleClose}>OPEN PASSPORT</a>
         {/if}
       </div>
     {/if}
@@ -1143,7 +1147,7 @@
     box-sizing: border-box;
   }
 
-  @media (max-width: 520px) {
+  @media (max-width: 480px) {
     .modal-overlay {
       padding: 12px;
     }

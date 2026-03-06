@@ -20,50 +20,19 @@ import { fetchSantimentSocial } from '$lib/server/santiment';
 import { fetchCoinMetricsData } from '$lib/server/coinmetrics';
 import { withTransaction } from '$lib/server/db';
 import { getCached, setCache } from '$lib/server/providers/cache';
+import { getErrorCode, getErrorMessage } from '$lib/utils/errorUtils';
+import {
+  SOURCE_CACHE_TTL as SRC_TTL,
+  cachedFetch as cf,
+  createInflightDedup,
+} from '$lib/server/dataFetchInfra';
 
 const SNAPSHOT_UNAVAILABLE_CODES = new Set(['42P01', '42703', '23503']);
 
-// ── Performance: 타임아웃 + 캐시 + 요청 병합 ───────────────
-const API_TIMEOUT_MS = 5_000;
 const SNAPSHOT_CACHE_TTL_MS = 30_000; // 30초 결과 캐시
 
-function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`[snapshot] ${label} timed out`)), API_TIMEOUT_MS)
-    ),
-  ]);
-}
-
-/** 소스별 캐시 TTL */
-const SRC_TTL = {
-  binance: 10_000,       // 10초 (가격 데이터)
-  coinalyze: 300_000,    // 5분 (rate limit 절약)
-  feargreed: 120_000,    // 2분
-  coingecko: 60_000,     // 1분
-  defillama: 120_000,    // 2분
-  yahoo: 300_000,        // 5분
-  news: 120_000,         // 2분
-  cmc: 120_000,          // 2분
-  cryptoquant: 300_000,  // 5분
-  etherscan: 120_000,    // 2분
-  lunarcrush: 120_000,   // 2분
-  santiment: 120_000,    // 2분 (LunarCrush 대체)
-  coinmetrics: 300_000,  // 5분 (CryptoQuant 대체, 무료 API)
-};
-
-function cf<T>(key: string, fetcher: () => Promise<T>, ttl: number, label: string): Promise<T> {
-  const hit = getCached<T>(key);
-  if (hit !== null) return Promise.resolve(hit);
-  return withTimeout(fetcher(), label).then(r => {
-    if (r !== null && r !== undefined) setCache(key, r, ttl);
-    return r;
-  });
-}
-
 // ── 동일 pair/timeframe 동시 요청 병합 ──
-const _inflightSnapshots = new Map<string, Promise<MarketSnapshotResult>>();
+const _inflightSnapshots = createInflightDedup<MarketSnapshotResult>();
 
 type SnapshotSource = {
   source: string;
@@ -181,10 +150,10 @@ function buildRsiDivergence(closes: number[], rsi: number[]): DivergenceSignal |
   return detectDivergence(p.slice(-96), i.slice(-96));
 }
 
-function isPersistenceUnavailableError(error: any): boolean {
-  const code = typeof error?.code === 'string' ? error.code : '';
+function isPersistenceUnavailableError(error: unknown): boolean {
+  const code = getErrorCode(error) ?? '';
   if (SNAPSHOT_UNAVAILABLE_CODES.has(code)) return true;
-  return typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set');
+  return getErrorMessage(error).includes('DATABASE_URL is not set');
 }
 
 async function persistSnapshots(
@@ -312,6 +281,7 @@ export async function collectMarketSnapshot(
   } finally {
     _inflightSnapshots.delete(snapKey);
   }
+
 }
 
 async function _collectInternal(
@@ -564,7 +534,7 @@ async function _collectInternal(
     try {
       updated = await persistSnapshots(pair, timeframe, at, snapshotSources, indicators);
       persisted = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (isPersistenceUnavailableError(error)) {
         persisted = false;
         warning = 'market snapshot tables unavailable; returning non-persistent snapshot';

@@ -9,7 +9,12 @@
   import { onMount } from 'svelte';
   import EmptyState from '../shared/EmptyState.svelte';
 
-  export let embedded = false;
+  interface Props {
+    embedded?: boolean;
+  }
+  let {
+    embedded = false,
+  }: Props = $props();
 
   type SortBy = 'wilson' | 'accuracy' | 'sample' | 'calibration';
   type Period = '7d' | '30d' | 'all';
@@ -46,12 +51,12 @@
     recentVotes: VoteSnapshot[];
   };
 
-  $: stats = $agentStats;
-  $: records = $matchHistoryStore.records;
+  const stats = $derived($agentStats);
+  const records = $derived($matchHistoryStore.records);
 
-  let sortBy: SortBy = 'wilson';
-  let period: Period = 'all';
-  let selectedAgent: OracleRow | null = null;
+  let sortBy: SortBy = $state('wilson');
+  let period: Period = $state('all');
+  let selectedAgent: OracleRow | null = $state(null);
 
   function inferMarketDirection(record: (typeof records)[number]): 'LONG' | 'SHORT' | null {
     const userDir = String(record.hypothesis?.dir || '').toUpperCase();
@@ -73,14 +78,14 @@
     };
   }
 
-  $: filteredRecords = (() => {
+  const filteredRecords = $derived.by(() => {
     const now = Date.now();
     if (period === '7d') return records.filter((r) => now - r.timestamp < 7 * 86400000);
     if (period === '30d') return records.filter((r) => now - r.timestamp < 30 * 86400000);
     return records;
-  })();
+  });
 
-  $: oracleData = (Object.values(AGENT_POOL) as Array<(typeof AGENT_POOL)[AgentId]>).map((agent) => {
+  const oracleData = $derived((Object.values(AGENT_POOL) as Array<(typeof AGENT_POOL)[AgentId]>).map((agent) => {
     const statKey = agent.id.toLowerCase();
     const s = stats[statKey] || { level: 1, xp: 0 };
     let wins = 0;
@@ -157,9 +162,9 @@
     if (sortBy === 'sample') return b.sample - a.sample;
     if (sortBy === 'calibration') return b.calibration - a.calibration;
     return b.wilson - a.wilson;
-  });
+  }));
 
-  $: consistentRows = oracleData.filter((row) => row.sample >= 5 && row.wilson >= 55);
+  const consistentRows = $derived(oracleData.filter((row: OracleRow) => row.sample >= 5 && row.wilson >= 55));
 
   function selectAgent(ag: OracleRow) {
     selectedAgent = ag;
@@ -204,13 +209,13 @@
     <div class="control-group">
       <span class="ctrl-label">PERIOD:</span>
       {#each [['7d', '7D'], ['30d', '30D'], ['all', 'ALL']] as [key, label]}
-        <button class="ctrl-btn" class:active={period === key} on:click={() => period = key as typeof period}>{label}</button>
+        <button class="ctrl-btn" class:active={period === key} onclick={() => period = key as typeof period}>{label}</button>
       {/each}
     </div>
     <div class="control-group">
       <span class="ctrl-label">SORT:</span>
       {#each [['wilson', 'WILSON'], ['accuracy', 'ACCURACY'], ['sample', 'SAMPLE'], ['calibration', 'CALIBRATION']] as [key, label]}
-        <button class="ctrl-btn" class:active={sortBy === key} on:click={() => sortBy = key as SortBy}>{label}</button>
+        <button class="ctrl-btn" class:active={sortBy === key} onclick={() => sortBy = key as SortBy}>{label}</button>
       {/each}
     </div>
   </div>
@@ -239,7 +244,7 @@
         <span class="ot-col">CALIBRATION</span>
       </div>
       {#each oracleData as ag, i}
-        <button class="ot-row" on:click={() => selectAgent(ag)}>
+        <button class="ot-row" onclick={() => selectAgent(ag)}>
           <span class="ot-rank rank-{i+1}">{i+1}</span>
           <div class="ot-agent">
             <span class="ot-icon">{ag.icon}</span>
@@ -268,11 +273,11 @@
   {/if}
 
   {#if selectedAgent}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="agent-detail-overlay" on:click={() => selectedAgent = null}>
-      <div class="agent-detail" on:click|stopPropagation>
-        <button class="close-btn" on:click={() => selectedAgent = null}>✕</button>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="agent-detail-overlay" onclick={() => selectedAgent = null}>
+      <div class="agent-detail" onclick={(e: MouseEvent) => e.stopPropagation()}>
+        <button class="close-btn" onclick={() => selectedAgent = null}>✕</button>
         <div class="ad-header" style="border-color:{selectedAgent.color}">
           <div class="ot-icon" style="font-size:32px">{selectedAgent.icon}</div>
           <div class="ad-info">
@@ -327,7 +332,7 @@
           </div>
         </div>
 
-        <button class="ad-arena-btn" on:click={triggerArena}>
+        <button class="ad-arena-btn" onclick={triggerArena}>
           DEPLOY TO ARENA
         </button>
       </div>

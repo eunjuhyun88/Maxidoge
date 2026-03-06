@@ -3,21 +3,28 @@
   type Size = 'xs' | 'sm' | 'md';
   type Variant = 'solid' | 'soft';
 
-  export let direction: DirectionInput | string = 'NEUTRAL';
-  export let confidence: number | null = null;
-  export let showArrow = true;
-  export let showConfidence = false;
-  export let size: Size = 'sm';
-  export let variant: Variant = 'soft';
+  interface Props {
+    direction?: DirectionInput | string;
+    confidence?: number | null;
+    showArrow?: boolean;
+    showConfidence?: boolean;
+    size?: Size;
+    variant?: Variant;
+  }
 
-  $: normalized = String(direction || 'neutral').toLowerCase();
-  $: tone = normalized === 'long'
-    ? 'long'
-    : normalized === 'short'
-      ? 'short'
-      : 'neutral';
-  $: label = tone === 'long' ? 'LONG' : tone === 'short' ? 'SHORT' : 'NEUTRAL';
-  $: arrow = tone === 'long' ? '▲' : tone === 'short' ? '▼' : '◆';
+  let {
+    direction = 'NEUTRAL',
+    confidence = null,
+    showArrow = true,
+    showConfidence = false,
+    size = 'sm',
+    variant = 'soft',
+  }: Props = $props();
+
+  const normalized = $derived(String(direction || 'neutral').toLowerCase());
+  const tone = $derived(normalized === 'long' ? 'long' : normalized === 'short' ? 'short' : 'neutral');
+  const label = $derived(tone === 'long' ? 'LONG' : tone === 'short' ? 'SHORT' : 'NEUTRAL');
+  const arrow = $derived(tone === 'long' ? '▲' : tone === 'short' ? '▼' : '◆');
 </script>
 
 <span class="dir-badge {tone} {size} {variant}">

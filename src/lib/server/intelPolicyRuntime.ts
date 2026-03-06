@@ -1,4 +1,5 @@
 import { computeDecision, type EngineEvidence } from '$lib/intel/decisionEngine';
+import { clampSafe as clamp } from '$lib/utils/math';
 import { evaluateQualityGateFromFeatures } from '$lib/intel/qualityGate';
 import { getIntelThresholds } from '$lib/intel/thresholds';
 import type { DecisionBias, IntelDecisionOutput, ManipulationRiskLevel, QualityGateResult, QualityGateScores } from '$lib/intel/types';
@@ -108,10 +109,6 @@ export interface IntelPolicyOutput {
   };
 }
 
-function clamp(value: number, min = 0, max = 100): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, value));
-}
 
 function toNum(value: unknown, fallback = 0): number {
   const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;

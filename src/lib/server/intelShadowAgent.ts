@@ -1,4 +1,5 @@
 import type { DecisionBias } from '$lib/intel/types';
+import { clampSafe as clamp } from '$lib/utils/math';
 import type { IntelPolicyOutput } from '$lib/server/intelPolicyRuntime';
 import { callLLM, isLLMAvailable, type LLMResult } from '$lib/server/llmService';
 
@@ -38,10 +39,6 @@ interface LLMDecisionSchema {
   nowWhat?: string;
 }
 
-function clamp(value: number, min = 0, max = 100): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, value));
-}
 
 function toBias(raw: unknown, fallback: DecisionBias = 'wait'): DecisionBias {
   const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';

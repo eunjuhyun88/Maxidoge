@@ -139,5 +139,17 @@ export const authVerifyLimiter = createRateLimiter({ windowMs: 60_000, max: 10 }
 /** Market snapshot (heavy fan-out): 20 per minute per IP */
 export const marketSnapshotLimiter = createRateLimiter({ windowMs: 60_000, max: 20 });
 
+/** Profile mutations: 12 per minute per IP */
+export const profileMutationLimiter = createRateLimiter({ windowMs: 60_000, max: 12 });
+
+/** Quick-trade mutations: 30 per minute per IP */
+export const quickTradeMutationLimiter = createRateLimiter({ windowMs: 60_000, max: 30 });
+
 // War Room
 export const emergencyMeetingLimiter = createRateLimiter({ windowMs: 60_000, max: 5 });
+
+/** Guest chat: 3 LLM calls per minute per IP (prevents API cost abuse) */
+export const guestChatLimiter = createRateLimiter({ windowMs: 60_000, max: 3 });
+
+/** Arena War record save: 10 per minute per IP */
+export const arenaWarLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });

@@ -52,34 +52,32 @@
     type PassportTabType,
   } from '../../components/passport/passportHelpers';
 
-  $: profile = $userProfileStore;
-  $: wallet = $walletStore;
-  $: stats = $profileStats;
-  $: tier = $profileTier;
-  $: earned = $earnedBadges;
-  $: locked = $lockedBadges;
-  $: agStats = $agentStats;
-  $: gState = $gameState;
-  $: openPos = $openTradeCount;
-  $: trackedCount = $activeSignalCount;
-  $: pnl = $totalQuickPnL;
-  $: opens = $openTrades;
-  $: closed = $closedTrades;
-  $: tracked = $activeSignals;
-  $: expired = $expiredSignals;
-  $: records = $matchHistoryStore.records;
-  $: wr = $winRate;
-  $: bStreak = $bestStreak;
+  const profile = $derived($userProfileStore);
+  const wallet = $derived($walletStore);
+  const stats = $derived($profileStats);
+  const tier = $derived($profileTier);
+  const earned = $derived($earnedBadges);
+  const locked = $derived($lockedBadges);
+  const agStats = $derived($agentStats);
+  const gState = $derived($gameState);
+  const openPos = $derived($openTradeCount);
+  const trackedCount = $derived($activeSignalCount);
+  const pnl = $derived($totalQuickPnL);
+  const opens = $derived($openTrades);
+  const closed = $derived($closedTrades);
+  const tracked = $derived($activeSignals);
+  const expired = $derived($expiredSignals);
+  const records = $derived($matchHistoryStore.records);
+  const wr = $derived($winRate);
+  const bStreak = $derived($bestStreak);
 
   // Holdings: live API data with static fallback
-  let liveHoldings: HoldingAsset[] = [];
-  let holdingsLoaded = false;
-  let holdingsState: 'loading' | 'live' | 'fallback' = 'loading';
-  let holdingsStatusMessage = 'Syncing wallet holdings...';
-  let holdingsSyncAddress: string | null = null;
-  let baseHoldings: HoldingAsset[] = HOLDINGS_DATA;
-  let effectiveHoldings: HoldingAsset[] = HOLDINGS_DATA;
-  $: liveP = $livePrices;
+  let liveHoldings: HoldingAsset[] = $state([]);
+  let holdingsLoaded = $state(false);
+  let holdingsState: 'loading' | 'live' | 'fallback' = $state<'loading' | 'live' | 'fallback'>('loading');
+  let holdingsStatusMessage = $state('Syncing wallet holdings...');
+  let holdingsSyncAddress: string | null = $state(null);
+  const liveP = $derived($livePrices);
 
   async function hydrateHoldings() {
     holdingsState = 'loading';
@@ -107,19 +105,19 @@
   }
 
   // Build effective holdings array: live API → static fallback + live price overlay
-  $: baseHoldings = holdingsLoaded && liveHoldings.length > 0 ? liveHoldings : HOLDINGS_DATA;
-  $: effectiveHoldings = withLivePrices(baseHoldings, liveP);
+  const baseHoldings = $derived(holdingsLoaded && liveHoldings.length > 0 ? liveHoldings : HOLDINGS_DATA);
+  const effectiveHoldings = $derived(withLivePrices(baseHoldings, liveP));
 
   // Holdings calculations
-  $: total = effectiveHoldings.reduce((s, h) => s + h.amount * h.currentPrice, 0);
-  $: totalCost = effectiveHoldings.reduce((s, h) => s + h.amount * h.avgPrice, 0);
-  $: totalPnl = total - totalCost;
-  $: totalPnlPct = totalCost > 0 ? ((totalPnl / totalCost) * 100) : 0;
-  $: unrealizedPnl = opens.reduce((s, t) => s + t.pnlPercent, 0);
+  const total = $derived(effectiveHoldings.reduce((s: number, h: HoldingAsset) => s + h.amount * h.currentPrice, 0));
+  const totalCost = $derived(effectiveHoldings.reduce((s: number, h: HoldingAsset) => s + h.amount * h.avgPrice, 0));
+  const totalPnl = $derived(total - totalCost);
+  const totalPnlPct = $derived(totalCost > 0 ? ((totalPnl / totalCost) * 100) : 0);
+  const unrealizedPnl = $derived(opens.reduce((s: number, t: { pnlPercent: number }) => s + t.pnlPercent, 0));
 
   // Tab state
   type TabType = PassportTabType;
-  let activeTab: TabType = 'wallet';
+  let activeTab: TabType = $state<TabType>('wallet');
 
   const TABS: { id: TabType; label: string; icon: string }[] = [
     { id: 'wallet', label: 'WALLET', icon: '💼' },
@@ -131,11 +129,11 @@
   const OPEN_PREVIEW_LIMIT = 4;
   const MATCH_PREVIEW_LIMIT = 5;
   const HOLDINGS_PREVIEW_LIMIT = 6;
-  $: openPreview = opens.slice(0, OPEN_PREVIEW_LIMIT);
-  $: openOverflow = opens.slice(OPEN_PREVIEW_LIMIT);
-  $: holdingsPreview = effectiveHoldings.slice(0, HOLDINGS_PREVIEW_LIMIT);
-  $: holdingsOverflow = effectiveHoldings.slice(HOLDINGS_PREVIEW_LIMIT);
-  $: matchPreview = records.slice(0, MATCH_PREVIEW_LIMIT);
+  const openPreview = $derived(opens.slice(0, OPEN_PREVIEW_LIMIT));
+  const openOverflow = $derived(opens.slice(OPEN_PREVIEW_LIMIT));
+  const holdingsPreview = $derived(effectiveHoldings.slice(0, HOLDINGS_PREVIEW_LIMIT));
+  const holdingsOverflow = $derived(effectiveHoldings.slice(HOLDINGS_PREVIEW_LIMIT));
+  const matchPreview = $derived(records.slice(0, MATCH_PREVIEW_LIMIT));
 
   interface FocusInsight {
     key: string;
@@ -154,31 +152,30 @@
     primary?: boolean;
   }
 
-  let headerStats: HeaderStat[] = [];
-  let focusCards: FocusCard[] = [];
+  // headerStats and focusCards are derived below
 
-  $: closedStats = summarizeClosedTrades(closed);
-  $: closedWins = closedStats.wins;
-  $: closedLosses = closedStats.losses;
-  $: closedWinRate = closed.length > 0 ? Math.round((closedWins / closed.length) * 100) : 0;
-  $: totalLongTrades = countLongTrades([...opens, ...closed]);
-  $: totalTradeDecisions = opens.length + closed.length;
-  $: longBiasPct = totalTradeDecisions > 0 ? Math.round((totalLongTrades / totalTradeDecisions) * 100) : 50;
-  $: avgWinPnl = closedStats.avgWinPnl;
-  $: avgLossPnl = closedStats.avgLossPnl;
-  $: resolvedSamples = closed.length + records.length;
-  $: learningSamples = closed.length + records.length + tracked.length + expired.length;
-  $: learningReadinessPct = Math.min(100, Math.round((learningSamples / 40) * 100));
-  $: showFocusInsights = resolvedSamples >= 8 || learningSamples >= 20;
+  const closedStats = $derived(summarizeClosedTrades(closed));
+  const closedWins = $derived(closedStats.wins);
+  const closedLosses = $derived(closedStats.losses);
+  const closedWinRate = $derived(closed.length > 0 ? Math.round((closedWins / closed.length) * 100) : 0);
+  const totalLongTrades = $derived(countLongTrades([...opens, ...closed]));
+  const totalTradeDecisions = $derived(opens.length + closed.length);
+  const longBiasPct = $derived(totalTradeDecisions > 0 ? Math.round((totalLongTrades / totalTradeDecisions) * 100) : 50);
+  const avgWinPnl = $derived(closedStats.avgWinPnl);
+  const avgLossPnl = $derived(closedStats.avgLossPnl);
+  const resolvedSamples = $derived(closed.length + records.length);
+  const learningSamples = $derived(closed.length + records.length + tracked.length + expired.length);
+  const learningReadinessPct = $derived(Math.min(100, Math.round((learningSamples / 40) * 100)));
+  const showFocusInsights = $derived(resolvedSamples >= 8 || learningSamples >= 20);
 
-  $: headerStats = [
+  const headerStats: HeaderStat[] = $derived([
     { label: 'OPEN', value: openPos },
     { label: 'ASSETS', value: wallet.connected ? effectiveHoldings.length : 0, color: '#8bd8ff' },
     { label: 'WIN RATE', value: `${wr}%`, color: wr >= 50 ? '#9dffcf' : '#ff8f7e' },
     { label: 'TRACKED', value: trackedCount, color: '#ff8c3b' }
-  ];
+  ]);
 
-  $: performanceInsight = (() => {
+  const performanceInsight: FocusInsight = $derived.by(() => {
     const sampleCount = closed.length + records.length;
     if (sampleCount < 8) {
       return {
@@ -214,9 +211,9 @@
       sub: 'Edge exists but consistency is not stable',
       tone: 'warn'
     } satisfies FocusInsight;
-  })();
+  });
 
-  $: winRateInsight = (() => {
+  const winRateInsight: FocusInsight = $derived.by(() => {
     if (records.length < 5) {
       return {
         key: 'WHY WIN RATE',
@@ -250,9 +247,9 @@
       sub: 'Direction and execution are mostly balanced',
       tone: 'good'
     } satisfies FocusInsight;
-  })();
+  });
 
-  $: actionInsight = (() => {
+  const actionInsight: FocusInsight = $derived.by(() => {
     if (closed.length < 6) {
       return {
         key: 'NEXT IMPROVEMENT',
@@ -295,9 +292,9 @@
       sub: 'Increase size only if current rules stay consistent',
       tone: 'good'
     } satisfies FocusInsight;
-  })();
+  });
 
-  $: learningInsight = (() => {
+  const learningInsight: FocusInsight = $derived.by(() => {
     if (learningStatusRemote) {
       if (learningStatusRemote.outbox.failed > 0 || learningStatusRemote.trainJobs.failed > 0) {
         return {
@@ -351,25 +348,25 @@
       sub: `Need ${Math.max(0, 40 - learningSamples)} more samples to start model tuning`,
       tone: 'neutral'
     } satisfies FocusInsight;
-  })();
+  });
 
-  $: focusCards = [
+  const focusCards: FocusCard[] = $derived.by(() => [
     { ...performanceInsight, primary: true },
     winRateInsight,
     actionInsight,
     learningInsight
-  ];
+  ]);
 
-  let learningStatusRemote: PassportLearningStatus | null = null;
-  let learningDatasetsRemote: PassportDatasetVersion[] = [];
-  let learningEvalsRemote: PassportEvalReport[] = [];
-  let learningTrainJobsRemote: PassportTrainJob[] = [];
-  let learningReportsRemote: PassportReport[] = [];
-  let learningHydrated = false;
-  let learningRefreshing = false;
-  let learningActionRunning = false;
-  let learningActionMessage = '';
-  let learningErrorMessage = '';
+  let learningStatusRemote: PassportLearningStatus | null = $state(null);
+  let learningDatasetsRemote: PassportDatasetVersion[] = $state([]);
+  let learningEvalsRemote: PassportEvalReport[] = $state([]);
+  let learningTrainJobsRemote: PassportTrainJob[] = $state([]);
+  let learningReportsRemote: PassportReport[] = $state([]);
+  let learningHydrated = $state(false);
+  let learningRefreshing = $state(false);
+  let learningActionRunning = $state(false);
+  let learningActionMessage = $state('');
+  let learningErrorMessage = $state('');
 
   async function hydrateLearningPanel() {
     learningRefreshing = true;
@@ -453,21 +450,23 @@
     learningActionRunning = false;
   }
 
-  $: learningOpsConnected = Boolean(
+  const learningOpsConnected = $derived(Boolean(
     learningStatusRemote || learningDatasetsRemote.length || learningEvalsRemote.length || learningTrainJobsRemote.length || learningReportsRemote.length
-  );
+  ));
 
-  $: learningPipelineState = (() => {
+  const learningPipelineState = $derived.by(() => {
     if (!learningStatusRemote) return 'LOCAL_ONLY';
     if (learningStatusRemote.outbox.failed > 0 || learningStatusRemote.trainJobs.failed > 0) return 'ATTENTION';
     if (learningStatusRemote.outbox.processing > 0 || learningStatusRemote.trainJobs.running > 0) return 'RUNNING';
     if (learningStatusRemote.latestDataset) return 'SYNCED';
     return 'BOOTSTRAP';
-  })();
+  });
 
-  $: latestLearningStatusLine = learningStatusRemote
-    ? `Outbox P:${learningStatusRemote.outbox.pending} / R:${learningStatusRemote.outbox.processing} / F:${learningStatusRemote.outbox.failed} · Jobs Q:${learningStatusRemote.trainJobs.queued} / Run:${learningStatusRemote.trainJobs.running} / OK:${learningStatusRemote.trainJobs.succeeded}`
-    : 'Learning backend is not connected for this user/session yet.';
+  const latestLearningStatusLine = $derived.by(() => {
+    const s = learningStatusRemote;
+    if (!s) return 'Learning backend is not connected for this user/session yet.';
+    return `Outbox P:${s.outbox.pending} / R:${s.outbox.processing} / F:${s.outbox.failed} · Jobs Q:${s.trainJobs.queued} / Run:${s.trainJobs.running} / OK:${s.trainJobs.succeeded}`;
+  });
 
   // Avatar options
   const AVATAR_OPTIONS = [
@@ -478,9 +477,9 @@
     '/doge/badge-verified.png', '/doge/badge-shield.png', '/doge/badge-rocket.png', '/doge/badge-diamond.png',
   ];
 
-  let showAvatarPicker = false;
-  let editingName = false;
-  let nameInput = '';
+  let showAvatarPicker = $state(false);
+  let editingName = $state(false);
+  let nameInput = $state('');
 
   function pickAvatar(path: string) { setAvatar(path); showAvatarPicker = false; }
   function startEditName() { nameInput = profile.username; editingName = true; }
@@ -492,7 +491,7 @@
     void updateUiStateApi({ passportActiveTab: tab });
   }
 
-  let holdingsSyncing = false;
+  let holdingsSyncing = $state(false);
   async function syncHoldingsNow() {
     if (holdingsSyncing) return;
     holdingsSyncing = true;
@@ -503,27 +502,33 @@
     }
   }
 
-  $: if (wallet.connected && wallet.address && wallet.address !== holdingsSyncAddress) {
-    holdingsSyncAddress = wallet.address;
-    void hydrateHoldings();
-  }
+  $effect(() => {
+    if (wallet.connected && wallet.address && wallet.address !== holdingsSyncAddress) {
+      holdingsSyncAddress = wallet.address;
+      void hydrateHoldings();
+    }
+  });
 
-  $: if (!wallet.connected && holdingsSyncAddress !== null) {
-    holdingsSyncAddress = null;
-  }
+  $effect(() => {
+    if (!wallet.connected && holdingsSyncAddress !== null) {
+      holdingsSyncAddress = null;
+    }
+  });
 
   // If wallet is disconnected after a live sync, clear cached live holdings
   // to avoid showing stale wallet data from a previous connection.
-  $: if (
-    (!wallet.connected || !wallet.address) &&
-    (holdingsLoaded || liveHoldings.length > 0 || holdingsState === 'live')
-  ) {
-    holdingsSyncAddress = null;
-    liveHoldings = [];
-    holdingsLoaded = false;
-    holdingsState = 'fallback';
-    holdingsStatusMessage = 'Connect wallet to load live holdings.';
-  }
+  $effect(() => {
+    if (
+      (!wallet.connected || !wallet.address) &&
+      (holdingsLoaded || liveHoldings.length > 0 || holdingsState === 'live')
+    ) {
+      holdingsSyncAddress = null;
+      liveHoldings = [];
+      holdingsLoaded = false;
+      holdingsState = 'fallback';
+      holdingsStatusMessage = 'Connect wallet to load live holdings.';
+    }
+  });
 
   onMount(() => {
     hydrateUserProfile();
@@ -562,7 +567,7 @@
       <!-- ═══ UNIFIED HEADER: PROFILE + PORTFOLIO ═══ -->
       <div class="unified-header">
         <div class="uh-left">
-          <button class="doge-avatar" on:click={() => showAvatarPicker = !showAvatarPicker}>
+          <button class="doge-avatar" onclick={() => showAvatarPicker = !showAvatarPicker}>
             <img src={profile.avatar} alt="avatar" class="doge-img" />
             <span class="avatar-edit">✏️</span>
           </button>
@@ -570,11 +575,11 @@
           <div class="player-info">
             {#if editingName}
               <div class="name-edit">
-                <input class="name-input" type="text" bind:value={nameInput} maxlength="16" on:keydown={(e) => e.key === 'Enter' && saveName()} />
-                <button class="name-save" on:click={saveName}>✓</button>
+                <input class="name-input" type="text" bind:value={nameInput} maxlength="16" onkeydown={(e) => e.key === 'Enter' && saveName()} />
+                <button class="name-save" onclick={saveName}>✓</button>
               </div>
             {:else}
-              <button class="player-name" on:click={startEditName}>
+              <button class="player-name" onclick={startEditName}>
                 {profile.username} <span class="name-pen">✏️</span>
               </button>
             {/if}
@@ -584,7 +589,7 @@
             {#if wallet.connected}
               <div class="player-addr">{wallet.shortAddr} · {wallet.chain}</div>
             {:else}
-              <button class="connect-mini" on:click={openWalletModal}>CONNECT WALLET</button>
+              <button class="connect-mini" onclick={openWalletModal}>CONNECT WALLET</button>
             {/if}
           </div>
         </div>
@@ -619,7 +624,7 @@
           <div class="ap-title">SELECT AVATAR</div>
           <div class="ap-grid">
             {#each AVATAR_OPTIONS as opt}
-              <button class="ap-opt" class:selected={profile.avatar === opt} on:click={() => pickAvatar(opt)}>
+              <button class="ap-opt" class:selected={profile.avatar === opt} onclick={() => pickAvatar(opt)}>
                 <img src={opt} alt="avatar option" loading="lazy" />
               </button>
             {/each}
@@ -633,7 +638,7 @@
           <button
             class="tab-btn"
             class:active={activeTab === tab.id}
-            on:click={() => setActiveTab(tab.id)}
+            onclick={() => setActiveTab(tab.id)}
           >
             <span class="tab-icon">{tab.icon}</span>
             <span class="tab-label">{tab.label}</span>
@@ -658,12 +663,12 @@
             </a>
           {/if}
           {#if activeTab === 'wallet' && wallet.connected}
-            <button class="qa-btn qa-sync" on:click={syncHoldingsNow} disabled={holdingsSyncing} data-gtm-area="passport" data-gtm-action="sync_holdings">
+            <button class="qa-btn qa-sync" onclick={syncHoldingsNow} disabled={holdingsSyncing} data-gtm-area="passport" data-gtm-action="sync_holdings">
               {holdingsSyncing ? 'SYNCING...' : 'SYNC HOLDINGS'}
             </button>
           {/if}
           {#if !wallet.connected}
-            <button class="qa-btn qa-wallet" on:click={openWalletModal} data-gtm-area="passport" data-gtm-action="connect_wallet">
+            <button class="qa-btn qa-wallet" onclick={openWalletModal} data-gtm-area="passport" data-gtm-action="connect_wallet">
               CONNECT WALLET
             </button>
           {/if}
@@ -745,7 +750,7 @@
                 <div class="vb-header"><span class="vb-icon">🏦</span><span class="vb-title">VIRTUAL BALANCE</span></div>
                 <div class="vb-amount">${profile.balance.virtual.toLocaleString()}</div>
                 {#if !wallet.connected}
-                  <button class="vb-connect" on:click={openWalletModal}>CONNECT WALLET FOR DEFI</button>
+                  <button class="vb-connect" onclick={openWalletModal}>CONNECT WALLET FOR DEFI</button>
                 {:else}
                   <div class="vb-connected"><span class="vbc-dot"></span>Wallet Connected · {wallet.chain} · {wallet.balance.toLocaleString()} USDT</div>
                 {/if}
@@ -944,16 +949,16 @@
               <div class="section-header">AI LEARNING PIPELINE</div>
 
               <div class="ml-action-row">
-                <button class="qa-btn qa-sync" on:click={hydrateLearningPanel} disabled={learningRefreshing}>
+                <button class="qa-btn qa-sync" onclick={hydrateLearningPanel} disabled={learningRefreshing}>
                   {learningRefreshing ? 'REFRESHING...' : 'REFRESH'}
                 </button>
-                <button class="qa-btn qa-terminal" on:click={runLearningWorkerNow} disabled={learningActionRunning}>
+                <button class="qa-btn qa-terminal" onclick={runLearningWorkerNow} disabled={learningActionRunning}>
                   RUN WORKER
                 </button>
-                <button class="qa-btn qa-arena" on:click={queueLearningRetrainNow} disabled={learningActionRunning}>
+                <button class="qa-btn qa-arena" onclick={queueLearningRetrainNow} disabled={learningActionRunning}>
                   QUEUE RETRAIN
                 </button>
-                <button class="qa-btn qa-wallet" on:click={generateLearningReportNow} disabled={learningActionRunning}>
+                <button class="qa-btn qa-wallet" onclick={generateLearningReportNow} disabled={learningActionRunning}>
                   GENERATE REPORT
                 </button>
               </div>
@@ -2566,7 +2571,7 @@
     margin: var(--sp-space-1) 0 0;
   }
 
-  @media (max-width: 980px) {
+  @media (max-width: 1024px) {
     .passport-scroll {
       padding: var(--sp-space-2);
     }
@@ -2607,7 +2612,7 @@
     }
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: 768px) {
     .agent-perf-grid,
     .badges-grid {
       grid-template-columns: 1fr;

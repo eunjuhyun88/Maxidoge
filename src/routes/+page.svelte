@@ -1594,7 +1594,7 @@
     .sq-grid-6 { grid-template-columns: repeat(3, 1fr); }
   }
 
-  @media (max-width: 1200px) {
+  @media (max-width: 1280px) {
     .hero {
       grid-template-columns: minmax(0, 1fr) clamp(280px, 36vw, 380px);
     }
@@ -1609,7 +1609,7 @@
     .fc-img .ht { width: 54%; }
   }
 
-  @media (max-width: 1080px) {
+  @media (max-width: 1024px) {
     .hero {
       grid-template-columns: minmax(0, 1fr);
       min-height: auto;
@@ -1691,7 +1691,7 @@
     .sq-grid-6 { grid-template-columns: repeat(2, 1fr); }
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1024px) {
     .hero-left { padding: 22px var(--space-sec-x) 30px; }
     .hero-sub-v {
       font-size: clamp(13px, 2.8vw, 16px);
@@ -1732,7 +1732,7 @@
     .sq-pct { font-size: 11px; }
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 768px) {
     .hero-left { padding: clamp(32px, 8vw, 48px) 20px clamp(24px, 5vw, 36px); }
 
     /* ── Hero title: 1면답게 크게 ── */
@@ -1914,7 +1914,7 @@
     .foot-tag { font-size: 8px; }
   }
 
-  @media (max-width: 400px) {
+  @media (max-width: 480px) {
     .hl-pk { font-size: clamp(26px, 12vw, 32px); }
     .hl-xl { font-size: clamp(24px, 10vw, 28px); }
     .hero-doge { width: 50px; }
@@ -1954,7 +1954,7 @@
     display: none;
   }
 
-  @media (max-width: 1080px) {
+  @media (max-width: 1024px) {
     .m-sheet-backdrop {
       display: block;
       position: fixed; inset: 0; z-index: 200;

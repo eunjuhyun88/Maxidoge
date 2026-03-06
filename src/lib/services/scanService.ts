@@ -255,14 +255,24 @@ async function persistScan(userId: string, scan: WarRoomScanResult): Promise<str
 }
 
 export async function runTerminalScan(
-  userId: string,
+  userId: string | null | undefined,
   request: { pair?: unknown; timeframe?: unknown }
 ): Promise<RunTerminalScanResult> {
   const { pair, timeframe } = normalizeScanRequest(request);
   const scan = await runServerScan(pair, timeframe);
+  const persistUserId = typeof userId === 'string' && UUID_RE.test(userId) ? userId : null;
+
+  if (!persistUserId) {
+    const scanId = randomUUID();
+    return {
+      scanId,
+      persisted: false,
+      data: fromScanResult(scanId, scan),
+    };
+  }
 
   try {
-    const scanId = await persistScan(userId, scan);
+    const scanId = await persistScan(persistUserId, scan);
     return {
       scanId,
       persisted: true,
@@ -419,4 +429,3 @@ export async function getTerminalScanSignals(
     throw error;
   }
 }
-

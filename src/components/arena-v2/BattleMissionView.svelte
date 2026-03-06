@@ -6,42 +6,48 @@
    */
   import type { V2BattleState, AgentBattleState } from '$lib/engine/v2BattleTypes';
 
-  export let battleState: V2BattleState | null = null;
+  interface Props {
+    battleState?: V2BattleState | null;
+  }
 
-  $: bs = battleState;
-  $: tickN = bs?.tickN ?? 0;
-  $: maxTicks = bs?.maxTicks ?? 24;
-  $: currentPrice = bs?.currentPrice ?? 0;
-  $: entryPrice = bs?.config.entryPrice ?? 0;
-  $: tpPrice = bs?.config.tpPrice ?? 0;
-  $: slPrice = bs?.config.slPrice ?? 0;
-  $: direction = bs?.config.direction ?? 'LONG';
-  $: vs = bs?.vsMeter.value ?? 50;
-  $: combo = bs?.combo.count ?? 0;
-  $: maxCombo = bs?.combo.maxCombo ?? 0;
-  $: agentStates = bs ? Object.values(bs.agentStates) : [];
-  $: log = bs?.log.slice(-10) ?? [];
-  $: tickResults = bs?.tickResults.slice(-5) ?? [];
+  let {
+    battleState = null,
+  }: Props = $props();
 
-  $: pnl = entryPrice > 0
+  const bs = $derived(battleState);
+  const tickN = $derived(bs?.tickN ?? 0);
+  const maxTicks = $derived(bs?.maxTicks ?? 24);
+  const currentPrice = $derived(bs?.currentPrice ?? 0);
+  const entryPrice = $derived(bs?.config.entryPrice ?? 0);
+  const tpPrice = $derived(bs?.config.tpPrice ?? 0);
+  const slPrice = $derived(bs?.config.slPrice ?? 0);
+  const direction = $derived(bs?.config.direction ?? 'LONG');
+  const vs = $derived(bs?.vsMeter.value ?? 50);
+  const combo = $derived(bs?.combo.count ?? 0);
+  const maxCombo = $derived(bs?.combo.maxCombo ?? 0);
+  const agentStates = $derived(bs ? Object.values(bs.agentStates) : []);
+  const log = $derived(bs?.log.slice(-10) ?? []);
+  const tickResults = $derived(bs?.tickResults.slice(-5) ?? []);
+
+  const pnl = $derived(entryPrice > 0
     ? (direction === 'LONG'
       ? ((currentPrice - entryPrice) / entryPrice) * 100
       : ((entryPrice - currentPrice) / entryPrice) * 100)
-    : 0;
+    : 0);
 
-  $: tpDistPct = entryPrice > 0 ? ((Math.abs(tpPrice - entryPrice) / entryPrice) * 100) : 0;
-  $: slDistPct = entryPrice > 0 ? ((Math.abs(slPrice - entryPrice) / entryPrice) * 100) : 0;
-  $: tpProgress = tpDistPct > 0 ? Math.min(100, Math.max(0, (Math.max(0, pnl) / tpDistPct) * 100)) : 0;
-  $: slProgress = slDistPct > 0 ? Math.min(100, Math.max(0, (Math.abs(Math.min(0, pnl)) / slDistPct) * 100)) : 0;
+  const tpDistPct = $derived(entryPrice > 0 ? ((Math.abs(tpPrice - entryPrice) / entryPrice) * 100) : 0);
+  const slDistPct = $derived(entryPrice > 0 ? ((Math.abs(slPrice - entryPrice) / entryPrice) * 100) : 0);
+  const tpProgress = $derived(tpDistPct > 0 ? Math.min(100, Math.max(0, (Math.max(0, pnl) / tpDistPct) * 100)) : 0);
+  const slProgress = $derived(slDistPct > 0 ? Math.min(100, Math.max(0, (Math.abs(Math.min(0, pnl)) / slDistPct) * 100)) : 0);
 
   // Latest 5 tick feed
-  $: tickFeed = tickResults.map(tr => ({
+  const tickFeed = $derived(tickResults.map(tr => ({
     tick: tr.tickN,
     cls: tr.classifiedTick.tickClass,
     delta: tr.classifiedTick.deltaPct,
     vs: tr.vsAfter,
     combo: tr.comboAfter,
-  }));
+  })));
 
   function getTickColor(cls: string): string {
     if (cls.includes('FAVORABLE') && !cls.includes('UN')) return '#00ff88';

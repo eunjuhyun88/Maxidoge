@@ -148,7 +148,7 @@
     color: rgba(240, 237, 228, 0.55);
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1024px) {
     .arena-hud {
       top: 8px;
       left: 8px;
@@ -170,7 +170,7 @@
     }
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 768px) {
     .arena-hud {
       grid-template-columns: auto auto;
       grid-template-areas:

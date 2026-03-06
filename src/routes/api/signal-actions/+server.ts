@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { fireAndForget } from '$lib/server/taskUtils';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
@@ -10,6 +11,7 @@ import {
   UUID_RE,
 } from '$lib/server/apiValidation';
 import { saveSignalActionRAG } from '$lib/server/ragService';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 const ACTIONS = new Set(['track', 'untrack', 'convert_to_trade', 'copy_trade', 'quick_long', 'quick_short']);
 
@@ -79,8 +81,8 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
       records: rows.rows.map(mapRow),
       pagination: { limit, offset },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[signal-actions/get] unexpected error:', error);
@@ -125,27 +127,27 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       [user.id, signalId, linkedTradeId, pair, dir || 'NEUTRAL', actionType, source, confidence, JSON.stringify(payload)]
     );
 
-    await query(
+    fireAndForget('signal-activity', query(
       `
         INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
         VALUES ($1, 'signal_tracked', 'signals', $2, 'info', $3::jsonb)
       `,
       [user.id, insert.rows[0].id, JSON.stringify({ actionType, pair, dir: dir || 'NEUTRAL' })]
-    ).catch(() => undefined);
+    ));
 
     // Decision Memory: Signal Action → RAG (fire-and-forget)
-    saveSignalActionRAG(user.id, {
+    fireAndForget('signal-rag', saveSignalActionRAG(user.id, {
       actionId: insert.rows[0].id,
       pair,
       dir: dir || 'NEUTRAL',
       actionType,
       source,
       confidence,
-    }).catch(() => undefined);
+    }));
 
     return json({ success: true, action: mapRow(insert.rows[0]) });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

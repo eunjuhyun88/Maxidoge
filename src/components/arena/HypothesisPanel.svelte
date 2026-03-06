@@ -1,6 +1,8 @@
 <script lang="ts">
   import { gameState } from '$lib/stores/gameState';
   import { p0Override } from '$lib/stores/notificationStore';
+  import { livePrices } from '$lib/stores/priceStore';
+  import { getBaseSymbolFromPair, getPairPrice } from '$lib/utils/price';
 
   interface Props {
     timeLeft?: number;
@@ -9,8 +11,13 @@
   let { timeLeft = 45, onsubmit }: Props = $props();
 
   // Get current price from the active pair
-  let pairBase = $derived($gameState.pair.split('/')[0]);
-  let currentPrice = $derived($gameState.prices[pairBase as keyof typeof $gameState.prices] || $gameState.prices.BTC);
+  const pairBaseSymbol = $derived(getBaseSymbolFromPair($gameState.pair) || 'BTC');
+  const pairBaseFallbackPrice = $derived(
+    $gameState.bases[pairBaseSymbol as keyof typeof $gameState.bases] || $gameState.bases.BTC || 0
+  );
+  let currentPrice = $derived(
+    getPairPrice($livePrices, $gameState.pair, pairBaseSymbol, pairBaseFallbackPrice)
+  );
 
   // Hypothesis state
   let dir: 'LONG' | 'SHORT' | 'NEUTRAL' | null = $state(null);

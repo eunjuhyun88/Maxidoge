@@ -21,18 +21,18 @@
   import ResultScreen from '../../components/arena-v2/ResultScreen.svelte';
 
   // ── Local reactive state (from store) ──
-  $: state = $arenaV2State;
-  $: phase = state.phase;
-  $: subPhase = state.subPhase;
-  $: currentView = state.currentView;
+  const arenaState = $derived($arenaV2State);
+  const phase = $derived(arenaState.phase);
+  const subPhase = $derived(arenaState.subPhase);
+  const currentView = $derived(arenaState.currentView);
 
   // ── Price feed ──
-  $: livePrice = $btcPrice ?? 0;
-  $: {
+  const livePrice = $derived($btcPrice ?? 0);
+  $effect(() => {
     if (livePrice > 0) {
       arenaV2State.update(s => ({ ...s, btcPrice: livePrice }));
     }
-  }
+  });
 
   // ── Lobby ──
   function handleStartRound() {
@@ -76,8 +76,8 @@
   <PhaseBar
     {phase}
     {subPhase}
-    timer={state.timer}
-    btcPrice={state.btcPrice}
+    timer={arenaState.timer}
+    btcPrice={arenaState.btcPrice}
   />
 
   <!-- Main Content Area -->
@@ -95,7 +95,7 @@
               <span class="price-loading">connecting to price feed...</span>
             {/if}
           </div>
-          <button class="btn-start" on:click={handleStartRound}>
+          <button class="btn-start" onclick={handleStartRound}>
             <span class="btn-icon">⚔</span>
             <span class="btn-text">START ROUND</span>
           </button>
@@ -104,48 +104,48 @@
 
     {:else if phase === 'DRAFT'}
       <DraftScreen
-        selectedAgents={state.selectedAgents}
-        weights={state.weights}
-        squadConfig={state.squadConfig}
+        selectedAgents={arenaState.selectedAgents}
+        weights={arenaState.weights}
+        squadConfig={arenaState.squadConfig}
       />
 
     {:else if phase === 'ANALYSIS'}
       <AnalysisScreen
-        subPhase={state.subPhase}
-        findings={state.findings}
-        chatMessages={state.chatMessages}
-        selectedAgents={state.selectedAgents}
-        timer={state.timer}
-        speed={state.speed}
+        subPhase={arenaState.subPhase}
+        findings={arenaState.findings}
+        chatMessages={arenaState.chatMessages}
+        selectedAgents={arenaState.selectedAgents}
+        timer={arenaState.timer}
+        speed={arenaState.speed}
       />
 
     {:else if phase === 'HYPOTHESIS'}
       <HypothesisScreen
-        hypothesis={state.hypothesis}
-        btcPrice={state.btcPrice}
-        timer={state.timer}
-        consensusDir={state.consensusDir}
-        consensusConf={state.consensusConf}
-        findings={state.findings}
-        councilVotes={state.councilVotes}
-        selectedAgents={state.selectedAgents}
+        hypothesis={arenaState.hypothesis}
+        btcPrice={arenaState.btcPrice}
+        timer={arenaState.timer}
+        consensusDir={arenaState.consensusDir}
+        consensusConf={arenaState.consensusConf}
+        findings={arenaState.findings}
+        councilVotes={arenaState.councilVotes}
+        selectedAgents={arenaState.selectedAgents}
       />
 
     {:else if phase === 'BATTLE'}
       <BattleScreen
-        battleState={state.battleState}
+        battleState={arenaState.battleState}
         {currentView}
       />
 
     {:else if phase === 'RESULT'}
       <ResultScreen
-        battleResult={state.battleResult}
-        lpDelta={state.lpDelta}
-        lpBreakdown={state.lpBreakdown}
-        fbsScore={state.fbsScore}
-        badges={state.badges}
-        on:goLobby={handleGoLobby}
-        on:playAgain={handlePlayAgain}
+        battleResult={arenaState.battleResult}
+        lpDelta={arenaState.lpDelta}
+        lpBreakdown={arenaState.lpBreakdown}
+        fbsScore={arenaState.fbsScore}
+        badges={arenaState.badges}
+        onGoLobby={handleGoLobby}
+        onPlayAgain={handlePlayAgain}
       />
     {/if}
   </div>

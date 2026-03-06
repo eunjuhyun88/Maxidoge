@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { registerTournament, isTournamentError } from '$lib/server/tournamentService';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 export const POST: RequestHandler = async ({ cookies, params }) => {
   try {
@@ -10,7 +11,7 @@ export const POST: RequestHandler = async ({ cookies, params }) => {
 
     const result = await registerTournament(user.id, params.id);
     return json({ success: true, ...result });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (isTournamentError(err)) {
       return json({ error: err.code, message: err.message }, { status: err.status });
     }

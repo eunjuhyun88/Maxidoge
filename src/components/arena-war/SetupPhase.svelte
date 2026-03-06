@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { arenaWarStore, updateSetup, startMatch, setSelectedMode, startDraft } from '$lib/stores/arenaWarStore';
+  import { updateSetup, startMatch, setSelectedMode, startDraft } from '$lib/stores/arenaWarStore';
   import type { WagerAmount } from '$lib/engine/arenaWarTypes';
 
   // Svelte 5 runes
@@ -41,10 +41,11 @@
   <div class="setup-grid">
     <!-- Mode Selection (NEW) -->
     <div class="setup-section">
-      <label class="section-label">MODE</label>
+      <p class="section-label">MODE</p>
       <div class="mode-row">
         {#each modes as mode}
           <button
+            type="button"
             class="mode-btn"
             class:active={selectedMode === mode.id}
             onclick={() => selectedMode = mode.id}
@@ -59,10 +60,11 @@
 
     <!-- Pair Selection -->
     <div class="setup-section">
-      <label class="section-label">PAIR</label>
+      <p class="section-label">PAIR</p>
       <div class="option-row">
         {#each pairs as pair}
           <button
+            type="button"
             class="option-btn"
             class:active={selectedPair === pair}
             onclick={() => selectedPair = pair}
@@ -75,10 +77,11 @@
 
     <!-- Timeframe Selection -->
     <div class="setup-section">
-      <label class="section-label">TIMEFRAME</label>
+      <p class="section-label">TIMEFRAME</p>
       <div class="option-row">
         {#each timeframes as tf}
           <button
+            type="button"
             class="option-btn"
             class:active={selectedTf === tf}
             onclick={() => selectedTf = tf}
@@ -91,10 +94,11 @@
 
     <!-- Wager Selection -->
     <div class="setup-section">
-      <label class="section-label">WAGER (LP)</label>
+      <p class="section-label">WAGER (LP)</p>
       <div class="option-row">
         {#each wagers as w}
           <button
+            type="button"
             class="option-btn wager"
             class:active={selectedWager === w}
             onclick={() => selectedWager = w}
@@ -106,7 +110,7 @@
     </div>
   </div>
 
-  <button class="start-btn" onclick={handleStart}>
+  <button type="button" class="start-btn" onclick={handleStart}>
     {selectedMode === 'spectator' ? '👁 SPECTATE' : selectedMode === 'draft' ? '📋 DRAFT' : '⚔ START MATCH'}
   </button>
 
@@ -169,6 +173,7 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.7rem;
     color: var(--arena-accent, #e8967d);
+    margin: 0;
     letter-spacing: 2px;
     text-transform: uppercase;
   }

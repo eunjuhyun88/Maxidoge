@@ -1,49 +1,61 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import type { Phase, Hypothesis } from '$lib/stores/gameState';
   import type { BattleTickState, BattlePriceTick } from '$lib/engine/battleResolver';
 
-  export let phase: Phase = 'DRAFT';
-  export let battleTick: BattleTickState | null = null;
-  export let hypothesis: Hypothesis | null = null;
-  export let prices: { BTC: number } = { BTC: 0 };
-  export let battleResult: string | null = null;
-  export let battlePriceHistory: BattlePriceTick[] = [];
-  export let activeAgents: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }> = [];
+  interface Props {
+    phase?: Phase;
+    battleTick?: BattleTickState | null;
+    hypothesis?: Hypothesis | null;
+    prices?: { BTC: number };
+    battleResult?: string | null;
+    battlePriceHistory?: BattlePriceTick[];
+    activeAgents?: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }>;
+    onGoLobby?: () => void;
+    onPlayAgain?: () => void;
+  }
+  let {
+    phase = 'DRAFT',
+    battleTick = null,
+    hypothesis = null,
+    prices = { BTC: 0 },
+    battleResult = null,
+    battlePriceHistory = [],
+    activeAgents = [],
+    onGoLobby = () => {},
+    onPlayAgain = () => {},
+  }: Props = $props();
 
-  const dispatch = createEventDispatcher();
-
-  $: isBattle = phase === 'BATTLE';
-  $: isResult = phase === 'RESULT';
-  $: currentPrice = battleTick?.currentPrice ?? prices.BTC;
-  $: entryPrice = battleTick?.entryPrice ?? hypothesis?.entry ?? 0;
-  $: tpPrice = battleTick?.tpPrice ?? hypothesis?.tp ?? 0;
-  $: slPrice = battleTick?.slPrice ?? hypothesis?.sl ?? 0;
-  $: pnl = battleTick?.pnlPercent ?? 0;
-  $: pnlPositive = pnl >= 0;
-  $: pnlAbs = battleTick?.pnlAbsolute ?? 0;
-  $: distToTP = battleTick?.distToTP ?? 0;
-  $: distToSL = battleTick?.distToSL ?? 0;
-  $: maxRunup = battleTick?.maxRunup ?? 0;
-  $: maxDrawdown = battleTick?.maxDrawdown ?? 0;
-  $: rr = hypothesis?.rr ?? 0;
-  $: dir = hypothesis?.dir ?? 'NEUTRAL';
-  $: elapsed = battleTick?.elapsed ?? 0;
-  $: timeProgress = battleTick?.timeProgress ?? 0;
+  const isBattle = $derived(phase === 'BATTLE');
+  const isResult = $derived(phase === 'RESULT');
+  const currentPrice = $derived(battleTick?.currentPrice ?? prices.BTC);
+  const entryPrice = $derived(battleTick?.entryPrice ?? hypothesis?.entry ?? 0);
+  const tpPrice = $derived(battleTick?.tpPrice ?? hypothesis?.tp ?? 0);
+  const slPrice = $derived(battleTick?.slPrice ?? hypothesis?.sl ?? 0);
+  const pnl = $derived(battleTick?.pnlPercent ?? 0);
+  const pnlPositive = $derived(pnl >= 0);
+  const pnlAbs = $derived(battleTick?.pnlAbsolute ?? 0);
+  const distToTP = $derived(battleTick?.distToTP ?? 0);
+  const distToSL = $derived(battleTick?.distToSL ?? 0);
+  const maxRunup = $derived(battleTick?.maxRunup ?? 0);
+  const maxDrawdown = $derived(battleTick?.maxDrawdown ?? 0);
+  const rr = $derived(hypothesis?.rr ?? 0);
+  const dir = $derived(hypothesis?.dir ?? 'NEUTRAL');
+  const elapsed = $derived(battleTick?.elapsed ?? 0);
+  const timeProgress = $derived(battleTick?.timeProgress ?? 0);
 
   // Amber glow threshold
-  $: amberGlow = distToTP > 70 || distToSL > 70;
+  const amberGlow = $derived(distToTP > 70 || distToSL > 70);
 
   // Duration formatted
-  $: durationStr = (() => {
+  const durationStr = $derived((() => {
     const s = Math.floor(elapsed / 1000);
     const m = Math.floor(s / 60);
     const sec = s % 60;
     return m.toString().padStart(2, '0') + ':' + sec.toString().padStart(2, '0');
-  })();
+  })());
 
   // Last 5 ticks for live feed
-  $: liveFeed = (() => {
+  const liveFeed = $derived((() => {
     const recent = battlePriceHistory.slice(-5).reverse();
     return recent.map((tick, i) => {
       const prev = battlePriceHistory[battlePriceHistory.length - 5 + (4 - i) - 1];
@@ -53,7 +65,7 @@
       const timeStr = time.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
       return { price: tick.price, change, pct, timeStr };
     });
-  })();
+  })());
 
   function fmtPrice(p: number): string {
     if (!p) return '---';
@@ -225,8 +237,8 @@
           {battleResult === 'tp' ? 'TP HIT' : battleResult === 'sl' ? 'SL HIT' : battleResult === 'timeout_win' ? 'TIMEOUT WIN' : 'TIMEOUT LOSS'}
         </span>
         <span class="result-pnl" class:positive={pnlPositive} class:negative={!pnlPositive}>{fmtPnl(pnl)}</span>
-        <button on:click={() => dispatch('goLobby')}>LOBBY</button>
-        <button class="btn-again" on:click={() => dispatch('playAgain')}>AGAIN</button>
+        <button onclick={() => onGoLobby()}>LOBBY</button>
+        <button class="btn-again" onclick={() => onPlayAgain()}>AGAIN</button>
       </div>
     {/if}
 

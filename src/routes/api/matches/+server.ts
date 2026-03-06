@@ -8,6 +8,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { getErrorMessage, getErrorCode } from '$lib/utils/errorUtils';
 
 // ── Legacy v2 match row (matches 테이블) ──
 interface MatchRow {
@@ -208,8 +209,8 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
         hasMore: offset + limit < total,
       },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[matches/get] unexpected error:', error);
@@ -285,11 +286,11 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       success: true,
       record: mapLegacyMatch(result.rows[0]),
     });
-  } catch (error: any) {
-    if (error?.code === '23503') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === '23503') {
       return json({ error: 'User does not exist' }, { status: 409 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+    if (getErrorMessage(error).includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) {

@@ -48,7 +48,7 @@
 </script>
 
 {#if scanning}
-  <div class="verdict-banner verdict-loading">
+  <div class="verdict-banner verdict-loading" aria-live="assertive" aria-busy="true">
     <span class="verdict-pulse"></span>
     <span class="verdict-label">SCANNING — analyzing market data</span>
   </div>
@@ -59,6 +59,8 @@
     class:expanded
     class:just-arrived={justArrived}
     onclick={() => expanded = !expanded}
+    aria-live="polite"
+    aria-label="Scan verdict: {verdict.consensus.toUpperCase()} {verdict.pair} confidence {Math.round(verdict.avgConfidence)}%"
   >
     <div class="verdict-row">
       <DirectionBadge
@@ -96,7 +98,7 @@
     font-family: var(--fm, 'JetBrains Mono', monospace);
     background: rgba(10, 9, 8, 0.92);
     border: none;
-    border-bottom: 1px solid rgba(232, 150, 125, 0.15);
+    border-bottom: 1px solid rgba(var(--t-accent-rgb), 0.15);
     padding: 6px 12px;
     cursor: pointer;
     user-select: none;
@@ -114,7 +116,7 @@
     animation: verdictGlow 2.5s ease-out;
   }
   @keyframes verdictGlow {
-    0% { box-shadow: inset 0 0 20px rgba(232,150,125,.25), 0 0 12px rgba(232,150,125,.15); }
+    0% { box-shadow: inset 0 0 20px rgba(var(--t-accent-rgb),.25), 0 0 12px rgba(var(--t-accent-rgb),.15); }
     100% { box-shadow: none; }
   }
   .verdict-loading {
@@ -127,7 +129,7 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #E8967D;
+    background: var(--term-accent, #e8967d);
     animation: vpulse 1s ease infinite;
   }
   @keyframes vpulse {
@@ -175,7 +177,7 @@
   .verdict-detail {
     margin-top: 6px;
     padding-top: 6px;
-    border-top: 1px solid rgba(232, 150, 125, 0.08);
+    border-top: 1px solid rgba(var(--t-accent-rgb), 0.08);
   }
   .verdict-summary {
     font-size: 10px;

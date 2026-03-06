@@ -3,17 +3,14 @@
   import { RESETTABLE_STORAGE_KEYS } from '$lib/stores/storageKeys';
   import { CORE_TIMEFRAME_OPTIONS, normalizeTimeframe } from '$lib/utils/timeframe';
 
-  export let onClose: () => void = () => {};
+  let { onClose = () => {} }: { onClose?: () => void } = $props();
 
-  let state = $gameState;
-  $: state = $gameState;
+  const gs = $derived($gameState);
 
-  let speed = state.speed;
-  let audioOn = true;
-  let theme = 'comic';
+  let audioOn = $state(true);
+  let theme = $state('comic');
 
   function setSpeed(s: number) {
-    speed = s;
     gameState.update(st => ({ ...st, speed: s }));
   }
 
@@ -27,14 +24,13 @@
   }
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="modal-overlay" on:click={onClose}>
-  <div class="settings-panel" on:click|stopPropagation>
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<div class="modal-overlay" onclick={onClose} role="presentation">
+  <div class="settings-panel" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
     <div class="st-header">
       <span class="st-icon">⚙</span>
       <span class="st-title">SETTINGS</span>
-      <div class="st-close" on:click={onClose}>✕</div>
+      <button class="st-close" onclick={onClose}>✕</button>
     </div>
 
     <div class="st-body">
@@ -43,7 +39,7 @@
         <div class="st-label">BATTLE SPEED</div>
         <div class="st-btns">
           {#each [1, 2, 3] as s}
-            <button class="spd-btn" class:active={speed === s} on:click={() => setSpeed(s)}>
+            <button class="spd-btn" class:active={gs.speed === s} onclick={() => setSpeed(s)}>
               {s}x
             </button>
           {/each}
@@ -54,8 +50,8 @@
       <div class="st-section">
         <div class="st-label">SOUND EFFECTS</div>
         <div class="st-toggle">
-          <button class="tg-btn" class:active={audioOn} on:click={() => audioOn = true}>ON</button>
-          <button class="tg-btn" class:active={!audioOn} on:click={() => audioOn = false}>OFF</button>
+          <button class="tg-btn" class:active={audioOn} onclick={() => audioOn = true}>ON</button>
+          <button class="tg-btn" class:active={!audioOn} onclick={() => audioOn = false}>OFF</button>
         </div>
       </div>
 
@@ -73,8 +69,8 @@
         <div class="st-label">DEFAULT PAIR</div>
         <div class="st-btns">
           {#each ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'] as p}
-            <button class="pair-btn" class:active={state.pair === p}
-              on:click={() => gameState.update(s => ({...s, pair: p}))}>
+            <button class="pair-btn" class:active={gs.pair === p}
+              onclick={() => gameState.update(s => ({...s, pair: p}))}>
               {p.split('/')[0]}
             </button>
           {/each}
@@ -86,8 +82,8 @@
         <div class="st-label">DEFAULT TIMEFRAME</div>
         <div class="st-btns">
           {#each CORE_TIMEFRAME_OPTIONS as tf}
-            <button class="tf-btn" class:active={normalizeTimeframe(state.timeframe) === tf.value}
-              on:click={() => gameState.update(s => ({...s, timeframe: tf.value}))}>
+            <button class="tf-btn" class:active={normalizeTimeframe(gs.timeframe) === tf.value}
+              onclick={() => gameState.update(s => ({...s, timeframe: tf.value}))}>
               {tf.label}
             </button>
           {/each}
@@ -110,7 +106,7 @@
       <!-- Danger Zone -->
       <div class="st-section danger">
         <div class="st-label">DANGER ZONE</div>
-        <button class="reset-btn" on:click={resetData}>
+        <button class="reset-btn" onclick={resetData}>
           🗑 RESET ALL DATA
         </button>
         <div class="reset-warn">This will clear all match history, agent data, and settings.</div>
@@ -142,7 +138,7 @@
   }
   .st-icon { font-size: 18px; }
   .st-title { font-size: 14px; font-weight: 900; font-family: var(--fd); letter-spacing: 3px; }
-  .st-close { margin-left: auto; font-size: 16px; cursor: pointer; color: #555; }
+  .st-close { margin-left: auto; font-size: 16px; cursor: pointer; color: #555; background: none; border: none; padding: 0; }
   .st-close:hover { color: #000; }
 
   .st-body { padding: 14px; overflow-y: auto; max-height: calc(80vh - 60px); }

@@ -1,9 +1,5 @@
 <script lang="ts">
   import { timeSince } from '$lib/utils/time';
-
-  export let embedded = false;
-  export let variant: 'full' | 'stream' = 'full';
-
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
   import { gameState } from '$lib/stores/gameState';
   import { matchHistoryStore } from '$lib/stores/matchHistoryStore';
@@ -15,14 +11,23 @@
   import EmptyState from '../shared/EmptyState.svelte';
   import ContextBanner from '../shared/ContextBanner.svelte';
 
-  $: state = $gameState;
-  $: records = $matchHistoryStore.records;
-  $: trades = $openTrades;
-  $: tracked = $activeSignals;
-  $: profile = $userProfileStore;
-  $: isStream = embedded && variant === 'stream';
-  $: liveP = $livePrices;
-  $: changes = $priceChanges;
+  interface Props {
+    embedded?: boolean;
+    variant?: 'full' | 'stream';
+  }
+  let {
+    embedded = false,
+    variant = 'full',
+  }: Props = $props();
+
+  const storeState = $derived($gameState);
+  const records = $derived($matchHistoryStore.records);
+  const trades = $derived($openTrades);
+  const tracked = $derived($activeSignals);
+  const profile = $derived($userProfileStore);
+  const isStream = $derived(embedded && variant === 'stream');
+  const liveP = $derived($livePrices);
+  const changes = $derived($priceChanges);
 
   function fmtChange(pct: number): string {
     if (!Number.isFinite(pct) || pct === 0) return '+0.00%';
@@ -30,11 +35,11 @@
   }
 
   // S-03: priceStore에서 실시간 가격 + 24h% 구독
-  $: prices = [
+  const prices = $derived([
     { symbol: 'BTC', price: `$${Math.round(liveP.BTC || 97420).toLocaleString()}`, change: fmtChange(changes.BTC), up: (changes.BTC || 0) >= 0 },
     { symbol: 'ETH', price: `$${Math.round(liveP.ETH || 3481).toLocaleString()}`, change: fmtChange(changes.ETH), up: (changes.ETH || 0) >= 0 },
     { symbol: 'SOL', price: `$${(liveP.SOL || 198).toFixed(2)}`, change: fmtChange(changes.SOL), up: (changes.SOL || 0) >= 0 },
-  ];
+  ]);
 
   // Build activity timeline from all sources
   interface ActivityItem {
@@ -47,7 +52,7 @@
     type: 'match' | 'trade' | 'signal' | 'agent';
   }
 
-  $: activityFeed = buildActivityFeed();
+  const activityFeed = $derived(buildActivityFeed());
 
   function buildActivityFeed(): ActivityItem[] {
     const items: ActivityItem[] = [];
@@ -108,7 +113,7 @@
   }
 
   // Reaction system
-  let reactions: Array<{ emoji: string; x: number; y: number; id: number }> = [];
+  let reactions: Array<{ emoji: string; x: number; y: number; id: number }> = $state([]);
   let nextReaction = 0;
 
   function sendReaction(emoji: string) {
@@ -246,9 +251,9 @@
   {#if !isStream}
     <div class="reaction-bar">
       {#each ['🔥', '🐕', '💎', '🚀', '😂', '👑', '⚡', '💀'] as emoji}
-        <button class="reaction-btn" on:click={() => sendReaction(emoji)}>{emoji}</button>
+        <button class="reaction-btn" onclick={() => sendReaction(emoji)}>{emoji}</button>
       {/each}
-      <button class="join-arena-btn" on:click={() => goto('/arena')}>⚔️ JOIN ARENA</button>
+      <button class="join-arena-btn" onclick={() => goto('/arena')}>⚔️ JOIN ARENA</button>
     </div>
 
     {#each reactions as r (r.id)}
@@ -455,7 +460,7 @@
   }
   @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-100px) scale(1.5); } }
 
-  @media (max-width: 980px) {
+  @media (max-width: 1024px) {
     .stream-price-row {
       grid-template-columns: 1fr;
       padding-bottom: 6px;

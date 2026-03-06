@@ -12,9 +12,17 @@
   } from '$lib/stores/arenaV2State';
   import { getSynergyPreview } from '$lib/engine/teamSynergy';
 
-  export let selectedAgents: AgentId[] = [];
-  export let weights: Record<string, number> = {};
-  export let squadConfig: V2SquadConfig = { riskLevel: 'mid', timeframe: '5m', leverage: 1, tier: 'BRONZE' };
+  interface Props {
+    selectedAgents?: AgentId[];
+    weights?: Record<string, number>;
+    squadConfig?: V2SquadConfig;
+  }
+
+  let {
+    selectedAgents = [],
+    weights = {},
+    squadConfig = { riskLevel: 'mid', timeframe: '5m', leverage: 1, tier: 'BRONZE' },
+  }: Props = $props();
 
   const TIER_INFO: Record<V2Tier, { icon: string; desc: string }> = {
     BRONZE:  { icon: '🥉', desc: 'VS 55 · 24 ticks' },
@@ -28,11 +36,11 @@
   const ROLE_COLORS: Record<string, string> = { OFFENSE: '#ff4466', DEFENSE: '#4488ff', CONTEXT: '#aa66ff' };
   const ROLE_LABELS: Record<string, string> = { OFFENSE: 'ATK', DEFENSE: 'DEF', CONTEXT: 'CTX' };
 
-  $: isReady = selectedAgents.length === 3;
-  $: synergies = getSynergyPreview(selectedAgents as AgentId[]);
-  $: activeSynergies = synergies.filter(s => s.isActive);
+  const isReady = $derived(selectedAgents.length === 3);
+  const synergies = $derived(getSynergyPreview(selectedAgents as AgentId[]));
+  const activeSynergies = $derived(synergies.filter(s => s.isActive));
 
-  let hoveredAgent: string | null = null;
+  let hoveredAgent = $state<string | null>(null);
 
   function handleSelect(agentId: string) {
     if (selectedAgents.includes(agentId as AgentId)) {
@@ -78,7 +86,7 @@
                 <span class="slot-name">{agent.name}</span>
                 <span class="slot-role" style="color:{ROLE_COLORS[getRole(agent)]}">{ROLE_LABELS[getRole(agent)]}</span>
               </div>
-              <button class="slot-remove" on:click={() => v2DeselectAgent(agentId)}>✕</button>
+              <button class="slot-remove" onclick={() => v2DeselectAgent(agentId)}>✕</button>
             </div>
           {:else}
             <div class="slot-empty">
@@ -97,7 +105,7 @@
         <div class="weight-row">
           <span class="weight-name">{agent?.icon ?? '?'} {agentId}</span>
           <input type="range" min="10" max="80" value={weights[agentId] ?? 33}
-            on:input={(e) => handleWeightChange(agentId, e)} class="weight-slider" />
+            oninput={(e) => handleWeightChange(agentId, e)} class="weight-slider" />
           <span class="weight-val">{weights[agentId] ?? 33}%</span>
         </div>
       {/each}
@@ -108,7 +116,7 @@
         <div class="spec-btns">
           {#each ['low', 'mid', 'aggro'] as risk}
             <button class="spec-btn" class:active={squadConfig.riskLevel === risk}
-              on:click={() => v2SetSquadConfig({ riskLevel: risk as V2SquadConfig['riskLevel'] })}>{risk.toUpperCase()}</button>
+              onclick={() => v2SetSquadConfig({ riskLevel: risk as V2SquadConfig['riskLevel'] })}>{risk.toUpperCase()}</button>
           {/each}
         </div>
       </div>
@@ -117,7 +125,7 @@
         <div class="spec-btns">
           {#each ['1m', '5m', '15m', '1h'] as tf}
             <button class="spec-btn" class:active={squadConfig.timeframe === tf}
-              on:click={() => v2SetSquadConfig({ timeframe: tf })}>{tf}</button>
+              onclick={() => v2SetSquadConfig({ timeframe: tf })}>{tf}</button>
           {/each}
         </div>
       </div>
@@ -126,7 +134,7 @@
         <div class="spec-btns">
           {#each [1, 2, 5, 10] as lev}
             <button class="spec-btn" class:active={squadConfig.leverage === lev}
-              on:click={() => v2SetSquadConfig({ leverage: lev })}>{lev}x</button>
+              onclick={() => v2SetSquadConfig({ leverage: lev })}>{lev}x</button>
           {/each}
         </div>
       </div>
@@ -135,7 +143,7 @@
         <div class="spec-btns tier-btns">
           {#each (['BRONZE', 'SILVER', 'GOLD', 'DIAMOND', 'MASTER'] as V2Tier[]) as tier}
             <button class="spec-btn tier-btn" class:active={squadConfig.tier === tier}
-              on:click={() => v2SetSquadConfig({ tier })}
+              onclick={() => v2SetSquadConfig({ tier })}
               title={TIER_INFO[tier].desc}>
               {TIER_INFO[tier].icon}
             </button>
@@ -154,7 +162,7 @@
         </div>
       {/if}
 
-      <button class="btn-lock" on:click={handleLockIn}>⚡ LOCK IN ⚡</button>
+      <button class="btn-lock" onclick={handleLockIn}>⚡ LOCK IN ⚡</button>
     {/if}
   </div>
 
@@ -167,9 +175,9 @@
         {@const isSelected = selectedAgents.includes(agent.id as AgentId)}
         {@const isDisabled = selectedAgents.length >= 3 && !isSelected}
         <button class="agent-card" class:selected={isSelected} class:disabled={isDisabled}
-          on:click={() => handleSelect(agent.id)}
-          on:mouseenter={() => hoveredAgent = agent.id}
-          on:mouseleave={() => hoveredAgent = null}>
+          onclick={() => handleSelect(agent.id)}
+          onmouseenter={() => hoveredAgent = agent.id}
+          onmouseleave={() => hoveredAgent = null}>
 
           <div class="ac-header">
             <span class="ac-role" style="background:{ROLE_COLORS[role]}">{ROLE_LABELS[role]}</span>
@@ -287,7 +295,7 @@
   @keyframes fadeIn { from { opacity:0; transform:translateX(-50%) translateY(4px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
   @keyframes pulse { 0%,100% { box-shadow:0 0 0 0 rgba(232,150,125,0); } 50% { box-shadow:0 0 20px 0 rgba(232,150,125,.15); } }
 
-  @media (max-width:900px) {
+  @media (max-width: 1024px) {
     .draft { flex-direction:column; }
     .draft-left { width:100%; min-width:unset; border-right:none; border-bottom:1px solid rgba(240,237,228,.06); }
     .roster-grid { grid-template-columns:repeat(2,1fr); }

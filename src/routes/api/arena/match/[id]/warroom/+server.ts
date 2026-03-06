@@ -65,7 +65,7 @@ export const POST: RequestHandler = async ({ cookies, params, request, getClient
       success: true,
       round: result,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[arena/match/warroom/post]', err);
     return json({ error: 'Failed to generate War Room round' }, { status: 500 });
   }

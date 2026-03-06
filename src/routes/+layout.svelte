@@ -15,8 +15,6 @@
 
   let { children } = $props();
 
-  // Derive isArena from page store (only actual /arena/* pages, not home /)
-  const isArena = derived(page, $p => $p.url.pathname.startsWith('/arena'));
   const isTerminal = derived(page, $p => $p.url.pathname.startsWith('/terminal'));
 
   // Sync currentView store from URL via effect
@@ -108,7 +106,7 @@
           }
           if (Object.keys(mapped).length) {
             updatePriceStore(mapped, 'ws');
-            // gameState.prices는 gameState 내부 auto-sync가 처리
+            // gameState에는 live price를 다시 미러링하지 않는다.
           }
         }, 350);
       }, (fullUpdate) => {
@@ -155,9 +153,7 @@
   <div id="main-content" class:terminal-route={$isTerminal}>
     {@render children()}
   </div>
-  {#if $isArena}
-    <BottomBar />
-  {/if}
+  <BottomBar />
 </div>
 
 <!-- Global Wallet Modal -->
@@ -175,7 +171,7 @@
     flex-direction: column;
     height: 100dvh;
     min-height: 100vh;
-    padding-top: 36px;
+    padding-top: var(--sc-header-h, 44px);
     overflow: hidden;
     position: relative;
   }
@@ -185,11 +181,11 @@
     position: relative;
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1024px) {
     #app {
       height: 100svh;
       min-height: 100svh;
-      padding-top: 72px;
+      padding-top: 76px; /* mobile header (40px) + mobile nav tabs (36px) */
     }
     #main-content {
       overflow: auto;

@@ -9,12 +9,9 @@ import type {
   TrendAnalysis,
   TrendDirection,
 } from './types';
+import { clamp } from '$lib/utils/math';
 
 type Pivot = { index: number; value: number };
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 function isFiniteNum(value: number): boolean {
   return Number.isFinite(value);

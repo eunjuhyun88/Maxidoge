@@ -2,22 +2,23 @@
   import { AGDEFS } from '$lib/data/agents';
   import { agentStats, getWinRate } from '$lib/stores/agentData';
 
-  export let agentId: string = AGDEFS[0].id;
-  export let onClose: () => void = () => {};
+  interface Props {
+    agentId?: string;
+    onClose?: () => void;
+  }
 
-  let stats = $agentStats;
-  $: stats = $agentStats;
-  $: agent = AGDEFS.find(a => a.id === agentId) || AGDEFS[0];
-  $: st = stats[agentId] || { level: 1, xp: 0, xpMax: 100, wins: 0, losses: 0, bestStreak: 0, curStreak: 0, avgConf: 0, bestConf: 0, matches: [], stamps: { win: 0, lose: 0, streak: 0, diamond: 0, crown: 0 } };
-  $: wr = getWinRate(st);
+  let { agentId = AGDEFS[0].id, onClose = () => {} }: Props = $props();
+
+  const agent = $derived(AGDEFS.find(a => a.id === agentId) || AGDEFS[0]);
+  const st = $derived($agentStats[agentId] || { level: 1, xp: 0, xpMax: 100, wins: 0, losses: 0, bestStreak: 0, curStreak: 0, avgConf: 0, bestConf: 0, matches: [], stamps: { win: 0, lose: 0, streak: 0, diamond: 0, crown: 0 } });
+  const wr = $derived(getWinRate(st));
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="modal-overlay" on:click={onClose}>
-  <div class="passport" on:click|stopPropagation>
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<div class="modal-overlay" onclick={onClose} role="presentation">
+  <div class="passport" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
     <div class="pass-header" style="background:{agent.color}">
-      <div class="pass-close" on:click={onClose}>✕</div>
+      <button class="pass-close" onclick={onClose}>✕</button>
       <div class="pass-icon">{agent.icon}</div>
       <div class="pass-name">{agent.name}</div>
       <div class="pass-role">{agent.role}</div>
@@ -131,7 +132,7 @@
   .pass-close {
     position: absolute; top: 8px; right: 12px;
     font-size: 16px; cursor: pointer; color: rgba(255,255,255,.6);
-    transition: color .15s;
+    transition: color .15s; background: none; border: none; padding: 0;
   }
   .pass-close:hover { color: #fff; }
   .pass-icon { font-size: 48px; margin-bottom: 6px; filter: drop-shadow(2px 2px 0 rgba(0,0,0,.3)); }

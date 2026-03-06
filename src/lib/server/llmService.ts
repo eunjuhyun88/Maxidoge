@@ -238,13 +238,20 @@ export async function callLLM(options: LLMCallOptions): Promise<LLMResult> {
     : providers;
 
   let lastError: Error | null = null;
+  const deadline = Date.now() + timeoutMs; // Total budget across all providers
 
   for (const provider of ordered) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 500) break; // Not enough time for another attempt
+
     try {
-      return await PROVIDER_CALL[provider](messages, maxTokens, temperature, timeoutMs);
-    } catch (err: any) {
-      lastError = err;
-      console.warn(`[llmService] ${provider} failed: ${err.message}`);
+      return await PROVIDER_CALL[provider](
+        messages, maxTokens, temperature,
+        Math.min(remaining, timeoutMs),
+      );
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`[llmService] ${provider} failed: ${lastError.message}`);
     }
   }
 

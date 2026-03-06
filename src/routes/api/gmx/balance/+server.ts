@@ -25,7 +25,7 @@ export const GET: RequestHandler = async ({ url, getClientAddress }) => {
   try {
     const balance = await getBalanceInfo(address);
     return json({ ok: true, ...balance });
-  } catch (err: any) {
-    return json({ error: err?.message ?? 'Failed to fetch balance' }, { status: 500 });
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : 'Failed to fetch balance') }, { status: 500 });
   }
 };

@@ -258,6 +258,40 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Overlap check (before work):
   - `git log -n 12` 확인: 최신 커밋은 docs/BE/store 정리, Agent 3 IN_PROGRESS 항목 없음
   - `W-006`, `W-008`은 FE 컴포넌트 범위(`src/components/**`, `src/routes/**`)로 이번 수정(`src/lib/services/**`, `src/lib/stores/**`)과 충돌 없음
+
+## [2026-03-06 21:09:59 +0900] FINISH frontend-phase2-copytrade-idempotency-terminal-shell-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: continue until the current refactor line is actually stable end-to-end
+- What changed:
+  - Added durable copy-trade publish idempotency:
+    - `src/lib/stores/copyTradeStore.ts` now keeps `publishMutationId`
+    - `src/lib/api/tradingApi.ts` carries `clientMutationId`
+    - `src/routes/api/copy-trades/publish/+server.ts` reuses existing canonical outcomes before/inside transaction and after `23505`
+    - `db/migrations/0007_copy_trade_publish_idempotency.sql`
+    - `supabase/migrations/014_copy_trade_publish_idempotency.sql`
+  - Continued terminal shell extraction:
+    - added `src/routes/terminal/terminalTypes.ts`
+    - added `src/components/terminal/TerminalDesktopLayout.svelte`
+    - added `src/components/terminal/TerminalTabletLayout.svelte`
+    - added `src/components/terminal/TerminalMobileLayout.svelte`
+    - `src/routes/terminal/+page.svelte` now acts as orchestration shell instead of holding all layout markup
+  - Moved terminal route shell styling out of route-local `<style>` into:
+    - `src/components/terminal/terminalShell.css`
+    - this restored warning-budget stability after layout extraction
+  - Repaired shared server/API error handling regression:
+    - `src/lib/utils/errorUtils.ts` is now the canonical `unknown error` helper (`getErrorMessage`, `getErrorCode`, `createErrorWithCode`)
+    - server/API files were normalized away from direct `error?.code` / `error?.message` access
+  - Updated project guide:
+    - `frontend/CLAUDE.md`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 39 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=39)
+- Residual risks:
+  - terminal shell is split, but view-model extraction is still pending (`terminalViewModel`, `intelViewModel`)
+  - `ChartPanel.svelte` remains structurally heavy and is still the next major performance split target
+  - remaining warnings are mostly unrelated arena-v2/shared markup cleanup and one IntelPanel a11y item
+- Status: DONE
   - 현재 워크트리의 docs 변경은 기존 로그 갱신 이력이며, 이번 작업은 Agent 3 범위 파일만 수정
 - Changes (actual):
   - `src/lib/services/livePriceSyncService.ts` 신규
@@ -1998,4 +2032,303 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `ALLOW_LEGACY_WORKSPACE` 미설정 상태에서 `frontend-passport` 컨텍스트 guard 실행: BLOCKED (expected)
   - `WARNING_BUDGET=49 npm run check:budget`: PASS (`0 errors, 49 warnings`)
 - Commit / Push: pending at log time
+- Status: DONE
+
+## [2026-03-06 18:12:04 +0900] START frontend-refactor-execution-design-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: 구현 전에 전체 성능/구조/버그/보안/중복 기준을 포함한 리팩토링 설계를 먼저 고정
+- Initial branch: unknown (git metadata unavailable from repo root during analysis)
+- Overlap check:
+  - 기존 `terminal-refactor-master-plan-2026-03-06.md`와 `terminal-uiux-refactor-design-v3-2026-03-06.md`는 terminal 중심
+  - 이번 설계는 terminal 상위 레벨에서 state authority, server authority, security, legacy duplication까지 포함한 frontend 전체 실행 설계로 정의
+
+## [2026-03-06 18:12:04 +0900] FINISH frontend-refactor-execution-design-20260306 (frontend)
+- What changed:
+  - Added canonical execution design doc:
+    - `docs/FRONTEND_REFACTOR_EXECUTION_DESIGN_2026-03-06.md`
+  - Locked implementation order:
+    - Phase 1: state authority repair
+    - Phase 2: domain integrity repair
+    - Phase 3+: terminal/intel/chart split
+- Key decisions:
+  - `priceStore`를 유일한 live price source로 유지하고 `gameState`의 live price mirror를 제거한다.
+  - profile/badge/quick-trade 등은 서버 authoritative로 정리하고 `localStorage`는 cache/offline staging으로 제한한다.
+  - terminal UI 분해보다 먼저 correctness/performance debt를 제거한다.
+  - legacy sibling app copies는 canonical source가 아니며 신규 작업 복제를 금지한다.
+- Validation reference:
+  - `npm run check`: PASS (`0 errors, 35 warnings`)
+  - `npm run build`: PASS
+- Status: DONE
+
+## [2026-03-06 19:08:15 +0900] FINISH frontend-phase1-state-authority-quicktrade-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- What changed:
+  - Removed `priceStore -> gameState.prices` live mirror and left `gameState.prices` as legacy boot fallback only.
+  - Added shared pair-price selectors in `src/lib/utils/price.ts` and switched active consumers to `priceStore`:
+    - `routes/arena/+page.svelte`
+    - `components/arena/ChartPanel.svelte`
+    - `components/arena/HypothesisPanel.svelte`
+    - `components/terminal/BottomPanel.svelte`
+    - `components/terminal/IntelPanel.svelte`
+    - `routes/signals/+page.svelte`
+  - Hardened `quickTradeStore` optimistic/server reconcile:
+    - hydrate now dedupes optimistic local trades against server-open trades by semantic key + time window
+    - server ID replacement now merges rather than duplicating
+    - local-close-before-open-ack path now replays close against server ID after open ack arrives
+- Validation:
+  - `npm run check`: PASS (`0 errors, 38 warnings`)
+  - `npm run build`: PASS
+  - Note: one concurrent `check/build` attempt produced transient `.svelte-kit/output` ENOENT; sequential build passed
+- Residual risks:
+  - Hydration dedupe is best-effort because server API still lacks client mutation IDs
+  - large chunk warning remains in terminal/arena bundles and belongs to next phase
+- Status: DONE
+
+## [2026-03-06 19:16:40 +0900] FINISH frontend-phase2-domain-integrity-plan-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: fix the next refactor plan specifically around profile/badge authority and trade-domain integrity before implementation
+- What changed:
+  - Expanded Phase 2 in `docs/FRONTEND_REFACTOR_EXECUTION_DESIGN_2026-03-06.md`
+  - Locked four concrete workstreams:
+    - `P2-A` profile authority split
+    - `P2-B` tracked signal mutation integrity
+    - `P2-C` copy-trade transaction boundary cleanup
+    - `P2-D` dead persistence cleanup
+- Key findings captured in the plan:
+  - `userProfileStore.ts` computes badges locally and syncs them back to the server
+  - `PATCH /api/profile` accepts client-authored `badges` and `displayTier`
+  - `trackedSignalStore.ts` still uses plain optimistic ID replacement and hydrate merge by raw IDs
+  - `copyTradeStore.ts` still issues dual optimistic mutations without a single mutation envelope
+  - `dbStore.ts` is a legacy persistence layer inconsistent with current server-authoritative direction
+- Runtime code changes: none
+- Status: DONE
+
+## [2026-03-06 19:13:07 +0900] START frontend-phase1-state-authority-followup-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: 설계 이후 실제 Phase 1 구현 계속 진행
+- Scope for this pass:
+  - `gameState.prices` 잔여 소비 경로 제거
+  - terminal의 중복 `hydrateQuickTrades()` 진입점 제거
+  - live price fallback을 `priceStore + bases` 기준으로 정리
+
+## [2026-03-06 19:17:34 +0900] FINISH frontend-phase1-state-authority-followup-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- What changed:
+  - Removed remaining active `gameState.prices` fallback usage from arena consumers and aligned BTC fallback to `priceStore + bases`.
+  - Removed terminal-local `hydrateQuickTrades()` on-mount call so quick-trade hydration enters only through `hydrateDomainStores()` or explicit force refresh.
+  - Renamed community signal price input from ambiguous `prices` to `livePrices` and reused `getPairPrice()` / `getBaseSymbolFromPair()` for pair-aware base price resolution.
+- Validation:
+  - `rg -n "$gameState.prices|state.prices?|state.prices.|gameState.prices|{ prices: $livePrices }" src`: no matches in active `src/`
+  - `npm run check`: PASS (`0 errors, 44 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `gameState.prices` field still exists as legacy boot fallback in store shape and should be removed only with a wider state migration.
+  - large client chunk warning (`836.56 kB`) and terminal server bundle size (`172.44 kB`) remain for the next performance pass.
+- Status: DONE
+
+## [2026-03-06 19:52:08 +0900] FINISH frontend-phase2-domain-integrity-implementation-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: implement Phase 2 so profile/badge/tracked-signal authority is handled by the real SvelteKit backend rather than local cache logic
+- What changed:
+  - Added shared profile authority helpers in `src/lib/profile/profileAuthority.ts` and server projection logic in `src/lib/server/profileProjection.ts`.
+  - Reworked `GET /api/profile` and `GET /api/profile/passport` to hydrate stats, tier, badges, tracked-signal count, and total PnL from `syncUserProfileProjection(user.id)` instead of trusting stale `user_profiles` fields.
+  - Locked `PATCH /api/profile` down to `nickname` and `avatar`; client-authored `displayTier` and `badges` are now rejected as server-managed fields.
+  - Rewrote `src/lib/stores/userProfileStore.ts` so `localStorage` is cache-only:
+    - no client badge minting
+    - no badge sync back to server
+    - optimistic edits remain only for `nickname` and `avatar`
+    - tracked-signal and PnL refresh now converge back through server hydrate
+  - Hardened `src/lib/stores/trackedSignalStore.ts` reconcile semantics:
+    - added `clientMutationId`-based track ACK matching
+    - preserved local conversion state when track ACK arrives late
+    - prevented `convert` and `untrack` from firing against unresolved local-only UUIDs
+    - added fallback server trade open when signal conversion cannot resolve a server signal id
+  - Extended tracked-signal API contract:
+    - `src/lib/api/tradingApi.ts` now carries optional `clientMutationId`
+    - `POST /api/signals/track` echoes `clientMutationId` and refreshes profile projection after insert
+  - Refreshed profile projection after mutations that affect tier/badges/stats:
+    - `src/routes/api/copy-trades/publish/+server.ts`
+    - `src/routes/api/quick-trades/[id]/close/+server.ts`
+    - `src/lib/server/progressionUpdater.ts`
+    - `src/routes/api/progression/+server.ts`
+  - Removed unused legacy persistence file `src/lib/stores/dbStore.ts`.
+- Validation:
+  - `npm run check`: PASS (`0 errors, 39 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - profile projection currently recomputes from transactional tables on request/mutation; if volume rises, this should move to a denormalized stats updater or materialized summary path.
+  - large client chunk warning (`836.56 kB`) still remains and belongs to the next terminal/chart split phase.
+  - existing Svelte warnings in unrelated UI files remain untouched in this pass.
+- Status: DONE
+
+## [2026-03-06 20:19:11 +0900] START frontend-phase2-security-boundary-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: state authority 다음 단계로 profile / quick-trade / polymarket mutation 경계 강화
+- Scope for this pass:
+  - mutating endpoint body parsing을 `readJsonBody` 계열로 통일
+  - profile PATCH의 허용 필드와 rate limit 명시
+  - quick-trade / polymarket에 IP + distributed rate limit 패턴 적용
+
+## [2026-03-06 20:19:11 +0900] FINISH frontend-phase2-security-boundary-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- What changed:
+  - Added shared guarded JSON body reader:
+    - `src/lib/server/requestGuards.ts`
+  - Added mutation-specific limiters:
+    - `src/lib/server/rateLimit.ts`
+  - Hardened `PATCH /api/profile`:
+    - only `nickname`, `avatar` are accepted
+    - oversized / invalid JSON is rejected explicitly
+    - IP + distributed rate limit added
+  - Hardened quick-trade mutations:
+    - `src/routes/api/quick-trades/open/+server.ts`
+    - `src/routes/api/quick-trades/[id]/close/+server.ts`
+    - raw `request.json()` 제거
+    - body size limit + validation + IP/distributed rate limit 추가
+  - Hardened Polymarket order flow:
+    - `src/routes/api/positions/polymarket/prepare/+server.ts`
+    - `src/routes/api/positions/polymarket/submit/+server.ts`
+    - guarded JSON parsing + IP/distributed rate limit 적용
+    - authenticated wallet mismatch를 거부하도록 강화
+- Validation:
+  - `npm run check`: PASS (`0 errors, 39 warnings`)
+  - `npm run build`: PASS
+  - terminal server page output: `168.96 kB`
+- Residual risks:
+  - `profile` projection 계산은 아직 read-path recompute 비중이 커서 트래픽 증가 시 denormalized updater로 옮겨야 한다.
+  - large client chunk warning (`836.56 kB`)은 여전히 남아 있고 다음 terminal/chart split 단계에서 해결해야 한다.
+  - `src/routes/terminal/+page.svelte.bak` 같은 dead copy cleanup은 아직 남아 있다.
+- Status: DONE
+
+## [2026-03-06 20:30:18 +0900] FINISH frontend-phase2-copytrade-canonical-publish-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: continue the next refactor step by making copy-trade publish server-canonical instead of dual optimistic fallback mutations
+- What changed:
+  - Reworked `src/lib/stores/copyTradeStore.ts`:
+    - publish is now a single async mutation path using `publishCopyTradeApi()` as the canonical backend write
+    - removed fallback `openQuickTradeApi()` + `trackSignalApi()` fan-out when publish fails
+    - added `isPublishing` / `publishError` state to lock the modal during submission
+    - added optimistic rollback on publish failure using local `removeQuickTrade()` and `removeTracked()`
+    - success path now reconciles local optimistic IDs against the canonical publish response and refreshes `userProfile`
+  - Updated `src/components/modals/CopyTradeModal.svelte`:
+    - publish button is async and double-submit safe
+    - modal controls are disabled while publish is in flight
+    - inline pending/error status is shown instead of silently failing
+  - Added `removeQuickTrade()` to `src/lib/stores/quickTradeStore.ts` for optimistic rollback.
+  - Normalized `POST /api/copy-trades/publish` response shape in `src/routes/api/copy-trades/publish/+server.ts`:
+    - returns full quick-trade fields (`pnlPercent`, `source`, `note`, `closedAt`, `closePnl`)
+    - returns full tracked-signal fields (`pnlPercent`, `source`, `note`)
+    - keeps copy-trade publish as the single server-authoritative mutation boundary
+  - Added `@ts-expect-error` guards in `src/lib/arena-war/battlePixiRuntime.ts` for intentional Pixi internal ESM subpath imports used only for bundle-size control.
+- Validation:
+  - `npm run check`: PASS (`0 errors, 39 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - copy-trade publish still lacks durable backend idempotency; repeated requests from multiple tabs could still create duplicate runs until a server-side mutation key is persisted.
+  - terminal shell / chart split remains the next structural priority.
+  - existing unrelated Svelte warnings remain untouched in this pass.
+- Status: DONE
+
+## [2026-03-06 21:27:25 +0900] FINISH frontend-phase3-terminal-viewmodel-chart-csp-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue until the terminal/chart/security refactor is materially completed from the current design baseline
+- What changed:
+  - Extracted terminal route pure view-model logic:
+    - `src/components/terminal/terminalViewModel.ts`
+    - moved terminal decision rail state, control-bar prop assembly, shared panel prop assembly, ticker chip classification, offline fallback reply shaping out of `src/routes/terminal/+page.svelte`
+  - Extracted Intel panel pure view-model logic:
+    - `src/components/terminal/intelViewModel.ts`
+    - moved positions/trending/feed/headline/policy-card derived state out of `src/components/terminal/IntelPanel.svelte`
+    - removed unused `latestScan` pass-through from the Intel shared props contract
+    - fixed tablist focusability warning in `IntelPanel.svelte`
+  - Split TradingView embed wiring from chart runtime:
+    - added `src/lib/chart/tradingviewEmbed.ts`
+    - `src/components/arena/ChartPanel.svelte` now delegates iframe URL creation and teardown to the adapter instead of rebuilding that logic inline
+  - Hardened response security policy:
+    - `src/hooks.server.ts` now builds an allowlist-based CSP
+    - production policy explicitly covers Google Fonts, TradingView frame embed, Binance websocket, inline styles, and self-hosted assets
+    - dev policy remains relaxed enough for Vite/HMR
+  - Stabilized terminal scan API parsing:
+    - `src/routes/api/terminal/scan/+server.ts`
+    - extracted the RAG save payload before `fireAndForget()` to avoid parser instability during `svelte-check`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 36 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=36`)
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` is still a large mixed-responsibility component; TradingView embed is isolated now, but overlay/pattern/trade-planner extraction remains.
+  - terminal server bundle is still large (`/terminal` server entry about `220.86 kB`); the next meaningful reduction requires deeper chart/service splitting rather than more prop reshaping.
+  - existing unrelated Svelte warnings remain in arena-v2/shared legacy components and are now the dominant warning budget consumers.
+- Status: DONE
+
+## [2026-03-06 21:49:12 +0900] FINISH frontend-phase4-chart-planner-runes-stabilization-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue the next refactor phase by extracting more ChartPanel core logic and keep validation green until the batch is fully closed
+- What changed:
+  - Extracted chart trade-planning math into `src/lib/chart/chartTradePlanner.ts`:
+    - moved line-entry normalization (`entry/sl/tp/rr`) out of `ChartPanel.svelte`
+    - moved preview -> `TradePlanDraft` shaping out of `ChartPanel.svelte`
+    - moved canonical planned-order calculation out of `chartDrawingEngine.ts`
+    - moved community signal draft shaping (`source/reason/confidence`) out of `ChartPanel.svelte`
+  - Updated chart type contracts in `src/lib/chart/chartTypes.ts`:
+    - added `PlannedTradeOrder`, `LineEntryTradeDraft`, `CommunitySignalDraft`
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - chart component now delegates trade-plan and community-signal calculations to `chartTradePlanner.ts`
+    - removed local duplicate trade math and one-off draft typing
+    - trimmed stale imports while keeping side effects (open trade, GTM, notices) local
+  - Re-aligned terminal Intel contracts after `check:budget` exposed rune/event drift:
+    - `src/components/terminal/IntelPanel.svelte` now uses runes-compatible `$state` for mutable UI data and callback props for `onSendChat`, `onGoToTrade`, `onCollapse`
+    - `src/components/terminal/{TerminalDesktopLayout,TerminalTabletLayout,TerminalMobileLayout}.svelte` now pass callback props instead of invalid `on:` listeners
+    - `src/routes/terminal/+page.svelte` `handleSendChat()` now accepts the plain `{ text }` payload expected by the Intel callback contract
+  - Removed a latent Svelte type error in `src/components/community/OracleLeaderboard.svelte` by converting the period filter to `$derived.by(...)`.
+- Validation:
+  - `npm run check`: PASS (`0 errors, 37 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=37`)
+  - `/terminal` server entry reduced to about `137.47 kB` after this pass (from `220.86 kB` in the prior logged baseline)
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` still owns overlay rendering, pattern range orchestration, and drawing interaction; RF-06 is not fully complete yet.
+  - warning budget is healthy again, but remaining warnings are still concentrated in legacy `arena-v2/shared` components and should be cleaned in a dedicated pass instead of mixed into domain refactors.
+  - `IntelPanel.svelte` is stable again, but it remains a broad orchestration component; a later pass should extract fetch/sync services if further size reduction is required.
+- Status: DONE
+
+## [2026-03-06 22:06:54 +0900] FINISH frontend-phase5-chart-pattern-render-contract-stabilization-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue automatically until the current ChartPanel split batch is stabilized, validated, and documented
+- What changed:
+  - Expanded `src/components/arena/chart/chartPatternEngine.ts` into the canonical pure pattern-scan layer:
+    - added visible-range candle slicing
+    - added pattern signature / snapshot construction
+    - added `detectChartPatternState()` to return both user-facing scan report and overlay state in one pure path
+  - Extended `src/lib/chart/chartTypes.ts` with shared pattern scan contracts:
+    - `PatternScanScope`
+    - `PatternScanReport`
+    - terminal helpers now import the shared types instead of duplicating local equivalents
+  - Extended `src/components/arena/chart/chartDrawingEngine.ts` with persisted drawing rendering:
+    - added `toChartX` to `CoordProvider`
+    - added `drawDrawingItems()` so `ChartPanel.svelte` no longer owns the drawing-item render loop inline
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - delegated pattern detection state transitions to `chartPatternEngine.ts`
+    - delegated persisted drawing rendering to `chartDrawingEngine.ts`
+    - restored the dual contract needed across routes by dispatching component events while still honoring callback props
+    - converted new mutable runes variables (`klineCache`, `drawings`, `drawingCanvas`, `tvContainer`, `ratioTrackEl`, `_tvFallbackTried`) to `$state(...)`
+    - normalized chart interaction a11y suppressions to the Svelte 5 warning names so warning count returned to baseline
+  - Hardened callback propagation across terminal shells:
+    - `src/components/terminal/{TerminalDesktopLayout,TerminalTabletLayout,TerminalMobileLayout}.svelte`
+    - `src/routes/terminal/+page.svelte`
+    - explicit wrapper lambdas now preserve the detail-payload callback contract and prevent event/callback type drift
+- Validation:
+  - `npm run check`: PASS (`0 errors, 37 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=37`)
+  - `/terminal` server entry: `138.36 kB`
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` is smaller and more coherent, but overlay orchestration and interaction state are still concentrated there; RF-06 remains open.
+  - warning budget is back to baseline, but most remaining warnings still come from legacy `arena-v2` and shared components rather than the terminal/chart path.
+  - `npm run build` and `npm run check:budget` should continue to run sequentially; concurrent runs can still contend on `.svelte-kit/output`.
 - Status: DONE

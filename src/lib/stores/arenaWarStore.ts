@@ -223,10 +223,30 @@ export const arenaWarHumanRR = derived(arenaWarStore, $s => {
 
 let _timerInterval: ReturnType<typeof setInterval> | null = null;
 let _battleInterval: ReturnType<typeof setInterval> | null = null;
+let _phaseTimeouts: ReturnType<typeof setTimeout>[] = [];
+let _phaseIntervals: ReturnType<typeof setInterval>[] = [];
+
+/** Track a setTimeout so it can be cleared on phase transition */
+function trackedTimeout(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
+  const t = setTimeout(fn, ms);
+  _phaseTimeouts.push(t);
+  return t;
+}
+
+/** Track a setInterval so it can be cleared on phase transition */
+function trackedInterval(fn: () => void, ms: number): ReturnType<typeof setInterval> {
+  const t = setInterval(fn, ms);
+  _phaseIntervals.push(t);
+  return t;
+}
 
 function clearTimers() {
   if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
   if (_battleInterval) { clearInterval(_battleInterval); _battleInterval = null; }
+  for (const t of _phaseTimeouts) clearTimeout(t);
+  _phaseTimeouts = [];
+  for (const t of _phaseIntervals) clearInterval(t);
+  _phaseIntervals = [];
 }
 
 function startPhaseTimer(seconds: number, onComplete: () => void) {
@@ -286,7 +306,7 @@ export function startMatch(setup?: Partial<ArenaWarSetup>) {
 
   // Animate progress over 4 seconds (faster for prototype)
   let progress = 0;
-  const progressInterval = setInterval(() => {
+  const progressInterval = trackedInterval(() => {
     progress += 5;
     arenaWarStore.update(s => ({ ...s, analyzeProgress: Math.min(100, progress) }));
     if (progress >= 100) {
@@ -295,7 +315,7 @@ export function startMatch(setup?: Partial<ArenaWarSetup>) {
   }, 200);
 
   // After 4 seconds, transition to HUMAN_CALL (with RAG search)
-  setTimeout(async () => {
+  trackedTimeout(async () => {
     clearInterval(progressInterval);
 
     // ── RAG Search (fire-and-forget style — doesn't block phase transition) ──
@@ -369,22 +389,30 @@ export function setHumanDirection(direction: Direction) {
   });
 }
 
+function normalizePriceInput(nextValue: number, previousValue: number): number {
+  if (!Number.isFinite(nextValue)) return previousValue;
+  return Math.max(0, Math.round(nextValue * 100) / 100);
+}
+
 /** Update human confidence */
 export function setHumanConfidence(confidence: number) {
-  arenaWarStore.update(s => ({
-    ...s,
-    humanConfidence: Math.max(0, Math.min(100, confidence)),
-  }));
+  arenaWarStore.update(s => {
+    const safeConfidence = Number.isFinite(confidence) ? confidence : s.humanConfidence;
+    return {
+      ...s,
+      humanConfidence: Math.max(0, Math.min(100, safeConfidence)),
+    };
+  });
 }
 
 /** Update human TP */
 export function setHumanTp(tp: number) {
-  arenaWarStore.update(s => ({ ...s, humanTp: tp }));
+  arenaWarStore.update(s => ({ ...s, humanTp: normalizePriceInput(tp, s.humanTp) }));
 }
 
 /** Update human SL */
 export function setHumanSl(sl: number) {
-  arenaWarStore.update(s => ({ ...s, humanSl: sl }));
+  arenaWarStore.update(s => ({ ...s, humanSl: normalizePriceInput(sl, s.humanSl) }));
 }
 
 /** Toggle reason tag */
@@ -606,7 +634,7 @@ function startBattle() {
     if (hit || isV3Over) {
       if (_battleInterval) clearInterval(_battleInterval);
       _battleInterval = null;
-      setTimeout(finishBattle, 500);
+      trackedTimeout(finishBattle, 500);
     }
   }, 800); // 800ms per tick for prototype (plan: 1500ms)
 }
@@ -707,7 +735,7 @@ function finishBattle() {
 
   // Animate judge score count-up over 3 seconds
   let progress = 0;
-  const judgeInterval = setInterval(() => {
+  const judgeInterval = trackedInterval(() => {
     progress += 4;
     arenaWarStore.update(s => ({
       ...s,
@@ -717,7 +745,7 @@ function finishBattle() {
     if (progress >= 100) {
       clearInterval(judgeInterval);
       // After animation, go to RESULT
-      setTimeout(() => {
+      trackedTimeout(() => {
         showResult(exitPrice, priceChange, actualDirection);
       }, 500);
     }

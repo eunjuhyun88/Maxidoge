@@ -104,8 +104,8 @@ export const GET: RequestHandler = async ({ cookies, url, getClientAddress }) =>
     }));
 
     return json({ ok: true, positions, total: positions.length });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[GMX positions] Error:', err);
-    return json({ error: err?.message ?? 'Failed to fetch positions' }, { status: 500 });
+    return json({ error: (err instanceof Error ? err.message : 'Failed to fetch positions') }, { status: 500 });
   }
 };

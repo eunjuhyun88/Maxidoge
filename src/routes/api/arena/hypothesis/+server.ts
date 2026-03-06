@@ -35,7 +35,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     });
 
     return json({ success: true, prediction: result.prediction, phase: 'BATTLE' });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });
     console.error('[arena/hypothesis/post]', err);
     return json({ error: 'Failed to submit hypothesis' }, { status: 500 });

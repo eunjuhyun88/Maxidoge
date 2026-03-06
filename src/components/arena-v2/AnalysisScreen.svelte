@@ -13,12 +13,15 @@
     type Vote,
   } from '$lib/stores/arenaV2State';
 
-  export let subPhase: V2SubPhase = null;
-  export let findings: Finding[] = [];
-  export let chatMessages: ChatMsg[] = [];
-  export let selectedAgents: AgentId[] = [];
-  export let timer: number = 0;
-  export let speed: number = 3;
+  interface Props {
+    subPhase?: V2SubPhase;
+    findings?: Finding[];
+    chatMessages?: ChatMsg[];
+    selectedAgents?: AgentId[];
+    timer?: number;
+    speed?: number;
+  }
+  let { subPhase = null, findings = [], chatMessages = [], selectedAgents = [], timer = 0, speed = 3 }: Props = $props();
 
   // ── Data sources (beacons on tactical map) ──
   const SOURCES = [
@@ -50,9 +53,9 @@
     source: typeof SOURCES[0] | null;
   }
 
-  let sprites: Sprite[] = [];
-  let confidenceMeter = 50; // 0=BEAR, 100=BULL
-  let councilVerdict = '';
+  let sprites = $state<Sprite[]>([]);
+  let confidenceMeter = $state(50); // 0=BEAR, 100=BULL
+  let councilVerdict = $state('');
   let votes: Vote[] = [];
   let timeouts: ReturnType<typeof setTimeout>[] = [];
   let animFrame: number | null = null;
@@ -60,10 +63,9 @@
   let startTime = 0;
 
   // Phase timing (scaled by speed)
-  $: scoutDuration = (5000 / speed);
-  $: gatherDuration = (5000 / speed);
-  $: councilDuration = (5000 / speed);
-  $: totalDuration = scoutDuration + gatherDuration + councilDuration;
+  const scoutDuration = $derived(5000 / speed);
+  const gatherDuration = $derived(5000 / speed);
+  const councilDuration = $derived(5000 / speed);
 
   function getAgentDef(id: string): AgentDef {
     return AGDEFS.find(a => a.id === id) ?? AGDEFS[0];
@@ -267,10 +269,10 @@
   });
 
   // ── Reactive ──
-  $: subLabel = subPhase === 'SCOUT' ? 'SCOUTING DATA SOURCES' :
+  const subLabel = $derived(subPhase === 'SCOUT' ? 'SCOUTING DATA SOURCES' :
                 subPhase === 'GATHER' ? 'GATHERING INTELLIGENCE' :
-                subPhase === 'COUNCIL' ? 'COUNCIL DELIBERATION' : '';
-  $: confColor = confidenceMeter > 60 ? '#00ff88' : confidenceMeter < 40 ? '#ff2d55' : '#ffaa00';
+                subPhase === 'COUNCIL' ? 'COUNCIL DELIBERATION' : '');
+  const confColor = $derived(confidenceMeter > 60 ? '#00ff88' : confidenceMeter < 40 ? '#ff2d55' : '#ffaa00');
 </script>
 
 <div class="analysis">

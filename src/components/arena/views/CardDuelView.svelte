@@ -1,30 +1,42 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import type { Phase, Hypothesis } from '$lib/stores/gameState';
   import type { BattleTickState, BattlePriceTick } from '$lib/engine/battleResolver';
 
-  export let phase: Phase = 'DRAFT';
-  export let battleTick: BattleTickState | null = null;
-  export let hypothesis: Hypothesis | null = null;
-  export let prices: { BTC: number } = { BTC: 0 };
-  export let battleResult: string | null = null;
-  export let battlePriceHistory: BattlePriceTick[] = [];
-  export let activeAgents: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }> = [];
+  interface Props {
+    phase?: Phase;
+    battleTick?: BattleTickState | null;
+    hypothesis?: Hypothesis | null;
+    prices?: { BTC: number };
+    battleResult?: string | null;
+    battlePriceHistory?: BattlePriceTick[];
+    activeAgents?: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }>;
+    onGoLobby?: () => void;
+    onPlayAgain?: () => void;
+  }
+  let {
+    phase = 'DRAFT',
+    battleTick = null,
+    hypothesis = null,
+    prices = { BTC: 0 },
+    battleResult = null,
+    battlePriceHistory = [],
+    activeAgents = [],
+    onGoLobby = () => {},
+    onPlayAgain = () => {},
+  }: Props = $props();
 
-  const dispatch = createEventDispatcher();
-
-  $: isBattle = phase === 'BATTLE';
-  $: isResult = phase === 'RESULT';
-  $: currentPrice = battleTick?.currentPrice ?? prices.BTC;
-  $: entryPrice = battleTick?.entryPrice ?? hypothesis?.entry ?? 0;
-  $: pnl = battleTick?.pnlPercent ?? 0;
-  $: pnlPositive = pnl >= 0;
-  $: distToTP = battleTick?.distToTP ?? 0;
-  $: distToSL = battleTick?.distToSL ?? 0;
-  $: rr = hypothesis?.rr ?? 0;
-  $: dir = hypothesis?.dir ?? 'NEUTRAL';
-  $: tpPrice = hypothesis?.tp ?? 0;
-  $: slPrice = hypothesis?.sl ?? 0;
+  const isBattle = $derived(phase === 'BATTLE');
+  const isResult = $derived(phase === 'RESULT');
+  const currentPrice = $derived(battleTick?.currentPrice ?? prices.BTC);
+  const entryPrice = $derived(battleTick?.entryPrice ?? hypothesis?.entry ?? 0);
+  const pnl = $derived(battleTick?.pnlPercent ?? 0);
+  const pnlPositive = $derived(pnl >= 0);
+  const distToTP = $derived(battleTick?.distToTP ?? 0);
+  const distToSL = $derived(battleTick?.distToSL ?? 0);
+  const rr = $derived(hypothesis?.rr ?? 0);
+  const dir = $derived(hypothesis?.dir ?? 'NEUTRAL');
+  const tpPrice = $derived(hypothesis?.tp ?? 0);
+  const slPrice = $derived(hypothesis?.sl ?? 0);
 
   // Generate tick cards from price history (relative to previous tick)
   interface TickCard {
@@ -35,7 +47,7 @@
     price: number;
   }
 
-  $: tickCards = (() => {
+  const tickCards = $derived((() => {
     const cards: TickCard[] = [];
     const history = battlePriceHistory;
     // Sample every few ticks to keep max ~20 visible cards
@@ -54,17 +66,17 @@
       });
     }
     return cards.slice(-20);
-  })();
+  })());
 
   // Tally of green vs red
-  $: greenCount = tickCards.filter(c => c.favorable).length;
-  $: redCount = tickCards.filter(c => !c.favorable).length;
+  const greenCount = $derived(tickCards.filter((c: TickCard) => c.favorable).length);
+  const redCount = $derived(tickCards.filter((c: TickCard) => !c.favorable).length);
 
   // Market card pulsing during battle
-  $: marketPulsing = isBattle && battlePriceHistory.length > 0;
+  const marketPulsing = $derived(isBattle && battlePriceHistory.length > 0);
 
   // Sparkline SVG from price history
-  $: sparklinePath = (() => {
+  const sparklinePath = $derived((() => {
     if (battlePriceHistory.length < 2) return '';
     const pts = battlePriceHistory.slice(-80);
     const minP = Math.min(...pts.map(p => p.price));
@@ -77,7 +89,7 @@
       const y = h - ((p.price - minP) / range) * (h - 4) - 2;
       return (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
     }).join(' ');
-  })();
+  })());
 
   function fmtPrice(p: number): string {
     if (!p) return '---';
@@ -184,8 +196,8 @@
             {battleResult === 'tp' ? 'TP HIT' : battleResult === 'sl' ? 'SL HIT' : battleResult === 'timeout_win' ? 'TIME WIN' : 'TIME LOSS'}
           </div>
           <div class="result-actions">
-            <button on:click={() => dispatch('goLobby')}>LOBBY</button>
-            <button class="btn-again" on:click={() => dispatch('playAgain')}>AGAIN</button>
+            <button onclick={() => onGoLobby()}>LOBBY</button>
+            <button class="btn-again" onclick={() => onPlayAgain()}>AGAIN</button>
           </div>
         </div>
       {/if}

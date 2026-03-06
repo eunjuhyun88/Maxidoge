@@ -1,10 +1,17 @@
 import { json } from '@sveltejs/kit';
+import { fireAndForget } from '$lib/server/taskUtils';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { normalizePair, normalizeTradeDir, PAIR_RE, toPositiveNumber } from '$lib/server/apiValidation';
+import { runIpRateLimitGuard } from '$lib/server/authSecurity';
 import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
+import { quickTradeMutationLimiter } from '$lib/server/rateLimit';
 import { saveQuickTradeOpenRAG } from '$lib/server/ragService';
+import { readJsonBodySafely } from '$lib/server/requestGuards';
+import { getErrorMessage } from '$lib/utils/errorUtils';
+
+const QUICK_TRADE_MUTATION_MAX_BYTES = 16 * 1024;
 
 interface QuickTradeRow {
   id: string;
@@ -44,12 +51,29 @@ function mapTrade(row: QuickTradeRow) {
   };
 }
 
-export const POST: RequestHandler = async ({ cookies, request }) => {
+export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
+  const guard = await runIpRateLimitGuard({
+    request,
+    fallbackIp: getClientAddress(),
+    limiter: quickTradeMutationLimiter,
+    scope: 'quick-trades:open',
+    max: 30,
+    tooManyMessage: 'Too many quick trade requests.',
+  });
+  if (!guard.ok) return guard.response;
+
   try {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
-    const body = await request.json();
+    const bodyResult = await readJsonBodySafely<Record<string, unknown>>(request, QUICK_TRADE_MUTATION_MAX_BYTES);
+    if (!bodyResult.ok) return bodyResult.response;
+
+    const body = bodyResult.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return json({ error: 'Invalid request body' }, { status: 400 });
+    }
+
     const pair = normalizePair(body?.pair);
     const dir = normalizeTradeDir(body?.dir);
     const entry = toPositiveNumber(body?.entry, 0);
@@ -62,6 +86,19 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     if (!PAIR_RE.test(pair)) return json({ error: 'Invalid pair format' }, { status: 400 });
     if (!dir) return json({ error: 'dir must be LONG or SHORT' }, { status: 400 });
     if (entry <= 0) return json({ error: 'entry must be greater than 0' }, { status: 400 });
+    if (source.length > 64) return json({ error: 'source must be 64 chars or fewer' }, { status: 400 });
+    if (note.length > 2000) return json({ error: 'note must be 2000 chars or fewer' }, { status: 400 });
+
+    // TP/SL logical bounds validation
+    if (tp != null && tp <= 0) return json({ error: 'tp must be greater than 0' }, { status: 400 });
+    if (sl != null && sl <= 0) return json({ error: 'sl must be greater than 0' }, { status: 400 });
+    if (dir === 'LONG') {
+      if (tp != null && tp <= entry) return json({ error: 'LONG tp must be above entry price' }, { status: 400 });
+      if (sl != null && sl >= entry) return json({ error: 'LONG sl must be below entry price' }, { status: 400 });
+    } else {
+      if (tp != null && tp >= entry) return json({ error: 'SHORT tp must be below entry price' }, { status: 400 });
+      if (sl != null && sl <= entry) return json({ error: 'SHORT sl must be above entry price' }, { status: 400 });
+    }
 
     const result = await query<QuickTradeRow>(
       `
@@ -104,7 +141,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     // chainId: scan 기반이면 scan-{note}, 아니면 trade-{id}
     const chainId = trade.source === 'terminal_scan' && trade.note
       ? `scan-${trade.note}` : `trade-${trade.id}`;
-    saveQuickTradeOpenRAG(user.id, {
+    fireAndForget('trade-open-rag', saveQuickTradeOpenRAG(user.id, {
       tradeId: trade.id,
       pair: trade.pair,
       dir: trade.dir,
@@ -114,14 +151,14 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       sl: trade.sl,
       source: trade.source,
       note: trade.note,
-    }, chainId).catch(() => undefined);
+    }, chainId));
 
     return json({ success: true, trade });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? getErrorMessage(error) : '';
+    if (msg.includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
-    if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });
     console.error('[quick-trades/open] unexpected error:', error);
     return json({ error: 'Failed to open trade' }, { status: 500 });
   }

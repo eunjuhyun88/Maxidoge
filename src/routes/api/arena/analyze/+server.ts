@@ -72,7 +72,7 @@ export const POST: RequestHandler = async ({ cookies, request, fetch: eventFetch
       regime,
       meta: pipelineResult.meta,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });
     console.error('[arena/analyze/post]', err);
     return json({ error: 'Failed to run analysis' }, { status: 500 });

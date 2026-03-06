@@ -1,28 +1,34 @@
 <script lang="ts">
   import type { Phase } from '$lib/stores/gameState';
 
-  export let phase: Phase = 'DRAFT';
-  export let pair = 'BTC/USDT';
-  export let timeframe = '4h';
+  interface Props {
+    phase?: Phase;
+    pair?: string;
+    timeframe?: string;
+  }
 
-  const GUIDE: Record<Phase, { title: string; desc: string; action: string; icon: string }> = {
+  let { phase = 'DRAFT' as Phase, pair = 'BTC/USDT', timeframe = '4h' }: Props = $props();
+
+  const GUIDE = $derived<Record<Phase, { title: string; desc: string; action: string; icon: string }>>({
     DRAFT:      { title: 'BUILD SQUAD',     desc: 'Select your AI agents and configure risk parameters',  action: 'Pick agents',         icon: '⚙' },
     ANALYSIS:   { title: 'SCANNING',        desc: `Agents analyzing ${pair} ${timeframe} chart`,          action: 'Watch agents report',  icon: '◉' },
     HYPOTHESIS: { title: 'YOUR CALL',       desc: 'Set your direction, entry, TP, and SL on the chart',   action: 'Set TP/SL levels',     icon: '◎' },
     BATTLE:     { title: 'MARKET DECIDES',  desc: 'Live price tracking against your TP and SL levels',    action: 'Watch the chart',      icon: '⚡' },
     RESULT:     { title: 'COMPLETE',        desc: 'Review your performance and agent accuracy',           action: 'Review results',       icon: '■' },
-  };
+  });
 
-  $: g = GUIDE[phase] || GUIDE.DRAFT;
+  const g = $derived(GUIDE[phase] || GUIDE.DRAFT);
 
-  let visible = false;
-  let prevPhase = phase;
+  let visible = $state(false);
+  let prevPhase = $state<Phase>(phase);
 
-  $: if (phase !== prevPhase) {
-    prevPhase = phase;
-    visible = true;
-    setTimeout(() => { visible = false; }, 2800);
-  }
+  $effect(() => {
+    if (phase !== prevPhase) {
+      prevPhase = phase;
+      visible = true;
+      setTimeout(() => { visible = false; }, 2800);
+    }
+  });
 </script>
 
 {#if visible}

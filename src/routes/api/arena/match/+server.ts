@@ -20,7 +20,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const result = await createMatch(user.id, { pair, timeframe });
 
     return json({ success: true, ...result });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });
     console.error('[arena/match/post]', err);
     return json({ error: 'Failed to create match' }, { status: 500 });
@@ -38,7 +38,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
     const result = await listMatches(user.id, limit, offset);
 
     return json({ success: true, ...result, pagination: { limit, offset } });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[arena/match/get]', err);
     return json({ error: 'Failed to list matches' }, { status: 500 });
   }

@@ -12,14 +12,17 @@
   } from '$lib/stores/arenaV2State';
   import { searchV2SimilarGames, recallToHint, type V2RAGHint } from '$lib/engine/v2RagBridge';
 
-  export let hypothesis: V2Hypothesis | null = null;
-  export let btcPrice: number = 0;
-  export let timer: number = 0;
-  export let consensusDir: Direction = 'NEUTRAL';
-  export let consensusConf: number = 0;
-  export let findings: Finding[] = [];
-  export let councilVotes: Vote[] = [];
-  export let selectedAgents: AgentId[] = [];
+  interface Props {
+    hypothesis?: V2Hypothesis | null;
+    btcPrice?: number;
+    timer?: number;
+    consensusDir?: Direction;
+    consensusConf?: number;
+    findings?: Finding[];
+    councilVotes?: Vote[];
+    selectedAgents?: AgentId[];
+  }
+  let { hypothesis = null, btcPrice = 0, timer = 0, consensusDir = 'NEUTRAL', consensusConf = 0, findings = [], councilVotes = [], selectedAgents = [] }: Props = $props();
 
   // ── RAG hint ──
   let ragHint: V2RAGHint | null = null;
@@ -53,33 +56,33 @@
   loadRAGHint();
 
   // ── Local state ──
-  let dir: Direction = consensusDir;
-  let conf: number = consensusConf || 70;
-  let tpPct: number = 0.5;
-  let slPct: number = 0.3;
+  let dir = $state<Direction>(consensusDir);
+  let conf = $state(consensusConf || 70);
+  let tpPct = $state(0.5);
+  let slPct = $state(0.3);
 
   // Execute transition
-  let executing = false;
-  let executePhase = -1; // -1=not started, 0-4=phases
+  let executing = $state(false);
+  let executePhase = $state(-1); // -1=not started, 0-4=phases
   let transitionTimeouts: ReturnType<typeof setTimeout>[] = [];
 
   // Agent reactions
-  let agentReactions: Record<string, 'idle' | 'agree' | 'disagree' | 'neutral' | 'panic' | 'happy' | 'windup' | 'dash'> = {};
+  let agentReactions = $state<Record<string, 'idle' | 'agree' | 'disagree' | 'neutral' | 'panic' | 'happy' | 'windup' | 'dash'>>({});
   let reactionTimeouts: Record<string, ReturnType<typeof setTimeout>> = {};
 
   // Initialize from consensus
-  $: if (consensusDir !== 'NEUTRAL' && dir === 'NEUTRAL') dir = consensusDir;
-  $: if (consensusConf > 0 && conf === 70) conf = consensusConf;
+  $effect(() => { if (consensusDir !== 'NEUTRAL' && dir === 'NEUTRAL') dir = consensusDir; });
+  $effect(() => { if (consensusConf > 0 && conf === 70) conf = consensusConf; });
 
-  $: entry = btcPrice;
-  $: tp = dir === 'LONG' ? entry * (1 + tpPct / 100) : entry * (1 - tpPct / 100);
-  $: sl = dir === 'LONG' ? entry * (1 - slPct / 100) : entry * (1 + slPct / 100);
-  $: rr = slPct > 0 ? tpPct / slPct : 0;
-  $: rrColor = rr >= 3 ? '#FFD700' : rr >= 2 ? '#00ff88' : rr >= 1.5 ? '#ffaa00' : '#ff2d55';
-  $: rrLabel = rr >= 3 ? 'EXCELLENT' : rr >= 2 ? 'GOOD' : rr >= 1.5 ? 'FAIR' : 'RISKY';
+  const entry = $derived(btcPrice);
+  const tp = $derived(dir === 'LONG' ? entry * (1 + tpPct / 100) : entry * (1 - tpPct / 100));
+  const sl = $derived(dir === 'LONG' ? entry * (1 - slPct / 100) : entry * (1 + slPct / 100));
+  const rr = $derived(slPct > 0 ? tpPct / slPct : 0);
+  const rrColor = $derived(rr >= 3 ? '#FFD700' : rr >= 2 ? '#00ff88' : rr >= 1.5 ? '#ffaa00' : '#ff2d55');
+  const rrLabel = $derived(rr >= 3 ? 'EXCELLENT' : rr >= 2 ? 'GOOD' : rr >= 1.5 ? 'FAIR' : 'RISKY');
 
   // Screen color tint based on direction
-  $: screenTint = dir === 'LONG' ? 'rgba(0,255,136,.03)' : dir === 'SHORT' ? 'rgba(255,45,85,.03)' : 'transparent';
+  const screenTint = $derived(dir === 'LONG' ? 'rgba(0,255,136,.03)' : dir === 'SHORT' ? 'rgba(255,45,85,.03)' : 'transparent');
 
   // ── Agent helpers ──
   function getAgentDef(id: string): AgentDef {
@@ -120,10 +123,10 @@
   }
 
   // React to direction changes
-  $: updateReactions(dir);
+  $effect(() => { updateReactions(dir); });
 
   // React to TP/SL changes
-  $: {
+  $effect(() => {
     if (slPct < 0.15 && dir !== 'NEUTRAL') {
       selectedAgents.forEach(id => {
         agentReactions = { ...agentReactions, [id]: 'panic' };
@@ -133,7 +136,7 @@
         agentReactions = { ...agentReactions, [id]: 'happy' };
       });
     }
-  }
+  });
 
   // ── Agent speech ──
   function getAgentSpeech(agentId: string): string {
@@ -307,7 +310,7 @@
               class:active={dir === d}
               class:recommended={consensusDir === d && d !== 'NEUTRAL'}
               style="--cmd-color:{color}"
-              on:click={() => dir = d as Direction}>
+              onclick={() => dir = d as Direction}>
               <span class="cmd-icon">{icon}</span>
               <span class="cmd-label">{d}</span>
               {#if consensusDir === d && d !== 'NEUTRAL'}
@@ -366,7 +369,7 @@
       <button class="btn-execute"
         class:disabled={dir === 'NEUTRAL' || btcPrice <= 0 || executing}
         disabled={dir === 'NEUTRAL' || btcPrice <= 0 || executing}
-        on:click={handleExecute}
+        onclick={handleExecute}
         class:long={dir === 'LONG'} class:short={dir === 'SHORT'}>
         {#if btcPrice <= 0}
           ⏳ WAITING FOR PRICE...

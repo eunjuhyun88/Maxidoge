@@ -1,8 +1,7 @@
 <script lang="ts">
   import { p0Override } from '$lib/stores/notificationStore';
 
-  let p0 = $p0Override;
-  $: p0 = $p0Override;
+  const p0 = $derived($p0Override);
 
   function dismiss() {
     p0Override.clear();
@@ -25,7 +24,7 @@
       {#if p0.triggeredAt}
         <span class="p0-time">{formatTime(p0.triggeredAt)}</span>
       {/if}
-      <button class="p0-dismiss" on:click={dismiss}>CLEAR OVERRIDE</button>
+      <button class="p0-dismiss" onclick={dismiss}>CLEAR OVERRIDE</button>
     </div>
   </div>
 {/if}

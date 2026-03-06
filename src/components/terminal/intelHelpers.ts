@@ -88,6 +88,16 @@ export function scoreBreakdownText(scores: PolicyScoresLike): string {
 
 // ─── Number Formatting ────────────────────────────────────────
 
+/** Format USD value with B/M/K shorthand */
+export function fmtUsd(v: number | null): string {
+  if (v == null) return '—';
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
+  return `$${v.toFixed(0)}`;
+}
+
 /** Format trending coin price with appropriate decimals */
 export function fmtTrendPrice(p: number): string {
   if (!Number.isFinite(p)) return '$0';
@@ -128,4 +138,21 @@ export function getTokenAliases(token: string): string[] {
 /** Extract error message from API response payload */
 export function apiErrorMessage(payload: any, fallback: string): string {
   return typeof payload?.error === 'string' && payload.error.trim().length > 0 ? payload.error.trim() : fallback;
+}
+
+// ─── URL Safety ───────────────────────────────────────────────
+
+/**
+ * Allow only absolute http/https URLs for external rendering.
+ * Returns null when value is invalid or uses a non-web protocol.
+ */
+export function safeExternalUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  try {
+    const parsed = new URL(value.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }

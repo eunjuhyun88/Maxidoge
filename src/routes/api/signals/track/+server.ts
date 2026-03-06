@@ -10,6 +10,8 @@ import {
   toPositiveNumber,
 } from '$lib/server/apiValidation';
 import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
+import { syncUserProfileProjection } from '$lib/server/profileProjection';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 interface TrackedSignalRow {
   id: string;
@@ -58,6 +60,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const currentPrice = toPositiveNumber(body?.currentPrice, entryPrice);
     const source = typeof body?.source === 'string' ? body.source.trim() : 'manual';
     const note = typeof body?.note === 'string' ? body.note.trim() : '';
+    const clientMutationId = typeof body?.clientMutationId === 'string' ? body.clientMutationId.trim() : null;
 
     const ttlHours = toBoundedInt(body?.ttlHours, 24, 1, 168);
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
@@ -89,6 +92,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     ).catch(() => undefined);
 
     const signal = mapSignal(result.rows[0]);
+    await syncUserProfileProjection(user.id).catch(() => undefined);
 
     await enqueuePassportEventBestEffort({
       userId: user.id,
@@ -111,9 +115,9 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       },
     });
 
-    return json({ success: true, signal });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+    return json({ success: true, signal: { ...signal, clientMutationId } });
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

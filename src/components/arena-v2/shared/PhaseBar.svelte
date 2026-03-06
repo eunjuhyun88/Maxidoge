@@ -1,10 +1,14 @@
 <script lang="ts">
   import type { V2Phase, V2SubPhase } from '$lib/stores/arenaV2State';
 
-  export let phase: V2Phase = 'LOBBY';
-  export let subPhase: V2SubPhase = null;
-  export let timer: number = 0;
-  export let btcPrice: number = 0;
+  interface Props {
+    phase?: V2Phase;
+    subPhase?: V2SubPhase;
+    timer?: number;
+    btcPrice?: number;
+  }
+
+  let { phase = 'LOBBY' as V2Phase, subPhase = null as V2SubPhase, timer = 0, btcPrice = 0 }: Props = $props();
 
   const PHASES: Array<{ id: V2Phase; label: string; icon: string; color: string }> = [
     { id: 'LOBBY',      label: 'LOBBY',      icon: '⬡', color: '#8b5cf6' },
@@ -15,11 +19,11 @@
     { id: 'RESULT',     label: 'RESULT',     icon: '🏆', color: '#00aa44' },
   ];
 
-  $: currentIdx = PHASES.findIndex(p => p.id === phase);
-  $: currentPhase = PHASES[currentIdx] ?? PHASES[0];
-  $: displayTimer = timer > 0 ? Math.ceil(timer) + 's' : '';
-  $: subLabel = subPhase ? ` · ${subPhase}` : '';
-  $: fmtPrice = btcPrice > 0 ? '$' + btcPrice.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '';
+  const currentIdx = $derived(PHASES.findIndex(p => p.id === phase));
+  const currentPhase = $derived(PHASES[currentIdx] ?? PHASES[0]);
+  const displayTimer = $derived(timer > 0 ? Math.ceil(timer) + 's' : '');
+  const subLabel = $derived(subPhase ? ` · ${subPhase}` : '');
+  const fmtPrice = $derived(btcPrice > 0 ? '$' + btcPrice.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '');
 </script>
 
 <div class="phase-bar">

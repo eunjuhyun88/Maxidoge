@@ -7,25 +7,31 @@
   import type { V2BattleState, TickResult } from '$lib/engine/v2BattleTypes';
   import { AGDEFS } from '$lib/data/agents';
 
-  export let battleState: V2BattleState | null = null;
+  interface Props {
+    battleState?: V2BattleState | null;
+  }
 
-  $: bs = battleState;
-  $: tickN = bs?.tickN ?? 0;
-  $: maxTicks = bs?.maxTicks ?? 24;
-  $: vs = bs?.vsMeter.value ?? 50;
-  $: combo = bs?.combo.count ?? 0;
-  $: agentStates = bs ? Object.values(bs.agentStates) : [];
-  $: currentPrice = bs?.currentPrice ?? 0;
-  $: entryPrice = bs?.config.entryPrice ?? 0;
-  $: direction = bs?.config.direction ?? 'LONG';
-  $: pnl = entryPrice > 0
+  let {
+    battleState = null,
+  }: Props = $props();
+
+  const bs = $derived(battleState);
+  const tickN = $derived(bs?.tickN ?? 0);
+  const maxTicks = $derived(bs?.maxTicks ?? 24);
+  const vs = $derived(bs?.vsMeter.value ?? 50);
+  const combo = $derived(bs?.combo.count ?? 0);
+  const agentStates = $derived(bs ? Object.values(bs.agentStates) : []);
+  const currentPrice = $derived(bs?.currentPrice ?? 0);
+  const entryPrice = $derived(bs?.config.entryPrice ?? 0);
+  const direction = $derived(bs?.config.direction ?? 'LONG');
+  const pnl = $derived(entryPrice > 0
     ? (direction === 'LONG'
       ? ((currentPrice - entryPrice) / entryPrice) * 100
       : ((entryPrice - currentPrice) / entryPrice) * 100)
-    : 0;
+    : 0);
 
   // Card history (last 8 ticks as "played cards")
-  $: cards = (bs?.tickResults ?? []).slice(-8).map(tr => {
+  const cards = $derived((bs?.tickResults ?? []).slice(-8).map(tr => {
     const isFav = tr.classifiedTick.isFavorable;
     const isNeutral = tr.classifiedTick.tickClass === 'NEUTRAL';
     const delta = tr.classifiedTick.deltaPct;
@@ -40,16 +46,16 @@
       isCrit: mainAction?.isCritical ?? false,
       vsChange: tr.vsChange,
     };
-  });
+  }));
 
   // Score: count favorable vs unfavorable ticks
-  $: favCount = (bs?.tickResults ?? []).filter(t => t.classifiedTick.isFavorable).length;
-  $: unfavCount = (bs?.tickResults ?? []).filter(t =>
+  const favCount = $derived((bs?.tickResults ?? []).filter(t => t.classifiedTick.isFavorable).length);
+  const unfavCount = $derived((bs?.tickResults ?? []).filter(t =>
     t.classifiedTick.tickClass === 'UNFAVORABLE' || t.classifiedTick.tickClass === 'STRONG_UNFAVORABLE'
-  ).length;
+  ).length);
 
   // Latest card for flip animation
-  $: latestCard = cards.length > 0 ? cards[cards.length - 1] : null;
+  const latestCard = $derived(cards.length > 0 ? cards[cards.length - 1] : null);
 
   function getAgentImg(agentId: string): string {
     const def = AGDEFS.find(a => a.id === agentId.toLowerCase());

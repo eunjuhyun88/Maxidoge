@@ -7,6 +7,7 @@
   import type { V3BattleState, V3AgentState, HPChange, KOEvent } from '$lib/engine/v3BattleTypes';
   import { getAgentCharacter, getTypeBadge } from '$lib/engine/agentCharacter';
   import type { AgentAnimState } from '$lib/engine/v2BattleTypes';
+  import type * as BattlePixiRuntime from '$lib/arena-war/battlePixiRuntime';
 
   const {
     v3State,
@@ -22,6 +23,7 @@
   let hpBars: Map<string, any> = new Map();
   let damageTexts: any[] = [];
   let pixiLoaded = $state(false);
+  let battlePixiRuntimePromise: Promise<typeof BattlePixiRuntime> | null = null;
 
   // Canvas dimensions
   const WIDTH = 760;
@@ -38,9 +40,16 @@
     vsCenter:    { x: 380, y: 140 },
   };
 
+  function loadBattlePixiRuntime() {
+    if (!battlePixiRuntimePromise) {
+      battlePixiRuntimePromise = import('$lib/arena-war/battlePixiRuntime');
+    }
+    return battlePixiRuntimePromise;
+  }
+
   onMount(async () => {
     try {
-      const PIXI = await import('pixi.js');
+      const PIXI = await loadBattlePixiRuntime();
 
       app = new PIXI.Application();
       await app.init({
@@ -77,7 +86,7 @@
     const _hp = v3State.humanAgents.map(a => a.hp).join(',');
     const _aiHp = v3State.aiAgents.map(a => a.hp).join(',');
 
-    import('pixi.js').then(PIXI => {
+    loadBattlePixiRuntime().then(PIXI => {
       updateBattleScene(PIXI);
     });
   });
@@ -306,7 +315,7 @@
   // Spawn floating damage number
   export function showDamageNumber(agentId: string, side: 'human' | 'ai', value: number, color: string) {
     if (!app) return;
-    import('pixi.js').then(PIXI => {
+    loadBattlePixiRuntime().then(PIXI => {
       const key = `${side}-${agentId}`;
       const sprite = sprites.get(key);
       if (!sprite) return;

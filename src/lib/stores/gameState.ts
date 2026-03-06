@@ -8,7 +8,6 @@ import type { OrpoOutput, CtxBelief, CommanderVerdict, GuardianCheck, FBScore } 
 import type { BattleTickState, BattlePriceTick } from '$lib/engine/battleResolver';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
-import { btcPrice, ethPrice, solPrice } from './priceStore';
 
 export type Phase = 'DRAFT' | 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE' | 'RESULT';
 export type ViewMode = 'arena' | 'terminal' | 'passport';
@@ -105,7 +104,8 @@ export interface GameState {
   // Pending action (from War Room → Arena)
   pendingAction: { dir: Direction; pair: string } | null;
 
-  // Prices (shared between arena + terminal)
+  // Legacy fallback prices.
+  // Live prices come from priceStore; this stays only for boot/default state.
   prices: { BTC: number; ETH: number; SOL: number };
   bases: { BTC: number; ETH: number; SOL: number };
   pair: string;
@@ -201,23 +201,6 @@ function loadState(): GameState {
 
 export const gameState = writable<GameState>(loadState());
 
-// S-03: priceStore → gameState.prices 자동 동기화 (단일 소스)
-// +layout.svelte의 이중 쓰기를 제거하고 여기서 중앙 관리한다.
-if (typeof window !== 'undefined') {
-  derived(
-    [btcPrice, ethPrice, solPrice],
-    ([$btc, $eth, $sol]) => ({ BTC: $btc, ETH: $eth, SOL: $sol })
-  ).subscribe(p => {
-    gameState.update(s => {
-      const nextBtc = p.BTC || s.prices.BTC;
-      const nextEth = p.ETH || s.prices.ETH;
-      const nextSol = p.SOL || s.prices.SOL;
-      if (s.prices.BTC === nextBtc && s.prices.ETH === nextEth && s.prices.SOL === nextSol) return s;
-      return { ...s, prices: { BTC: nextBtc, ETH: nextEth, SOL: nextSol } };
-    });
-  });
-}
-
 // Auto-save persistent fields to localStorage (debounced — prices excluded intentionally)
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 let _lastPersist = '';
@@ -253,10 +236,8 @@ gameState.subscribe(s => {
 export const currentView = derived(gameState, $s => $s.currentView);
 export const isRunning = derived(gameState, $s => $s.running);
 export const currentPhase = derived(gameState, $s => $s.phase);
-export const prices = derived(gameState, $s => $s.prices);
 
 // Helpers
 export function setView(view: ViewMode) {
   gameState.update(s => ({ ...s, currentView: view }));
 }
-

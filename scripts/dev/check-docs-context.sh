@@ -104,6 +104,8 @@ REQUIRED_FILES=(
 	"docs/generated/store-authority-map.md"
 	"docs/generated/api-group-map.md"
 	"docs/references/index.md"
+	"scripts/dev/context-checkpoint.sh"
+	"scripts/dev/check-context-quality.sh"
 )
 
 for dir in "${REQUIRED_DIRS[@]}"; do
@@ -116,7 +118,11 @@ done
 
 require_text "AGENTS.md" "docs/README.md" "task-level docs router"
 require_text "AGENTS.md" "ARCHITECTURE.md" "architecture map"
+require_text "AGENTS.md" "ctx:checkpoint" "semantic checkpoint command"
+require_text "AGENTS.md" "ctx:check -- --strict" "strict context quality command"
 require_text "README.md" "## 1.1) Context Routing" "context routing section"
+require_text "README.md" "ctx:checkpoint" "checkpoint command in readme"
+require_text "README.md" "Context Artifact Model" "context artifact model section"
 require_text "ARCHITECTURE.md" "## Canonical Doc Entry Points" "canonical doc entry section"
 require_text "docs/README.md" "## Canonical Entry Docs" "canonical entry docs"
 require_text "docs/README.md" "## Structured Knowledge Base" "structured knowledge base"
@@ -128,6 +134,7 @@ require_text "docs/FRONTEND.md" "## State Authority" "state authority section"
 require_text "docs/PLANS.md" "## Current Active Planning Surface" "active planning section"
 require_text "docs/PRODUCT_SENSE.md" "## Core Product Heuristics" "product heuristics"
 require_text "docs/QUALITY_SCORE.md" "Scale:" "quality scale"
+require_text "docs/QUALITY_SCORE.md" "Context handoff quality" "context handoff quality row"
 require_text "docs/RELIABILITY.md" "## Reliability Rules" "reliability rules"
 require_text "docs/SECURITY.md" "## Security Non-Negotiables" "security non-negotiables"
 require_text "docs/design-docs/core-beliefs.md" "## Beliefs" "beliefs section"
@@ -138,10 +145,14 @@ require_text "docs/generated/store-authority-map.md" "## Stores" "store authorit
 require_text "docs/generated/api-group-map.md" "## API Group Overview" "api group overview"
 require_text "docs/exec-plans/index.md" "## Active" "active plans section"
 require_text "docs/AGENT_CONTEXT_COMPACTION_PROTOCOL.md" 'Scope: `/Users/ej/Downloads/maxidoge-clones/frontend`' "frontend scope"
+require_text "docs/AGENT_CONTEXT_COMPACTION_PROTOCOL.md" "## 2) Context Architecture" "context architecture section"
+require_text "docs/AGENT_CONTEXT_COMPACTION_PROTOCOL.md" "ctx:checkpoint" "checkpoint command in protocol"
+require_text "docs/AGENT_CONTEXT_COMPACTION_PROTOCOL.md" "brief" "brief mode in protocol"
 require_absent "docs/DESIGN.md" "../STOCKCLAW_UNIFIED_DESIGN.md" "external arena design ref in design entry doc"
 require_absent "docs/product-specs/index.md" "../STOCKCLAW_UNIFIED_DESIGN.md" "external arena design ref in product spec index"
 require_absent "docs/product-specs/arena.md" "../STOCKCLAW_UNIFIED_DESIGN.md" "external arena design ref in arena spec"
 require_absent "docs/PRODUCT_SENSE.md" "../STOCKCLAW_UNIFIED_DESIGN.md" "external arena design ref in product sense"
+require_absent "AGENTS.md" "/Users/ej/Downloads/maxi-doge-unified/README.md" "broken external ssot readme path in agents"
 
 if [ "$FAIL" -ne 0 ]; then
 	echo "[docs:check] failed."

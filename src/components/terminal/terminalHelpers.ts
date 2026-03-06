@@ -4,29 +4,33 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { AGDEFS } from '$lib/data/agents';
+import type { PatternScanReport, PatternScanScope } from '$lib/chart/chartTypes';
 
 // ─── Types ────────────────────────────────────────────────────
 
 export type ChatTradeDirection = 'LONG' | 'SHORT';
+export type { PatternScanReport, PatternScanScope };
 
-export type PatternScanScope = 'visible' | 'full';
+export type MobileTab = 'warroom' | 'chart' | 'intel';
 
-export interface PatternScanReport {
-  ok: boolean;
-  scope: PatternScanScope;
-  candleCount: number;
-  patternCount: number;
-  patterns: Array<{
-    kind: 'head_and_shoulders' | 'falling_wedge';
-    shortName: string;
-    direction: 'BULLISH' | 'BEARISH';
-    status: 'FORMING' | 'CONFIRMED';
-    confidence: number;
-    startTime: number;
-    endTime: number;
-  }>;
-  message: string;
-}
+export const MOBILE_TAB_META: Record<MobileTab, { label: string }> = {
+  warroom: { label: 'War Room' },
+  chart: { label: 'Chart' },
+  intel: { label: 'Intel' },
+};
+
+export const TERMINAL_BREAKPOINTS = {
+  mobile: 768,
+  tablet: 1024,
+} as const;
+
+export const TABLET_SPLIT_LIMITS = {
+  leftMin: 208,
+  leftMax: 380,
+  bottomMin: 220,
+  bottomMax: 380,
+  step: 12,
+} as const;
 
 export type ChatErrorKind = 'network' | 'timeout' | 'llm_unavailable' | 'server_error' | 'unknown';
 
@@ -142,9 +146,42 @@ export function formatPatternChatReply(report: PatternScanReport): string {
 
 // ─── Layout Utilities ─────────────────────────────────────────
 
-/** Clamp a numeric value between min and max */
-export function clampPercent(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+export function getDefaultTabletLeftWidth(viewportWidth?: number): number {
+  if (!Number.isFinite(viewportWidth)) return 232;
+  return Math.round(Math.min(260, Math.max(210, (viewportWidth as number) * 0.26)));
+}
+
+export function getDefaultTabletBottomHeight(viewportHeight?: number): number {
+  if (!Number.isFinite(viewportHeight)) return 260;
+  return Math.round(Math.min(320, Math.max(220, (viewportHeight as number) * 0.32)));
+}
+
+export function clampTabletLeftWidth(next: number, viewportWidth?: number): number {
+  if (!Number.isFinite(viewportWidth)) {
+    return Math.round(Math.min(TABLET_SPLIT_LIMITS.leftMax, Math.max(TABLET_SPLIT_LIMITS.leftMin, next)));
+  }
+  const dynamicMax = Math.min(
+    TABLET_SPLIT_LIMITS.leftMax,
+    Math.max(236, Math.round((viewportWidth as number) * 0.4))
+  );
+  return Math.round(Math.min(dynamicMax, Math.max(TABLET_SPLIT_LIMITS.leftMin, next)));
+}
+
+export function clampTabletBottomHeight(next: number, viewportHeight?: number): number {
+  if (!Number.isFinite(viewportHeight)) {
+    return Math.round(Math.min(TABLET_SPLIT_LIMITS.bottomMax, Math.max(TABLET_SPLIT_LIMITS.bottomMin, next)));
+  }
+  const dynamicMax = Math.min(
+    TABLET_SPLIT_LIMITS.bottomMax,
+    Math.max(232, Math.round((viewportHeight as number) * 0.46))
+  );
+  return Math.round(Math.min(dynamicMax, Math.max(TABLET_SPLIT_LIMITS.bottomMin, next)));
+}
+
+export function wheelAxisDelta(axis: 'x' | 'y', e: WheelEvent): number | null {
+  const rawDelta = axis === 'x' ? (Math.abs(e.deltaX) > 0 ? e.deltaX : e.deltaY) : e.deltaY;
+  if (!Number.isFinite(rawDelta) || rawDelta === 0) return null;
+  return rawDelta;
 }
 
 /** Detect horizontal resize gesture from wheel event */

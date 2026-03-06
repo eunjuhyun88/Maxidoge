@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
-  import { gameState } from '$lib/stores/gameState';
   import { matchHistoryStore } from '$lib/stores/matchHistoryStore';
+  import { livePrices } from '$lib/stores/priceStore';
   import { openTrades } from '$lib/stores/quickTradeStore';
   import { activeSignals, trackSignal } from '$lib/stores/trackedSignalStore';
   import { incrementTrackedSignals } from '$lib/stores/userProfileStore';
@@ -22,14 +22,13 @@
   import ContextBanner from '../../components/shared/ContextBanner.svelte';
   import OracleLeaderboard from '../../components/community/OracleLeaderboard.svelte';
 
-  $: state = $gameState;
-  $: records = $matchHistoryStore.records;
-  $: opens = $openTrades;
-  $: tracked = $activeSignals;
+  const records = $derived($matchHistoryStore.records);
+  const opens = $derived($openTrades);
+  const tracked = $derived($activeSignals);
 
-  let filter: string = 'all';
-  let signalsView: 'community' | 'signals' | 'oracle' = 'community';
-  let communityFilter: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked' = 'all';
+  let filter: string = $state('all');
+  let signalsView: 'community' | 'signals' | 'oracle' = $state<'community' | 'signals' | 'oracle'>('community');
+  let communityFilter: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked' = $state<'all' | 'crypto' | 'arena' | 'trade' | 'tracked'>('all');
   const COMMUNITY_FILTERS: Array<{ key: 'all' | 'crypto' | 'arena' | 'trade' | 'tracked'; label: string }> = [
     { key: 'all', label: 'All' },
     { key: 'crypto', label: 'Crypto' },
@@ -48,20 +47,20 @@
   ];
 
   // Build signals from real data sources
-  $: arenaSignals = buildArenaSignals(records, AGDEFS, state);
-  $: tradeSignals = buildTradeSignals(opens);
-  $: trackedSignals = buildTrackedSignals(tracked, AGDEFS);
-  $: agentSignals = buildAgentSignals(AGDEFS, state);
-  $: allSignals = [...arenaSignals, ...tradeSignals, ...trackedSignals, ...agentSignals];
-  $: filteredSignals = filter === 'all' ? allSignals
+  const arenaSignals = $derived(buildArenaSignals(records, AGDEFS, { livePrices: $livePrices }));
+  const tradeSignals = $derived(buildTradeSignals(opens));
+  const trackedSignals = $derived(buildTrackedSignals(tracked, AGDEFS));
+  const agentSignals = $derived(buildAgentSignals(AGDEFS, { livePrices: $livePrices }));
+  const allSignals = $derived([...arenaSignals, ...tradeSignals, ...trackedSignals, ...agentSignals]);
+  const filteredSignals = $derived(filter === 'all' ? allSignals
     : filter === 'active' ? allSignals.filter(s => s.active)
     : filter === 'arena' ? arenaSignals
     : filter === 'trade' ? tradeSignals
     : filter === 'tracked' ? trackedSignals
-    : allSignals.filter(s => s.priority === filter);
-  $: activeSignalCount = allSignals.filter((s) => s.active).length;
-  $: highConvictionCount = allSignals.filter((s) => s.conf >= 78).length;
-  $: communityIdeas = buildCommunityIdeas(filteredSignals, communityFilter);
+    : allSignals.filter(s => s.priority === filter));
+  const activeSignalCount = $derived(allSignals.filter((s) => s.active).length);
+  const highConvictionCount = $derived(allSignals.filter((s) => s.conf >= 78).length);
+  const communityIdeas = $derived(buildCommunityIdeas(filteredSignals, communityFilter));
 
   function handleTrack(sig: Signal) {
     trackSignal(sig.pair, sig.dir, sig.entry, sig.agent?.name || 'manual', sig.conf);
@@ -154,31 +153,31 @@
   </div>
 
   <div class="view-switch">
-    <button class="vs-btn" class:active={signalsView === 'community'} on:click={() => setSignalsView('community')}>
+    <button class="vs-btn" class:active={signalsView === 'community'} onclick={() => setSignalsView('community')}>
       COMMUNITY HUB
     </button>
-    <button class="vs-btn" class:active={signalsView === 'signals'} on:click={() => setSignalsView('signals')}>
+    <button class="vs-btn" class:active={signalsView === 'signals'} onclick={() => setSignalsView('signals')}>
       SIGNAL LIST
     </button>
-    <button class="vs-btn" class:active={signalsView === 'oracle'} on:click={() => setSignalsView('oracle')}>
+    <button class="vs-btn" class:active={signalsView === 'oracle'} onclick={() => setSignalsView('oracle')}>
       ORACLE
     </button>
   </div>
 
   <div class="hub-summary">
-    <button class="hs-card" on:click={() => setSignalsView('signals')}>
+    <button class="hs-card" onclick={() => setSignalsView('signals')}>
       <span class="hs-label">Total Signals</span>
       <span class="hs-value">{allSignals.length}</span>
     </button>
-    <button class="hs-card" on:click={() => setSignalsView('signals')}>
+    <button class="hs-card" onclick={() => setSignalsView('signals')}>
       <span class="hs-label">High Conviction</span>
       <span class="hs-value">{highConvictionCount}</span>
     </button>
-    <button class="hs-card" on:click={() => setSignalsView('signals')}>
+    <button class="hs-card" onclick={() => setSignalsView('signals')}>
       <span class="hs-label">Open Trades</span>
       <span class="hs-value">{tradeSignals.length}</span>
     </button>
-    <button class="hs-card terminal" on:click={() => goto('/terminal')}>
+    <button class="hs-card terminal" onclick={() => goto('/terminal')}>
       <span class="hs-label">Quick Action</span>
       <span class="hs-value">OPEN TERMINAL →</span>
     </button>
@@ -192,13 +191,13 @@
             <div class="ci-title">Community Ideas</div>
             <div class="ci-sub">Signals + Live activity in one flow</div>
           </div>
-          <button class="ci-explore" on:click={() => setSignalsView('signals')}>
+          <button class="ci-explore" onclick={() => setSignalsView('signals')}>
             Explore {allSignals.length.toLocaleString()}+ Signals →
           </button>
         </div>
         <div class="ci-filters">
           {#each COMMUNITY_FILTERS as item}
-            <button class="ci-chip" class:active={communityFilter === item.key} on:click={() => communityFilter = item.key}>{item.label}</button>
+            <button class="ci-chip" class:active={communityFilter === item.key} onclick={() => communityFilter = item.key}>{item.label}</button>
           {/each}
         </div>
 
@@ -230,8 +229,8 @@
                     </div>
                   </div>
                   <div class="ci-actions">
-                    <button class="ci-track" on:click={() => handleTrack(idea.signal)}>Track</button>
-                    <button class="ci-view" on:click={() => handleTrade(idea.signal)}>View</button>
+                    <button class="ci-track" onclick={() => handleTrack(idea.signal)}>Track</button>
+                    <button class="ci-view" onclick={() => handleTrade(idea.signal)}>View</button>
                   </div>
                 </div>
               </article>
@@ -247,8 +246,8 @@
         </div>
         <LivePanel embedded={true} variant="stream" />
         <div class="cl-actions">
-          <button class="cl-btn signal" on:click={() => setSignalsView('signals')}>📡 Full Signal List</button>
-          <button class="cl-btn arena" on:click={() => goto('/arena')}>⚔️ Jump To Arena</button>
+          <button class="cl-btn signal" onclick={() => setSignalsView('signals')}>📡 Full Signal List</button>
+          <button class="cl-btn arena" onclick={() => goto('/arena')}>⚔️ Jump To Arena</button>
         </div>
       </aside>
     </div>
@@ -256,7 +255,7 @@
   {:else if signalsView === 'signals'}
     <div class="filter-bar">
       {#each SIGNAL_FILTERS as item}
-        <button class="filter-btn" class:active={filter === item.key} on:click={() => filter = item.key}>{item.label}</button>
+        <button class="filter-btn" class:active={filter === item.key} onclick={() => filter = item.key}>{item.label}</button>
       {/each}
     </div>
 
@@ -310,9 +309,9 @@
               {#if sig.active}
                 <div class="sig-actions">
                   {#if sig.source !== 'tracked'}
-                    <button class="sig-btn track" on:click={() => handleTrack(sig)}>📌 TRACK</button>
+                    <button class="sig-btn track" onclick={() => handleTrack(sig)}>📌 TRACK</button>
                   {/if}
-                  <button class="sig-btn copy-trade" on:click={() => handleTrade(sig)}>
+                  <button class="sig-btn copy-trade" onclick={() => handleTrade(sig)}>
                     🚀 COPY TRADE
                   </button>
                 </div>
@@ -900,7 +899,7 @@
   }
   .sig-btn.copy-trade:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 #000; }
 
-  @media (max-width: 1200px) {
+  @media (max-width: 1280px) {
     .hub-summary {
       grid-template-columns: 1fr 1fr;
     }
@@ -916,7 +915,7 @@
     }
   }
 
-  @media (max-width: 820px) {
+  @media (max-width: 768px) {
     .sig-header {
       padding: 16px 14px;
     }

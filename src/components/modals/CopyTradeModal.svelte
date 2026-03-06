@@ -1,19 +1,26 @@
 <script lang="ts">
-  import { copyTradeStore, isCopyTradeOpen, copyTradeStep, copyTradeDraft } from '$lib/stores/copyTradeStore';
-  import { getConsensus } from '$lib/data/warroom';
+  import {
+    copyTradeStore,
+    isCopyTradeOpen,
+    copyTradeStep,
+    copyTradeDraft,
+    copyTradeIsPublishing,
+    copyTradePublishError,
+  } from '$lib/stores/copyTradeStore';
   import { notifySignalTracked } from '$lib/stores/notificationStore';
-  import { derived } from 'svelte/store';
 
-  $: isOpen = $isCopyTradeOpen;
-  $: step = $copyTradeStep;
-  $: draft = $copyTradeDraft;
+  const isOpen = $derived($isCopyTradeOpen);
+  const step = $derived($copyTradeStep);
+  const draft = $derived($copyTradeDraft);
+  const isPublishing = $derived($copyTradeIsPublishing);
+  const publishError = $derived($copyTradePublishError);
 
   // evidence는 이미 draft에 포함되어 있으므로 별도 signal lookup 불필요
-  $: selectedSignals = draft.evidence;
+  const selectedSignals = $derived(draft.evidence);
 
-  $: consensus = selectedSignals.length
-    ? { dir: draft.dir, conf: Math.round(selectedSignals.reduce((a, e) => a + e.conf, 0) / selectedSignals.length), count: { long: 0, short: 0, neutral: 0 } }
-    : { dir: 'NEUTRAL' as const, conf: 0, count: { long: 0, short: 0, neutral: 0 } };
+  const consensus = $derived(selectedSignals.length
+    ? { dir: draft.dir, conf: Math.round(selectedSignals.reduce((a: number, e: { conf: number }) => a + e.conf, 0) / selectedSignals.length), count: { long: 0, short: 0, neutral: 0 } }
+    : { dir: 'NEUTRAL' as const, conf: 0, count: { long: 0, short: 0, neutral: 0 } });
 
   function calcRR(): string {
     if (!draft.sl || !draft.tp[0] || !draft.entry) return '—';
@@ -29,15 +36,15 @@
     return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
   }
 
-  function handlePublish() {
-    const ok = copyTradeStore.publishSignal();
+  async function handlePublish() {
+    const ok = await copyTradeStore.publishSignal();
     if (ok) {
       notifySignalTracked(draft.pair, draft.dir);
     }
   }
 
   function handleOverlayClick(e: MouseEvent) {
-    if ((e.target as HTMLElement).classList.contains('ct-overlay')) {
+    if (!isPublishing && (e.target as HTMLElement).classList.contains('ct-overlay')) {
       copyTradeStore.closeModal();
     }
   }
@@ -47,12 +54,12 @@
 </script>
 
 {#if isOpen}
-  <div class="ct-overlay" on:click={handleOverlayClick} on:keydown={(e) => { if (e.key === 'Escape') copyTradeStore.closeModal(); }} role="dialog" tabindex="-1">
-    <div class="ct-modal">
+  <div class="ct-overlay" onclick={handleOverlayClick} onkeydown={(e) => { if (e.key === 'Escape') copyTradeStore.closeModal(); }} role="dialog" tabindex="-1">
+    <div class="ct-modal" aria-busy={isPublishing}>
       <!-- Header -->
       <div class="ct-header">
         <span class="ct-title">⚡ CREATE COPY TRADE</span>
-        <button class="ct-close" on:click={() => copyTradeStore.closeModal()}>✕</button>
+        <button class="ct-close" onclick={() => copyTradeStore.closeModal()} disabled={isPublishing}>✕</button>
       </div>
 
       <!-- Step Indicator -->
@@ -90,7 +97,7 @@
             <span class="ct-cons-count">({consensus.count.long + consensus.count.short + consensus.count.neutral} agents)</span>
           </div>
 
-          <button class="ct-btn ct-btn-primary" on:click={() => copyTradeStore.nextStep()}>
+          <button class="ct-btn ct-btn-primary" onclick={() => copyTradeStore.nextStep()} disabled={isPublishing}>
             NEXT: CONFIGURE →
           </button>
         </div>
@@ -102,7 +109,7 @@
           <!-- Pair -->
           <div class="ct-field">
             <label class="ct-label" for="ct-pair">PAIR</label>
-            <select id="ct-pair" class="ct-select" bind:value={draft.pair} on:change={(e) => copyTradeStore.updateDraft({ pair: e.currentTarget.value })}>
+            <select id="ct-pair" class="ct-select" bind:value={draft.pair} onchange={(e) => copyTradeStore.updateDraft({ pair: e.currentTarget.value })} disabled={isPublishing}>
               <option value="BTC/USDT">BTC/USDT</option>
               <option value="ETH/USDT">ETH/USDT</option>
               <option value="SOL/USDT">SOL/USDT</option>
@@ -114,9 +121,9 @@
             <span class="ct-label">DIRECTION</span>
             <div class="ct-toggle-row">
               <button class="ct-dir-btn" class:active={draft.dir === 'LONG'} class:long-active={draft.dir === 'LONG'}
-                on:click={() => copyTradeStore.updateDraft({ dir: 'LONG' })}>▲ LONG</button>
+                onclick={() => copyTradeStore.updateDraft({ dir: 'LONG' })} disabled={isPublishing}>▲ LONG</button>
               <button class="ct-dir-btn" class:active={draft.dir === 'SHORT'} class:short-active={draft.dir === 'SHORT'}
-                on:click={() => copyTradeStore.updateDraft({ dir: 'SHORT' })}>▼ SHORT</button>
+                onclick={() => copyTradeStore.updateDraft({ dir: 'SHORT' })} disabled={isPublishing}>▼ SHORT</button>
             </div>
           </div>
 
@@ -125,9 +132,9 @@
             <span class="ct-label">ORDER TYPE</span>
             <div class="ct-toggle-row">
               <button class="ct-type-btn" class:active={draft.orderType === 'market'}
-                on:click={() => copyTradeStore.updateDraft({ orderType: 'market' })}>MARKET</button>
+                onclick={() => copyTradeStore.updateDraft({ orderType: 'market' })} disabled={isPublishing}>MARKET</button>
               <button class="ct-type-btn" class:active={draft.orderType === 'limit'}
-                on:click={() => copyTradeStore.updateDraft({ orderType: 'limit' })}>LIMIT</button>
+                onclick={() => copyTradeStore.updateDraft({ orderType: 'limit' })} disabled={isPublishing}>LIMIT</button>
             </div>
           </div>
 
@@ -135,7 +142,7 @@
           <div class="ct-field">
             <label class="ct-label" for="ct-entry">ENTRY PRICE</label>
             <input id="ct-entry" class="ct-input" type="number" value={draft.entry}
-              on:change={(e) => copyTradeStore.updateDraft({ entry: +e.currentTarget.value })} />
+              onchange={(e) => copyTradeStore.updateDraft({ entry: +e.currentTarget.value })} disabled={isPublishing} />
           </div>
 
           <!-- TP Targets -->
@@ -145,19 +152,19 @@
               <div class="ct-tp-row">
                 <span class="ct-tp-label">TP {i + 1}</span>
                 <input class="ct-input ct-input-sm" type="number" value={tp}
-                  on:change={(e) => {
+                  onchange={(e) => {
                     const newTp = [...draft.tp];
                     newTp[i] = +e.currentTarget.value;
                     copyTradeStore.updateDraft({ tp: newTp });
-                  }} />
+                  }} disabled={isPublishing} />
                 <span class="ct-pct tp">{calcPct(tp)}</span>
                 {#if i > 0}
-                  <button class="ct-remove-tp" on:click={() => copyTradeStore.removeTpTarget(i)}>✕</button>
+                  <button class="ct-remove-tp" onclick={() => copyTradeStore.removeTpTarget(i)} disabled={isPublishing}>✕</button>
                 {/if}
               </div>
             {/each}
             {#if draft.tp.length < 3}
-              <button class="ct-add-tp" on:click={() => copyTradeStore.addTpTarget()}>+ ADD TP TARGET</button>
+              <button class="ct-add-tp" onclick={() => copyTradeStore.addTpTarget()} disabled={isPublishing}>+ ADD TP TARGET</button>
             {/if}
           </div>
 
@@ -167,7 +174,7 @@
             <div class="ct-tp-row">
               <span class="ct-tp-label">SL</span>
               <input class="ct-input ct-input-sm" type="number" value={draft.sl}
-                on:change={(e) => copyTradeStore.updateDraft({ sl: +e.currentTarget.value })} />
+                onchange={(e) => copyTradeStore.updateDraft({ sl: +e.currentTarget.value })} disabled={isPublishing} />
               <span class="ct-pct sl">{calcPct(draft.sl)}</span>
             </div>
           </div>
@@ -178,7 +185,7 @@
             <div class="ct-lev-row">
               {#each leverageOptions as lev}
                 <button class="ct-lev-btn" class:active={draft.leverage === lev}
-                  on:click={() => copyTradeStore.updateDraft({ leverage: lev })}>{lev}x</button>
+                  onclick={() => copyTradeStore.updateDraft({ leverage: lev })} disabled={isPublishing}>{lev}x</button>
               {/each}
             </div>
           </div>
@@ -189,7 +196,7 @@
             <div class="ct-size-row">
               {#each sizeOptions as sz}
                 <button class="ct-size-btn" class:active={draft.sizePercent === sz}
-                  on:click={() => copyTradeStore.updateDraft({ sizePercent: sz })}>{sz}%</button>
+                  onclick={() => copyTradeStore.updateDraft({ sizePercent: sz })} disabled={isPublishing}>{sz}%</button>
               {/each}
             </div>
           </div>
@@ -199,9 +206,9 @@
             <span class="ct-label">MARGIN MODE</span>
             <div class="ct-toggle-row">
               <button class="ct-type-btn" class:active={draft.marginMode === 'isolated'}
-                on:click={() => copyTradeStore.updateDraft({ marginMode: 'isolated' })}>ISOLATED</button>
+                onclick={() => copyTradeStore.updateDraft({ marginMode: 'isolated' })} disabled={isPublishing}>ISOLATED</button>
               <button class="ct-type-btn" class:active={draft.marginMode === 'cross'}
-                on:click={() => copyTradeStore.updateDraft({ marginMode: 'cross' })}>CROSS</button>
+                onclick={() => copyTradeStore.updateDraft({ marginMode: 'cross' })} disabled={isPublishing}>CROSS</button>
             </div>
           </div>
 
@@ -212,8 +219,8 @@
           </div>
 
           <div class="ct-nav-row">
-            <button class="ct-btn ct-btn-back" on:click={() => copyTradeStore.prevStep()}>← BACK</button>
-            <button class="ct-btn ct-btn-primary" on:click={() => copyTradeStore.nextStep()}>NEXT: REVIEW →</button>
+            <button class="ct-btn ct-btn-back" onclick={() => copyTradeStore.prevStep()} disabled={isPublishing}>← BACK</button>
+            <button class="ct-btn ct-btn-primary" onclick={() => copyTradeStore.nextStep()} disabled={isPublishing}>NEXT: REVIEW →</button>
           </div>
         </div>
       {/if}
@@ -261,12 +268,22 @@
             <label class="ct-label" for="ct-notes">NOTES</label>
             <textarea id="ct-notes" class="ct-textarea" placeholder="Add your trade reasoning..."
               value={draft.note}
-              on:input={(e) => copyTradeStore.updateDraft({ note: e.currentTarget.value })}></textarea>
+              oninput={(e) => copyTradeStore.updateDraft({ note: e.currentTarget.value })} disabled={isPublishing}></textarea>
           </div>
 
+          {#if isPublishing}
+            <div class="ct-status">Publishing to backend and reconciling optimistic state...</div>
+          {/if}
+
+          {#if publishError}
+            <div class="ct-status ct-status-error">{publishError}</div>
+          {/if}
+
           <div class="ct-nav-row">
-            <button class="ct-btn ct-btn-back" on:click={() => copyTradeStore.prevStep()}>← BACK</button>
-            <button class="ct-btn ct-btn-publish" on:click={handlePublish}>🚀 PUBLISH SIGNAL</button>
+            <button class="ct-btn ct-btn-back" onclick={() => copyTradeStore.prevStep()} disabled={isPublishing}>← BACK</button>
+            <button class="ct-btn ct-btn-publish" onclick={handlePublish} disabled={isPublishing}>
+              {isPublishing ? 'PUBLISHING...' : '🚀 PUBLISH SIGNAL'}
+            </button>
           </div>
         </div>
       {/if}
@@ -307,6 +324,7 @@
     font-size: 16px; color: #000; background: none; border: none;
     cursor: pointer; font-weight: 900; padding: 0 4px;
   }
+  .ct-close:disabled { opacity: .45; cursor: not-allowed; }
 
   /* Steps */
   .ct-steps {
@@ -332,6 +350,23 @@
   }
   .ct-body::-webkit-scrollbar { width: 3px; }
   .ct-body::-webkit-scrollbar-thumb { background: var(--yel); border-radius: 3px; }
+
+  .ct-status {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(232,150,125,.3);
+    background: rgba(232,150,125,.08);
+    font-family: var(--fm);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    color: var(--yel);
+  }
+  .ct-status-error {
+    border-color: rgba(255,82,82,.38);
+    background: rgba(255,82,82,.1);
+    color: #ff8d8d;
+  }
 
   .ct-section-label {
     font-family: var(--fm); font-size: 8px; font-weight: 900;

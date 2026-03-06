@@ -76,10 +76,32 @@
   - Positions error-empty demo fallback
   - Decision Rail 추가: 상단에 Pair/TF + Consensus + Primary CTA + Density 토글 통합
   - Essential 모드에서 Intel 필터/트렌딩 탭 축소(핵심만 노출)
+  - 모바일 구조 재정렬: 하단 네비 absolute 오버레이 제거, 정상 플로우 배치
+  - 모바일 의사결정 바 재배치: 2행(상태 요약 + 풀폭 CTA)로 정보 과밀 완화
+  - 패널 간격 토큰 통일: desktop/tablet/mobile 공통 spacing 기준 적용
+  - WarRoom 에이전트 요약칩 밀도 개선: 이름 폭 제한 + essential 모드 신뢰도 숨김
+  - TRENDING 근거 텍스트 축약: essential 모드에서 short basis 노출
 - 다음:
   - demo fallback을 “마지막 성공 스냅샷” 우선으로 확장
   - CTA 이벤트를 conversion funnel 대시보드에 연결
   - warning budget 정리(기존 전역 경고 47건)
+
+## 9) 레이아웃 계약 (V3)
+- 공통:
+  - 상단 컨트롤 바는 상태/방향/행동을 한 블록으로 유지
+  - 본문 패널은 `min-height: 0 + 내부 스크롤` 원칙만 사용
+  - 하단 티커는 독립 row로 분리(본문과 스크롤 영역 혼합 금지)
+- 데스크톱:
+  - Row 구조 = `control / main / ticker`
+  - Column 구조 = `warroom / chart / intel` + resizer
+  - 패널 내부 간격은 4px 기준으로 고정
+- 태블릿:
+  - 상단 split + 하단 intel 2층 구조 유지
+  - 상단/하단 row 높이 조절은 split 핸들 기준
+- 모바일:
+  - 구조 = `control / (선택적 context) / content / bottom-nav`
+  - bottom-nav는 문서 플로우 하단 고정(overlay 금지)
+  - content는 nav 높이 계산 의존 없이 단일 스크롤 컨테이너 유지
 
 ## 8) 수용 기준 (Definition of Done)
 - `npm run check` / `npm run build` 통과

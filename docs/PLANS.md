@@ -14,7 +14,7 @@ Purpose:
 ## Current Active Planning Surface
 
 - `docs/exec-plans/index.md`
-- `docs/exec-plans/active/context-system-rollout-2026-03-06.md`
+- `docs/exec-plans/active/context-system-rollout-2026-03-06.md` (now includes checkpoint/brief/handoff rollout)
 - `docs/FRONTEND_REFACTOR_EXECUTION_DESIGN_2026-03-06.md`
 - `docs/terminal-refactor-master-plan-2026-03-06.md`
 

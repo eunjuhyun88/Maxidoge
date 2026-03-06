@@ -2,9 +2,11 @@
 // Server-side match lifecycle management
 
 import { randomUUID } from 'node:crypto';
+import { clamp } from '$lib/utils/math';
 import { query, withTransaction } from '$lib/server/db';
 import { validateDraft } from '$lib/engine/constants';
 import { computeExitStrategy, applyExitToPrediction } from '$lib/engine/exitOptimizer';
+import { getErrorCode, getErrorMessage } from '$lib/utils/errorUtils';
 import type {
   DraftSelection,
   MatchState,
@@ -48,14 +50,10 @@ export interface ResolveMatchInput {
 // ── DB persistence helpers ──
 const TABLE_UNAVAILABLE = new Set(['42P01', '42703', '23503']);
 function isTableError(err: unknown): boolean {
-  const errObj = err as Record<string, unknown> | null | undefined;
-  const code = typeof errObj?.code === 'string' ? errObj.code : '';
-  return TABLE_UNAVAILABLE.has(code) || (typeof errObj?.message === 'string' && (errObj.message as string).includes('DATABASE_URL is not set'));
+  const code = getErrorCode(err) ?? '';
+  return TABLE_UNAVAILABLE.has(code) || getErrorMessage(err).includes('DATABASE_URL is not set');
 }
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
 
 // ── Create Match ──
 export async function createMatch(userId: string, input: CreateMatchInput): Promise<{ matchId: string; state: Partial<MatchState> }> {

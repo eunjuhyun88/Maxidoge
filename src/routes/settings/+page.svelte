@@ -9,32 +9,31 @@
   } from '$lib/utils/timeframe';
   import { fetchPreferencesApi, updatePreferencesApi } from '$lib/api/preferencesApi';
 
-  let state = $gameState;
-  $: state = $gameState;
-  let saving = false;
-  let loadedRemote = false;
+  const gameStateVal = $derived($gameState);
+  let saving = $state(false);
+  let loadedRemote = $state(false);
 
   // Settings
-  let settings = {
-    defaultTF: normalizeTimeframe(state.timeframe),
+  let settings = $state({
+    defaultTF: normalizeTimeframe($gameState.timeframe),
     signals: true,
     sfx: true,
     dataSource: 'binance',
     chartTheme: 'dark',
-    speed: state.speed || 3,
+    speed: $gameState.speed || 3,
     language: 'kr'
-  };
-  $: {
-    const normalized = normalizeTimeframe(state.timeframe);
+  });
+  $effect(() => {
+    const normalized = normalizeTimeframe(gameStateVal.timeframe);
     if (settings.defaultTF !== normalized) {
       settings = { ...settings, defaultTF: normalized };
     }
-  }
+  });
 
   async function persistPreferences(currentSettings = settings) {
     saving = true;
     await updatePreferencesApi({
-      defaultPair: state.pair,
+      defaultPair: gameStateVal.pair,
       defaultTimeframe: normalizeTimeframe(currentSettings.defaultTF),
       battleSpeed: Number(currentSettings.speed || 3),
       signalsEnabled: Boolean(currentSettings.signals),
@@ -121,7 +120,7 @@
           <div class="sr-label">Default Timeframe</div>
           <div class="sr-desc">Set default chart timeframe</div>
         </div>
-        <select class="sr-select" bind:value={settings.defaultTF} on:change={() => updateSetting('defaultTF', settings.defaultTF)}>
+        <select class="sr-select" bind:value={settings.defaultTF} onchange={() => updateSetting('defaultTF', settings.defaultTF)}>
           {#each CORE_TIMEFRAME_OPTIONS as option}
             <option value={option.value}>{formatTimeframeLabel(option.value)}</option>
           {/each}
@@ -133,7 +132,7 @@
           <div class="sr-label">Data Source</div>
           <div class="sr-desc">Real-time market data provider</div>
         </div>
-        <select class="sr-select" bind:value={settings.dataSource} on:change={() => updateSetting('dataSource', settings.dataSource)}>
+        <select class="sr-select" bind:value={settings.dataSource} onchange={() => updateSetting('dataSource', settings.dataSource)}>
           <option value="binance">Binance Futures</option>
           <option value="simulation">Simulation</option>
         </select>
@@ -149,7 +148,7 @@
             <button
               class="speed-btn"
               class:active={settings.speed === s}
-              on:click={() => updateSetting('speed', s)}
+              onclick={() => updateSetting('speed', s)}
             >{s}x</button>
           {/each}
         </div>
@@ -165,7 +164,7 @@
           <div class="sr-label">Chart Theme</div>
           <div class="sr-desc">Chart color scheme</div>
         </div>
-        <select class="sr-select" bind:value={settings.chartTheme} on:change={() => updateSetting('chartTheme', settings.chartTheme)}>
+        <select class="sr-select" bind:value={settings.chartTheme} onchange={() => updateSetting('chartTheme', settings.chartTheme)}>
           <option value="dark">Dark</option>
           <option value="light">Light</option>
         </select>
@@ -176,7 +175,7 @@
           <div class="sr-label">Language</div>
           <div class="sr-desc">Interface language</div>
         </div>
-        <select class="sr-select" bind:value={settings.language} on:change={() => updateSetting('language', settings.language)}>
+        <select class="sr-select" bind:value={settings.language} onchange={() => updateSetting('language', settings.language)}>
           <option value="kr">한국어</option>
           <option value="en">English</option>
         </select>
@@ -196,7 +195,7 @@
           class="toggle-btn"
           class:on={settings.signals}
           aria-label="Toggle signal alerts"
-          on:click={() => { settings.signals = !settings.signals; updateSetting('signals', settings.signals); }}
+          onclick={() => { settings.signals = !settings.signals; updateSetting('signals', settings.signals); }}
         >
           <div class="toggle-dot"></div>
         </button>
@@ -211,7 +210,7 @@
           class="toggle-btn"
           class:on={settings.sfx}
           aria-label="Toggle sound effects"
-          on:click={() => { settings.sfx = !settings.sfx; updateSetting('sfx', settings.sfx); }}
+          onclick={() => { settings.sfx = !settings.sfx; updateSetting('sfx', settings.sfx); }}
         >
           <div class="toggle-dot"></div>
         </button>
@@ -222,11 +221,11 @@
     <div class="settings-section">
       <div class="ss-title">📋 ACCOUNT</div>
       <div class="account-stats">
-        <div class="as-row"><span>Matches Played</span><span class="as-val">{state.matchN}</span></div>
-        <div class="as-row"><span>Total Wins</span><span class="as-val up">{state.wins}</span></div>
-        <div class="as-row"><span>Total Losses</span><span class="as-val dn">{state.losses}</span></div>
-        <div class="as-row"><span>Current LP</span><span class="as-val">{state.lp.toLocaleString()}</span></div>
-        <div class="as-row"><span>Current Streak</span><span class="as-val fire">🔥 {state.streak}</span></div>
+        <div class="as-row"><span>Matches Played</span><span class="as-val">{gameStateVal.matchN}</span></div>
+        <div class="as-row"><span>Total Wins</span><span class="as-val up">{gameStateVal.wins}</span></div>
+        <div class="as-row"><span>Total Losses</span><span class="as-val dn">{gameStateVal.losses}</span></div>
+        <div class="as-row"><span>Current LP</span><span class="as-val">{gameStateVal.lp.toLocaleString()}</span></div>
+        <div class="as-row"><span>Current Streak</span><span class="as-val fire">🔥 {gameStateVal.streak}</span></div>
       </div>
     </div>
 
@@ -238,7 +237,7 @@
           <div class="sr-label">Reset All Data</div>
           <div class="sr-desc">Delete all saved progress and start fresh</div>
         </div>
-        <button class="reset-btn" on:click={resetAllData}>🗑 RESET</button>
+        <button class="reset-btn" onclick={resetAllData}>🗑 RESET</button>
       </div>
     </div>
   </div>

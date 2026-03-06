@@ -28,6 +28,7 @@ export interface ApiTrackedSignal {
   note: string;
   trackedAt: number;
   expiresAt: number;
+  clientMutationId?: string | null;
 }
 
 export interface ApiCopyTradeRun {
@@ -184,6 +185,7 @@ export async function trackSignalApi(payload: {
   source: string;
   note: string;
   ttlHours?: number;
+  clientMutationId?: string;
 }): Promise<ApiTrackedSignal | null> {
   if (!canUseBrowserFetch()) return null;
   try {
@@ -242,6 +244,7 @@ export async function publishCopyTradeApi(payload: {
     source?: string;
   };
   confidence?: number;
+  clientMutationId?: string;
 }): Promise<{ run: ApiCopyTradeRun; trade: ApiQuickTrade; signal: ApiTrackedSignal } | null> {
   if (!canUseBrowserFetch()) return null;
   try {

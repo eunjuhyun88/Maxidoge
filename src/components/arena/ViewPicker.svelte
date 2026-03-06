@@ -1,10 +1,15 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import type { ArenaView } from '$lib/stores/gameState';
 
-  export let current: ArenaView = 'chart';
+  interface Props {
+    current?: ArenaView;
+    onselect?: (view: ArenaView) => void;
+  }
 
-  const dispatch = createEventDispatcher<{ select: ArenaView }>();
+  let {
+    current = 'chart',
+    onselect = () => {},
+  }: Props = $props();
 
   const views: Array<{ id: ArenaView; name: string; icon: string; desc: string }> = [
     { id: 'chart',   name: 'CHART WAR',       icon: '◎', desc: 'Chart is the game board' },
@@ -21,7 +26,7 @@
       <button
         class="vp-card"
         class:active={current === v.id}
-        on:click={() => { dispatch('select', v.id); }}
+        onclick={() => { onselect(v.id); }}
       >
         <span class="vp-icon">{v.icon}</span>
         <span class="vp-name">{v.name}</span>

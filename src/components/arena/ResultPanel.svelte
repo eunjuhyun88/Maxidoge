@@ -2,48 +2,72 @@
   import type { BattlePriceTick } from '$lib/engine/battleResolver';
   import type { FBScore } from '$lib/engine/types';
 
-  export let win = false;
-  export let battleResult: string = '';
-  export let entryPrice = 0;
-  export let exitPrice = 0;
-  export let tpPrice = 0;
-  export let slPrice = 0;
-  export let direction: string = 'LONG';
-  export let priceHistory: BattlePriceTick[] = [];
-  export let duration = 0;      // ms
-  export let maxRunup = 0;
-  export let maxDrawdown = 0;
-  export let rAchieved = 0;
-  export let fbScore: FBScore | null = null;
-  export let lpChange = 0;
-  export let streak = 0;
-  export let agents: Array<{ name: string; icon: string; color: string; dir: string; conf: number }> = [];
-  export let actualDirection: string = '';
-  export let onPlayAgain: () => void = () => {};
-  export let onLobby: () => void = () => {};
+  interface Props {
+    win?: boolean;
+    battleResult?: string;
+    entryPrice?: number;
+    exitPrice?: number;
+    tpPrice?: number;
+    slPrice?: number;
+    direction?: string;
+    priceHistory?: BattlePriceTick[];
+    duration?: number;
+    maxRunup?: number;
+    maxDrawdown?: number;
+    rAchieved?: number;
+    fbScore?: FBScore | null;
+    lpChange?: number;
+    streak?: number;
+    agents?: Array<{ name: string; icon: string; color: string; dir: string; conf: number }>;
+    actualDirection?: string;
+    onPlayAgain?: () => void;
+    onLobby?: () => void;
+  }
+
+  let {
+    win = false,
+    battleResult = '',
+    entryPrice = 0,
+    exitPrice = 0,
+    tpPrice = 0,
+    slPrice = 0,
+    direction = 'LONG',
+    priceHistory = [],
+    duration = 0,
+    maxRunup = 0,
+    maxDrawdown = 0,
+    rAchieved = 0,
+    fbScore = null,
+    lpChange = 0,
+    streak = 0,
+    agents = [],
+    actualDirection = '',
+    onPlayAgain = () => {},
+    onLobby = () => {},
+  }: Props = $props();
 
   // Computed
-  $: pnlAbs = exitPrice - entryPrice;
-  $: pnlPct = entryPrice > 0 ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
-  $: pnlDir = direction === 'SHORT' ? -pnlPct : pnlPct;
-  $: durationStr = duration >= 60000
+  const pnlAbs = $derived(exitPrice - entryPrice);
+  const pnlPct = $derived(entryPrice > 0 ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0);
+  const pnlDir = $derived(direction === 'SHORT' ? -pnlPct : pnlPct);
+  const durationStr = $derived(duration >= 60000
     ? `${Math.floor(duration / 60000)}m ${Math.round((duration % 60000) / 1000)}s`
-    : `${Math.round(duration / 1000)}s`;
+    : `${Math.round(duration / 1000)}s`);
 
-  $: resultTag = battleResult === 'tp' ? 'TP HIT'
+  const resultTag = $derived(battleResult === 'tp' ? 'TP HIT'
     : battleResult === 'sl' ? 'SL HIT'
     : battleResult === 'time_win' ? 'TIMED OUT'
     : battleResult === 'time_loss' ? 'TIMED OUT'
-    : 'COMPLETE';
+    : 'COMPLETE');
 
-  $: narrative = battleResult === 'tp'
+  const narrative = $derived(battleResult === 'tp'
     ? `Price reached your $${Math.round(tpPrice).toLocaleString()} target — $${Math.abs(Math.round(pnlAbs)).toLocaleString()} ${pnlAbs > 0 ? 'above' : 'below'} entry in ${durationStr}`
     : battleResult === 'sl'
     ? `Price hit your $${Math.round(slPrice).toLocaleString()} stop — $${Math.abs(Math.round(pnlAbs)).toLocaleString()} ${pnlAbs > 0 ? 'above' : 'below'} entry in ${durationStr}`
-    : `Time expired at $${Math.round(exitPrice).toLocaleString()} — ${pnlDir >= 0 ? 'profit' : 'loss'} of ${Math.abs(pnlDir).toFixed(2)}%`;
+    : `Time expired at $${Math.round(exitPrice).toLocaleString()} — ${pnlDir >= 0 ? 'profit' : 'loss'} of ${Math.abs(pnlDir).toFixed(2)}%`);
 
   // SVG sparkline
-  $: sparkPoints = (() => {
+  const sparkPoints = $derived((() => {
     if (priceHistory.length < 2) return '';
     const prices = priceHistory.map(p => p.price);
     const min = Math.min(...prices);
@@ -56,25 +80,25 @@
       const y = h - ((p - min) / range) * h;
       return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
-  })();
+  })());
 
-  $: sparkTpY = (() => {
+  const sparkTpY = $derived((() => {
     if (priceHistory.length < 2) return 0;
     const prices = priceHistory.map(p => p.price);
     const min = Math.min(...prices, tpPrice, slPrice);
     const max = Math.max(...prices, tpPrice, slPrice);
     const range = max - min || 1;
     return 60 - ((tpPrice - min) / range) * 60;
-  })();
+  })());
 
-  $: sparkSlY = (() => {
+  const sparkSlY = $derived((() => {
     if (priceHistory.length < 2) return 60;
     const prices = priceHistory.map(p => p.price);
     const min = Math.min(...prices, tpPrice, slPrice);
     const max = Math.max(...prices, tpPrice, slPrice);
     const range = max - min || 1;
     return 60 - ((slPrice - min) / range) * 60;
-  })();
+  })());
 </script>
 
 <div class="rp" class:win class:lose={!win}>
@@ -169,8 +193,8 @@
 
   <!-- 7. ACTION BUTTONS -->
   <div class="rp-actions">
-    <button class="rp-btn primary" on:click={onPlayAgain}>PLAY AGAIN</button>
-    <button class="rp-btn secondary" on:click={onLobby}>LOBBY</button>
+    <button class="rp-btn primary" onclick={onPlayAgain}>PLAY AGAIN</button>
+    <button class="rp-btn secondary" onclick={onLobby}>LOBBY</button>
   </div>
 </div>
 

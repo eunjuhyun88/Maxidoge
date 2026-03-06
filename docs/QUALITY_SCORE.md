@@ -12,8 +12,9 @@ Scale:
 
 | Area | Grade | Why | Next upgrade |
 | --- | --- | --- | --- |
-| Context routing | B+ | Canonical entry docs now exist, but some deep authority still lives outside git root. | Localize remaining external design authority. |
-| Docs structure | B | New hierarchy exists, but older dated docs still dominate some workflows. | Promote more stable rules into canonical docs. |
+| Context routing | A- | Canonical entry docs and local context protocol now form a small-map resume path. | Localize remaining external design authority. |
+| Context handoff quality | B | Checkpoint + brief + handoff flow now exists, but adoption still depends on agent discipline. | Keep `ctx:check -- --strict` enforced and reduce degraded fallback usage. |
+| Docs structure | B+ | New hierarchy exists and canonical entry docs are stronger, but older dated docs still dominate some workflows. | Promote more stable rules into canonical docs. |
 | Terminal architecture | C+ | Refactor direction exists, but god-shell and large intel surface remain. | Continue route/view-model/presentation split. |
 | Arena product clarity | B- | Deep semantics are rich, but split across upstream design and local docs. | Consolidate Arena authority into repo-local specs. |
 | Profile/server authority | C | Known client-authority leakage exists in badges/profile-related flows. | Complete authority repair phases. |

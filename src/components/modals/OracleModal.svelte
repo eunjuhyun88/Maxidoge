@@ -2,15 +2,12 @@
   import { AGDEFS } from '$lib/data/agents';
   import { agentStats, getWinRate } from '$lib/stores/agentData';
 
-  export let onClose: () => void = () => {};
+  let { onClose = () => {} }: { onClose?: () => void } = $props();
 
-  let stats = $agentStats;
-  $: stats = $agentStats;
+  let activeTab = $state('leaderboard');
 
-  let activeTab = 'leaderboard';
-
-  $: leaderboard = AGDEFS.map(ag => {
-    const st = stats[ag.id];
+  const leaderboard = $derived(AGDEFS.map(ag => {
+    const st = $agentStats[ag.id];
     return {
       ...ag,
       level: st?.level || 1,
@@ -19,22 +16,21 @@
       winRate: st ? getWinRate(st) : 0,
       streak: st?.bestStreak || 0,
     };
-  }).sort((a, b) => b.wins - a.wins);
+  }).sort((a, b) => b.wins - a.wins));
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="modal-overlay" on:click={onClose}>
-  <div class="oracle-panel" on:click|stopPropagation>
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<div class="modal-overlay" onclick={onClose} role="presentation">
+  <div class="oracle-panel" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
     <div class="oh">
       <span class="ohi">🏆</span>
       <span class="oht">ORACLE / LEADERBOARD</span>
-      <div class="ohc" on:click={onClose}>✕</div>
+      <button class="ohc" onclick={onClose}>✕</button>
     </div>
 
     <div class="otabs">
-      <button class="otab" class:active={activeTab === 'leaderboard'} on:click={() => activeTab = 'leaderboard'}>LEADERBOARD</button>
-      <button class="otab" class:active={activeTab === 'history'} on:click={() => activeTab = 'history'}>HISTORY</button>
+      <button class="otab" class:active={activeTab === 'leaderboard'} onclick={() => activeTab = 'leaderboard'}>LEADERBOARD</button>
+      <button class="otab" class:active={activeTab === 'history'} onclick={() => activeTab = 'history'}>HISTORY</button>
     </div>
 
     <div class="ob">
@@ -91,7 +87,7 @@
   }
   .ohi { font-size: 18px; }
   .oht { font-size: 12px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; }
-  .ohc { margin-left: auto; font-size: 16px; cursor: pointer; }
+  .ohc { margin-left: auto; font-size: 16px; cursor: pointer; background: none; border: none; color: inherit; padding: 0; }
 
   .otabs {
     display: flex; border-bottom: 2px solid rgba(255,255,255,.05);

@@ -12,29 +12,43 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { runIpRateLimitGuard } from '$lib/server/authSecurity';
+import { UUID_RE } from '$lib/server/apiValidation';
 import { query } from '$lib/server/db';
 import { submitSignedOrder, type L2Credentials } from '$lib/server/polymarketClob';
 import { polymarketOrderLimiter } from '$lib/server/rateLimit';
+import { readJsonBodySafely } from '$lib/server/requestGuards';
 import { decryptSecret } from '$lib/server/secretCrypto';
 
 const EIP712_SIG_RE = /^0x[0-9a-f]{130,}$/i;
+const POLYMARKET_MUTATION_MAX_BYTES = 16 * 1024;
 
 export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
-  const ip = getClientAddress();
-  if (!polymarketOrderLimiter.check(ip)) {
-    return json({ error: 'Too many requests. Please wait.' }, { status: 429 });
-  }
+  const guard = await runIpRateLimitGuard({
+    request,
+    fallbackIp: getClientAddress(),
+    limiter: polymarketOrderLimiter,
+    scope: 'polymarket:submit',
+    max: 10,
+    tooManyMessage: 'Too many requests. Please wait.',
+  });
+  if (!guard.ok) return guard.response;
 
   try {
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
-    const body = await request.json().catch(() => null);
-    if (!body) return json({ error: 'Invalid request body' }, { status: 400 });
+    const bodyResult = await readJsonBodySafely<Record<string, unknown>>(request, POLYMARKET_MUTATION_MAX_BYTES);
+    if (!bodyResult.ok) return bodyResult.response;
+
+    const body = bodyResult.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return json({ error: 'Invalid request body' }, { status: 400 });
+    }
 
     const { positionId, signature } = body;
 
-    if (typeof positionId !== 'string' || !positionId) {
+    if (typeof positionId !== 'string' || !UUID_RE.test(positionId)) {
       return json({ error: 'positionId is required' }, { status: 400 });
     }
     if (typeof signature !== 'string' || !EIP712_SIG_RE.test(signature)) {
@@ -50,6 +64,9 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
     const pos = posResult.rows[0];
     if (!pos) {
       return json({ error: 'Position not found or already submitted' }, { status: 404 });
+    }
+    if (user.wallet_address && typeof pos.wallet_address === 'string' && pos.wallet_address.toLowerCase() !== user.wallet_address.toLowerCase()) {
+      return json({ error: 'Position wallet does not match the authenticated wallet' }, { status: 403 });
     }
 
     // Check expiration (position should be submitted within 5 minutes of creation)

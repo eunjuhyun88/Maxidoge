@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived, get } from 'svelte/store';
+import { calcPnlPercent } from '$lib/utils/pnl';
 import { STORAGE_KEYS } from './storageKeys';
 import {
   closeQuickTradeApi,
@@ -43,6 +44,7 @@ interface QuickTradeState {
 const STORAGE_KEY = STORAGE_KEYS.quickTrades;
 const MAX_TRADES = 200;
 const PRICE_SYNC_DEBOUNCE_MS = 1200;
+const QUICK_TRADE_RECONCILE_WINDOW_MS = 45_000;
 let _quickTradesHydrated = false;
 let _quickTradesHydratePromise: Promise<void> | null = null;
 
@@ -108,12 +110,99 @@ function mapApiQuickTrade(row: ApiQuickTrade): QuickTrade {
   };
 }
 
-function mergeServerAndLocalTrades(serverTrades: QuickTrade[], localTrades: QuickTrade[]): QuickTrade[] {
-  const serverIds = new Set(serverTrades.map((t) => t.id));
-  const unsyncedLocal = localTrades.filter((t) => !serverIds.has(t.id));
-  return [...serverTrades, ...unsyncedLocal]
+function sortAndClampTrades(trades: QuickTrade[]): QuickTrade[] {
+  return [...trades]
     .sort((a, b) => b.openedAt - a.openedAt)
     .slice(0, MAX_TRADES);
+}
+
+function normalizeTradeText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function normalizeTradeNumber(value: number | null): string {
+  if (value == null) return 'null';
+  return Number(value).toFixed(8);
+}
+
+function buildQuickTradeReconcileKey(trade: Pick<QuickTrade, 'pair' | 'dir' | 'entry' | 'tp' | 'sl' | 'status' | 'source' | 'note'>): string {
+  return [
+    trade.pair.toUpperCase(),
+    trade.dir,
+    normalizeTradeNumber(trade.entry),
+    normalizeTradeNumber(trade.tp),
+    normalizeTradeNumber(trade.sl),
+    trade.status,
+    normalizeTradeText(trade.source),
+    normalizeTradeText(trade.note),
+  ].join('|');
+}
+
+function isHydrationDuplicate(serverTrade: QuickTrade, localTrade: QuickTrade): boolean {
+  if (localTrade.status !== 'open' || serverTrade.status !== 'open') return false;
+  if (buildQuickTradeReconcileKey(serverTrade) !== buildQuickTradeReconcileKey(localTrade)) return false;
+  return Math.abs(serverTrade.openedAt - localTrade.openedAt) <= QUICK_TRADE_RECONCILE_WINDOW_MS;
+}
+
+function mergeServerAndLocalTrades(serverTrades: QuickTrade[], localTrades: QuickTrade[]): QuickTrade[] {
+  const serverIds = new Set(serverTrades.map((t) => t.id));
+  const matchedLocalIds = new Set<string>();
+
+  for (const serverTrade of serverTrades) {
+    const matchedLocal = localTrades.find((localTrade) => {
+      if (matchedLocalIds.has(localTrade.id)) return false;
+      if (serverIds.has(localTrade.id)) return false;
+      return isHydrationDuplicate(serverTrade, localTrade);
+    });
+    if (matchedLocal) matchedLocalIds.add(matchedLocal.id);
+  }
+
+  const unsyncedLocal = localTrades.filter((t) => !serverIds.has(t.id) && !matchedLocalIds.has(t.id));
+  return sortAndClampTrades([...serverTrades, ...unsyncedLocal]);
+}
+
+function mergeServerTradeIntoList(
+  trades: QuickTrade[],
+  serverTrade: QuickTrade,
+  options: { localId?: string; patch?: Partial<QuickTrade> } = {}
+): QuickTrade[] {
+  const localTrade = options.localId ? trades.find((trade) => trade.id === options.localId) : null;
+  const existingServerTrade = trades.find((trade) => trade.id === serverTrade.id);
+
+  const mergedTrade: QuickTrade = {
+    ...(existingServerTrade ?? {}),
+    ...(localTrade ?? {}),
+    ...serverTrade,
+    ...(options.patch ?? {}),
+    id: serverTrade.id,
+  } as QuickTrade;
+
+  return sortAndClampTrades(
+    [
+      mergedTrade,
+      ...trades.filter((trade) => trade.id !== serverTrade.id && trade.id !== options.localId),
+    ]
+  );
+}
+
+function replaceTradeIdInList(trades: QuickTrade[], localId: string, nextId: string, patch: Partial<QuickTrade> = {}): QuickTrade[] {
+  const localTrade = trades.find((trade) => trade.id === localId);
+  const existingNextTrade = trades.find((trade) => trade.id === nextId);
+  if (!localTrade && !existingNextTrade) return trades;
+
+  const mergedTrade: QuickTrade = {
+    ...(existingNextTrade ?? {}),
+    ...(localTrade ?? {}),
+    ...patch,
+    id: nextId,
+  } as QuickTrade;
+
+  return sortAndClampTrades(
+    [
+      mergedTrade,
+      ...trades.filter((trade) => trade.id !== localId && trade.id !== nextId),
+    ]
+  );
 }
 
 export async function hydrateQuickTrades(force = false): Promise<void> {
@@ -143,10 +232,40 @@ export async function hydrateQuickTrades(force = false): Promise<void> {
 // ═══ Actions ═══
 
 export function replaceQuickTradeId(localId: string, nextId: string, patch: Partial<QuickTrade> = {}) {
-  quickTradeStore.update(s => ({
+  quickTradeStore.update((s) => ({
     ...s,
-    trades: s.trades.map(t => (t.id === localId ? { ...t, id: nextId, ...patch } : t))
+    trades: replaceTradeIdInList(s.trades, localId, nextId, patch),
   }));
+}
+
+export function removeQuickTrade(tradeId: string) {
+  quickTradeStore.update((s) => ({
+    ...s,
+    trades: s.trades.filter((trade) => trade.id !== tradeId),
+  }));
+}
+
+/**
+ * Validate TP/SL bounds relative to entry price and direction.
+ * Returns error message string, or null if valid.
+ */
+export function validateTpSl(
+  dir: TradeDirection,
+  entry: number,
+  tp: number | null,
+  sl: number | null
+): string | null {
+  if (entry <= 0) return 'entry must be positive';
+  if (tp != null && tp <= 0) return 'tp must be positive';
+  if (sl != null && sl <= 0) return 'sl must be positive';
+  if (dir === 'LONG') {
+    if (tp != null && tp <= entry) return 'LONG tp must be above entry';
+    if (sl != null && sl >= entry) return 'LONG sl must be below entry';
+  } else {
+    if (tp != null && tp >= entry) return 'SHORT tp must be below entry';
+    if (sl != null && sl <= entry) return 'SHORT sl must be above entry';
+  }
+  return null;
 }
 
 export function openQuickTrade(
@@ -159,6 +278,13 @@ export function openQuickTrade(
   note: string = '',
   sync: boolean = true
 ) {
+  // Validate TP/SL bounds before opening trade
+  const tpSlError = validateTpSl(dir, entry, tp, sl);
+  if (tpSlError) {
+    console.warn(`[quickTradeStore] Invalid TP/SL: ${tpSlError}`);
+    return null;
+  }
+
   const localId = crypto.randomUUID();
   const trade: QuickTrade = {
     id: localId,
@@ -195,12 +321,39 @@ export function openQuickTrade(
       note: trade.note,
     }).then((serverTrade) => {
       if (!serverTrade || !serverTrade.id) return;
+      const mappedServerTrade = mapApiQuickTrade(serverTrade);
+      const localTrade = get(quickTradeStore).trades.find((t) => t.id === localId);
+      const closedLocally = Boolean(localTrade && localTrade.status !== 'open');
+
       replaceQuickTradeId(localId, serverTrade.id, {
-        currentPrice: serverTrade.currentPrice,
-        pnlPercent: serverTrade.pnlPercent,
-        status: serverTrade.status,
-        openedAt: serverTrade.openedAt,
+        pair: mappedServerTrade.pair,
+        dir: mappedServerTrade.dir,
+        entry: mappedServerTrade.entry,
+        tp: mappedServerTrade.tp,
+        sl: mappedServerTrade.sl,
+        source: mappedServerTrade.source,
+        note: mappedServerTrade.note,
+        openedAt: mappedServerTrade.openedAt,
+        currentPrice: closedLocally ? (localTrade?.currentPrice ?? mappedServerTrade.currentPrice) : mappedServerTrade.currentPrice,
+        pnlPercent: closedLocally ? (localTrade?.pnlPercent ?? mappedServerTrade.pnlPercent) : mappedServerTrade.pnlPercent,
+        status: closedLocally ? (localTrade?.status ?? mappedServerTrade.status) : mappedServerTrade.status,
+        closedAt: closedLocally ? (localTrade?.closedAt ?? null) : mappedServerTrade.closedAt,
+        closePnl: closedLocally ? (localTrade?.closePnl ?? null) : mappedServerTrade.closePnl,
       });
+
+      if (closedLocally && localTrade) {
+        const finalStatus = localTrade.status === 'stopped' ? 'stopped' : 'closed';
+        void closeQuickTradeApi(serverTrade.id, {
+          closePrice: localTrade.currentPrice,
+          status: finalStatus,
+        }).then((closedServerTrade) => {
+          if (!closedServerTrade) return;
+          quickTradeStore.update((s) => ({
+            ...s,
+            trades: mergeServerTradeIntoList(s.trades, mapApiQuickTrade(closedServerTrade), { localId }),
+          }));
+        });
+      }
     });
   }
 
@@ -212,9 +365,7 @@ export function closeQuickTrade(tradeId: string, exitPrice: number) {
     ...s,
     trades: s.trades.map(t => {
       if (t.id !== tradeId || t.status !== 'open') return t;
-      const pnl = t.dir === 'LONG'
-        ? +((exitPrice - t.entry) / t.entry * 100).toFixed(2)
-        : +((t.entry - exitPrice) / t.entry * 100).toFixed(2);
+      const pnl = calcPnlPercent(t.dir, t.entry, exitPrice);
       return {
         ...t,
         status: 'closed' as TradeStatus,
@@ -231,18 +382,7 @@ export function closeQuickTrade(tradeId: string, exitPrice: number) {
       if (!serverTrade) return;
       quickTradeStore.update(s => ({
         ...s,
-        trades: s.trades.map(t => {
-          if (t.id !== tradeId && t.id !== serverTrade.id) return t;
-          return {
-            ...t,
-            id: serverTrade.id,
-            currentPrice: serverTrade.currentPrice,
-            pnlPercent: serverTrade.pnlPercent,
-            status: serverTrade.status,
-            closedAt: serverTrade.closedAt,
-            closePnl: serverTrade.closePnl,
-          };
-        }),
+        trades: mergeServerTradeIntoList(s.trades, mapApiQuickTrade(serverTrade), { localId: tradeId }),
       }));
     });
   }
@@ -253,9 +393,7 @@ export function updateTradePrice(tradeId: string, currentPrice: number) {
     ...s,
     trades: s.trades.map(t => {
       if (t.id !== tradeId || t.status !== 'open') return t;
-      const pnl = t.dir === 'LONG'
-        ? +((currentPrice - t.entry) / t.entry * 100).toFixed(2)
-        : +((t.entry - currentPrice) / t.entry * 100).toFixed(2);
+      const pnl = calcPnlPercent(t.dir, t.entry, currentPrice);
       return { ...t, currentPrice, pnlPercent: pnl };
     })
   }));
@@ -294,9 +432,7 @@ export function updateAllPrices(
       const price = prices[token];
       if (!price || price === t.currentPrice) return t;
       changed = true;
-      const pnl = t.dir === 'LONG'
-        ? +((price - t.entry) / t.entry * 100).toFixed(2)
-        : +((t.entry - price) / t.entry * 100).toFixed(2);
+      const pnl = calcPnlPercent(t.dir, t.entry, price);
       return { ...t, currentPrice: price, pnlPercent: pnl };
     });
 
@@ -338,6 +474,6 @@ export function clearClosedTrades() {
   }));
 }
 
-// 모듈 import 시 자동 hydration 제거 — terminal 페이지 onMount에서 호출하도록 변경
-// 모든 페이지에서 불필요한 API 호출 방지
+// 모듈 import 시 자동 hydration 제거.
+// 진입점은 hydrateDomainStores() 또는 명시적 force refresh로 제한한다.
 // if (typeof window !== 'undefined') { void hydrateQuickTrades(); }

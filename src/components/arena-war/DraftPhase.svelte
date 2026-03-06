@@ -607,7 +607,7 @@
     50% { opacity: 0.6; }
   }
 
-  @media (max-width: 400px) {
+  @media (max-width: 480px) {
     .agent-grid { grid-template-columns: repeat(3, 1fr); }
   }
 </style>

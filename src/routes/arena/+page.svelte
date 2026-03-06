@@ -28,6 +28,7 @@
   import type { DraftSelection } from '$lib/engine/types';
   import { createBattleResolver, type BattleTickState } from '$lib/engine/battleResolver';
   import { mapAnalysisToC02, buildChartAnnotations, buildAgentMarkers } from '../../components/arena/arenaState';
+  import { btcPrice } from '$lib/stores/priceStore';
   import ViewPicker from '../../components/arena/ViewPicker.svelte';
   import PhaseGuide from '../../components/arena/PhaseGuide.svelte';
   import ResultPanel from '../../components/arena/ResultPanel.svelte';
@@ -35,10 +36,14 @@
   import AgentArenaView from '../../components/arena/views/AgentArenaView.svelte';
   import MissionControlView from '../../components/arena/views/MissionControlView.svelte';
   import CardDuelView from '../../components/arena/views/CardDuelView.svelte';
+  import type { CharState, ActionType, CharSpriteState, BattleTurn, AgentDef } from '$lib/engine/arenaCharacters';
+  import { ACTION_CATALOG, CHAR_ACTIONS, ATTACK_NAMES, ATTACK_SUPER, ATTACK_WEAK, AGENT_TO_CHAR_STATE, getFormPos, createInitialSprites, scheduleBattleTurns } from '$lib/engine/arenaCharacters';
+  import { juice_shake, juice_flash, juice_flyNumber, juice_confetti, type ArenaLiveEvent, LIVE_EVENT_TTL_MS, LIVE_EVENT_DECK, pickLiveEvent, getEventCadence } from '$lib/engine/arenaGameJuice';
 
   $: walletOk = $isWalletConnected;
 
   $: state = $gameState;
+  $: currentBtcPrice = $btcPrice || state.bases.BTC || 97000;
   $: modeLabel = state.arenaMode;
   $: tournamentInfo = state.tournament;
   $: resultOverlayTitle = state.arenaMode === 'TOURNAMENT'
@@ -62,69 +67,12 @@
   let councilActive = false;
 
   // ═══════ CHARACTER-CENTERED ARENA STATE ═══════
-  // 9-state character state machine
-  type CharState = 'idle' | 'patrol' | 'lock' | 'windup' | 'cast' | 'impact' | 'recover' | 'celebrate' | 'panic';
-  // 8 action types
-  type ActionType = 'dash' | 'ping' | 'shield' | 'burst' | 'hook' | 'taunt' | 'assist' | 'finisher';
-  interface CharAction {
-    type: ActionType;
-    label: string;
-    emoji: string;
-    duration: number; // ms for cast animation
-    shakeLevel: 'light' | 'medium' | 'heavy';
-    flashColor: 'white' | 'green' | 'red' | 'gold';
-  }
-  const ACTION_CATALOG: Record<ActionType, CharAction> = {
-    dash:     { type: 'dash',     label: '돌진!',     emoji: '💨', duration: 400,  shakeLevel: 'light',  flashColor: 'white' },
-    ping:     { type: 'ping',     label: '핑!',       emoji: '📡', duration: 300,  shakeLevel: 'light',  flashColor: 'white' },
-    shield:   { type: 'shield',   label: '방어!',     emoji: '🛡️', duration: 600,  shakeLevel: 'light',  flashColor: 'green' },
-    burst:    { type: 'burst',    label: '폭발!',     emoji: '💥', duration: 500,  shakeLevel: 'medium', flashColor: 'gold' },
-    hook:     { type: 'hook',     label: '훅!',       emoji: '🪝', duration: 450,  shakeLevel: 'medium', flashColor: 'red' },
-    taunt:    { type: 'taunt',    label: '도발!',     emoji: '😤', duration: 350,  shakeLevel: 'light',  flashColor: 'white' },
-    assist:   { type: 'assist',   label: '지원!',     emoji: '✨', duration: 500,  shakeLevel: 'light',  flashColor: 'green' },
-    finisher: { type: 'finisher', label: '필살기!',   emoji: '⚡', duration: 800,  shakeLevel: 'heavy',  flashColor: 'gold' },
-  };
-  // Per-character role → preferred actions
-  const CHAR_ACTIONS: Record<string, ActionType[]> = {
-    STRUCTURE: ['dash', 'shield', 'burst', 'finisher'],
-    ICT:       ['hook', 'shield', 'taunt', 'finisher'],
-    VPA:       ['burst', 'dash', 'assist', 'finisher'],
-    FLOW:      ['ping', 'dash', 'assist', 'finisher'],
-    MACRO:     ['shield', 'assist', 'burst', 'finisher'],
-    DERIV:     ['burst', 'hook', 'dash', 'finisher'],
-    SENTI:     ['taunt', 'ping', 'assist', 'finisher'],
-    VALUATION: ['ping', 'shield', 'burst', 'finisher'],
-  };
+  // Types, actions, and constants imported from $lib/engine/arenaCharacters
   // Character sprite state per agent
-  interface CharSpriteState {
-    charState: CharState;
-    x: number;       // % position in arena
-    y: number;       // % position in arena
-    targetX: number;
-    targetY: number;
-    actionEmoji: string;
-    actionLabel: string;
-    flipX: boolean;
-    hp: number;       // 0-100
-    energy: number;   // 0-100
-    showHit: boolean;
-    hitText: string;
-    hitColor: string;
-  }
   let charSprites: Record<string, CharSpriteState> = {};
   // Arena combat state
   let vsMeter = 50;
   let vsMeterTarget = 50;
-  interface BattleTurn {
-    agent: typeof AGDEFS[0];
-    attackName: string;
-    action: ActionType;
-    effectiveness: 'super' | 'normal' | 'weak';
-    isCritical: boolean;
-    meterShift: number;
-    dirSign: number;
-    damage: number;
-  }
   let battleTurns: BattleTurn[] = [];
   let currentTurnIdx = -1;
   let battleNarration = '';
@@ -153,20 +101,7 @@
 
   // Initialize sprite positions in circular formation
   function initCharSprites() {
-    const total = activeAgents.length;
-    charSprites = {};
-    activeAgents.forEach((ag, i) => {
-      const pos = getFormPos(i, total);
-      charSprites[ag.id] = {
-        charState: 'idle',
-        x: pos.x, y: pos.y,
-        targetX: pos.x, targetY: pos.y,
-        actionEmoji: '', actionLabel: '',
-        flipX: pos.x > 50,
-        hp: 100, energy: 0,
-        showHit: false, hitText: '', hitColor: '',
-      };
-    });
+    charSprites = createInitialSprites(activeAgents);
     // Spawn floating particles
     arenaParticles = Array.from({length: 12}, (_, i) => ({
       id: i,
@@ -176,15 +111,6 @@
       speed: 0.5 + Math.random() * 1.5,
       opacity: 0.1 + Math.random() * 0.2,
     }));
-  }
-
-  function getFormPos(idx: number, total: number): { x: number; y: number } {
-    if (total <= 0) return { x: 50, y: 50 };
-    const angle = ((idx / total) * 360 - 90) * (Math.PI / 180);
-    return {
-      x: 50 + Math.cos(angle) * 30,
-      y: 50 + Math.sin(angle) * 34
-    };
   }
 
   // State machine transition
@@ -257,55 +183,12 @@
     lastHitTime = now;
   }
 
-  const ATTACK_NAMES: Record<string, string> = {
-    STRUCTURE: '차트 분석', VPA: '거래량 델타', ICT: '유동성 스윕',
-    DERIV: '파생 분석', FLOW: '고래 추적', SENTI: '소셜 스캔',
-    MACRO: '매크로 분석', VALUATION: '온체인 밸류'
-  };
-  const ATTACK_SUPER: Record<string, string> = {
-    STRUCTURE: '강세 브레이크아웃!', VPA: '거래량 폭발!', ICT: '스마트머니 포착!',
-    DERIV: 'OI 급증!', FLOW: '대형 매수!', SENTI: '분위기 폭등!',
-    MACRO: '글로벌 확인!', VALUATION: '저평가 발견!'
-  };
-  const ATTACK_WEAK: Record<string, string> = {
-    STRUCTURE: '패턴 불분명...', VPA: '거래량 약세...', ICT: '유동성 부족...',
-    DERIV: '데이터 혼재...', FLOW: '흐름 불확실...', SENTI: '분위기 혼조...',
-    MACRO: '신호 약함...', VALUATION: '밸류 중립...'
-  };
   let phaseLabel = PHASE_LABELS.DRAFT;
   let pvpVisible = false;
   let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = [];
   let historyOpen = false;
   let matchHistoryOpen = false;
   let arenaRailTab: 'rank' | 'log' | 'map' = 'rank';
-
-  type ArenaLiveEvent = {
-    id: number;
-    icon: string;
-    title: string;
-    detail: string;
-    severity: 'LOW' | 'MID' | 'HIGH';
-    tint: string;
-    expiresAt: number;
-  };
-  const LIVE_EVENT_TTL_MS = 8000;
-  const LIVE_EVENT_DECK: Record<'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE', Array<Omit<ArenaLiveEvent, 'id' | 'expiresAt'>>> = {
-    ANALYSIS: [
-      { icon: '🛰️', title: 'VOL SHIFT', detail: 'Micro volatility spike detected on last swing.', severity: 'MID', tint: '#6fd6ff' },
-      { icon: '🐋', title: 'WHALE TRACE', detail: 'On-chain flow leaning to directional build-up.', severity: 'LOW', tint: '#7ef0c2' },
-      { icon: '📡', title: 'SOCIAL PULSE', detail: 'Narrative momentum rising in high-beta clusters.', severity: 'LOW', tint: '#89a8ff' },
-    ],
-    HYPOTHESIS: [
-      { icon: '⏱️', title: 'ENTRY WINDOW', detail: 'Timing edge narrows. Tighten your trigger zone.', severity: 'MID', tint: '#7ecbff' },
-      { icon: '🧭', title: 'BIAS CHECK', detail: 'Model confidence diverges across macro and flow.', severity: 'HIGH', tint: '#ff8ea5' },
-      { icon: '🛡️', title: 'RISK GATE', detail: 'Suggested risk budget below 2% per attempt.', severity: 'LOW', tint: '#76f2bf' },
-    ],
-    BATTLE: [
-      { icon: '🌌', title: 'MOMENTUM BURST', detail: 'Directional acceleration in active candle range.', severity: 'HIGH', tint: '#ff9b7f' },
-      { icon: '💥', title: 'LIQUIDITY SWEEP', detail: 'Fast wick event cleared a nearby stop pocket.', severity: 'MID', tint: '#ffb26f' },
-      { icon: '📈', title: 'TREND HOLD', detail: 'Price structure remains aligned with current bias.', severity: 'LOW', tint: '#65f4c0' },
-    ],
-  };
 
   let liveEvents: ArenaLiveEvent[] = [];
   let liveEventTimer: ReturnType<typeof setInterval> | null = null;
@@ -535,11 +418,7 @@
     }, 30);
   }
 
-  // Bridge: legacy agent state → char sprite state mapping
-  const AGENT_TO_CHAR_STATE: Record<string, CharState> = {
-    idle: 'idle', walk: 'patrol', think: 'lock', alert: 'lock',
-    charge: 'windup', vote: 'cast', jump: 'celebrate', sad: 'panic',
-  };
+  // Bridge: legacy agent state → char sprite state mapping (AGENT_TO_CHAR_STATE imported)
   function setAgentState(agentId: string, st: string) {
     if (agentStates[agentId]) {
       agentStates[agentId] = { ...agentStates[agentId], state: st };
@@ -608,70 +487,11 @@
   }
 
   // ═══════ GAME JUICE UTILITIES ═══════
-  function juice_shake(intensity: 'light'|'medium'|'heavy' = 'medium') {
-    const el = document.querySelector('.battle-layout');
-    if (!el) return;
-    el.classList.remove('jc-shake-light','jc-shake-medium','jc-shake-heavy');
-    void (el as HTMLElement).offsetHeight;
-    el.classList.add(`jc-shake-${intensity}`);
-    setTimeout(() => el.classList.remove(`jc-shake-${intensity}`), 400);
-  }
-  function juice_flash(color: 'white'|'green'|'red'|'gold' = 'white') {
-    const d = document.createElement('div');
-    d.className = `jc-flash jc-flash-${color}`;
-    document.body.appendChild(d);
-    setTimeout(() => d.remove(), 400);
-  }
-  function juice_flyNumber(text: string, x: number, y: number, color: string) {
-    const s = document.createElement('span');
-    s.className = 'jc-fly-number';
-    s.textContent = text;
-    s.style.cssText = `left:${x}px;top:${y}px;color:${color}`;
-    document.body.appendChild(s);
-    setTimeout(() => s.remove(), 1300);
-  }
-  function juice_confetti(count = 30) {
-    const cols = ['#FF5E7A','#00CC88','#66CCE6','#DCB970','#E8967D','#8b5cf6','#ffcc00'];
-    for (let i = 0; i < count; i++) {
-      setTimeout(() => {
-        const d = document.createElement('div');
-        d.className = 'jc-confetti';
-        const sz = 4 + Math.random() * 6;
-        d.style.cssText = `left:${10+Math.random()*80}vw;width:${sz}px;height:${sz}px;background:${cols[i%cols.length]};animation-delay:${Math.random()*0.3}s;animation-duration:${1.5+Math.random()*1}s;border-radius:${Math.random()>0.5?'50%':'2px'}`;
-        document.body.appendChild(d);
-        setTimeout(() => d.remove(), 3000);
-      }, i * 25);
-    }
-  }
+  // juice_shake, juice_flash, juice_flyNumber, juice_confetti imported from $lib/engine/arenaGameJuice
 
   // ═══════ TURN SYSTEM (Character-Centered) ═══════
-  function scheduleBattleTurns(): BattleTurn[] {
-    const lastActions: Record<string, ActionType> = {};
-    return activeAgents.map(ag => {
-      const r = Math.random();
-      const eff: 'super'|'normal'|'weak' = r < 0.2 ? 'super' : r > 0.8 ? 'weak' : 'normal';
-      const crit = Math.random() < 0.12;
-      // Pick action from character's repertoire (anti-repetition)
-      const pool = CHAR_ACTIONS[ag.id] || ['burst', 'dash', 'shield', 'finisher'];
-      let action: ActionType;
-      if (crit || eff === 'super') {
-        action = 'finisher'; // Big moments → finisher
-      } else {
-        const filtered = pool.filter(a => a !== lastActions[ag.id] && a !== 'finisher');
-        action = filtered[Math.floor(Math.random() * filtered.length)] || pool[0];
-      }
-      lastActions[ag.id] = action;
-      const eMult = eff === 'super' ? 1.5 : eff === 'weak' ? 0.5 : 1.0;
-      const cMult = crit ? 2.0 : 1.0;
-      const ds = ag.dir === 'LONG' ? 1 : -1;
-      const baseDamage = (eff === 'super' ? 18 : eff === 'weak' ? 5 : 10) * cMult;
-      return {
-        agent: ag, attackName: ATTACK_NAMES[ag.id]||'분석',
-        action, effectiveness: eff, isCritical: crit,
-        meterShift: ag.conf * 0.3 * ds * eMult * cMult,
-        dirSign: ds, damage: baseDamage,
-      };
-    });
+  function scheduleBattleTurnsLocal(): BattleTurn[] {
+    return scheduleBattleTurns(activeAgents);
   }
 
   // executeTurn with full state machine: windup → cast → impact → recover
@@ -780,7 +600,7 @@
   function clearTurnTimers() { turnTimers.forEach(t => clearTimeout(t)); turnTimers = []; }
 
   function startBattleTurnSequence() {
-    battleTurns = scheduleBattleTurns();
+    battleTurns = scheduleBattleTurnsLocal();
     vsMeter = 50; vsMeterTarget = 50;
     currentTurnIdx = -1; chatMessages = []; battleNarration = '';
     enemyHP = 100; enemyMomentum = 50; comboCount = 0;
@@ -833,14 +653,8 @@
   }
 
   function pushLiveEvent(phase: 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE') {
-    const bucket = LIVE_EVENT_DECK[phase];
-    if (!bucket || bucket.length === 0) return;
-    const picked = bucket[Math.floor(Math.random() * bucket.length)];
-    const ev: ArenaLiveEvent = {
-      ...picked,
-      id: Date.now() + Math.floor(Math.random() * 10000),
-      expiresAt: Date.now() + LIVE_EVENT_TTL_MS
-    };
+    const ev = pickLiveEvent(phase);
+    if (!ev) return;
     liveEvents = [ev, ...liveEvents].slice(0, 3);
     addFeed(ev.icon, 'EVENT', ev.tint, `${ev.title} · ${ev.detail}`);
     safeTimeout(() => {
@@ -852,12 +666,12 @@
     clearLiveEventTimer();
     trimExpiredEvents();
     pushLiveEvent(phase);
-    const cadence = phase === 'BATTLE' ? 3600 : phase === 'HYPOTHESIS' ? 4400 : 5000;
+    const cadence = getEventCadence(phase, state.speed || 1);
     liveEventTimer = setInterval(() => {
       if (_arenaDestroyed) return;
       trimExpiredEvents();
       pushLiveEvent(phase);
-    }, Math.max(2200, Math.round(cadence / Math.max(1, state.speed || 1))));
+    }, cadence);
   }
 
   function clearArenaDynamics() {
@@ -928,32 +742,32 @@
   }
 
   // Chart drag handlers
-  function onDragTP(e: CustomEvent) {
-    chartPosTp = e.detail.price;
+  function onDragTP(detail: { price: number }) {
+    chartPosTp = detail.price;
     // Also update hypothesis panel if visible
     gameState.update(s => {
       if (s.hypothesis) {
-        return { ...s, hypothesis: { ...s.hypothesis, tp: e.detail.price, rr: Math.abs(e.detail.price - (s.hypothesis.entry || 0)) / Math.max(1, Math.abs((s.hypothesis.entry || 0) - (s.hypothesis.sl || 0))) } };
+        return { ...s, hypothesis: { ...s.hypothesis, tp: detail.price, rr: Math.abs(detail.price - (s.hypothesis.entry || 0)) / Math.max(1, Math.abs((s.hypothesis.entry || 0) - (s.hypothesis.sl || 0))) } };
       }
       return s;
     });
   }
 
-  function onDragSL(e: CustomEvent) {
-    chartPosSl = e.detail.price;
+  function onDragSL(detail: { price: number }) {
+    chartPosSl = detail.price;
     gameState.update(s => {
       if (s.hypothesis) {
-        return { ...s, hypothesis: { ...s.hypothesis, sl: e.detail.price, rr: Math.abs((s.hypothesis.tp || 0) - (s.hypothesis.entry || 0)) / Math.max(1, Math.abs((s.hypothesis.entry || 0) - e.detail.price)) } };
+        return { ...s, hypothesis: { ...s.hypothesis, sl: detail.price, rr: Math.abs((s.hypothesis.tp || 0) - (s.hypothesis.entry || 0)) / Math.max(1, Math.abs((s.hypothesis.entry || 0) - detail.price)) } };
       }
       return s;
     });
   }
 
-  function onDragEntry(e: CustomEvent) {
-    chartPosEntry = e.detail.price;
+  function onDragEntry(detail: { price: number }) {
+    chartPosEntry = detail.price;
     gameState.update(s => {
       if (s.hypothesis) {
-        return { ...s, hypothesis: { ...s.hypothesis, entry: e.detail.price } };
+        return { ...s, hypothesis: { ...s.hypothesis, entry: detail.price } };
       }
       return s;
     });
@@ -1047,7 +861,7 @@
         hypothesisVisible = false;
 
         // Default: NEUTRAL (skip)
-        const price = state.prices.BTC;
+        const price = currentBtcPrice;
         gameState.update(s => ({
           ...s,
           hypothesis: {
@@ -1218,7 +1032,7 @@
     verdictVisible = true;
 
     // Set position from hypothesis
-    const curPrice = state.prices.BTC;
+    const curPrice = currentBtcPrice;
     gameState.update(s => ({
       ...s,
       pos: s.hypothesis ? {
@@ -1446,7 +1260,7 @@
 
     // ── FBS Scoring (C02-aligned) ──
     const hyp = state.hypothesis;
-    const exitPrice = state.prices.BTC;
+    const exitPrice = currentBtcPrice;
     const entryPrice = hyp?.entry || state.bases.BTC;
     const priceChange = entryPrice > 0 ? (exitPrice - entryPrice) / entryPrice : 0;
     const actualDir = determineActualDirection(priceChange);
@@ -1525,7 +1339,7 @@
 
     // ── Server sync: resolve match ──
     if (serverMatchId) {
-      const exitP = state.prices.BTC;
+      const exitP = currentBtcPrice;
       resolveArenaMatch(serverMatchId, exitP)
         .catch(err => console.warn('[Arena] Resolve sync failed:', err));
     }
@@ -1573,8 +1387,8 @@
       juice_shake('light');
       juice_flash('red');
       // Near-miss detection
-      const nearMiss = br === 'sl' && state.hypothesis ? Math.abs(state.prices.BTC - state.hypothesis.tp) / state.hypothesis.tp < 0.003 : false;
-      battleNarration = nearMiss ? `😱 아깝다! TP까지 ${(Math.abs(state.prices.BTC - (state.hypothesis?.tp||0))).toFixed(0)}$ 남았었다!` : `💀 패배... ${resultTag}`;
+      const nearMiss = br === 'sl' && state.hypothesis ? Math.abs(currentBtcPrice - state.hypothesis.tp) / state.hypothesis.tp < 0.003 : false;
+      battleNarration = nearMiss ? `😱 아깝다! TP까지 ${(Math.abs(currentBtcPrice - (state.hypothesis?.tp||0))).toFixed(0)}$ 남았었다!` : `💀 패배... ${resultTag}`;
       addChatMsg({ id:'SYS', name:'SYSTEM', icon:'💀', color:'#ff5e7a' } as any, nearMiss ? '아깝다!! 거의 TP 도달이었는데...' : `패배... ${resultTag}`, true);
       activeAgents.forEach(ag => {
         setAgentState(ag.id, 'sad');
@@ -1804,7 +1618,7 @@
 
     <!-- ═══════ VIEW PICKER (always visible) ═══════ -->
     <div class="view-picker-bar">
-      <ViewPicker current={state.arenaView} on:select={(e) => gameState.update(s => ({ ...s, arenaView: e.detail }))} />
+      <ViewPicker current={state.arenaView} onselect={(view) => gameState.update(s => ({ ...s, arenaView: view }))} />
     </div>
 
     <!-- ═══════ VIEW SWITCHING ═══════ -->
@@ -1815,7 +1629,7 @@
             phase={state.phase}
             battleTick={state.battleTick}
             hypothesis={state.hypothesis}
-            prices={{ BTC: state.prices.BTC }}
+            prices={{ BTC: currentBtcPrice }}
             battleResult={state.battleResult}
             battlePriceHistory={state.battlePriceHistory}
             activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
@@ -1825,7 +1639,7 @@
             phase={state.phase}
             battleTick={state.battleTick}
             hypothesis={state.hypothesis}
-            prices={{ BTC: state.prices.BTC }}
+            prices={{ BTC: currentBtcPrice }}
             battleResult={state.battleResult}
             battlePriceHistory={state.battlePriceHistory}
             activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
@@ -1835,7 +1649,7 @@
             phase={state.phase}
             battleTick={state.battleTick}
             hypothesis={state.hypothesis}
-            prices={{ BTC: state.prices.BTC }}
+            prices={{ BTC: currentBtcPrice }}
             battleResult={state.battleResult}
             battlePriceHistory={state.battlePriceHistory}
             activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
@@ -1849,7 +1663,7 @@
               win={resultData.win}
               battleResult={state.battleResult || ''}
               entryPrice={state.hypothesis?.entry || state.bases.BTC}
-              exitPrice={state.battleExitPrice || state.prices.BTC}
+              exitPrice={state.battleExitPrice || currentBtcPrice}
               tpPrice={state.hypothesis?.tp || 0}
               slPrice={state.hypothesis?.sl || 0}
               direction={state.hypothesis?.dir || 'LONG'}
@@ -1862,7 +1676,7 @@
               lpChange={resultData.lp}
               streak={state.streak}
               agents={activeAgents.map(a => ({ name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
-              actualDirection={determineActualDirection(state.prices.BTC > (state.hypothesis?.entry || 0) ? 0.01 : -0.01)}
+              actualDirection={determineActualDirection(currentBtcPrice > (state.hypothesis?.entry || 0) ? 0.01 : -0.01)}
               onPlayAgain={playAgain}
               onLobby={goLobby}
             />
@@ -1881,9 +1695,9 @@
           posDir={chartPosDir}
           agentAnnotations={showMarkers ? chartAnnotations : []}
           agentMarkers={showMarkers ? chartAgentMarkers : []}
-          on:dragTP={onDragTP}
-          on:dragSL={onDragSL}
-          on:dragEntry={onDragEntry}
+          onDragTP={onDragTP}
+          onDragSL={onDragSL}
+          onDragEntry={onDragEntry}
         />
 
         <!-- Hypothesis Panel on right side during hypothesis phase -->
@@ -2017,7 +1831,7 @@
             <span class="hud-hp-num">{Math.round(enemyHP)}</span>
           </div>
           <!-- Price -->
-          <div class="hud-price">${Number.isFinite(state.prices.BTC) ? Math.round(state.prices.BTC).toLocaleString() : '--'}</div>
+          <div class="hud-price">${Number.isFinite(currentBtcPrice) ? Math.round(currentBtcPrice).toLocaleString() : '--'}</div>
         </div>
 
         <!-- ═══ SPATIAL ARENA (THE GAME WORLD) ═══ -->
@@ -2047,7 +1861,7 @@
           <!-- Center battle node -->
           <div class="arena-center-node">
             <div class="acn-icon">⚔</div>
-            <div class="acn-price">${Number.isFinite(state.prices.BTC) ? Math.round(state.prices.BTC).toLocaleString() : '--'}</div>
+            <div class="acn-price">${Number.isFinite(currentBtcPrice) ? Math.round(currentBtcPrice).toLocaleString() : '--'}</div>
           </div>
 
           <!-- CHARACTER SPRITES -->
@@ -2553,23 +2367,6 @@
     pointer-events: none;
   }
 
-  /* Match History Toggle */
-  .mh-toggle {
-    position: absolute;
-    top: 8px; right: 8px;
-    z-index: 55;
-    padding: 4px 10px;
-    border: 2px solid #000;
-    border-radius: 8px;
-    background: #fff;
-    font-family: var(--fm);
-    font-size: 8px;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 2px 2px 0 #000;
-    transition: all .15s;
-  }
-  .mh-toggle:hover { background: #e8967d; }
   .chart-side { display: flex; flex-direction: column; background: #07130d; overflow: hidden; border-right: 1px solid rgba(232,150,125,.15); position: relative; }
 
   /* ═══════ SPATIAL BATTLE ARENA ═══════ */
@@ -3074,384 +2871,6 @@
   .mbtn { padding: 6px 16px; border-radius: 16px; background: #E8967D; border: 3px solid #000; color: #000; font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
   .mbtn:hover { background: #d07a64; }
 
-  /* Arena Background — Retro Space + Collage */
-  .arena-texture {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-position: center;
-    background-size: cover;
-    background-repeat: no-repeat;
-    z-index: 0;
-  }
-  .arena-stars {
-    background-image: url('/arena/references/14-o.png');
-    opacity: .34;
-    mix-blend-mode: screen;
-    filter: saturate(1.1) contrast(1.12);
-  }
-  .arena-rainbow {
-    background-image: url('/arena/references/03-o.png');
-    opacity: .44;
-    mix-blend-mode: screen;
-    filter: saturate(1.2) contrast(1.06);
-  }
-  .arena-grid {
-    background-image: url('/arena/references/02-o.png');
-    opacity: .16;
-    mix-blend-mode: lighten;
-    transform: scale(1.05);
-  }
-  .arena-doodle {
-    background-image: url('/arena/references/cs-robert-a1-o.png');
-    opacity: .18;
-    mix-blend-mode: soft-light;
-    filter: grayscale(.12) contrast(1.2);
-  }
-  .arena-vignette {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 1;
-    background:
-      radial-gradient(circle at 50% 54%, transparent 18%, rgba(2, 7, 18, .4) 58%, rgba(1, 4, 12, .7) 100%),
-      linear-gradient(180deg, rgba(5, 8, 18, .04) 0%, rgba(1, 3, 11, .62) 100%);
-  }
-  .battle-floor {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 2;
-    height: 14%;
-    border-top: 1px solid rgba(232, 150, 125, .18);
-    background:
-      linear-gradient(180deg, rgba(10, 26, 18, .2) 0%, rgba(8, 19, 13, .82) 35%, rgba(7, 16, 11, .95) 100%),
-      repeating-linear-gradient(90deg, rgba(232, 150, 125, .04) 0 1px, transparent 1px 46px);
-    backdrop-filter: blur(2px);
-  }
-  .battle-floor span {
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-family: var(--fd);
-    font-size: 8px;
-    letter-spacing: 4px;
-    color: rgba(240, 237, 228, .5);
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-
-  /* Data Sources */
-  .dsrc { position: absolute; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; transform: translate(-50%, -50%); }
-  .dp { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: transparent; border: 1px solid rgba(232,150,125,.2); animation: dpPulse 2s ease infinite; will-change: transform, opacity; contain: strict; }
-  @keyframes dpPulse { 0%,100% { transform: scale(1); opacity: .3 } 50% { transform: scale(1.3); opacity: 0 } }
-  .di {
-    width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px;
-    background: rgba(10,26,18,.88);
-    border: 2px solid;
-    box-shadow: 0 0 0 1px rgba(232,150,125,.15), 0 10px 18px rgba(0,0,0,.4);
-    backdrop-filter: blur(4px);
-  }
-  .dl {
-    font-size: 7px; color: rgba(240,237,228,.7); letter-spacing: 2px; font-family: var(--fd); font-weight: 900;
-    background: rgba(8,19,13,.8); padding: 2px 6px; border-radius: 8px;
-    border: 1px solid rgba(232,150,125,.2);
-  }
-
-  /* Council Table */
-  .ctable {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 108px; height: 58px; border-radius: 999px;
-    border: 1px dashed rgba(232,150,125,.2);
-    background: rgba(10,26,18,.45);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 4; transition: all .3s;
-    backdrop-filter: blur(3px);
-  }
-  .ctable.on {
-    border-color: rgba(232,150,125,.6);
-    border-style: solid;
-    background: rgba(10,26,18,.72);
-    box-shadow: 0 0 28px rgba(232, 150, 125, .2);
-  }
-  .cl { font-size: 7px; color: rgba(240, 237, 228, .35); letter-spacing: 3px; font-family: var(--fd); font-weight: 900; }
-  .ctable.on .cl { color: rgba(240,237,228,.7); }
-
-  /* Agent Sprites */
-  .ag {
-    position: absolute; z-index: 10; width: 110px; text-align: center;
-    transform: translate(-50%, -50%);
-    cursor: pointer;
-    transition: left .6s cubic-bezier(.4,0,.2,1), top .6s cubic-bezier(.4,0,.2,1);
-    will-change: transform, left, top;
-    contain: layout style;
-  }
-  .ag .sha {
-    position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
-    width: 48px; height: 8px; background: rgba(0,0,0,.5);
-    border-radius: 50%; filter: blur(2px);
-    transition: width .3s, opacity .3s;
-  }
-  .ag.jump .sha { width: 36px; opacity: .3; }
-  .ag .wr { position: relative; display: flex; flex-direction: column; align-items: center; animation-delay: var(--ag-delay, 0s); }
-
-  /* ── Idle: gentle float ── */
-  .ag.idle .wr { animation: aI 1.4s ease-in-out infinite; }
-  @keyframes aI {
-    0%,100% { transform: translateY(0) rotate(0) }
-    25% { transform: translateY(-3px) rotate(-0.5deg) }
-    75% { transform: translateY(-2px) rotate(0.5deg) }
-  }
-
-  /* ── Walk: energetic run ── */
-  .ag.walk .wr { animation: aW .25s ease-in-out infinite; }
-  @keyframes aW {
-    0%   { transform: translateX(0) translateY(0) rotate(0) }
-    25%  { transform: translateX(-4px) translateY(-5px) rotate(-3deg) }
-    50%  { transform: translateX(0) translateY(-2px) rotate(0) }
-    75%  { transform: translateX(4px) translateY(-5px) rotate(3deg) }
-    100% { transform: translateX(0) translateY(0) rotate(0) }
-  }
-
-  /* ── Think: head bob ── */
-  .ag.think .wr { animation: aT 1.5s ease-in-out infinite; }
-  @keyframes aT {
-    0%,100% { transform: rotate(0) scale(1) }
-    20% { transform: rotate(-4deg) scale(.98) }
-    40% { transform: rotate(3deg) scale(1.01) }
-    60% { transform: rotate(-2deg) scale(.99) }
-    80% { transform: rotate(4deg) scale(1) }
-  }
-
-  /* ── Alert: pulse glow ── */
-  .ag.alert .wr { animation: aA .4s ease infinite; }
-  .ag.alert .agent-sprite { box-shadow: 0 0 20px var(--ag-color, #E8967D) !important; }
-  @keyframes aA {
-    0%,100% { transform: scale(1) }
-    50% { transform: scale(1.08) }
-  }
-
-  /* ── Charge: intense vibrate ── */
-  .ag.charge .wr { animation: aC .1s linear infinite; }
-  .ag.charge .agent-sprite { box-shadow: 0 0 24px var(--ag-color, #ff0) !important; }
-  @keyframes aC {
-    0%  { transform: translateX(-2px) translateY(1px) }
-    25% { transform: translateX(2px) translateY(-1px) }
-    50% { transform: translateX(-1px) translateY(-2px) }
-    75% { transform: translateX(1px) translateY(2px) }
-  }
-
-  /* ── Vote: bounce up ── */
-  .ag.vote .wr { animation: aV .5s ease infinite; }
-  @keyframes aV {
-    0%,100% { transform: translateY(0) scale(1) }
-    30% { transform: translateY(-8px) scale(1.06) }
-    60% { transform: translateY(-2px) scale(1.02) }
-  }
-
-  /* ── Jump: victory leap ── */
-  .ag.jump .wr { animation: aJ .4s ease-in-out infinite; }
-  @keyframes aJ {
-    0%,100% { transform: translateY(0) rotate(0) scale(1) }
-    20% { transform: translateY(-18px) rotate(-5deg) scale(1.1) }
-    50% { transform: translateY(-22px) rotate(3deg) scale(1.12) }
-    80% { transform: translateY(-8px) rotate(-2deg) scale(1.05) }
-  }
-
-  /* ── Sad: droopy wobble ── */
-  .ag.sad .wr { animation: aS 2s ease infinite; }
-  @keyframes aS {
-    0%,100% { transform: translateY(0) rotate(0) }
-    30% { transform: translateY(4px) rotate(-4deg) }
-    70% { transform: translateY(3px) rotate(3deg) }
-  }
-
-  /* ══ Energy Aura ══ */
-  .energy-aura {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 72px; height: 72px;
-    border-radius: 50%;
-    background: radial-gradient(circle, var(--aura-color) 0%, transparent 70%);
-    opacity: .2;
-    z-index: -1;
-    animation: auraBreath 1.5s ease-in-out infinite;
-    pointer-events: none;
-    will-change: transform, opacity;
-    contain: strict;
-  }
-  @keyframes auraBreath {
-    0%,100% { transform: translate(-50%, -50%) scale(1); opacity: .15; }
-    50% { transform: translate(-50%, -50%) scale(1.3); opacity: .3; }
-  }
-
-  /* ══ Trail Particles ══ */
-  .trail-particles {
-    position: absolute;
-    bottom: -10px; left: 50%;
-    transform: translateX(-50%);
-    pointer-events: none;
-  }
-  .tp {
-    position: absolute;
-    font-size: 8px;
-    color: var(--ag-color, #E8967D);
-    opacity: 0;
-    animation: tpFade .8s ease-out infinite;
-    animation-delay: var(--tp-d, 0s);
-    left: var(--tp-x, 0px);
-    will-change: transform, opacity;
-    contain: layout style;
-  }
-  @keyframes tpFade {
-    0% { opacity: .8; transform: translateY(0) scale(1); }
-    100% { opacity: 0; transform: translateY(12px) scale(.5); }
-  }
-
-  /* ══ Energy Bar Glow ══ */
-  .ebar-glow {
-    position: absolute;
-    inset: 0;
-    border-radius: 4px;
-    opacity: .4;
-    animation: ebarGlow .5s ease infinite;
-  }
-  @keyframes ebarGlow { 0%,100% { opacity: .3 } 50% { opacity: .6 } }
-
-  /* Speech Bubble */
-  .sp { position: absolute; top: -32px; left: 50%; transform: translateX(-50%); background: #fff; border: 2px solid #000; border-radius: 10px 10px 10px 2px; padding: 3px 8px; font-size: 7px; font-weight: 700; white-space: nowrap; opacity: 0; transition: opacity .2s; z-index: 20; box-shadow: 2px 2px 0 #000; font-family: var(--fm); }
-  .sp.v { opacity: 1; }
-
-  /* Vote Badge */
-  .vb { position: absolute; top: -18px; right: -10px; background: #00ff88; border: 2px solid #000; border-radius: 8px; padding: 1px 6px; font-size: 7px; font-weight: 900; font-family: var(--fd); letter-spacing: 1px; opacity: 0; transition: opacity .2s; z-index: 19; box-shadow: 2px 2px 0 #000; }
-  .vb.v { opacity: 1; }
-  .vb.long { background: #00ff88; color: #000; }
-  .vb.short { background: #ff2d55; color: #fff; }
-  .vb.neutral { background: #ffaa00; color: #000; }
-
-  .agent-sprite {
-    width: 80px; height: 80px; border-radius: 20px; border: 4px solid;
-    display: flex; align-items: center; justify-content: center;
-    background: #fff; box-shadow: 5px 5px 0 #000; transition: all .15s; overflow: hidden;
-  }
-  .sprite-icon { font-size: 34px; }
-  .sprite-img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
-  .ag .rbadge {
-    position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center; font-size: 11px;
-    border: 3px solid #000; z-index: 3; text-shadow: 0 1px 0 #000;
-    box-shadow: 2px 2px 0 #000;
-  }
-  .ag .react {
-    position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
-    font-size: 6px; z-index: 15;
-    padding: 2px 6px;
-    border-radius: 999px;
-    border: 1px solid rgba(232, 150, 125, .35);
-    background: rgba(10, 26, 18, .8);
-    color: rgba(240,237,228,.7);
-    letter-spacing: 1.5px;
-    font-family: var(--fd);
-    font-weight: 900;
-    text-transform: uppercase;
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,.35));
-  }
-  .ag .nm {
-    font-size: 8px; font-weight: 900; letter-spacing: 2px; margin-top: 4px;
-    font-family: var(--fd); background: #fff; padding: 2px 8px; border-radius: 8px;
-    border: 2px solid #000; box-shadow: 2px 2px 0 #000;
-  }
-  .ag .ebar { width: 60px; height: 6px; margin: 3px auto 0; border-radius: 4px; background: #ddd; overflow: hidden; border: 2px solid #000; position: relative; }
-  .ag .efill { height: 100%; border-radius: 2px; transition: width .3s; }
-
-  /* Phase Display */
-  .phase-display {
-    position: absolute; top: 8px; right: 8px; z-index: 15;
-    background: rgba(10, 26, 18, .88);
-    border-radius: 12px;
-    padding: 8px 14px;
-    border: 1px solid rgba(232,150,125,.3);
-    box-shadow: 0 10px 24px rgba(0,0,0,.4);
-    text-align: center;
-    backdrop-filter: blur(5px);
-  }
-  .phase-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    margin: 0 auto 6px;
-    box-shadow: 0 0 10px currentColor;
-  }
-  .phase-name { font-size: 10px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; text-transform: uppercase; }
-  .phase-timer { font-size: 9px; font-family: var(--fm); color: rgba(240,237,228,.5); font-weight: 700; }
-
-  /* Agent Decision Card (below sprite) */
-  .ag-decision {
-    margin-top: 3px;
-    background: #fff;
-    border: 2px solid #000;
-    border-radius: 6px;
-    padding: 3px 5px;
-    box-shadow: 2px 2px 0 #000;
-    font-family: var(--fm);
-    animation: decisionSlideIn .3s ease;
-    width: 80px;
-  }
-  @keyframes decisionSlideIn {
-    from { opacity: 0; transform: translateY(-6px) scale(.9); }
-    to { opacity: 1; transform: none; }
-  }
-  .agd-dir {
-    font-size: 7px; font-weight: 900; letter-spacing: 1px;
-    padding: 1px 4px; border-radius: 4px; text-align: center;
-    border: 1.5px solid #000;
-  }
-  .agd-dir.long { background: #00ff88; color: #000; }
-  .agd-dir.short { background: #ff2d55; color: #fff; }
-  .agd-dir.neutral { background: #ffaa00; color: #000; }
-  .agd-finding {
-    font-size: 6px; color: #444; line-height: 1.3;
-    margin-top: 2px; text-align: center;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .agd-bar {
-    height: 3px; border-radius: 2px; background: #eee;
-    overflow: hidden; margin-top: 2px; border: 1px solid rgba(0,0,0,.15);
-  }
-  .agd-fill { height: 100%; border-radius: 2px; transition: width .5s; }
-
-  /* Feed */
-  .feed-panel { position: absolute; bottom: 14%; left: 8px; right: 8px; z-index: 14; max-height: 70px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
-  .feed-msg {
-    display: flex; align-items: center; gap: 4px; font-size: 7px; font-family: var(--fm);
-    background: rgba(10, 26, 18, .8);
-    border: 1px solid rgba(232, 150, 125, .2);
-    color: rgba(240,237,228,.6);
-    padding: 2px 6px;
-    border-radius: 4px;
-    backdrop-filter: blur(5px);
-  }
-  .feed-icon { font-size: 8px; }
-  .feed-name { font-weight: 900; font-size: 7px; }
-  .feed-text { color: rgba(240,237,228,.55); flex: 1; }
-  .feed-dir { font-size: 6px; padding: 1px 4px; border-radius: 4px; font-weight: 900; }
-  .feed-dir.long { background: #00ff88; color: #000; }
-  .feed-dir.short { background: #ff2d55; color: #fff; }
-  .feed-new { animation: feedSlideIn .3s ease; }
-  @keyframes feedSlideIn {
-    from { opacity: 0; transform: translateX(-10px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-  .feed-cursor {
-    animation: feedBlink .5s step-end infinite;
-    color: #000;
-    font-weight: 900;
-  }
-  @keyframes feedBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-
   /* ═══════ COMPARE OVERLAY ═══════ */
   .compare-overlay {
     position: absolute; inset: 0; z-index: 32;
@@ -3610,50 +3029,6 @@
   /* Doge Float */
   .doge-float { position: absolute; z-index: 25; font-family: var(--fc); font-weight: 900; font-style: italic; font-size: 16px; letter-spacing: 2px; pointer-events: none; animation: dogeUp ease forwards; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000; -webkit-text-stroke: 1px #000; }
   @keyframes dogeUp { 0% { opacity: 1; transform: translateY(0) rotate(-5deg) scale(1); } 100% { opacity: 0; transform: translateY(-100px) rotate(15deg) scale(1.5); } }
-
-  /* History */
-  .hist-btn {
-    position: absolute; bottom: 14%; right: 8px; z-index: 16;
-    padding: 4px 10px; border-radius: 8px;
-    background: rgba(5, 11, 24, .8);
-    border: 1px solid rgba(136, 171, 255, .5);
-    color: #bdd8ff;
-    font-size: 8px; font-weight: 700; cursor: pointer;
-    box-shadow: 0 8px 18px rgba(0,0,0,.35);
-  }
-  .hist-panel {
-    position: absolute; top: 0; right: 0; bottom: 0; width: 180px; z-index: 50;
-    background: rgba(6, 11, 24, .94);
-    border-left: 1px solid rgba(140, 174, 255, .42);
-    color: #d4e7ff;
-    padding: 10px; overflow-y: auto;
-    box-shadow: -6px 0 20px rgba(0,0,0,.4);
-    backdrop-filter: blur(4px);
-  }
-  .hist-header {
-    display: flex; align-items: center; justify-content: space-between;
-    font-size: 9px; font-weight: 900; font-family: var(--fd);
-    letter-spacing: 2px; margin-bottom: 8px;
-    border-bottom: 1px solid rgba(151, 184, 255, .35);
-    padding-bottom: 6px;
-    color: #cfe4ff;
-  }
-  .hist-close { background: none; border: none; font-size: 14px; cursor: pointer; color: #9fc2ff; }
-  .hitem {
-    display: flex; align-items: center; gap: 4px; padding: 3px 0;
-    border-bottom: 1px solid rgba(134, 166, 235, .15);
-    font-size: 8px; font-family: var(--fm);
-  }
-  .hnum { font-weight: 700; color: #83a8df; width: 24px; }
-  .hres { font-weight: 900; font-size: 7px; padding: 1px 5px; border-radius: 4px; }
-  .hres.w { background: #00ff88; color: #000; }
-  .hres.l { background: #ff2d55; color: #fff; }
-  .hlp { font-weight: 700; }
-  .hlp.pos { color: #00cc66; }
-  .hlp.neg { color: #ff2d55; }
-  .hscore { color: #8caedc; margin-left: auto; }
-  .hstreak { font-size: 7px; }
-  .hist-empty { text-align: center; color: #7f99bf; font-size: 9px; padding: 20px 0; }
 
   /* ═══════ REPLAY BANNER ═══════ */
   .replay-banner {
@@ -3861,208 +3236,7 @@
     box-shadow: 1px 1px 0 #000;
   }
 
-  /* ═══════ PARTIAL REFERENCE UI LAYER (OUR TONE) ═══════ */
-  .arena-rail {
-    position: absolute;
-    top: 52px;
-    right: 10px;
-    bottom: 38px;
-    width: 190px;
-    z-index: 14;
-    border: 1px solid var(--arena-line);
-    background: rgba(8, 18, 13, 0.92);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    backdrop-filter: blur(4px);
-  }
-  .rail-head {
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--arena-line-soft);
-    background: linear-gradient(180deg, rgba(232, 150, 125, 0.15), rgba(8, 18, 13, 0.2));
-  }
-  .rail-pair {
-    font-family: var(--fd);
-    font-size: 8px;
-    font-weight: 900;
-    letter-spacing: 1px;
-    color: var(--arena-accent);
-  }
-  .rail-price {
-    margin-top: 3px;
-    font-family: var(--fd);
-    font-size: 14px;
-    font-weight: 900;
-    color: var(--arena-text);
-    letter-spacing: 1px;
-  }
-  .rail-tabs {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    border-top: 1px solid var(--arena-line-soft);
-    border-bottom: 1px solid var(--arena-line-soft);
-  }
-  .rail-body {
-    flex: 1;
-    overflow-y: auto;
-  }
-  .rail-body::-webkit-scrollbar {
-    width: 2px;
-  }
-  .rail-body::-webkit-scrollbar-thumb {
-    background: rgba(232, 150, 125, 0.35);
-  }
-  .rail-row {
-    display: grid;
-    grid-template-columns: 14px 1fr auto auto;
-    align-items: center;
-    gap: 5px;
-    padding: 6px 8px;
-    border-bottom: 1px solid var(--arena-line-soft);
-  }
-  .rail-rank {
-    font-family: var(--fm);
-    font-size: 7px;
-    color: rgba(240, 237, 228, 0.45);
-    text-align: center;
-  }
-  .rail-name {
-    font-family: var(--fd);
-    font-size: 7px;
-    font-weight: 900;
-    letter-spacing: 1px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .rail-dir {
-    font-family: var(--fm);
-    font-size: 6px;
-    border: 1px solid;
-    padding: 1px 4px;
-    letter-spacing: 1px;
-  }
-  .rail-dir.long {
-    color: var(--arena-good);
-    border-color: rgba(0, 204, 136, 0.45);
-    background: rgba(0, 204, 136, 0.12);
-  }
-  .rail-dir.short {
-    color: var(--arena-bad);
-    border-color: rgba(255, 94, 122, 0.42);
-    background: rgba(255, 94, 122, 0.1);
-  }
-  .rail-dir.neutral {
-    color: var(--arena-warn);
-    border-color: rgba(220, 185, 112, 0.5);
-    background: rgba(220, 185, 112, 0.12);
-  }
-  .rail-conf {
-    font-family: var(--fm);
-    font-size: 7px;
-    color: var(--arena-accent-2);
-    min-width: 26px;
-    text-align: right;
-  }
-  .rail-log {
-    padding: 6px 8px;
-    border-bottom: 1px solid var(--arena-line-soft);
-    display: grid;
-    gap: 2px;
-  }
-  .rl-name {
-    font-family: var(--fd);
-    font-size: 7px;
-    letter-spacing: 1px;
-    font-weight: 900;
-  }
-  .rl-text {
-    font-family: var(--fm);
-    font-size: 7px;
-    line-height: 1.35;
-    color: var(--arena-text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .rail-map {
-    padding: 7px;
-    display: grid;
-    gap: 6px;
-  }
-  .rm-item {
-    padding: 7px 8px;
-    border: 1px solid var(--arena-line-soft);
-    background: rgba(10, 22, 17, 0.78);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .rm-item span {
-    font-family: var(--fm);
-    font-size: 7px;
-    color: var(--arena-text-muted);
-    letter-spacing: 1px;
-  }
-  .rail-empty {
-    padding: 18px 10px;
-    text-align: center;
-    color: rgba(240, 237, 228, 0.45);
-    font-family: var(--fm);
-    font-size: 8px;
-  }
-
-  .arena-balance {
-    position: absolute;
-    left: 10px;
-    right: 10px;
-    bottom: 8px;
-    z-index: 15;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 8px;
-  }
-  .ab-track {
-    height: 6px;
-    border: 1px solid var(--arena-line-soft);
-    background: linear-gradient(90deg, rgba(0, 204, 136, 0.12), rgba(255, 94, 122, 0.18));
-    position: relative;
-    overflow: hidden;
-  }
-  .ab-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--arena-good), var(--arena-accent-2));
-    transition: width .3s ease;
-  }
-
-  .feed-panel {
-    left: 8px;
-    right: 206px;
-    max-height: 82px;
-  }
-  .feed-msg {
-    border-color: var(--arena-line-soft);
-    background: rgba(8, 18, 13, 0.78);
-    color: var(--arena-text);
-  }
-  .feed-text {
-    color: var(--arena-text-dim);
-  }
-  .hist-btn {
-    right: 206px;
-  }
-
-  @media (max-width: 1150px) {
-    .arena-rail {
-      width: 170px;
-    }
-    .feed-panel {
-      right: 184px;
-    }
-    .hist-btn {
-      right: 184px;
-    }
+  @media (max-width: 1024px) {
     .atb-phase-track {
       justify-content: flex-start;
       overflow-x: auto;
@@ -4076,16 +3250,7 @@
       width: min(288px, calc(100% - 190px));
     }
   }
-  @media (max-width: 900px) {
-    .arena-rail {
-      display: none;
-    }
-    .feed-panel {
-      right: 8px;
-    }
-    .hist-btn {
-      right: 8px;
-    }
+  @media (max-width: 1024px) {
     .arena-topbar {
       grid-template-columns: 1fr auto;
       grid-template-areas:
@@ -4109,9 +3274,6 @@
     .live-event-stack {
       width: min(300px, calc(100% - 18px));
       top: 106px;
-    }
-    .phase-display {
-      top: 110px;
     }
   }
 

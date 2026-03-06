@@ -1,35 +1,53 @@
 <script lang="ts">
   import DirectionBadge from '../DirectionBadge.svelte';
 
-  export let selectedCount = 0;
-  export let signalPoolLength = 0;
-  export let trackedCount = 0;
-  export let avgConfidence = 0;
-  export let avgRR = 0;
-  export let consensusDir = 'NEUTRAL';
-  export let topSignalHint = '';
-  export let canApplyTopSignal = false;
+  interface Props {
+    selectedCount?: number;
+    signalPoolLength?: number;
+    trackedCount?: number;
+    avgConfidence?: number;
+    avgRR?: number;
+    consensusDir?: string;
+    topSignalHint?: string;
+    canApplyTopSignal?: boolean;
+    onOpenCopyTrade?: () => void;
+    onGoSignals?: () => void;
+    onApplyTopSignal?: () => void;
+  }
 
-  export let onOpenCopyTrade: () => void;
-  export let onGoSignals: () => void;
-  export let onApplyTopSignal: () => void;
+  let {
+    selectedCount = 0,
+    signalPoolLength = 0,
+    trackedCount = 0,
+    avgConfidence = 0,
+    avgRR = 0,
+    consensusDir = 'NEUTRAL',
+    topSignalHint = '',
+    canApplyTopSignal = false,
+    onOpenCopyTrade = () => {},
+    onGoSignals = () => {},
+    onApplyTopSignal = () => {},
+  }: Props = $props();
 </script>
 
-<button class="chart-signal-cta" on:click={onApplyTopSignal} disabled={!canApplyTopSignal}>
-  <span class="csc-text">APPLY TO CHART</span>
-  <span class="csc-hint">{topSignalHint || 'No actionable signal yet'}</span>
+<button class="chart-signal-cta" onclick={onApplyTopSignal} disabled={!canApplyTopSignal}>
+  <span class="csc-text">{canApplyTopSignal ? 'TRADE THIS SIGNAL' : 'WAIT FOR SIGNAL'}</span>
+  <div class="csc-meta">
+    <DirectionBadge direction={consensusDir} size="xs" variant="soft" />
+    <span class="csc-hint">{topSignalHint || 'No actionable setup yet'}</span>
+  </div>
   <span class="csc-arrow">↗</span>
 </button>
 
 {#if selectedCount > 0}
-  <button class="copy-trade-cta" on:click={onOpenCopyTrade}>
+  <button class="copy-trade-cta" onclick={onOpenCopyTrade}>
     <span class="ctc-text">CREATE COPY TRADE</span>
     <span class="ctc-count">{selectedCount} selected</span>
     <span class="ctc-arrow">→</span>
   </button>
 {/if}
 
-<button class="signal-room-cta" on:click={onGoSignals}>
+<button class="signal-room-cta" onclick={onGoSignals}>
   <span class="src-text">SIGNAL ROOM</span>
   <span class="src-count">{signalPoolLength} SIGNALS</span>
   {#if trackedCount > 0}

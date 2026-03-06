@@ -1,48 +1,62 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import type { Phase, Hypothesis } from '$lib/stores/gameState';
   import type { BattleTickState, BattlePriceTick } from '$lib/engine/battleResolver';
 
-  export let phase: Phase = 'DRAFT';
-  export let battleTick: BattleTickState | null = null;
-  export let hypothesis: Hypothesis | null = null;
-  export let prices: { BTC: number } = { BTC: 0 };
-  export let battleResult: string | null = null;
-  export let battlePriceHistory: BattlePriceTick[] = [];
-  export let activeAgents: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }> = [];
-  export let battleNarration: string = '';
+  interface Props {
+    phase?: Phase;
+    battleTick?: BattleTickState | null;
+    hypothesis?: Hypothesis | null;
+    prices?: { BTC: number };
+    battleResult?: string | null;
+    battlePriceHistory?: BattlePriceTick[];
+    activeAgents?: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }>;
+    battleNarration?: string;
+    onGoLobby?: () => void;
+    onPlayAgain?: () => void;
+  }
+  let {
+    phase = 'DRAFT',
+    battleTick = null,
+    hypothesis = null,
+    prices = { BTC: 0 },
+    battleResult = null,
+    battlePriceHistory = [],
+    activeAgents = [],
+    battleNarration = '',
+    onGoLobby = () => {},
+    onPlayAgain = () => {},
+  }: Props = $props();
 
-  const dispatch = createEventDispatcher();
-
-  $: isBattle = phase === 'BATTLE';
-  $: isResult = phase === 'RESULT';
-  $: currentPrice = battleTick?.currentPrice ?? prices.BTC;
-  $: pnl = battleTick?.pnlPercent ?? 0;
-  $: pnlPositive = pnl >= 0;
-  $: distToTP = battleTick?.distToTP ?? 0;
-  $: distToSL = battleTick?.distToSL ?? 0;
-  $: rr = hypothesis?.rr ?? 0;
-  $: dir = hypothesis?.dir ?? 'NEUTRAL';
-  $: timeProgress = battleTick?.timeProgress ?? 0;
+  const isBattle = $derived(phase === 'BATTLE');
+  const isResult = $derived(phase === 'RESULT');
+  const currentPrice = $derived(battleTick?.currentPrice ?? prices.BTC);
+  const pnl = $derived(battleTick?.pnlPercent ?? 0);
+  const pnlPositive = $derived(pnl >= 0);
+  const distToTP = $derived(battleTick?.distToTP ?? 0);
+  const distToSL = $derived(battleTick?.distToSL ?? 0);
+  const rr = $derived(hypothesis?.rr ?? 0);
+  const dir = $derived(hypothesis?.dir ?? 'NEUTRAL');
+  const timeProgress = $derived(battleTick?.timeProgress ?? 0);
 
   // Boss HP = 100 - distToTP (boss loses health as we approach TP)
-  $: bossHP = Math.max(0, Math.min(100, 100 - distToTP));
+  const bossHP = $derived(Math.max(0, Math.min(100, 100 - distToTP)));
 
   // Round counter: divide battle into 8 rounds
-  $: roundNum = Math.min(8, Math.max(1, Math.ceil((timeProgress / 100) * 8)));
+  const roundNum = $derived(Math.min(8, Math.max(1, Math.ceil((timeProgress / 100) * 8))));
 
   // Determine who is "attacking" based on recent price movement
-  $: lastTwoTicks = battlePriceHistory.slice(-2);
-  $: priceMovingFavorably = (() => {
+  const lastTwoTicks = $derived(battlePriceHistory.slice(-2));
+  const priceMovingFavorably = $derived((() => {
     if (lastTwoTicks.length < 2) return false;
     const diff = lastTwoTicks[1].price - lastTwoTicks[0].price;
     if (dir === 'LONG') return diff > 0;
     if (dir === 'SHORT') return diff < 0;
     return false;
-  })();
+  })());
 
   // Pick a random attacking agent index (changes each tick)
-  $: attackerIdx = battlePriceHistory.length % activeAgents.length;
+  const attackerIdx = $derived(battlePriceHistory.length % activeAgents.length);
 
   // Compute agent HP: confidence * direction_match_factor
   function agentHP(agent: { dir: string; conf: number }): number {
@@ -51,7 +65,7 @@
   }
 
   // Sparkline SVG from price history
-  $: sparklinePath = (() => {
+  const sparklinePath = $derived((() => {
     if (battlePriceHistory.length < 2) return '';
     const pts = battlePriceHistory.slice(-60);
     const minP = Math.min(...pts.map(p => p.price));
@@ -64,7 +78,7 @@
       const y = h - ((p.price - minP) / range) * h;
       return (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
     }).join(' ');
-  })();
+  })());
 
   function fmtPrice(p: number): string {
     if (!p) return '---';
@@ -186,8 +200,8 @@
       <div class="result-pnl" class:positive={pnlPositive}>{fmtPnl(pnl)}</div>
       <div class="result-narration">{battleNarration}</div>
       <div class="result-actions">
-        <button on:click={() => dispatch('goLobby')}>LOBBY</button>
-        <button class="btn-again" on:click={() => dispatch('playAgain')}>PLAY AGAIN</button>
+        <button onclick={() => onGoLobby()}>LOBBY</button>
+        <button class="btn-again" onclick={() => onPlayAgain()}>PLAY AGAIN</button>
       </div>
     </div>
   {/if}

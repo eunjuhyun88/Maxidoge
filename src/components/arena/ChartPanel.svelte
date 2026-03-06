@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
   import { gameState } from '$lib/stores/gameState';
   import {
     fetch24hr,
@@ -9,59 +9,204 @@
     subscribeMiniTicker,
     type BinanceKline
   } from '$lib/api/binance';
-  import { updatePrice } from '$lib/stores/priceStore';
+  import { livePrices, updatePrice } from '$lib/stores/priceStore';
+  import { getBaseSymbolFromPair, getPairPrice } from '$lib/utils/price';
   import {
     CORE_TIMEFRAME_OPTIONS,
     normalizeTimeframe,
     toBinanceInterval,
-    toTradingViewInterval,
   } from '$lib/utils/timeframe';
   import { openQuickTrade, type TradeDirection } from '$lib/stores/quickTradeStore';
-  import {
-    detectChartPatterns,
-    type ChartPatternDetection,
-  } from '$lib/engine/patternDetector';
+  import type { ChartPatternDetection } from '$lib/engine/patternDetector';
+  import type { IChartApi, ISeriesApi, IPriceLine } from 'lightweight-charts';
   import TokenDropdown from '../shared/TokenDropdown.svelte';
   import {
     type ChartTheme,
     FALLBACK_THEME,
-    readCssVar,
-    toRgbTuple,
     withAlpha,
     toTvHex,
     resolveChartTheme,
   } from './ChartTheme';
+  import type { DrawingMode, DrawingAnchorPoint, DrawingItem, AgentTradeSetup, TradePlanDraft, ChartMarker, PatternScanScope, PatternScanReport } from '$lib/chart/chartTypes';
+  import type { IndicatorKey } from '$lib/chart/chartTypes';
+  import { formatPrice, formatCompact, clampRoundPrice, normalizeChartTime } from '$lib/chart/chartCoordinates';
+  import { normalizeMarketPrice, clampRatio, isCompactViewport, generateCandles, gtmEvent } from '$lib/chart/chartHelpers';
+  import { computeSMA, computeRSI, updateRSIIncremental, BAR_SPACING, MAX_KLINE_CACHE, MAX_DRAWINGS, MIN_PATTERN_CANDLES, MAX_OVERLAY_PATTERNS, getIndicatorProfile } from '$lib/chart/chartIndicators';
+  import {
+    buildCommunitySignalDraft,
+    getPlannedTradeOrder,
+    withTradePlanRatio,
+  } from '$lib/chart/chartTradePlanner';
+  import {
+    destroyTradingViewEmbed,
+    mountTradingViewEmbed,
+    pairToTradingViewSymbol,
+    type TradingViewEmbedInstance,
+  } from '$lib/chart/tradingviewEmbed';
+  import {
+    computeTradePreview as _computeTradePreview,
+    drawTradePreview as _drawTradePreview,
+    drawDrawingItems as _drawDrawingItems,
+    drawAgentTradeOverlay as _drawAgentTradeOverlay,
+    drawPatternOverlays as _drawPatternOverlays,
+    drawPatternTag as _drawPatternTag,
+    roundRect as _roundRect,
+    makeTradeBoxDrawing as _makeTradeBoxDrawing,
+    type TradePreview,
+  } from './chart/chartDrawingEngine';
+  import {
+    appendDrawingWithLimit,
+    buildHorizontalLineDrawing,
+    completeTrendlineDraft,
+    finalizeTradePreview,
+    startTradePreviewDraft,
+    startTrendlineDraft,
+    updateTradePreviewDraft,
+    type TradePreviewDraft,
+    type TrendlineDraft,
+  } from './chart/chartDrawingSession';
+  import {
+    type ChartPatternStateSnapshot,
+    emptyChartPatternState,
+    getVisibleScopeCandles as sliceVisibleScopeCandles,
+    detectChartPatternState,
+    compute24hStatsFromKlines,
+  } from './chart/chartPatternEngine';
 
-  const dispatch = createEventDispatcher<{
-    scanrequest: { source: 'chart-bar'; pair: string; timeframe: string };
-    chatrequest: { source: 'chart-bar'; pair: string; timeframe: string };
+  // ═══ Props ═══
+  interface Props {
+    posEntry?: number | null;
+    posTp?: number | null;
+    posSl?: number | null;
+    posDir?: string;
+    showPosition?: boolean;
+    advancedMode?: boolean;
+    enableTradeLineEntry?: boolean;
+    uiPreset?: 'default' | 'tradingview';
+    requireTradeConfirm?: boolean;
+    chatFirstMode?: boolean;
+    chatTradeReady?: boolean;
+    chatTradeDir?: 'LONG' | 'SHORT';
+    hasScanned?: boolean;
+    activeTradeSetup?: AgentTradeSetup | null;
+    agentMarkers?: ChartMarker[];
+    agentAnnotations?: Array<{
+      id: string; icon: string; name: string; color: string; label: string;
+      detail: string; yPercent: number; xPercent: number;
+      type: 'ob' | 'funding' | 'whale' | 'signal';
+    }>;
+    onScanRequest?: (detail: { source: string; pair: string; timeframe: string }) => void;
+    onChatRequest?: (detail: { source: string; pair: string; timeframe: string }) => void;
+    onCommunitySignal?: (detail: {
+      pair: string; dir: 'LONG' | 'SHORT'; entry: number; tp: number; sl: number;
+      conf: number; source: string; reason: string; openCopyTrade: boolean;
+    }) => void;
+    onPriceUpdate?: (detail: { price: number }) => void;
+    onDragTP?: (detail: { price: number }) => void;
+    onDragSL?: (detail: { price: number }) => void;
+    onDragEntry?: (detail: { price: number }) => void;
+    onClearTradeSetup?: () => void;
+  }
+  interface ChartPanelEvents {
+    scanrequest: { source: string; pair: string; timeframe: string };
+    chatrequest: { source: string; pair: string; timeframe: string };
+    communitysignal: {
+      pair: string;
+      dir: 'LONG' | 'SHORT';
+      entry: number;
+      tp: number;
+      sl: number;
+      conf: number;
+      source: string;
+      reason: string;
+      openCopyTrade: boolean;
+    };
     priceUpdate: { price: number };
     dragTP: { price: number };
     dragSL: { price: number };
     dragEntry: { price: number };
     clearTradeSetup: void;
-  }>();
+  }
+  let {
+    posEntry = null,
+    posTp = null,
+    posSl = null,
+    posDir = 'LONG',
+    showPosition = false,
+    advancedMode = false,
+    enableTradeLineEntry = false,
+    uiPreset = 'default',
+    requireTradeConfirm = false,
+    chatFirstMode = false,
+    chatTradeReady = false,
+    chatTradeDir = 'LONG',
+    hasScanned = false,
+    activeTradeSetup = null,
+    agentMarkers = [],
+    agentAnnotations = [],
+    onScanRequest = () => {},
+    onChatRequest = () => {},
+    onCommunitySignal = () => {},
+    onPriceUpdate = () => {},
+    onDragTP = () => {},
+    onDragSL = () => {},
+    onDragEntry = () => {},
+    onClearTradeSetup = () => {},
+  }: Props = $props();
+  const dispatch = createEventDispatcher<ChartPanelEvents>();
+
+  function emitScanRequest(detail: ChartPanelEvents['scanrequest']) {
+    onScanRequest(detail);
+    dispatch('scanrequest', detail);
+  }
+
+  function emitChatRequest(detail: ChartPanelEvents['chatrequest']) {
+    onChatRequest(detail);
+    dispatch('chatrequest', detail);
+  }
+
+  function emitCommunitySignal(detail: ChartPanelEvents['communitysignal']) {
+    onCommunitySignal(detail);
+    dispatch('communitysignal', detail);
+  }
+
+  function emitPriceUpdate(detail: ChartPanelEvents['priceUpdate']) {
+    onPriceUpdate(detail);
+    dispatch('priceUpdate', detail);
+  }
+
+  function emitDrag(target: 'dragTP' | 'dragSL' | 'dragEntry', detail: { price: number }) {
+    if (target === 'dragTP') onDragTP(detail);
+    else if (target === 'dragSL') onDragSL(detail);
+    else onDragEntry(detail);
+    dispatch(target, detail);
+  }
+
+  function emitClearTradeSetup() {
+    onClearTradeSetup();
+    dispatch('clearTradeSetup');
+  }
 
   let chartContainer: HTMLDivElement;
-  let chart: any;
-  let lwcModule: any = null;
-  let series: any;
-  let volumeSeries: any;
+  let chart: IChartApi | null = null;
+  let lwcModule: typeof import('lightweight-charts') | null = null;
+  let series: ISeriesApi<'Candlestick'> | null = $state(null);
+  let volumeSeries: ISeriesApi<'Histogram'> | null = null;
   let cleanup: (() => void) | null = null;
   let wsCleanup: (() => void) | null = null;
   let priceWsCleanup: (() => void) | null = null;
 
   // ═══ Indicator Series ═══
-  let ma7Series: any;
-  let ma20Series: any;
-  let ma25Series: any;
-  let ma60Series: any;
-  let ma99Series: any;
-  let ma120Series: any;
-  let rsiSeries: any;
+  let ma7Series: ISeriesApi<'Line'> | null = null;
+  let ma20Series: ISeriesApi<'Line'> | null = null;
+  let ma25Series: ISeriesApi<'Line'> | null = null;
+  let ma60Series: ISeriesApi<'Line'> | null = null;
+  let ma99Series: ISeriesApi<'Line'> | null = null;
+  let ma120Series: ISeriesApi<'Line'> | null = null;
+  let rsiSeries: ISeriesApi<'Line'> | null = null;
   let volumePaneIndex: number | null = null;
   let rsiPaneIndex: number | null = null;
-  let klineCache: BinanceKline[] = [];
+  let klineCache = $state<BinanceKline[]>([]);
   let _isLoadingMore = false;
   let _noMoreHistory = false; // true when Binance returns 0 older candles
   let _currentSymbol = '';
@@ -70,158 +215,82 @@
   // ═══ Incremental indicator state (avoid full recompute on each WS tick) ═══
   let _rsiAvgGain = 0;
   let _rsiAvgLoss = 0;
+  let _maRunSum: Record<number, number> = {}; // period → running sum for O(1) MA updates
+  // MA period config for data-driven WS updates (rebuilt when series refs change in loadKlines)
+  let _maPeriods: Array<{ p: number; s: ISeriesApi<'Line'> | null; setVal: (v: number) => void }> = [];
 
   // ═══ Cached MA values for template display ═══
-  let ma7Val = 0;
-  let ma20Val = 0;
-  let ma25Val = 0;
-  let ma60Val = 0;
-  let ma99Val = 0;
-  let ma120Val = 0;
-  let rsiVal = 0;
-  let latestVolume = 0;
+  let ma7Val = $state(0);
+  let ma20Val = $state(0);
+  let ma25Val = $state(0);
+  let ma60Val = $state(0);
+  let ma99Val = $state(0);
+  let ma120Val = $state(0);
+  let rsiVal = $state(0);
+  let latestVolume = $state(0);
 
   // ═══ Chart Mode ═══
-  let chartMode: 'agent' | 'trading' = 'agent';
-  let tvWidget: any = null;
-  let tvContainer: HTMLDivElement;
-  let tvScriptLoaded = false;
-  let tvLoading = false;
-  let tvError = '';
-  let tvSafeMode = false;
-  let _tvFallbackTried = false;
+  let chartMode: 'agent' | 'trading' = $state('agent');
+  let tvWidget: TradingViewEmbedInstance | null = null;
+  let tvContainer = $state<HTMLDivElement | null>(null);
+  let tvScriptLoaded = $state(false);
+  let tvLoading = $state(false);
+  let tvError = $state('');
+  let tvSafeMode = $state(false);
+  let _tvFallbackTried = $state(false);
   let _tvLoadTimer: ReturnType<typeof setTimeout> | null = null;
   let _tvReinitKey = '';
 
   // ═══ Drawing Tools ═══
-  const LINE_ENTRY_DEFAULT_RR = 2;
-  const LINE_ENTRY_MIN_PIXEL_RISK = 6;
-  type DrawingMode = 'none' | 'hline' | 'trendline' | 'longentry' | 'shortentry' | 'trade';
-  type DrawingAnchorPoint = { time: number; price: number };
-  type DrawingItem =
-    | { type: 'hline'; points: Array<{ x: number; y: number }>; price?: number; color: string }
-    | { type: 'trendline'; points: Array<{ x: number; y: number }>; anchors?: [DrawingAnchorPoint, DrawingAnchorPoint]; color: string }
-    | {
-      type: 'tradebox';
-      points: Array<{ x: number; y: number }>; // [entry-left, entry-right, sl-left, tp-left]
-      fromTime?: number;
-      toTime?: number;
-      color: string;
-      dir: 'LONG' | 'SHORT';
-      entry: number;
-      sl: number;
-      tp: number;
-      rr: number;
-      riskPct: number;
-    };
-  let drawingCanvas: HTMLCanvasElement;
-  let drawingMode: DrawingMode = 'none';
-  let drawings: DrawingItem[] = [];
-  let currentDrawing: { type: 'trendline'; points: Array<{ x: number; y: number }> } | null = null;
-  let tradePreview: { mode: 'longentry' | 'shortentry' | 'trade'; startX: number; startY: number; cursorX: number; cursorY: number } | null = null;
-  type TradePlanDraft = {
-    pair: string;
-    previewDir: 'LONG' | 'SHORT';
-    entry: number;
-    sl: number;
-    tp: number;
-    rr: number;
-    riskPct: number;
-    longRatio: number;
-  };
-  let pendingTradePlan: TradePlanDraft | null = null;
-  let ratioTrackEl: HTMLButtonElement | null = null;
+  let drawingCanvas = $state<HTMLCanvasElement | null>(null);
+  let _drawCtx: CanvasRenderingContext2D | null = null;
+  let drawingMode: DrawingMode = $state('none');
+  let drawings = $state<DrawingItem[]>([]);
+  let currentDrawing: TrendlineDraft | null = null;
+  let tradePreview: TradePreviewDraft | null = $state(null);
+  let pendingTradePlan: TradePlanDraft | null = $state(null);
+  let ratioTrackEl = $state<HTMLButtonElement | null>(null);
   let _ratioDragPointerId: number | null = null;
   let _ratioDragBound = false;
-  let isDrawing = false;
-  let drawingsVisible = true;
+  let isDrawing = $state(false);
+  let drawingsVisible = $state(true);
   let _agentCloseBtn: { x: number; y: number; r: number } | null = null; // ✕ button hit area
-  let chartNotice = '';
+  let chartNotice = $state('');
   let _chartNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Position lines
-  let tpLine: any = null;
-  let entryLine: any = null;
-  let slLine: any = null;
+  let tpLine: IPriceLine | null = null;
+  let entryLine: IPriceLine | null = null;
+  let slLine: IPriceLine | null = null;
 
-  export let posEntry: number | null = null;
-  export let posTp: number | null = null;
-  export let posSl: number | null = null;
-  export let posDir: string = 'LONG';
-  export let showPosition = false;
-  export let advancedMode = false;
-  export let enableTradeLineEntry = false;
-  export let uiPreset: 'default' | 'tradingview' = 'default';
-  export let requireTradeConfirm = false;
-  export let chatFirstMode = false;
-  export let chatTradeReady = false;
-  export let chatTradeDir: 'LONG' | 'SHORT' = 'LONG';
-  export let hasScanned = false; // true after first scan completes
+  // (posEntry, posTp, posSl, posDir, showPosition, advancedMode, enableTradeLineEntry,
+  //  uiPreset, requireTradeConfirm, chatFirstMode, chatTradeReady, chatTradeDir,
+  //  hasScanned, activeTradeSetup — all via $props() above)
 
-  // ═══ Agent Trade Overlay (TradingView-style TP/SL zones) ═══
-  type AgentTradeSetup = {
-    source: 'consensus' | 'agent';
-    agentName?: string;
-    dir: 'LONG' | 'SHORT';
-    entry: number;
-    tp: number;
-    sl: number;
-    rr: number;
-    conf: number;
-    pair: string;
-  };
-  export let activeTradeSetup: AgentTradeSetup | null = null;
-  let agentPriceLines: { tp: any; entry: any; sl: any } = { tp: null, entry: null, sl: null };
+  let agentPriceLines: { tp: IPriceLine | null; entry: IPriceLine | null; sl: IPriceLine | null } = { tp: null, entry: null, sl: null };
 
-  type ChartMarker = {
-    time: number; position: 'aboveBar' | 'belowBar'; color: string;
-    shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'; text: string;
-  };
-  type PatternScanScope = 'visible' | 'full';
-  type PatternScanResult = {
-    ok: boolean;
-    scope: PatternScanScope;
-    candleCount: number;
-    patternCount: number;
-    patterns: Array<{
-      kind: ChartPatternDetection['kind'];
-      shortName: string;
-      direction: ChartPatternDetection['direction'];
-      status: ChartPatternDetection['status'];
-      confidence: number;
-      startTime: number;
-      endTime: number;
-    }>;
-    message: string;
-  };
-  const MIN_PATTERN_CANDLES = 30;
-  export let agentMarkers: ChartMarker[] = [];
-  let patternMarkers: ChartMarker[] = [];
-  let detectedPatterns: ChartPatternDetection[] = [];
-  let overlayPatterns: ChartPatternDetection[] = [];
-  let patternLineSeries: any[] = [];
-  const MAX_OVERLAY_PATTERNS = 1;
+  // agentMarkers — via $props() above
+  let patternMarkers: ChartMarker[] = $state([]);
+  let detectedPatterns: ChartPatternDetection[] = $state([]);
+  let overlayPatterns: ChartPatternDetection[] = $state([]);
+  let patternLineSeries: ISeriesApi<'Line'>[] = [];
   const ENABLE_PATTERN_LINE_SERIES = false;
   let _patternSignature = '';
   let _patternRangeScanTimer: ReturnType<typeof setTimeout> | null = null;
 
-  export let agentAnnotations: Array<{
-    id: string; icon: string; name: string; color: string; label: string;
-    detail: string; yPercent: number; xPercent: number;
-    type: 'ob' | 'funding' | 'whale' | 'signal';
-  }> = [];
+  // agentAnnotations — via $props() above
 
-  let selectedAnnotation: typeof agentAnnotations[0] | null = null;
+  let selectedAnnotation: typeof agentAnnotations[0] | null = $state(null);
 
-  let state = $gameState;
-  $: state = $gameState;
-  $: symbol = pairToSymbol(state.pair);
-  $: interval = toBinanceInterval(state.timeframe);
-  $: pairBaseLabel = (state.pair?.split('/')?.[0] || 'BTC').toUpperCase();
-  $: pairQuoteLabel = (state.pair?.split('/')?.[1] || 'USDT').toUpperCase();
+  const storeState = $derived($gameState);
+  const symbol = $derived(pairToSymbol(storeState.pair));
+  const interval = $derived(toBinanceInterval(storeState.timeframe));
+  const pairBaseLabel = $derived((storeState.pair?.split('/')?.[0] || 'BTC').toUpperCase());
+  const pairQuoteLabel = $derived((storeState.pair?.split('/')?.[1] || 'USDT').toUpperCase());
+  const pairBaseFallbackSymbol = $derived(getBaseSymbolFromPair(storeState.pair) || 'BTC');
+  const pairBaseFallbackPrice = $derived(storeState.bases[pairBaseFallbackSymbol as keyof typeof storeState.bases] || storeState.bases.BTC || 0);
 
-  type IndicatorKey = 'ma20' | 'ma60' | 'ma120' | 'ma7' | 'ma25' | 'ma99' | 'rsi' | 'vol';
-  let indicatorEnabled: Record<IndicatorKey, boolean> = {
+  let indicatorEnabled: Record<IndicatorKey, boolean> = $state({
     ma20: true,
     ma60: true,
     ma120: true,
@@ -230,24 +299,16 @@
     ma99: true,
     rsi: true,
     vol: true,
-  };
-  let chartVisualMode: 'focus' | 'full' = 'focus';
-  let showIndicatorLegend = true;
-  let indicatorStripState: 'expanded' | 'collapsed' | 'hidden' = 'collapsed';
-  $: isTvLikePreset = uiPreset === 'tradingview';
+  });
+  let chartVisualMode: 'focus' | 'full' = $state('focus');
+  let showIndicatorLegend = $state(true);
+  let indicatorStripState: 'expanded' | 'collapsed' | 'hidden' = $state('collapsed');
+  const isTvLikePreset = $derived(uiPreset === 'tradingview');
   let _indicatorProfileApplied: string | null = null;
-  const BAR_SPACING_MIN = 5;
-  const BAR_SPACING_MAX = 28;
-  const BAR_SPACING_STEP = 1.5;
-  const BAR_SPACING_DEFAULT = 14;
-  let barSpacing = BAR_SPACING_DEFAULT;
-  let autoScaleY = true;
+  let barSpacing: number = BAR_SPACING.DEFAULT;
+  let autoScaleY = $state(true);
 
-  function isCompactViewport(): boolean {
-    return typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
-  }
-
-  let chartTheme: ChartTheme = FALLBACK_THEME;
+  let chartTheme: ChartTheme = $state(FALLBACK_THEME);
 
   function pushChartNotice(msg: string) {
     chartNotice = msg;
@@ -258,19 +319,6 @@
     }, 2800);
   }
 
-  function formatPrice(v: number) {
-    if (!Number.isFinite(v)) return '—';
-    return v.toLocaleString('en-US', { maximumFractionDigits: v >= 100 ? 2 : 4 });
-  }
-
-  function formatCompact(v: number) {
-    if (!Number.isFinite(v)) return '—';
-    if (Math.abs(v) >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2)}B`;
-    if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
-    if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(2)}K`;
-    return v.toFixed(2);
-  }
-
   function toChartPrice(y: number): number | null {
     if (!series) return null;
     try { return series.coordinateToPrice(y); } catch { return null; }
@@ -279,23 +327,6 @@
   function toChartY(price: number): number | null {
     if (!series) return null;
     try { return series.priceToCoordinate(price); } catch { return null; }
-  }
-
-  function normalizeChartTime(rawTime: unknown): number | null {
-    if (typeof rawTime === 'number' && Number.isFinite(rawTime)) return rawTime;
-    if (rawTime && typeof rawTime === 'object') {
-      const maybeTimestamp = (rawTime as { timestamp?: unknown }).timestamp;
-      if (typeof maybeTimestamp === 'number' && Number.isFinite(maybeTimestamp)) return maybeTimestamp;
-      const maybeDay = rawTime as { year?: unknown; month?: unknown; day?: unknown };
-      if (
-        typeof maybeDay.year === 'number'
-        && typeof maybeDay.month === 'number'
-        && typeof maybeDay.day === 'number'
-      ) {
-        return Math.floor(Date.UTC(maybeDay.year, maybeDay.month - 1, maybeDay.day) / 1000);
-      }
-    }
-    return null;
   }
 
   function toChartTime(x: number): number | null {
@@ -334,60 +365,14 @@
     return { time, price: clampRoundPrice(price) };
   }
 
-  function clampRoundPrice(v: number) {
-    if (!Number.isFinite(v)) return v;
-    const abs = Math.abs(v);
-    if (abs >= 1000) return Math.round(v);
-    if (abs >= 100) return Number(v.toFixed(2));
-    return Number(v.toFixed(4));
-  }
-
-  function openTradeByLine(dir: 'LONG' | 'SHORT', entry: number, stopHint: number, rr = LINE_ENTRY_DEFAULT_RR) {
-    const pair = state.pair || 'BTC/USDT';
-    const entryPx = clampRoundPrice(entry);
-    let sl = clampRoundPrice(stopHint);
-    if (dir === 'LONG' && sl >= entryPx) sl = clampRoundPrice(entryPx * 0.995);
-    if (dir === 'SHORT' && sl <= entryPx) sl = clampRoundPrice(entryPx * 1.005);
-    const risk = Math.abs(entryPx - sl);
-    if (!Number.isFinite(risk) || risk <= 0) {
-      pushChartNotice('라인 기준 가격 계산 실패');
-      return;
-    }
-    const tp = clampRoundPrice(dir === 'LONG' ? entryPx + risk * rr : entryPx - risk * rr);
-    openQuickTrade(pair, dir, entryPx, tp, sl, 'chart-line', `${dir} line-entry`);
-    gtmEvent('terminal_line_entry_open', { pair, dir, entry: entryPx, tp, sl, rr });
-    pushChartNotice(`${dir} 진입 생성 · ENTRY ${formatPrice(entryPx)} · TP ${formatPrice(tp)} · SL ${formatPrice(sl)} · RR 1:${rr.toFixed(1)}`);
-  }
-
-  function clampRatio(v: number): number {
-    return Math.max(0, Math.min(100, Math.round(v)));
-  }
-
   function setTradePlanRatio(nextLongRatio: number) {
     if (!pendingTradePlan) return;
-    const longRatio = clampRatio(nextLongRatio);
-    if (pendingTradePlan.longRatio === longRatio) return;
-    pendingTradePlan = { ...pendingTradePlan, longRatio };
+    const nextPlan = withTradePlanRatio(pendingTradePlan, nextLongRatio);
+    if (nextPlan === pendingTradePlan) return;
+    pendingTradePlan = nextPlan;
   }
 
-  function getPlannedTradeOrder(plan: TradePlanDraft) {
-    const dir: 'LONG' | 'SHORT' = plan.longRatio >= 50 ? 'LONG' : 'SHORT';
-    const rr = Number.isFinite(plan.rr) && plan.rr > 0 ? plan.rr : LINE_ENTRY_DEFAULT_RR;
-    const risk = Math.max(Math.abs(plan.entry - plan.sl), Math.max(0.0001, Math.abs(plan.entry) * 0.001));
-    const sl = clampRoundPrice(dir === 'LONG' ? plan.entry - risk : plan.entry + risk);
-    const tp = clampRoundPrice(dir === 'LONG' ? plan.entry + risk * rr : plan.entry - risk * rr);
-    return {
-      pair: plan.pair,
-      dir,
-      entry: clampRoundPrice(plan.entry),
-      sl,
-      tp,
-      rr,
-      riskPct: (risk / Math.max(Math.abs(plan.entry), 1)) * 100,
-      longRatio: plan.longRatio,
-      shortRatio: 100 - plan.longRatio,
-    };
-  }
+  // getPlannedTradeOrder — imported from chart/chartDrawingEngine.ts
 
   function openTradeFromPlan() {
     if (!pendingTradePlan) return;
@@ -466,333 +451,21 @@
     bindRatioDrag();
   }
 
-  function clampToCanvas(v: number, max: number) {
-    return Math.max(0, Math.min(max, v));
-  }
-
-  function computeTradePreview(mode: 'longentry' | 'shortentry' | 'trade', startX: number, startY: number, cursorX: number, cursorY: number) {
+  function computeTradePreview(mode: 'longentry' | 'shortentry' | 'trade', startX: number, startY: number, cursorX: number, cursorY: number): TradePreview | null {
     if (!drawingCanvas) return null;
-    const sx = clampToCanvas(startX, drawingCanvas.width);
-    const sy = clampToCanvas(startY, drawingCanvas.height);
-    const cx = clampToCanvas(cursorX, drawingCanvas.width);
-    const cy = clampToCanvas(cursorY, drawingCanvas.height);
-
-    const left = Math.min(sx, cx);
-    const right = Math.min(drawingCanvas.width, Math.max(sx, cx, left + 26));
-    const entryY = sy;
-    let slY = cy;
-    let tpY = cy;
-
-    // For unified 'trade' mode: auto-detect direction from drag.
-    // Drag DOWN (cy > entryY) → SL below entry → LONG
-    // Drag UP   (cy < entryY) → SL above entry → SHORT
-    const effectiveMode: 'longentry' | 'shortentry' =
-      mode === 'trade'
-        ? (cy >= entryY ? 'longentry' : 'shortentry')
-        : mode;
-
-    if (effectiveMode === 'longentry') {
-      slY = Math.max(cy, entryY + LINE_ENTRY_MIN_PIXEL_RISK);
-      tpY = entryY - (slY - entryY) * LINE_ENTRY_DEFAULT_RR;
-    } else {
-      slY = Math.min(cy, entryY - LINE_ENTRY_MIN_PIXEL_RISK);
-      tpY = entryY + (entryY - slY) * LINE_ENTRY_DEFAULT_RR;
-    }
-
-    const entryRaw = toChartPrice(entryY);
-    const fallbackEntry = Number.isFinite(livePrice) && livePrice > 0 ? livePrice : null;
-    if (entryRaw == null && fallbackEntry == null) return null;
-    const entryPx = clampRoundPrice(entryRaw ?? fallbackEntry!);
-
-    const slRaw = toChartPrice(slY);
-    let slPx = 0;
-    if (slRaw != null) {
-      slPx = clampRoundPrice(slRaw);
-    } else {
-      const pxDelta = Math.max(LINE_ENTRY_MIN_PIXEL_RISK, Math.abs(slY - entryY));
-      const approxRisk = Math.max(0.0035, Math.min(0.08, (pxDelta / Math.max(120, drawingCanvas.height)) * 0.24));
-      slPx = clampRoundPrice(effectiveMode === 'longentry' ? entryPx * (1 - approxRisk) : entryPx * (1 + approxRisk));
-    }
-    if (effectiveMode === 'longentry' && slPx >= entryPx) slPx = clampRoundPrice(entryPx * 0.995);
-    if (effectiveMode === 'shortentry' && slPx <= entryPx) slPx = clampRoundPrice(entryPx * 1.005);
-    const risk = Math.abs(entryPx - slPx);
-    if (!Number.isFinite(risk) || risk <= 0) return null;
-    const tpPx = clampRoundPrice(effectiveMode === 'longentry' ? entryPx + risk * LINE_ENTRY_DEFAULT_RR : entryPx - risk * LINE_ENTRY_DEFAULT_RR);
-
-    const mappedEntryY = toChartY(entryPx);
-    const mappedSlY = toChartY(slPx);
-    const mappedTpY = toChartY(tpPx);
-    if (mappedSlY != null) slY = mappedSlY;
-    tpY = mappedTpY ?? tpY;
-    const normalizedEntryY = mappedEntryY ?? entryY;
-
-    const riskPct = Math.abs(entryPx - slPx) / Math.max(Math.abs(entryPx), 1) * 100;
-
-    return {
-      mode: effectiveMode,
-      dir: effectiveMode === 'longentry' ? 'LONG' as const : 'SHORT' as const,
-      left,
-      right,
-      entryY: normalizedEntryY,
-      slY,
-      tpY,
-      entry: entryPx,
-      sl: slPx,
-      tp: tpPx,
-      rr: LINE_ENTRY_DEFAULT_RR,
-      riskPct,
-    };
+    return _computeTradePreview(mode, startX, startY, cursorX, cursorY, drawingCanvas.width, drawingCanvas.height, { toChartPrice, toChartY }, livePrice);
   }
 
-  function drawTradePreview(ctx: CanvasRenderingContext2D, preview: NonNullable<ReturnType<typeof computeTradePreview>>) {
-    const lossTop = Math.min(preview.entryY, preview.slY);
-    const lossBottom = Math.max(preview.entryY, preview.slY);
-    const gainTop = Math.min(preview.entryY, preview.tpY);
-    const gainBottom = Math.max(preview.entryY, preview.tpY);
-
-    ctx.save();
-    ctx.fillStyle = withAlpha(chartTheme.candleUp, 0.17);
-    ctx.fillRect(preview.left, gainTop, preview.right - preview.left, gainBottom - gainTop);
-    ctx.fillStyle = withAlpha(chartTheme.candleDown, 0.17);
-    ctx.fillRect(preview.left, lossTop, preview.right - preview.left, lossBottom - lossTop);
-
-    ctx.lineWidth = 1.2;
-    ctx.setLineDash([5, 4]);
-    ctx.strokeStyle = withAlpha(chartTheme.entry, 0.92);
-    ctx.beginPath();
-    ctx.moveTo(preview.left, preview.entryY);
-    ctx.lineTo(preview.right, preview.entryY);
-    ctx.stroke();
-
-    ctx.strokeStyle = withAlpha(chartTheme.sl, 0.9);
-    ctx.beginPath();
-    ctx.moveTo(preview.left, preview.slY);
-    ctx.lineTo(preview.right, preview.slY);
-    ctx.stroke();
-
-    ctx.strokeStyle = withAlpha(chartTheme.tp, 0.9);
-    ctx.beginPath();
-    ctx.moveTo(preview.left, preview.tpY);
-    ctx.lineTo(preview.right, preview.tpY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    const label = `${preview.dir} · E ${formatPrice(preview.entry)} · TP ${formatPrice(preview.tp)} · SL ${formatPrice(preview.sl)} · RR 1:${preview.rr.toFixed(1)} · Risk ${preview.riskPct.toFixed(2)}%`;
-    ctx.font = "10px 'JetBrains Mono', monospace";
-    const textW = ctx.measureText(label).width;
-    const padX = 7;
-    const boxW = textW + padX * 2;
-    const boxH = 16;
-    const boxX = Math.max(4, Math.min(preview.right + 8, drawingCanvas.width - boxW - 4));
-    const boxY = Math.max(4, Math.min(preview.entryY - boxH - 4, drawingCanvas.height - boxH - 4));
-
-    ctx.fillStyle = withAlpha('#000000', 0.68);
-    ctx.fillRect(boxX, boxY, boxW, boxH);
-    ctx.strokeStyle = withAlpha(preview.dir === 'LONG' ? chartTheme.candleUp : chartTheme.candleDown, 0.9);
-    ctx.strokeRect(boxX, boxY, boxW, boxH);
-    ctx.fillStyle = withAlpha('#f5f7fa', 0.95);
-    ctx.fillText(label, boxX + padX, boxY + 11);
-    ctx.restore();
+  function drawTradePreview(ctx: CanvasRenderingContext2D, preview: TradePreview) {
+    if (!drawingCanvas) return;
+    _drawTradePreview(ctx, preview, chartTheme, drawingCanvas.width);
   }
 
-  // ═══ Agent Trade Overlay — TradingView-style position box ═══
-  // Clean, minimal: just colored zones + inside labels. No price lines on axis.
+  // drawAgentTradeOverlay + _roundRect — extracted to chart/chartDrawingEngine.ts
   function drawAgentTradeOverlay(ctx: CanvasRenderingContext2D, setup: AgentTradeSetup) {
     if (!drawingCanvas || !chart) return;
-    const rawEntryY = toChartY(setup.entry);
-    const rawTpY = toChartY(setup.tp);
-    const rawSlY = toChartY(setup.sl);
-    if (rawEntryY === null || rawTpY === null || rawSlY === null) return;
-
-    const W = drawingCanvas.width;
-    const rightPad = 72;
-    const R = W - rightPad;
-    const isLong = setup.dir === 'LONG';
-    const tpPct = ((Math.abs(setup.tp - setup.entry) / setup.entry) * 100).toFixed(1);
-    const slPct = ((Math.abs(setup.entry - setup.sl) / setup.entry) * 100).toFixed(1);
-
-    // ── Enforce minimum zone heights so overlay is always visible ──
-    const MIN_ZONE = 22;
-    const entryY = rawEntryY;
-    let tpY = rawTpY;
-    let slY = rawSlY;
-    if (Math.abs(tpY - entryY) < MIN_ZONE) {
-      tpY = isLong ? entryY - MIN_ZONE : entryY + MIN_ZONE;
-    }
-    if (Math.abs(slY - entryY) < MIN_ZONE) {
-      slY = isLong ? entryY + MIN_ZONE : entryY - MIN_ZONE;
-    }
-
-    ctx.save();
-
-    // ── App palette (matches warroom + chart toolbar) ──
-    const GREEN = chartTheme.candleUp;   // same as candle up / --grn
-    const RED = chartTheme.candleDown;   // same as candle down / --red
-    const ACCENT = '#E8967D';            // salmon accent (primary UI accent)
-    const BG_DARK = 'rgba(10,9,8,';     // near-black base for labels
-    const TEXT = '#F0EDE4';              // off-white text
-
-    // ── TP zone (profit) — subtle tinted band ──
-    const tpTop = Math.min(entryY, tpY);
-    const tpH = Math.abs(tpY - entryY);
-    ctx.fillStyle = withAlpha(GREEN, 0.10);
-    ctx.fillRect(0, tpTop, R, tpH);
-    ctx.strokeStyle = withAlpha(GREEN, 0.5);
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
-    ctx.beginPath();
-    ctx.moveTo(0, tpY);
-    ctx.lineTo(R, tpY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // ── SL zone (risk) — subtle tinted band ──
-    const slTop = Math.min(entryY, slY);
-    const slH = Math.abs(slY - entryY);
-    ctx.fillStyle = withAlpha(RED, 0.10);
-    ctx.fillRect(0, slTop, R, slH);
-    ctx.strokeStyle = withAlpha(RED, 0.5);
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
-    ctx.beginPath();
-    ctx.moveTo(0, slY);
-    ctx.lineTo(R, slY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // ── Entry line — salmon accent dashed ──
-    ctx.strokeStyle = withAlpha(ACCENT, 0.7);
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.moveTo(0, entryY);
-    ctx.lineTo(R, entryY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // ── Right-edge price axis tags ──
-    const tagW = rightPad - 2;
-    const tagH = 16;
-    const tagX = R + 1;
-    ctx.font = "bold 9px 'JetBrains Mono', monospace";
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'center';
-    // TP tag
-    ctx.fillStyle = withAlpha(GREEN, 0.85);
-    _roundRect(ctx, tagX, tpY - tagH / 2, tagW, tagH, 2);
-    ctx.fill();
-    ctx.fillStyle = TEXT;
-    ctx.fillText(formatPrice(setup.tp), tagX + tagW / 2, tpY);
-    // Entry tag
-    ctx.fillStyle = withAlpha(ACCENT, 0.85);
-    _roundRect(ctx, tagX, entryY - tagH / 2, tagW, tagH, 2);
-    ctx.fill();
-    ctx.fillStyle = TEXT;
-    ctx.fillText(formatPrice(setup.entry), tagX + tagW / 2, entryY);
-    // SL tag
-    ctx.fillStyle = withAlpha(RED, 0.85);
-    _roundRect(ctx, tagX, slY - tagH / 2, tagW, tagH, 2);
-    ctx.fill();
-    ctx.fillStyle = TEXT;
-    ctx.fillText(formatPrice(setup.sl), tagX + tagW / 2, slY);
-    ctx.textAlign = 'left';
-
-    // ── Zone labels (inside zones, dark pill) ──
-    ctx.font = "700 9px 'JetBrains Mono', monospace";
-    ctx.textBaseline = 'middle';
-    // TP label
-    const tpZoneMid = tpTop + tpH / 2;
-    const tpLabel = `TP +${tpPct}%`;
-    const tpLabelW = ctx.measureText(tpLabel).width;
-    ctx.fillStyle = BG_DARK + '0.7)';
-    _roundRect(ctx, 8, tpZoneMid - 8, tpLabelW + 12, 16, 3);
-    ctx.fill();
-    ctx.fillStyle = GREEN;
-    ctx.fillText(tpLabel, 14, tpZoneMid);
-    // SL label
-    const slZoneMid = slTop + slH / 2;
-    const slLabel = `SL -${slPct}%`;
-    const slLabelW = ctx.measureText(slLabel).width;
-    ctx.fillStyle = BG_DARK + '0.7)';
-    _roundRect(ctx, 8, slZoneMid - 8, slLabelW + 12, 16, 3);
-    ctx.fill();
-    ctx.fillStyle = RED;
-    ctx.fillText(slLabel, 14, slZoneMid);
-
-    // ── Entry info bar (single compact row above entry line) ──
-    const srcLabel = setup.source === 'consensus' ? 'CONSENSUS' : (setup.agentName?.toUpperCase() ?? 'AGENT');
-    const dirArrow = isLong ? '▲' : '▼';
-    ctx.font = "800 9px 'JetBrains Mono', monospace";
-    const eLabelH = 16;
-    const eLabelY = entryY - eLabelH - 4;
-    let curX = 8;
-
-    // Badge 1: Direction + source (accent bg)
-    const b1Text = `${dirArrow} ${srcLabel} ${setup.dir}`;
-    const b1W = ctx.measureText(b1Text).width + 12;
-    ctx.fillStyle = withAlpha(isLong ? GREEN : RED, 0.8);
-    _roundRect(ctx, curX, eLabelY, b1W, eLabelH, 3);
-    ctx.fill();
-    ctx.fillStyle = TEXT;
-    ctx.textBaseline = 'middle';
-    ctx.fillText(b1Text, curX + 6, eLabelY + eLabelH / 2);
-    curX += b1W + 3;
-
-    // Badge 2: R:R (dark pill)
-    const b2Text = `R:R 1:${setup.rr.toFixed(1)}`;
-    const b2W = ctx.measureText(b2Text).width + 12;
-    ctx.fillStyle = BG_DARK + '0.75)';
-    _roundRect(ctx, curX, eLabelY, b2W, eLabelH, 3);
-    ctx.fill();
-    ctx.strokeStyle = withAlpha(ACCENT, 0.25);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = withAlpha(TEXT, 0.85);
-    ctx.fillText(b2Text, curX + 6, eLabelY + eLabelH / 2);
-    curX += b2W + 3;
-
-    // Badge 3: Confidence (dark pill)
-    const b3Text = `${setup.conf}%`;
-    const b3W = ctx.measureText(b3Text).width + 12;
-    ctx.fillStyle = BG_DARK + '0.75)';
-    _roundRect(ctx, curX, eLabelY, b3W, eLabelH, 3);
-    ctx.fill();
-    ctx.strokeStyle = withAlpha(ACCENT, 0.25);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = withAlpha(isLong ? GREEN : RED, 0.85);
-    ctx.fillText(b3Text, curX + 6, eLabelY + eLabelH / 2);
-    curX += b3W + 3;
-
-    // Badge 4: Live P&L
-    if (livePrice > 0) {
-      const pnl = isLong
-        ? ((livePrice - setup.entry) / setup.entry) * 100
-        : ((setup.entry - livePrice) / setup.entry) * 100;
-      const pnlColor = pnl >= 0 ? GREEN : RED;
-      const pnlText = `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`;
-      const b4W = ctx.measureText(pnlText).width + 12;
-      ctx.fillStyle = withAlpha(pnlColor, 0.75);
-      _roundRect(ctx, curX, eLabelY, b4W, eLabelH, 3);
-      ctx.fill();
-      ctx.fillStyle = TEXT;
-      ctx.fillText(pnlText, curX + 6, eLabelY + eLabelH / 2);
-    }
-
-    // Close button position (used by HTML overlay-close-btn)
-    _agentCloseBtn = { x: R - 14, y: tpTop + 14, r: 14 };
-
-    ctx.restore();
-  }
-
-  function _roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+    const closeBtn = _drawAgentTradeOverlay(ctx, setup, drawingCanvas.width, { toChartY }, chartTheme, livePrice);
+    _agentCloseBtn = closeBtn;
   }
 
   function applyAgentTradeSetup(setup: AgentTradeSetup | null) {
@@ -805,40 +478,12 @@
     renderDrawings();
   }
 
-  function makeTradeBoxDrawing(preview: NonNullable<ReturnType<typeof computeTradePreview>>): DrawingItem {
-    const leftTime = toChartTime(preview.left);
-    const rightTime = toChartTime(preview.right);
-    const fromTime = leftTime !== null && rightTime !== null ? Math.min(leftTime, rightTime) : undefined;
-    const toTime = leftTime !== null && rightTime !== null ? Math.max(leftTime, rightTime) : undefined;
-    return {
-      type: 'tradebox',
-      points: [
-        { x: preview.left, y: preview.entryY },
-        { x: preview.right, y: preview.entryY },
-        { x: preview.left, y: preview.slY },
-        { x: preview.left, y: preview.tpY },
-      ],
-      fromTime,
-      toTime,
-      color: preview.dir === 'LONG' ? chartTheme.candleUp : chartTheme.candleDown,
-      dir: preview.dir,
-      entry: preview.entry,
-      sl: preview.sl,
-      tp: preview.tp,
-      rr: preview.rr,
-      riskPct: preview.riskPct,
-    };
+  function makeTradeBoxDrawing(preview: TradePreview): DrawingItem {
+    return _makeTradeBoxDrawing(preview, toChartTime, chartTheme);
   }
 
   function applyIndicatorProfile() {
-    const next = advancedMode
-      ? (
-        chartVisualMode === 'full'
-          ? { ma20: true, ma60: true, ma120: true, ma7: true, ma25: true, ma99: true, rsi: true, vol: true }
-          : { ma20: true, ma60: true, ma120: true, ma7: false, ma25: false, ma99: false, rsi: true, vol: true }
-      )
-      : { ma20: false, ma60: false, ma120: false, ma7: true, ma25: true, ma99: true, rsi: true, vol: true };
-    indicatorEnabled = next;
+    indicatorEnabled = getIndicatorProfile(advancedMode, chartVisualMode);
   }
 
   function applyIndicatorVisibility() {
@@ -893,7 +538,7 @@
   }
 
   function zoomChart(direction: 1 | -1) {
-    barSpacing = Math.max(BAR_SPACING_MIN, Math.min(BAR_SPACING_MAX, barSpacing + direction * BAR_SPACING_STEP));
+    barSpacing = Math.max(BAR_SPACING.MIN, Math.min(BAR_SPACING.MAX, barSpacing + direction * BAR_SPACING.STEP));
     applyTimeScale();
     pushChartNotice(`ZOOM ${barSpacing.toFixed(1)}`);
   }
@@ -912,7 +557,7 @@
   }
 
   function resetChartScale() {
-    barSpacing = BAR_SPACING_DEFAULT;
+    barSpacing = BAR_SPACING.DEFAULT;
     autoScaleY = true;
     applyTimeScale();
     try { chart?.priceScale('right').applyOptions({ autoScale: true }); } catch {}
@@ -945,82 +590,34 @@
     gtmEvent('terminal_indicator_strip_state', { state: next });
   }
 
-  $: if (isTvLikePreset) {
-    if (indicatorStripState !== 'hidden') indicatorStripState = 'hidden';
-    if (showIndicatorLegend) showIndicatorLegend = false;
-  }
+  $effect(() => {
+    if (isTvLikePreset) {
+      if (indicatorStripState !== 'hidden') indicatorStripState = 'hidden';
+      if (showIndicatorLegend) showIndicatorLegend = false;
+    }
+  });
 
-  $: if (!pendingTradePlan) {
-    unbindRatioDrag();
-  }
+  $effect(() => {
+    if (!pendingTradePlan) {
+      unbindRatioDrag();
+    }
+  });
 
-  $: {
+  $effect(() => {
     const profileKey = advancedMode ? `advanced:${chartVisualMode}` : 'basic';
     if (_indicatorProfileApplied !== profileKey) {
       _indicatorProfileApplied = profileKey;
       applyIndicatorProfile();
       applyIndicatorVisibility();
     }
-  }
-
-  function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
-    if (typeof window === 'undefined') return;
-    const w = window as any;
-    if (!Array.isArray(w.dataLayer)) return;
-    w.dataLayer.push({
-      event,
-      page: 'terminal',
-      component: 'chart-panel',
-      ...payload,
-    });
-  }
-
-  // ═══════════════════════════════════════════
-  //  INDICATOR COMPUTATION (optimised)
-  // ═══════════════════════════════════════════
-
-  function computeSMA(data: { time: any; close: number }[], period: number) {
-    const result: { time: any; value: number }[] = [];
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) {
-      sum += data[i].close;
-      if (i >= period) sum -= data[i - period].close;
-      if (i >= period - 1) result.push({ time: data[i].time, value: sum / period });
-    }
-    return result;
-  }
-
-  function computeRSI(data: { time: any; close: number }[], period = 14) {
-    if (data.length < period + 1) return [];
-    const result: { time: any; value: number }[] = [];
-    let avgGain = 0, avgLoss = 0;
-    for (let i = 1; i <= period; i++) {
-      const d = data[i].close - data[i - 1].close;
-      if (d > 0) avgGain += d; else avgLoss -= d;
-    }
-    avgGain /= period; avgLoss /= period;
-    const rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-    result.push({ time: data[period].time, value: rsi });
-    for (let i = period + 1; i < data.length; i++) {
-      const d = data[i].close - data[i - 1].close;
-      avgGain = (avgGain * (period - 1) + (d > 0 ? d : 0)) / period;
-      avgLoss = (avgLoss * (period - 1) + (d < 0 ? -d : 0)) / period;
-      result.push({ time: data[i].time, value: avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss) });
-    }
-    // Stash running state for incremental WS updates
-    _rsiAvgGain = avgGain;
-    _rsiAvgLoss = avgLoss;
-    return result;
-  }
+  });
 
   // OI/OBV removed — 3-pane layout (candles, volume, RSI) for stability
+  // computeSMA and computeRSI imported from $lib/chart/chartIndicators
 
   // ═══════════════════════════════════════════
   //  TRADINGVIEW WIDGET
   // ═══════════════════════════════════════════
-
-  function pairToTVSymbol(pair: string) { return 'BINANCE:' + pair.replace('/', ''); }
-  function tfToTVInterval(tf: string) { return toTradingViewInterval(tf); }
 
   function initTradingView(useSafeMode = false) {
     if (!tvContainer) return;
@@ -1033,58 +630,42 @@
       chartTheme = activeTheme;
       tvScriptLoaded = false;
       destroyTradingView();
-      const widgetDiv = tvContainer.querySelector('#tradingview_widget');
+      const widgetDiv = tvContainer.querySelector<HTMLElement>('#tradingview_widget');
       if (!widgetDiv) return;
-      widgetDiv.innerHTML = '';
 
       const handleTvFailure = (reason: 'timeout' | 'network') => {
         if (_tvLoadTimer) { clearTimeout(_tvLoadTimer); _tvLoadTimer = null; }
         if (!useSafeMode && !_tvFallbackTried) {
           _tvFallbackTried = true;
-          gtmEvent('terminal_tradingview_fallback_start', { reason, pair: state.pair, timeframe: state.timeframe });
+          gtmEvent('terminal_tradingview_fallback_start', { reason, pair: storeState.pair, timeframe: storeState.timeframe });
           initTradingView(true);
           return;
         }
         tvLoading = false;
         tvError = 'TradingView 연결 실패. 네트워크/확장프로그램 차단 가능성이 있습니다.';
-        gtmEvent('terminal_tradingview_error', { reason, mode: useSafeMode ? 'safe' : 'primary', pair: state.pair, timeframe: state.timeframe });
+        gtmEvent('terminal_tradingview_error', { reason, mode: useSafeMode ? 'safe' : 'primary', pair: storeState.pair, timeframe: storeState.timeframe });
       };
 
-      const iframe = document.createElement('iframe');
-      const params: Record<string, string> = {
-        symbol: pairToTVSymbol(state.pair), interval: tfToTVInterval(state.timeframe),
-        hidesidetoolbar: '0', symboledit: '1', saveimage: '1', toolbarbg: toTvHex(activeTheme.bg),
-        theme: 'dark', style: '1', timezone: 'Etc/UTC', withdateranges: '1', locale: 'en',
-        hide_top_toolbar: '0', allow_symbol_change: '1',
-      };
-      if (!useSafeMode) {
-        params.studies = ['Volume@tv-basicstudies', 'MASimple@tv-basicstudies', 'RSI@tv-basicstudies', 'OBV@tv-basicstudies'].join('\x1f');
-        params.studies_overrides = '{}';
-        params.overrides = JSON.stringify({
-          'mainSeriesProperties.candleStyle.upColor': activeTheme.candleUp,
-          'mainSeriesProperties.candleStyle.downColor': activeTheme.candleDown,
-          'mainSeriesProperties.candleStyle.wickUpColor': activeTheme.candleUp,
-          'mainSeriesProperties.candleStyle.wickDownColor': activeTheme.candleDown,
-          'paneProperties.background': activeTheme.bg,
-          'paneProperties.vertGridProperties.color': activeTheme.grid,
-          'paneProperties.horzGridProperties.color': activeTheme.grid,
-        });
-      }
-      const qs = new URLSearchParams(params);
-      iframe.src = `https://www.tradingview.com/widgetembed/?${qs.toString()}`;
-      iframe.style.cssText = 'width:100%;height:100%;border:none;display:block;';
-      iframe.allow = 'fullscreen';
-      iframe.loading = 'lazy';
-      iframe.onload = () => {
-        if (_tvLoadTimer) { clearTimeout(_tvLoadTimer); _tvLoadTimer = null; }
-        tvLoading = false;
-        tvScriptLoaded = true;
-        tvError = '';
-        gtmEvent('terminal_tradingview_loaded', { mode: useSafeMode ? 'safe' : 'primary', pair: state.pair, timeframe: state.timeframe });
-      };
-      iframe.onerror = () => { handleTvFailure('network'); };
-      widgetDiv.appendChild(iframe);
-      tvWidget = { iframe, container: widgetDiv };
+      tvWidget = mountTradingViewEmbed(widgetDiv, {
+        pair: storeState.pair,
+        timeframe: storeState.timeframe,
+        useSafeMode,
+        theme: {
+          bg: toTvHex(activeTheme.bg),
+          grid: activeTheme.grid,
+          candleUp: activeTheme.candleUp,
+          candleDown: activeTheme.candleDown,
+        },
+      }, {
+        onLoad: () => {
+          if (_tvLoadTimer) { clearTimeout(_tvLoadTimer); _tvLoadTimer = null; }
+          tvLoading = false;
+          tvScriptLoaded = true;
+          tvError = '';
+          gtmEvent('terminal_tradingview_loaded', { mode: useSafeMode ? 'safe' : 'primary', pair: storeState.pair, timeframe: storeState.timeframe });
+        },
+        onError: () => { handleTvFailure('network'); },
+      });
       _tvLoadTimer = setTimeout(() => {
         if (!tvScriptLoaded) handleTvFailure('timeout');
       }, 10000);
@@ -1092,22 +673,13 @@
       console.error('[ChartPanel] TV init error:', e);
       tvLoading = false;
       tvError = 'TradingView 초기화 실패';
-      gtmEvent('terminal_tradingview_error', { reason: 'init_exception', mode: useSafeMode ? 'safe' : 'primary', pair: state.pair, timeframe: state.timeframe });
+      gtmEvent('terminal_tradingview_error', { reason: 'init_exception', mode: useSafeMode ? 'safe' : 'primary', pair: storeState.pair, timeframe: storeState.timeframe });
     }
   }
 
   function destroyTradingView() {
     if (_tvLoadTimer) { clearTimeout(_tvLoadTimer); _tvLoadTimer = null; }
-    if (tvWidget?.iframe) {
-      tvWidget.iframe.onload = null;
-      tvWidget.iframe.onerror = null;
-      tvWidget.iframe.src = 'about:blank';
-    }
-    tvWidget = null;
-    if (tvContainer) {
-      const w = tvContainer.querySelector('#tradingview_widget');
-      if (w) w.innerHTML = '';
-    }
+    tvWidget = destroyTradingViewEmbed(tvWidget);
   }
 
   async function setChartMode(mode: 'agent' | 'trading') {
@@ -1133,22 +705,24 @@
 
   // Debounced TradingView init/re-init only when pair/TF key changes.
   let _tvInitTimer: ReturnType<typeof setTimeout> | null = null;
-  $: if (chartMode === 'trading' && tvContainer && state.pair && state.timeframe) {
-    const key = `${state.pair}|${state.timeframe}`;
-    if (key !== _tvReinitKey) {
-      _tvReinitKey = key;
-      if (_tvInitTimer) clearTimeout(_tvInitTimer);
-      _tvInitTimer = setTimeout(() => {
-        _tvFallbackTried = false;
-        initTradingView(false);
-      }, 220);
+  $effect(() => {
+    if (chartMode === 'trading' && tvContainer && storeState.pair && storeState.timeframe) {
+      const key = `${storeState.pair}|${storeState.timeframe}`;
+      if (key !== _tvReinitKey) {
+        _tvReinitKey = key;
+        if (_tvInitTimer) clearTimeout(_tvInitTimer);
+        _tvInitTimer = setTimeout(() => {
+          _tvFallbackTried = false;
+          initTradingView(false);
+        }, 220);
+      }
     }
-  }
+  });
 
   function retryTradingView() {
     _tvFallbackTried = false;
     tvError = '';
-    gtmEvent('terminal_tradingview_retry', { pair: state.pair, timeframe: state.timeframe });
+    gtmEvent('terminal_tradingview_retry', { pair: storeState.pair, timeframe: storeState.timeframe });
     initTradingView(false);
   }
 
@@ -1202,40 +776,42 @@
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     if (drawingMode === 'hline') {
       const linePrice = toChartPrice(y);
-      drawings = [
-        ...drawings,
-        {
-          type: 'hline',
-          points: [{ x: 0, y }, { x: rect.width, y }],
-          price: linePrice == null ? undefined : clampRoundPrice(linePrice),
+      drawings = appendDrawingWithLimit(
+        drawings,
+        buildHorizontalLineDrawing({
+          y,
+          width: rect.width,
+          linePrice,
           color: chartTheme.draw,
-        },
-      ];
+        }),
+        MAX_DRAWINGS,
+      );
       renderDrawings(); drawingMode = 'none'; return;
     }
     if (drawingMode === 'trendline') {
-      if (!isDrawing) { currentDrawing = { type: 'trendline', points: [{ x, y }] }; isDrawing = true; }
+      if (!isDrawing) { currentDrawing = startTrendlineDraft(x, y); isDrawing = true; }
       else if (currentDrawing) {
         const startPoint = currentDrawing.points[0];
         const endPoint = { x, y };
         const startAnchor = toDrawingAnchor(startPoint.x, startPoint.y);
         const endAnchor = toDrawingAnchor(endPoint.x, endPoint.y);
-        currentDrawing.points.push(endPoint);
-        drawings = [
-          ...drawings,
-          {
-            type: 'trendline',
-            points: [...currentDrawing.points],
-            anchors: startAnchor && endAnchor ? [startAnchor, endAnchor] : undefined,
+        drawings = appendDrawingWithLimit(
+          drawings,
+          completeTrendlineDraft({
+            draft: currentDrawing,
+            endPoint,
+            startAnchor,
+            endAnchor,
             color: chartTheme.draw,
-          },
-        ];
+          }),
+          MAX_DRAWINGS,
+        );
         currentDrawing = null; isDrawing = false; drawingMode = 'none'; renderDrawings();
       }
       return;
     }
     if (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade') {
-      tradePreview = { mode: drawingMode, startX: x, startY: y, cursorX: x, cursorY: y };
+      tradePreview = startTradePreviewDraft(drawingMode, x, y);
       currentDrawing = null;
       isDrawing = true;
       bindGlobalDrawingMouseUp();
@@ -1254,21 +830,41 @@
     if (!preview) {
       pushChartNotice('라인 진입 계산 실패');
     } else {
-      drawings = [...drawings, makeTradeBoxDrawing(preview)];
-      if (requireTradeConfirm) {
-        pendingTradePlan = {
-          pair: state.pair || 'BTC/USDT',
-          previewDir: preview.dir,
-          entry: preview.entry,
-          sl: preview.sl,
-          tp: preview.tp,
-          rr: preview.rr,
-          riskPct: preview.riskPct,
-          longRatio: preview.dir === 'LONG' ? 70 : 30,
-        };
+      const finalized = finalizeTradePreview({
+        drawings,
+        nextDrawing: makeTradeBoxDrawing(preview),
+        preview,
+        pair: storeState.pair || 'BTC/USDT',
+        requireTradeConfirm,
+        maxDrawings: MAX_DRAWINGS,
+      });
+      drawings = finalized.drawings;
+      if (finalized.pendingTradePlan) {
+        pendingTradePlan = finalized.pendingTradePlan;
         pushChartNotice('Drag complete — adjust ratio and confirm');
+      } else if (finalized.lineTrade) {
+        openQuickTrade(
+          finalized.lineTrade.pair,
+          finalized.lineTrade.dir,
+          finalized.lineTrade.entry,
+          finalized.lineTrade.tp,
+          finalized.lineTrade.sl,
+          'chart-line',
+          `${finalized.lineTrade.dir} line-entry`,
+        );
+        gtmEvent('terminal_line_entry_open', {
+          pair: finalized.lineTrade.pair,
+          dir: finalized.lineTrade.dir,
+          entry: finalized.lineTrade.entry,
+          tp: finalized.lineTrade.tp,
+          sl: finalized.lineTrade.sl,
+          rr: finalized.lineTrade.rr,
+        });
+        pushChartNotice(
+          `${finalized.lineTrade.dir} 진입 생성 · ENTRY ${formatPrice(finalized.lineTrade.entry)} · TP ${formatPrice(finalized.lineTrade.tp)} · SL ${formatPrice(finalized.lineTrade.sl)} · RR 1:${finalized.lineTrade.rr.toFixed(1)}`
+        );
       } else {
-        openTradeByLine(preview.dir, preview.entry, preview.sl, preview.rr);
+        pushChartNotice('라인 기준 가격 계산 실패');
       }
     }
     isDrawing = false;
@@ -1289,17 +885,14 @@
       if (!drawingCanvas) return;
       const rect = drawingCanvas.getBoundingClientRect();
       if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade')) {
-        tradePreview = {
-          ...tradePreview,
-          cursorX: e.clientX - rect.left,
-          cursorY: e.clientY - rect.top,
-        };
+        tradePreview = updateTradePreviewDraft(tradePreview, e.clientX - rect.left, e.clientY - rect.top);
         renderDrawings();
         return;
       }
       if (!currentDrawing) return;
       renderDrawings();
-      const ctx = drawingCanvas.getContext('2d');
+      if (!_drawCtx) _drawCtx = drawingCanvas.getContext('2d');
+      const ctx = _drawCtx;
       if (!ctx) return;
       ctx.beginPath();
       const ghostColor = chartTheme.drawGhost;
@@ -1314,7 +907,8 @@
 
   function renderDrawings() {
     if (!drawingCanvas) return;
-    const ctx = drawingCanvas.getContext('2d');
+    if (!_drawCtx) _drawCtx = drawingCanvas.getContext('2d');
+    const ctx = _drawCtx;
     if (!ctx) return;
     ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
     drawPatternOverlays(ctx);
@@ -1328,72 +922,7 @@
       }
       return;
     }
-    for (const d of drawings) {
-      ctx.beginPath(); ctx.strokeStyle = d.color; ctx.lineWidth = 1.5;
-      if (d.type === 'hline') {
-        const mappedY = Number.isFinite(d.price) ? toChartY(d.price as number) : null;
-        const y = mappedY ?? d.points[0]?.y;
-        if (!Number.isFinite(y)) continue;
-        ctx.setLineDash([6, 3]);
-        ctx.moveTo(0, y);
-        ctx.lineTo(drawingCanvas.width, y);
-      }
-      else if (d.type === 'trendline' && d.points.length === 2) {
-        const mappedFrom = d.anchors?.[0] ? toOverlayPoint(d.anchors[0].time, d.anchors[0].price) : null;
-        const mappedTo = d.anchors?.[1] ? toOverlayPoint(d.anchors[1].time, d.anchors[1].price) : null;
-        const from = mappedFrom ?? d.points[0];
-        const to = mappedTo ?? d.points[1];
-        if (!from || !to) continue;
-        ctx.setLineDash([]);
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(to.x, to.y);
-      }
-      else if (d.type === 'tradebox' && d.points.length >= 4) {
-        const mappedLeftX = Number.isFinite(d.fromTime) ? toChartX(d.fromTime as number) : null;
-        const mappedRightX = Number.isFinite(d.toTime) ? toChartX(d.toTime as number) : null;
-        const mappedEntryY = toChartY(d.entry);
-        const mappedSlY = toChartY(d.sl);
-        const mappedTpY = toChartY(d.tp);
-        const preview = (
-          mappedLeftX !== null
-          && mappedRightX !== null
-          && mappedEntryY !== null
-          && mappedSlY !== null
-          && mappedTpY !== null
-        )
-          ? {
-            mode: d.dir === 'LONG' ? 'longentry' as const : 'shortentry' as const,
-            dir: d.dir,
-            left: Math.min(mappedLeftX, mappedRightX),
-            right: Math.max(mappedLeftX, mappedRightX),
-            entryY: mappedEntryY,
-            slY: mappedSlY,
-            tpY: mappedTpY,
-            entry: d.entry,
-            sl: d.sl,
-            tp: d.tp,
-            rr: d.rr,
-            riskPct: d.riskPct,
-          }
-          : {
-            mode: d.dir === 'LONG' ? 'longentry' as const : 'shortentry' as const,
-            dir: d.dir,
-            left: Math.min(d.points[0].x, d.points[1].x),
-            right: Math.max(d.points[0].x, d.points[1].x),
-            entryY: d.points[0].y,
-            slY: d.points[2].y,
-            tpY: d.points[3].y,
-            entry: d.entry,
-            sl: d.sl,
-            tp: d.tp,
-            rr: d.rr,
-            riskPct: d.riskPct,
-          };
-        drawTradePreview(ctx, preview);
-        continue;
-      }
-      ctx.stroke(); ctx.setLineDash([]);
-    }
+    _drawDrawingItems(ctx, drawings, { toChartX, toChartY }, chartTheme);
     if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade')) {
       const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
       if (preview) drawTradePreview(ctx, preview);
@@ -1404,112 +933,26 @@
     if (!chart || !drawingCanvas) return null;
     if (!Number.isFinite(time) || !Number.isFinite(price)) return null;
     try {
-      const x = chart.timeScale().timeToCoordinate(time as any);
+      const x = chart.timeScale().timeToCoordinate(time as any) as number | null;
       const y = toChartY(price);
-      if (!Number.isFinite(x) || y === null || !Number.isFinite(y)) return null;
+      if (x === null || !Number.isFinite(x) || y === null || !Number.isFinite(y)) return null;
       return { x, y };
     } catch {
       return null;
     }
   }
 
-  function drawPatternTag(
-    ctx: CanvasRenderingContext2D,
-    point: { x: number; y: number },
-    text: string,
-    color: string
-  ) {
-    if (!drawingCanvas) return;
-    ctx.save();
-    ctx.font = "700 9px 'JetBrains Mono', monospace";
-    const padX = 6;
-    const h = 16;
-    const w = Math.ceil(ctx.measureText(text).width) + padX * 2;
-    const x = Math.max(4, Math.min(point.x + 8, drawingCanvas.width - w - 4));
-    const y = Math.max(4, Math.min(point.y - h - 8, drawingCanvas.height - h - 4));
-
-    ctx.fillStyle = withAlpha('#05070d', 0.84);
-    ctx.strokeStyle = withAlpha(color, 0.72);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.rect(x, y, w, h);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = withAlpha(color, 0.96);
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, x + padX, y + h / 2);
-    ctx.restore();
-  }
-
+  // drawPatternTag + drawPatternOverlays — extracted to chart/chartDrawingEngine.ts
   function drawPatternOverlays(ctx: CanvasRenderingContext2D) {
     if (!drawingCanvas || !chart || chartMode !== 'agent' || overlayPatterns.length === 0) return;
-
-    for (const pattern of overlayPatterns) {
-      const lineAlpha = 0.9;
-      const fillAlpha = 0.14;
-
-      const upperGuide = pattern.guideLines.find((g) => g.label === 'upper');
-      const lowerGuide = pattern.guideLines.find((g) => g.label === 'lower');
-      if (upperGuide && lowerGuide) {
-        const p1 = toOverlayPoint(upperGuide.from.time, upperGuide.from.price);
-        const p2 = toOverlayPoint(upperGuide.to.time, upperGuide.to.price);
-        const p3 = toOverlayPoint(lowerGuide.to.time, lowerGuide.to.price);
-        const p4 = toOverlayPoint(lowerGuide.from.time, lowerGuide.from.price);
-        if (p1 && p2 && p3 && p4) {
-          ctx.save();
-          ctx.fillStyle = withAlpha(upperGuide.color, fillAlpha);
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.lineTo(p3.x, p3.y);
-          ctx.lineTo(p4.x, p4.y);
-          ctx.closePath();
-          ctx.fill();
-          ctx.restore();
-        }
-      }
-
-      for (const guide of pattern.guideLines) {
-        const from = toOverlayPoint(guide.from.time, guide.from.price);
-        const to = toOverlayPoint(guide.to.time, guide.to.price);
-        if (!from || !to) continue;
-
-        ctx.save();
-        ctx.strokeStyle = withAlpha(guide.color, lineAlpha);
-        ctx.lineWidth = guide.style === 'dashed' ? 2 : 2.2;
-        ctx.setLineDash(guide.style === 'dashed' ? [7, 5] : []);
-        ctx.beginPath();
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(to.x, to.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = withAlpha(guide.color, 0.95);
-        ctx.beginPath();
-        ctx.arc(from.x, from.y, 2.2, 0, Math.PI * 2);
-        ctx.arc(to.x, to.y, 2.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      const marker = toOverlayPoint(pattern.markerTime, pattern.markerPrice);
-      if (!marker) continue;
-      const tagColor = pattern.direction === 'BULLISH' ? '#58d78d' : '#ff657a';
-      const statusLabel = pattern.status === 'CONFIRMED' ? 'OK' : 'PEND';
-      drawPatternTag(
-        ctx,
-        marker,
-        `${pattern.shortName} ${statusLabel} ${Math.round(pattern.confidence * 100)}%`,
-        tagColor
-      );
-    }
+    _drawPatternOverlays(ctx, overlayPatterns, drawingCanvas.width, drawingCanvas.height, { toOverlayPoint });
   }
 
   function resizeDrawingCanvas() {
     if (!drawingCanvas || !chartContainer) return;
     drawingCanvas.width = chartContainer.clientWidth;
     drawingCanvas.height = chartContainer.clientHeight;
+    _drawCtx = null; // invalidate cached context on resize
     renderDrawings();
   }
 
@@ -1540,15 +983,15 @@
         try {
           const lineSeries = chart.addSeries(lwcModule.LineSeries, {
             color: guide.color,
-            lineWidth: pattern.status === 'CONFIRMED' ? 2 : 1.5,
+            lineWidth: (pattern.status === 'CONFIRMED' ? 2 : 1.5) as any,
             lineStyle: guide.style === 'dashed' ? 2 : 0,
             priceLineVisible: false,
             lastValueVisible: false,
             crosshairMarkerVisible: false,
           });
           lineSeries.setData([
-            { time: guide.from.time, value: guide.from.price },
-            { time: guide.to.time, value: guide.to.price },
+            { time: guide.from.time as any, value: guide.from.price },
+            { time: guide.to.time as any, value: guide.to.price },
           ]);
           patternLineSeries.push(lineSeries);
         } catch (err) {
@@ -1558,94 +1001,42 @@
     }
   }
 
-  function toPatternMarker(pattern: ChartPatternDetection): ChartMarker {
-    const isBear = pattern.direction === 'BEARISH';
-    const isConfirmed = pattern.status === 'CONFIRMED';
-    const confidencePct = Math.round(pattern.confidence * 100);
-    return {
-      time: pattern.markerTime,
-      position: isBear ? 'aboveBar' : 'belowBar',
-      color: isBear ? '#ff657a' : '#58d78d',
-      shape: isConfirmed ? (isBear ? 'arrowDown' : 'arrowUp') : 'circle',
-      text: `${pattern.shortName} ${isConfirmed ? 'OK' : 'PEND'} ${confidencePct}%`,
-    };
-  }
+  // toPatternMarker — imported from chart/chartPatternEngine.ts
 
   function applyCombinedMarkers() {
     if (!series) return;
     try {
-      series.setMarkers([...agentMarkers, ...patternMarkers]);
+      (series as any).setMarkers([...agentMarkers, ...patternMarkers]);
     } catch {}
   }
 
-  function clearDetectedPatterns() {
-    detectedPatterns = [];
-    overlayPatterns = [];
-    patternMarkers = [];
-    _patternSignature = '';
-    applyCombinedMarkers();
-    clearPatternLineSeries();
-    renderDrawings();
-  }
-
-  function rankPatternsForOverlay(patterns: ChartPatternDetection[]): ChartPatternDetection[] {
-    return [...patterns].sort((a, b) => {
-      const statusDiff = (b.status === 'CONFIRMED' ? 1 : 0) - (a.status === 'CONFIRMED' ? 1 : 0);
-      if (statusDiff !== 0) return statusDiff;
-      const confidenceDiff = b.confidence - a.confidence;
-      if (Math.abs(confidenceDiff) > 1e-6) return confidenceDiff;
-      return b.endTime - a.endTime;
-    });
-  }
-
-  function snapshotPattern(pattern: ChartPatternDetection): PatternScanResult['patterns'][number] {
-    return {
-      kind: pattern.kind,
-      shortName: pattern.shortName,
-      direction: pattern.direction,
-      status: pattern.status,
-      confidence: pattern.confidence,
-      startTime: pattern.startTime,
-      endTime: pattern.endTime,
-    };
-  }
-
-  function buildPatternSummary(patterns: ChartPatternDetection[]): string {
-    if (patterns.length === 0) return '패턴 미감지 · 조건 미충족';
-    const summary = patterns
-      .slice(0, 2)
-      .map((p) => `${p.shortName} ${Math.round(p.confidence * 100)}%`)
-      .join(' · ');
-    return `패턴 ${patterns.length}개 감지 · ${summary}`;
-  }
-
-  function getVisibleScopeCandles(): BinanceKline[] {
-    if (!chart || klineCache.length === 0) return [];
-    try {
-      const range = chart.timeScale?.().getVisibleLogicalRange?.();
-      if (!range || !Number.isFinite(range.from) || !Number.isFinite(range.to)) return [];
-      const from = Math.max(0, Math.floor(range.from));
-      const to = Math.min(klineCache.length - 1, Math.ceil(range.to));
-      if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return [];
-      return klineCache.slice(from, to + 1);
-    } catch {
-      return [];
-    }
-  }
-
-  function applyDetectedPatternState(next: ChartPatternDetection[]) {
-    const signature = next
-      .map((p) => `${p.id}:${p.status}:${Math.round(p.confidence * 100)}`)
-      .join('|');
-    if (signature === _patternSignature) return;
-
-    _patternSignature = signature;
-    detectedPatterns = next;
-    overlayPatterns = rankPatternsForOverlay(next).slice(0, MAX_OVERLAY_PATTERNS);
-    patternMarkers = overlayPatterns.map(toPatternMarker);
+  function applyPatternStateSnapshot(
+    nextState: ChartPatternStateSnapshot,
+    options: { force?: boolean } = {}
+  ) {
+    if (!options.force && nextState.signature === _patternSignature) return;
+    _patternSignature = nextState.signature;
+    detectedPatterns = nextState.detectedPatterns;
+    overlayPatterns = nextState.overlayPatterns;
+    patternMarkers = nextState.patternMarkers;
     applyCombinedMarkers();
     applyPatternLineSeries();
     renderDrawings();
+  }
+
+  function clearDetectedPatterns() {
+    applyPatternStateSnapshot(emptyChartPatternState(), { force: true });
+  }
+
+  function getVisibleLogicalRange(): { from: number; to: number } | null {
+    if (!chart) return null;
+    try {
+      const range = chart.timeScale?.().getVisibleLogicalRange?.();
+      if (!range || !Number.isFinite(range.from) || !Number.isFinite(range.to)) return null;
+      return { from: range.from, to: range.to };
+    } catch {
+      return null;
+    }
   }
 
   function scheduleVisiblePatternScan() {
@@ -1659,8 +1050,7 @@
   function runPatternDetection(
     scope: PatternScanScope = 'visible',
     opts: { fallbackToFull?: boolean } = {}
-  ): PatternScanResult {
-    const fallbackToFull = opts.fallbackToFull ?? false;
+  ): PatternScanReport {
     if (!chart || !series || klineCache.length < MIN_PATTERN_CANDLES) {
       clearDetectedPatterns();
       return {
@@ -1672,36 +1062,19 @@
         message: '캔들 데이터가 부족해 패턴을 분석할 수 없습니다.',
       };
     }
-
-    let effectiveScope: PatternScanScope = scope;
-    let sourceCandles = scope === 'visible' ? getVisibleScopeCandles() : klineCache;
-    if (sourceCandles.length < MIN_PATTERN_CANDLES && scope === 'visible' && fallbackToFull) {
-      effectiveScope = 'full';
-      sourceCandles = klineCache;
-    }
-    if (sourceCandles.length < MIN_PATTERN_CANDLES) {
-      clearDetectedPatterns();
-      return {
-        ok: false,
-        scope: effectiveScope,
-        candleCount: sourceCandles.length,
-        patternCount: 0,
-        patterns: [],
-        message: '보이는 구간 캔들이 부족합니다. 조금 줌아웃한 뒤 다시 시도하세요.',
-      };
-    }
-
-    const next = detectChartPatterns(sourceCandles, { maxPatterns: 3, pivotLookaround: 2 });
-    applyDetectedPatternState(next);
-
-    return {
-      ok: next.length > 0,
-      scope: effectiveScope,
-      candleCount: sourceCandles.length,
-      patternCount: next.length,
-      patterns: next.map(snapshotPattern),
-      message: buildPatternSummary(next),
-    };
+    const visibleCandles = sliceVisibleScopeCandles(klineCache, getVisibleLogicalRange());
+    const detection = detectChartPatternState({
+      scope,
+      fullCandles: klineCache,
+      visibleCandles,
+      fallbackToFull: opts.fallbackToFull ?? false,
+      minCandles: MIN_PATTERN_CANDLES,
+      maxPatterns: 3,
+      pivotLookaround: 2,
+      maxOverlayPatterns: MAX_OVERLAY_PATTERNS,
+    });
+    applyPatternStateSnapshot(detection.state, { force: !detection.report.ok });
+    return detection.report;
   }
 
   function focusPatternRange(pattern: ChartPatternDetection) {
@@ -1719,7 +1092,7 @@
     pushChartNotice(result.message);
   }
 
-  export async function runPatternScanFromIntel(options: { scope?: PatternScanScope; focus?: boolean } = {}): Promise<PatternScanResult> {
+  export async function runPatternScanFromIntel(options: { scope?: PatternScanScope; focus?: boolean } = {}): Promise<PatternScanReport> {
     const scope = options.scope ?? 'visible';
     if (chartMode !== 'agent') {
       await setChartMode('agent');
@@ -1733,8 +1106,8 @@
     }
     pushChartNotice(result.message);
     gtmEvent('terminal_pattern_scan_from_intel', {
-      pair: state.pair,
-      timeframe: state.timeframe,
+      pair: storeState.pair,
+      timeframe: storeState.timeframe,
       scope: result.scope,
       candle_count: result.candleCount,
       pattern_count: result.patternCount,
@@ -1746,24 +1119,17 @@
   //  PRICE & POSITION
   // ═══════════════════════════════════════════
 
-  let livePrice = 0;
-  let priceChange24h = 0;
-  let high24h = 0;
-  let low24h = 0;
-  let quoteVolume24h = 0;
-  let isLoading = true;
-  let error = '';
+  let livePrice = $state(0);
+  let priceChange24h = $state(0);
+  let high24h = $state(0);
+  let low24h = $state(0);
+  let quoteVolume24h = $state(0);
+  let isLoading = $state(true);
+  let error = $state('');
 
   let _priceUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   let _pendingPrice: number | null = null;
   let _pendingPairBase: string | null = null;
-  function normalizeMarketPrice(price: number): number {
-    if (!Number.isFinite(price)) return 0;
-    const abs = Math.abs(price);
-    if (abs >= 1000) return Number(price.toFixed(2));
-    if (abs >= 1) return Number(price.toFixed(4));
-    return Number(price.toFixed(6));
-  }
 
   /** priceStore에 즉시 반영 (초기 로드 시 호출) */
   function flushPriceUpdate(price: number, pairBase: string) {
@@ -1787,23 +1153,15 @@
   }
 
   function hydrate24hStatsFromKlines(klines: BinanceKline[]) {
-    if (!Array.isArray(klines) || klines.length === 0) return;
-    let hi = Number.NEGATIVE_INFINITY;
-    let lo = Number.POSITIVE_INFINITY;
-    let qv = 0;
-    for (const k of klines) {
-      if (Number.isFinite(k.high)) hi = Math.max(hi, k.high);
-      if (Number.isFinite(k.low)) lo = Math.min(lo, k.low);
-      if (Number.isFinite(k.volume) && Number.isFinite(k.close)) qv += k.volume * k.close;
-    }
-    if (Number.isFinite(hi) && hi > 0) high24h = hi;
-    if (Number.isFinite(lo) && lo > 0) low24h = lo;
-    if (Number.isFinite(qv) && qv > 0) quoteVolume24h = qv;
+    const stats = compute24hStatsFromKlines(klines);
+    if (stats.high !== null) high24h = stats.high;
+    if (stats.low !== null) low24h = stats.low;
+    if (stats.quoteVolume !== null) quoteVolume24h = stats.quoteVolume;
   }
 
-  $: if (series && showPosition && posEntry !== null && posTp !== null && posSl !== null) { updatePositionLines(posEntry, posTp, posSl, posDir); }
-  $: if (series && !showPosition) { clearPositionLines(); }
-  $: if (series) { applyAgentTradeSetup(activeTradeSetup); }
+  $effect(() => { if (series && showPosition && posEntry !== null && posTp !== null && posSl !== null) { updatePositionLines(posEntry, posTp, posSl, posDir); } });
+  $effect(() => { if (series && !showPosition) { clearPositionLines(); } });
+  $effect(() => { if (series) { applyAgentTradeSetup(activeTradeSetup); } });
 
   function updatePositionLines(entry: number, tp: number, sl: number, dir: string) {
     if (!series) return;
@@ -1821,8 +1179,8 @@
   }
 
   // ═══ Drag TP/SL ═══
-  let isDragging: 'tp' | 'sl' | 'entry' | null = null;
-  let hoverLine: 'tp' | 'sl' | 'entry' | null = null;
+  let isDragging: 'tp' | 'sl' | 'entry' | null = $state(null);
+  let hoverLine: 'tp' | 'sl' | 'entry' | null = $state(null);
 
   function handleChartMouseDown(e: MouseEvent) {
     if (!chart || !series || !showPosition || posEntry === null || posTp === null || posSl === null) return;
@@ -1843,7 +1201,7 @@
     const price = priceFromY(y);
     if (price === null) return;
     if (isDragging) {
-      dispatch(isDragging === 'tp' ? 'dragTP' : isDragging === 'sl' ? 'dragSL' : 'dragEntry', { price: Math.round(price) });
+      emitDrag(isDragging === 'tp' ? 'dragTP' : isDragging === 'sl' ? 'dragSL' : 'dragEntry', { price: Math.round(price) });
     } else if (showPosition && posEntry !== null && posTp !== null && posSl !== null) {
       const distTP = Math.abs(price - (posTp || 0)), distSL = Math.abs(price - (posSl || 0)), distEntry = Math.abs(price - (posEntry || 0));
       const minDist = Math.min(distTP, distSL, distEntry);
@@ -1864,12 +1222,12 @@
     const step = basePrice > 10000 ? 10 : basePrice > 1000 ? 1 : basePrice > 100 ? 0.5 : 0.1;
     const delta = e.deltaY > 0 ? -step : step;
     const val = target === 'tp' ? posTp : target === 'sl' ? posSl : posEntry;
-    dispatch(target === 'tp' ? 'dragTP' : target === 'sl' ? 'dragSL' : 'dragEntry', { price: Math.round((val || 0) + delta) });
+    emitDrag(target === 'tp' ? 'dragTP' : target === 'sl' ? 'dragSL' : 'dragEntry', { price: Math.round((val || 0) + delta) });
   }
 
   function priceFromY(y: number): number | null { if (!series) return null; try { return series.coordinateToPrice(y); } catch { return null; } }
 
-  $: if (series) { applyCombinedMarkers(); }
+  $effect(() => { if (series) { applyCombinedMarkers(); } });
 
   export function getCurrentPrice() { return livePrice; }
 
@@ -1949,7 +1307,7 @@
       // MA lines on main pane
       const maOpts = (color: string, lineWidth = 1, lineStyle = 0) => ({
         color,
-        lineWidth,
+        lineWidth: lineWidth as any,
         lineStyle,
         priceLineVisible: false,
         lastValueVisible: false,
@@ -1961,6 +1319,16 @@
       ma60Series = chart.addSeries(lwc.LineSeries, maOpts(chartTheme.ma60, 2, 0));
       ma99Series = chart.addSeries(lwc.LineSeries, maOpts(chartTheme.ma99, 1, 2));
       ma120Series = chart.addSeries(lwc.LineSeries, maOpts(chartTheme.ma120, 2, 0));
+
+      // Rebuild _maPeriods with fresh series refs (no $: reactive — only needed after series creation)
+      _maPeriods = [
+        { p: 7, s: ma7Series, setVal: (v: number) => { ma7Val = v; } },
+        { p: 20, s: ma20Series, setVal: (v: number) => { ma20Val = v; } },
+        { p: 25, s: ma25Series, setVal: (v: number) => { ma25Val = v; } },
+        { p: 60, s: ma60Series, setVal: (v: number) => { ma60Val = v; } },
+        { p: 99, s: ma99Series, setVal: (v: number) => { ma99Val = v; } },
+        { p: 120, s: ma120Series, setVal: (v: number) => { ma120Val = v; } },
+      ];
 
       // ═══ Volume Pane ═══
       chart.addPane();
@@ -1975,7 +1343,7 @@
       rsiPaneIndex = rsiIdx;
       rsiSeries = chart.addSeries(lwc.LineSeries, {
         color: chartTheme.rsi,
-        lineWidth: 1.5,
+        lineWidth: 1.5 as any,
         priceLineVisible: true,
         lastValueVisible: true,
         crosshairMarkerVisible: false
@@ -1998,7 +1366,11 @@
         renderDrawings();
       };
       chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChange);
-      const onCrosshairMove = () => { renderDrawings(); };
+      let _crosshairRAF: number | null = null;
+      const onCrosshairMove = () => {
+        if (_crosshairRAF) return;
+        _crosshairRAF = requestAnimationFrame(() => { _crosshairRAF = null; renderDrawings(); });
+      };
       chart.subscribeCrosshairMove(onCrosshairMove);
 
       const ro = new ResizeObserver(() => {
@@ -2057,27 +1429,32 @@
       const unique = older.filter(k => k.time < earliestTime);
       if (unique.length === 0) { _noMoreHistory = true; _isLoadingMore = false; return; }
 
-      // Prepend to cache
+      // Prepend to cache (cap at MAX_KLINE_CACHE to prevent unbounded growth)
       klineCache = [...unique, ...klineCache];
+      if (klineCache.length > MAX_KLINE_CACHE) {
+        klineCache = klineCache.slice(-MAX_KLINE_CACHE);
+      }
 
       // Re-set all series data
-      series.setData(klineCache.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close })));
+      series.setData(klineCache.map(k => ({ time: k.time as any, open: k.open, high: k.high, low: k.low, close: k.close })));
       if (volumeSeries) volumeSeries.setData(klineCache.map(k => ({
-        time: k.time,
+        time: k.time as any,
         value: k.volume,
         color: k.close >= k.open ? chartTheme.volumeUp : chartTheme.volumeDown
       })));
 
       const closes = klineCache.map(k => ({ time: k.time, close: k.close }));
-      if (ma7Series) ma7Series.setData(computeSMA(closes, 7));
-      if (ma20Series) ma20Series.setData(computeSMA(closes, 20));
-      if (ma25Series) ma25Series.setData(computeSMA(closes, 25));
-      if (ma60Series) ma60Series.setData(computeSMA(closes, 60));
-      if (ma99Series) ma99Series.setData(computeSMA(closes, 99));
-      if (ma120Series) ma120Series.setData(computeSMA(closes, 120));
+      if (ma7Series) ma7Series.setData(computeSMA(closes, 7) as any);
+      if (ma20Series) ma20Series.setData(computeSMA(closes, 20) as any);
+      if (ma25Series) ma25Series.setData(computeSMA(closes, 25) as any);
+      if (ma60Series) ma60Series.setData(computeSMA(closes, 60) as any);
+      if (ma99Series) ma99Series.setData(computeSMA(closes, 99) as any);
+      if (ma120Series) ma120Series.setData(computeSMA(closes, 120) as any);
       if (rsiSeries) {
-        const rsiData = computeRSI(closes, 14);
-        rsiSeries.setData(rsiData);
+        const { result: rsiData, state: rsiState } = computeRSI(closes, 14);
+        _rsiAvgGain = rsiState.avgGain;
+        _rsiAvgLoss = rsiState.avgLoss;
+        rsiSeries.setData(rsiData as any);
         if (rsiData.length > 0) rsiVal = rsiData[rsiData.length - 1].value;
       }
       latestVolume = klineCache[klineCache.length - 1]?.volume || 0;
@@ -2093,15 +1470,15 @@
     if (!series || !volumeSeries || !chart) return;
     const sym = overrideSymbol || symbol;
     const intv = overrideInterval || interval;
-    const pairBase = (state.pair.split('/')[0] || 'BTC').toUpperCase();
+    const pairBase = (storeState.pair.split('/')[0] || 'BTC').toUpperCase();
     _currentSymbol = sym;
     _currentInterval = intv;
     _noMoreHistory = false;
-    detectedPatterns = [];
-    patternMarkers = [];
-    _patternSignature = '';
-    applyCombinedMarkers();
-    clearPatternLineSeries();
+    clearDetectedPatterns();
+    // Cleanup stale timers from previous pair/TF
+    if (_patternRangeScanTimer) { clearTimeout(_patternRangeScanTimer); _patternRangeScanTimer = null; }
+    if (_priceUpdateTimer) { clearTimeout(_priceUpdateTimer); _priceUpdateTimer = null; _pendingPrice = null; _pendingPairBase = null; }
+    if (_drawRAF) { cancelAnimationFrame(_drawRAF); _drawRAF = null; }
     isLoading = true; error = '';
 
     try {
@@ -2113,11 +1490,11 @@
       if (klines.length === 0) { error = 'No data received'; isLoading = false; return; }
 
       // Candles
-      series.setData(klines.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close })));
+      series.setData(klines.map(k => ({ time: k.time as any, open: k.open, high: k.high, low: k.low, close: k.close })));
 
       // Volume
-      volumeSeries.setData(klines.map(k => ({
-        time: k.time,
+      if (volumeSeries) volumeSeries.setData(klines.map(k => ({
+        time: k.time as any,
         value: k.volume,
         color: k.close >= k.open ? chartTheme.volumeUp : chartTheme.volumeDown
       })));
@@ -2126,28 +1503,44 @@
       klineCache = klines;
       const closes = klines.map(k => ({ time: k.time, close: k.close }));
 
-      if (ma7Series) ma7Series.setData(computeSMA(closes, 7));
-      if (ma20Series) ma20Series.setData(computeSMA(closes, 20));
-      if (ma25Series) ma25Series.setData(computeSMA(closes, 25));
-      if (ma60Series) ma60Series.setData(computeSMA(closes, 60));
-      if (ma99Series) ma99Series.setData(computeSMA(closes, 99));
-      if (ma120Series) ma120Series.setData(computeSMA(closes, 120));
+      // Compute SMA series + extract last value for display (avoids duplicate slice/reduce)
+      const maSeries = [
+        { period: 7, s: ma7Series },
+        { period: 20, s: ma20Series },
+        { period: 25, s: ma25Series },
+        { period: 60, s: ma60Series },
+        { period: 99, s: ma99Series },
+        { period: 120, s: ma120Series },
+      ];
+      const maLastValues: Record<number, number> = {};
+      for (const { period, s } of maSeries) {
+        const smaData = computeSMA(closes, period);
+        if (s) s.setData(smaData as any);
+        maLastValues[period] = smaData.length > 0 ? smaData[smaData.length - 1].value : 0;
+      }
+      ma7Val = maLastValues[7]; ma20Val = maLastValues[20]; ma25Val = maLastValues[25];
+      ma60Val = maLastValues[60]; ma99Val = maLastValues[99]; ma120Val = maLastValues[120];
+
+      // Seed running sums for O(1) WS MA updates
+      _maRunSum = {};
+      for (const p of [7, 20, 25, 60, 99, 120]) {
+        if (klines.length >= p) {
+          let s = 0;
+          for (let i = klines.length - p; i < klines.length; i++) s += klines[i].close;
+          _maRunSum[p] = s;
+        }
+      }
+
       if (rsiSeries) {
-        const rsiData = computeRSI(closes, 14);
-        rsiSeries.setData(rsiData);
+        const { result: rsiData, state: rsiState } = computeRSI(closes, 14);
+        _rsiAvgGain = rsiState.avgGain;
+        _rsiAvgLoss = rsiState.avgLoss;
+        rsiSeries.setData(rsiData as any);
         if (rsiData.length > 0) rsiVal = rsiData[rsiData.length - 1].value;
       }
       runPatternDetection('visible', { fallbackToFull: true });
 
-      // Cache MA display values
       const len = klines.length;
-      if (len >= 7) ma7Val = klines.slice(-7).reduce((a, k) => a + k.close, 0) / 7;
-      if (len >= 20) ma20Val = klines.slice(-20).reduce((a, k) => a + k.close, 0) / 20;
-      if (len >= 25) ma25Val = klines.slice(-25).reduce((a, k) => a + k.close, 0) / 25;
-      if (len >= 60) ma60Val = klines.slice(-60).reduce((a, k) => a + k.close, 0) / 60;
-      if (len >= 99) ma99Val = klines.slice(-99).reduce((a, k) => a + k.close, 0) / 99;
-      if (len >= 120) ma120Val = klines.slice(-120).reduce((a, k) => a + k.close, 0) / 120;
-
       const lastKline = klines[len - 1];
       latestVolume = lastKline.volume;
       livePrice = lastKline.close;
@@ -2168,7 +1561,7 @@
 
       // 초기 kline 로드 시 즉시 priceStore에 반영 (Header 즉시 업데이트)
       flushPriceUpdate(lastKline.close, pairBase);
-      dispatch('priceUpdate', { price: lastKline.close });
+      emitPriceUpdate({ price: lastKline.close });
       chart.timeScale().fitContent();
 
       // ═══ WebSocket real-time ═══
@@ -2180,10 +1573,10 @@
       wsCleanup = subscribeKlines(sym, intv, (kline: BinanceKline) => {
         if (!series) return;
 
-        series.update({ time: kline.time, open: kline.open, high: kline.high, low: kline.low, close: kline.close });
+        series.update({ time: kline.time as any, open: kline.open, high: kline.high, low: kline.low, close: kline.close });
         if (volumeSeries) {
           volumeSeries.update({
-            time: kline.time,
+            time: kline.time as any,
             value: kline.volume,
             color: kline.close >= kline.open ? chartTheme.volumeUp : chartTheme.volumeDown
           });
@@ -2193,50 +1586,44 @@
         const isUpdate = klineCache.length > 0 && klineCache[klineCache.length - 1].time === kline.time;
         const prevClose = isUpdate ? (klineCache.length > 1 ? klineCache[klineCache.length - 2].close : kline.open) : klineCache[klineCache.length - 1]?.close ?? kline.open;
         if (isUpdate) klineCache[klineCache.length - 1] = kline;
-        else klineCache.push(kline);
+        else {
+          klineCache.push(kline);
+          if (klineCache.length > MAX_KLINE_CACHE) klineCache = klineCache.slice(-MAX_KLINE_CACHE);
+        }
         const cLen = klineCache.length;
         runPatternDetection('visible', { fallbackToFull: true });
 
-        // MA — simple running average from last N
-        if (ma7Series && cLen >= 7) {
-          let s = 0; for (let i = cLen - 7; i < cLen; i++) s += klineCache[i].close;
-          ma7Val = s / 7; ma7Series.update({ time: kline.time, value: ma7Val });
-        }
-        if (ma20Series && cLen >= 20) {
-          let s = 0; for (let i = cLen - 20; i < cLen; i++) s += klineCache[i].close;
-          ma20Val = s / 20; ma20Series.update({ time: kline.time, value: ma20Val });
-        }
-        if (ma25Series && cLen >= 25) {
-          let s = 0; for (let i = cLen - 25; i < cLen; i++) s += klineCache[i].close;
-          ma25Val = s / 25; ma25Series.update({ time: kline.time, value: ma25Val });
-        }
-        if (ma60Series && cLen >= 60) {
-          let s = 0; for (let i = cLen - 60; i < cLen; i++) s += klineCache[i].close;
-          ma60Val = s / 60; ma60Series.update({ time: kline.time, value: ma60Val });
-        }
-        if (ma99Series && cLen >= 99) {
-          let s = 0; for (let i = cLen - 99; i < cLen; i++) s += klineCache[i].close;
-          ma99Val = s / 99; ma99Series.update({ time: kline.time, value: ma99Val });
-        }
-        if (ma120Series && cLen >= 120) {
-          let s = 0; for (let i = cLen - 120; i < cLen; i++) s += klineCache[i].close;
-          ma120Val = s / 120; ma120Series.update({ time: kline.time, value: ma120Val });
+        // MA — O(1) per period using running sums
+        for (const { p, s, setVal } of _maPeriods) {
+          if (!s || cLen < p) continue;
+          if (isUpdate) {
+            // Replace old close of current candle with new close
+            _maRunSum[p] = (_maRunSum[p] ?? 0) - prevClose + kline.close;
+          } else {
+            // New candle: drop oldest, add newest
+            _maRunSum[p] = (_maRunSum[p] ?? 0) - (klineCache[cLen - p - 1]?.close ?? 0) + kline.close;
+          }
+          const val = _maRunSum[p] / p;
+          setVal(val);
+          s.update({ time: kline.time as any, value: val });
         }
 
-        // RSI — incremental Wilder smoothing
+        // RSI — incremental Wilder smoothing (via imported helper)
         if (rsiSeries && cLen > 14) {
-          const d = kline.close - prevClose;
-          _rsiAvgGain = (_rsiAvgGain * 13 + (d > 0 ? d : 0)) / 14;
-          _rsiAvgLoss = (_rsiAvgLoss * 13 + (d < 0 ? -d : 0)) / 14;
-          const rsi = _rsiAvgLoss === 0 ? 100 : 100 - 100 / (1 + _rsiAvgGain / _rsiAvgLoss);
-          rsiSeries.update({ time: kline.time, value: rsi });
+          const { value: rsi, state: rsiState } = updateRSIIncremental(
+            { avgGain: _rsiAvgGain, avgLoss: _rsiAvgLoss },
+            kline.close - prevClose,
+          );
+          _rsiAvgGain = rsiState.avgGain;
+          _rsiAvgLoss = rsiState.avgLoss;
+          rsiSeries.update({ time: kline.time as any, value: rsi });
           rsiVal = rsi;
         }
 
         livePrice = kline.close;
         latestVolume = kline.volume;
         throttledPriceUpdate(kline.close, pairBase);
-        dispatch('priceUpdate', { price: kline.close });
+        emitPriceUpdate({ price: kline.close });
       });
 
       // Keep displayed price synced to trade ticker (closer match with TradingView quote).
@@ -2247,7 +1634,7 @@
           if (!Number.isFinite(tick) || tick <= 0) return;
           livePrice = tick;
           throttledPriceUpdate(tick, pairBase);
-          dispatch('priceUpdate', { price: tick });
+          emitPriceUpdate({ price: tick });
         },
         (updates) => {
           const full = updates[sym];
@@ -2265,8 +1652,7 @@
       error = `API Error: ${e.message || 'Failed'}`;
       isLoading = false;
       if (klineCache.length === 0) {
-        const pairBase = (state.pair.split('/')[0] || 'BTC') as keyof typeof state.prices;
-        const fallback = state.prices[pairBase] || state.prices.BTC;
+        const fallback = getPairPrice($livePrices, storeState.pair, pairBaseFallbackSymbol, pairBaseFallbackPrice);
         if (Number.isFinite(fallback) && fallback > 0) livePrice = fallback;
       }
     }
@@ -2274,9 +1660,9 @@
 
   function loadFallbackData() {
     if (!series || !chart) return;
-    const basePrice = state.prices.BTC || 97000;
+    const basePrice = getPairPrice($livePrices, storeState.pair, pairBaseFallbackSymbol, pairBaseFallbackPrice || 97000);
     const candles = generateCandles(201, basePrice);
-    series.setData(candles);
+    series.setData(candles as any);
     chart.timeScale().fitContent();
     livePrice = basePrice;
     const fallbackInterval = setInterval(() => {
@@ -2285,22 +1671,10 @@
       const newClose = last.close + change;
       const time = (last.time as number) + 14400;
       const nc = { time, open: last.close, high: Math.max(last.close, newClose) + Math.random() * 40, low: Math.min(last.close, newClose) - Math.random() * 40, close: newClose };
-      candles.push(nc); series.update(nc); livePrice = newClose;
-      dispatch('priceUpdate', { price: newClose });
+      candles.push(nc); if (series) series.update(nc as any); livePrice = newClose;
+      emitPriceUpdate({ price: newClose });
     }, 1500);
     if (cleanup) { const old = cleanup; cleanup = () => { clearInterval(fallbackInterval); old(); }; }
-  }
-
-  function generateCandles(count: number, basePrice: number) {
-    const candles = [];
-    let t = Math.floor(Date.now() / 1000) - count * 14400, price = basePrice;
-    for (let i = 0; i < count; i++) {
-      const change = (Math.random() - 0.48) * 120;
-      const open = price, close = price + change;
-      candles.push({ time: t, open, high: Math.max(open, close) + Math.random() * 60, low: Math.min(open, close) - Math.random() * 60, close });
-      price = close; t += 14400;
-    }
-    return candles;
   }
 
   function changePair(pair: string) {
@@ -2320,21 +1694,63 @@
   function requestAgentScan() {
     gtmEvent('terminal_scan_request_chart', {
       source: 'chart-bar',
-      pair: state.pair,
-      timeframe: state.timeframe,
+      pair: storeState.pair,
+      timeframe: storeState.timeframe,
     });
-    dispatch('scanrequest', {
+    emitScanRequest({
       source: 'chart-bar',
-      pair: state.pair,
-      timeframe: state.timeframe,
+      pair: storeState.pair,
+      timeframe: storeState.timeframe,
     });
+  }
+
+  function publishCommunitySignal(dir: 'LONG' | 'SHORT', options?: { openCopyTrade?: boolean; sourceContext?: string }) {
+    const draft = buildCommunitySignalDraft({
+      pair: storeState.pair || 'BTC/USDT',
+      dir,
+      livePrice,
+      activeTradeSetup,
+      timeframe: storeState.timeframe,
+      chatTradeReady,
+      chatTradeDir,
+    });
+    if (!draft) {
+      pushChartNotice('시그널 생성 실패: 가격 데이터가 부족합니다');
+      return;
+    }
+
+    const openCopyTrade = options?.openCopyTrade !== false;
+    emitCommunitySignal({
+      pair: draft.pair,
+      dir: draft.dir,
+      entry: draft.entry,
+      tp: draft.tp,
+      sl: draft.sl,
+      conf: draft.conf,
+      source: draft.source,
+      reason: draft.reason,
+      openCopyTrade,
+    });
+
+    gtmEvent('terminal_chart_community_signal', {
+      source: options?.sourceContext || 'chart-action',
+      pair: draft.pair,
+      dir: draft.dir,
+      entry: draft.entry,
+      tp: draft.tp,
+      sl: draft.sl,
+      conf: draft.conf,
+      openCopyTrade,
+    });
+
+    pushChartNotice(`${draft.dir} 시그널 생성 완료 · COMMUNITY${openCopyTrade ? ' + COPY' : ''}`);
   }
 
   function requestChatAssist() {
     gtmEvent('terminal_chat_request_chart', {
       source: 'chart-bar',
-      pair: state.pair,
-      timeframe: state.timeframe,
+      pair: storeState.pair,
+      timeframe: storeState.timeframe,
       tradeReady: chatTradeReady,
       tradeDir: chatTradeDir,
     });
@@ -2343,10 +1759,10 @@
       pushChartNotice(`${chatTradeDir} draw mode active`);
       return;
     }
-    dispatch('chatrequest', {
+    emitChatRequest({
       source: 'chart-bar',
-      pair: state.pair,
-      timeframe: state.timeframe,
+      pair: storeState.pair,
+      timeframe: storeState.timeframe,
     });
     pushChartNotice('채팅 탭에서 질문 후 거래를 시작하세요');
   }
@@ -2362,8 +1778,8 @@
     gtmEvent('terminal_trade_drawing_activate', {
       source: dir ? 'chat-first' : 'unified-tool',
       dir: dir ?? 'auto',
-      pair: state.pair,
-      timeframe: state.timeframe,
+      pair: storeState.pair,
+      timeframe: storeState.timeframe,
     });
     if (dir) {
       pushChartNotice(`${dir} mode — drag on chart to set ENTRY/TP/SL`);
@@ -2426,7 +1842,7 @@
 
         {#if chartMode === 'agent'}
           <div class="pair-slot">
-            <TokenDropdown value={state.pair} compact={isCompactViewport()} on:select={e => changePair(e.detail.pair)} />
+            <TokenDropdown value={storeState.pair} compact={isCompactViewport()} onSelect={(detail) => changePair(detail.pair)} />
           </div>
         {/if}
 
@@ -2434,8 +1850,8 @@
           <span class="tf-compact-label">TF</span>
           <select
             class="tf-compact-select"
-            value={normalizeTimeframe(state.timeframe)}
-            on:change={(e) => changeTF((e.currentTarget as HTMLSelectElement).value)}
+            value={normalizeTimeframe(storeState.timeframe)}
+            onchange={(e) => changeTF((e.currentTarget as HTMLSelectElement).value)}
             aria-label="Timeframe"
           >
             {#each CORE_TIMEFRAME_OPTIONS as tf}
@@ -2449,8 +1865,8 @@
         {#each CORE_TIMEFRAME_OPTIONS as tf}
           <button
             class="tfbtn"
-            class:active={normalizeTimeframe(state.timeframe) === tf.value}
-            on:click={() => changeTF(tf.value)}
+            class:active={normalizeTimeframe(storeState.timeframe) === tf.value}
+            onclick={() => changeTF(tf.value)}
           >
             {tf.label}
           </button>
@@ -2459,10 +1875,10 @@
 
       <div class="bar-controls">
         <div class="mode-toggle">
-          <button class="mode-btn" class:active={chartMode === 'agent'} on:click={() => setChartMode('agent')}>
+          <button class="mode-btn" class:active={chartMode === 'agent'} onclick={() => setChartMode('agent')}>
             AGENT
           </button>
-          <button class="mode-btn" class:active={chartMode === 'trading'} on:click={() => setChartMode('trading')}>
+          <button class="mode-btn" class:active={chartMode === 'trading'} onclick={() => setChartMode('trading')}>
             TRADING
           </button>
         </div>
@@ -2470,18 +1886,18 @@
         {#if chartMode === 'agent'}
           <div class="draw-tools">
             {#if !isTvLikePreset}
-              <button class="draw-btn" class:active={drawingMode === 'hline'} on:click={() => setDrawingMode(drawingMode === 'hline' ? 'none' : 'hline')} title="Horizontal Line">&#x2500;</button>
-              <button class="draw-btn" class:active={drawingMode === 'trendline'} on:click={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
+              <button class="draw-btn" class:active={drawingMode === 'hline'} onclick={() => setDrawingMode(drawingMode === 'hline' ? 'none' : 'hline')} title="Horizontal Line">&#x2500;</button>
+              <button class="draw-btn" class:active={drawingMode === 'trendline'} onclick={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
             {/if}
             {#if enableTradeLineEntry}
-              <button class="draw-btn trade-tool" class:active={drawingMode === 'trade' || drawingMode === 'longentry' || drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'trade' ? 'none' : 'trade')} title="Position Tool (R) — drag down LONG · drag up SHORT">⬡</button>
+              <button class="draw-btn trade-tool" class:active={drawingMode === 'trade' || drawingMode === 'longentry' || drawingMode === 'shortentry'} onclick={() => setDrawingMode(drawingMode === 'trade' ? 'none' : 'trade')} title="Position Tool (R) — drag down LONG · drag up SHORT">⬡</button>
             {/if}
             {#if drawings.length > 0 || activeTradeSetup}
-              <button class="draw-btn vis-toggle" class:off={!drawingsVisible} on:click={toggleDrawingsVisible} title={drawingsVisible ? 'Hide drawings (V)' : 'Show drawings (V)'}>
+              <button class="draw-btn vis-toggle" class:off={!drawingsVisible} onclick={toggleDrawingsVisible} title={drawingsVisible ? 'Hide drawings (V)' : 'Show drawings (V)'}>
                 {drawingsVisible ? '◉' : '○'}<span class="vis-count">{drawings.length}</span>
               </button>
             {/if}
-            <button class="draw-btn clear-btn" on:click={clearAllDrawings} title="Clear">&#x2715;</button>
+            <button class="draw-btn clear-btn" onclick={clearAllDrawings} title="Clear">&#x2715;</button>
           </div>
         {/if}
 
@@ -2490,26 +1906,42 @@
             <button
               class="scan-btn chat-trigger"
               class:ready={chatTradeReady}
-              on:click={requestChatAssist}
+              onclick={requestChatAssist}
               title={chatTradeReady ? `AI answer ready. Start ${chatTradeDir} drag on chart.` : 'Open Intel chat and ask AI first'}
             >
               {chatTradeReady ? `START ${chatTradeDir}` : 'OPEN CHAT'}
             </button>
           {:else}
-            <button class="scan-btn" on:click={requestAgentScan} title="Run agent scan for current market">
+            <button class="scan-btn" onclick={requestAgentScan} title="Run agent scan for current market">
               SCAN
             </button>
           {/if}
           <button
             class="scan-btn pattern-trigger"
-            on:click={forcePatternScan}
+            onclick={forcePatternScan}
             title="Re-scan head and shoulders / falling wedge patterns"
           >
             PATTERN
           </button>
+          <div class="opinion-actions">
+            <button
+              class="scan-btn view-btn long"
+              onclick={() => publishCommunitySignal('LONG', { openCopyTrade: true, sourceContext: 'chart-view-long' })}
+              title="Create LONG community signal and open copy trade modal"
+            >
+              ▲ LONG VIEW
+            </button>
+            <button
+              class="scan-btn view-btn short"
+              onclick={() => publishCommunitySignal('SHORT', { openCopyTrade: true, sourceContext: 'chart-view-short' })}
+              title="Create SHORT community signal and open copy trade modal"
+            >
+              ▼ SHORT VIEW
+            </button>
+          </div>
 
           {#if advancedMode && indicatorStripState === 'hidden' && !isTvLikePreset}
-            <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>IND ON</button>
+            <button class="strip-restore-btn" onclick={() => setIndicatorStripState('expanded')}>IND ON</button>
           {/if}
         {/if}
 
@@ -2533,38 +1965,38 @@
     <div class="indicator-strip" class:collapsed={indicatorStripState === 'collapsed'}>
       {#if indicatorStripState === 'expanded'}
         <div class="view-mode">
-          <button class="view-chip" class:on={chartVisualMode === 'focus'} on:click={() => setChartVisualMode('focus')}>FOCUS</button>
-          <button class="view-chip" class:on={chartVisualMode === 'full'} on:click={() => setChartVisualMode('full')}>FULL</button>
+          <button class="view-chip" class:on={chartVisualMode === 'focus'} onclick={() => setChartVisualMode('focus')}>FOCUS</button>
+          <button class="view-chip" class:on={chartVisualMode === 'full'} onclick={() => setChartVisualMode('full')}>FULL</button>
         </div>
-        <button class="ind-chip" class:on={indicatorEnabled.ma20} on:click={() => toggleIndicator('ma20')} style="--ind-color:{chartTheme.ma20}">
+        <button class="ind-chip" class:on={indicatorEnabled.ma20} onclick={() => toggleIndicator('ma20')} style="--ind-color:{chartTheme.ma20}">
           MA20 <span>{formatPrice(ma20Val)}</span>
         </button>
-        <button class="ind-chip" class:on={indicatorEnabled.ma60} on:click={() => toggleIndicator('ma60')} style="--ind-color:{chartTheme.ma60}">
+        <button class="ind-chip" class:on={indicatorEnabled.ma60} onclick={() => toggleIndicator('ma60')} style="--ind-color:{chartTheme.ma60}">
           MA60 <span>{formatPrice(ma60Val)}</span>
         </button>
-        <button class="ind-chip optional" class:on={indicatorEnabled.ma120} on:click={() => toggleIndicator('ma120')} style="--ind-color:{chartTheme.ma120}">
+        <button class="ind-chip optional" class:on={indicatorEnabled.ma120} onclick={() => toggleIndicator('ma120')} style="--ind-color:{chartTheme.ma120}">
           MA120 <span>{formatPrice(ma120Val)}</span>
         </button>
         {#if chartVisualMode === 'full'}
-          <button class="ind-chip muted" class:on={indicatorEnabled.ma7} on:click={() => toggleIndicator('ma7')} style="--ind-color:{chartTheme.ma7}">
+          <button class="ind-chip muted" class:on={indicatorEnabled.ma7} onclick={() => toggleIndicator('ma7')} style="--ind-color:{chartTheme.ma7}">
             MA7
           </button>
-          <button class="ind-chip muted" class:on={indicatorEnabled.ma25} on:click={() => toggleIndicator('ma25')} style="--ind-color:{chartTheme.ma25}">
+          <button class="ind-chip muted" class:on={indicatorEnabled.ma25} onclick={() => toggleIndicator('ma25')} style="--ind-color:{chartTheme.ma25}">
             MA25
           </button>
-          <button class="ind-chip muted" class:on={indicatorEnabled.ma99} on:click={() => toggleIndicator('ma99')} style="--ind-color:{chartTheme.ma99}">
+          <button class="ind-chip muted" class:on={indicatorEnabled.ma99} onclick={() => toggleIndicator('ma99')} style="--ind-color:{chartTheme.ma99}">
             MA99
           </button>
         {/if}
-        <button class="ind-chip" class:on={indicatorEnabled.rsi} on:click={() => toggleIndicator('rsi')} style="--ind-color:{chartTheme.rsi}">
+        <button class="ind-chip" class:on={indicatorEnabled.rsi} onclick={() => toggleIndicator('rsi')} style="--ind-color:{chartTheme.rsi}">
           RSI14 <span>{Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
         </button>
-        <button class="ind-chip" class:on={indicatorEnabled.vol} on:click={() => toggleIndicator('vol')} style="--ind-color:{chartTheme.candleUp}">
+        <button class="ind-chip" class:on={indicatorEnabled.vol} onclick={() => toggleIndicator('vol')} style="--ind-color:{chartTheme.candleUp}">
           VOL <span>{formatCompact(latestVolume)}</span>
         </button>
-        <button class="legend-chip" class:on={showIndicatorLegend} on:click={toggleIndicatorLegend}>LABELS</button>
-        <button class="legend-chip" on:click={() => setIndicatorStripState('collapsed')}>접기</button>
-        <button class="legend-chip danger" on:click={() => setIndicatorStripState('hidden')}>끄기</button>
+        <button class="legend-chip" class:on={showIndicatorLegend} onclick={toggleIndicatorLegend}>LABELS</button>
+        <button class="legend-chip" onclick={() => setIndicatorStripState('collapsed')}>접기</button>
+        <button class="legend-chip danger" onclick={() => setIndicatorStripState('hidden')}>끄기</button>
         {#if enableTradeLineEntry}
           <span class="ind-hint">L/S drag · +/- zoom · 0 reset</span>
         {/if}
@@ -2579,20 +2011,22 @@
         </div>
         {#if !isTvLikePreset}
           <div class="strip-actions">
-            <button class="legend-chip" class:on={showIndicatorLegend} on:click={toggleIndicatorLegend}>LABELS</button>
-            <button class="legend-chip" on:click={() => setIndicatorStripState('expanded')}>펴기</button>
-            <button class="legend-chip danger" on:click={() => setIndicatorStripState('hidden')}>끄기</button>
+            <button class="legend-chip" class:on={showIndicatorLegend} onclick={toggleIndicatorLegend}>LABELS</button>
+            <button class="legend-chip" onclick={() => setIndicatorStripState('expanded')}>펴기</button>
+            <button class="legend-chip danger" onclick={() => setIndicatorStripState('hidden')}>끄기</button>
           </div>
         {/if}
       {/if}
     </div>
   {/if}
 
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="chart-container" bind:this={chartContainer}
+    role="application"
+    aria-label="Trading chart"
     class:hidden-chart={chartMode !== 'agent'}
-    on:mousedown={handleChartMouseDown} on:mousemove={handleChartMouseMove}
-    on:mouseup={handleChartMouseUp} on:mouseleave={handleChartMouseUp} on:wheel={handleChartWheel}>
+    onmousedown={handleChartMouseDown} onmousemove={handleChartMouseMove}
+    onmouseup={handleChartMouseUp} onmouseleave={handleChartMouseUp} onwheel={handleChartWheel}>
     {#if isLoading && chartMode === 'agent'}
       <div class="loading-overlay"><div class="loader"></div><span>Loading {symbol}...</span></div>
     {/if}
@@ -2601,11 +2035,11 @@
     {/if}
     {#if chartMode === 'agent'}
       <div class="scale-tools">
-        <button class="scale-btn" on:click={() => zoomChart(-1)} title="Zoom Out">-</button>
-        <button class="scale-btn" on:click={() => zoomChart(1)} title="Zoom In">+</button>
-        <button class="scale-btn wide" on:click={fitChartRange} title="Fit Time Range">FIT</button>
-        <button class="scale-btn wide" class:on={autoScaleY} on:click={toggleAutoScaleY} title="Y Auto Scale">Y-AUTO</button>
-        <button class="scale-btn wide" on:click={resetChartScale} title="Reset Scale">RESET</button>
+        <button class="scale-btn" onclick={() => zoomChart(-1)} title="Zoom Out">-</button>
+        <button class="scale-btn" onclick={() => zoomChart(1)} title="Zoom In">+</button>
+        <button class="scale-btn wide" onclick={fitChartRange} title="Fit Time Range">FIT</button>
+        <button class="scale-btn wide" class:on={autoScaleY} onclick={toggleAutoScaleY} title="Y Auto Scale">Y-AUTO</button>
+        <button class="scale-btn wide" onclick={resetChartScale} title="Reset Scale">RESET</button>
       </div>
     {/if}
     {#if chartMode === 'agent' && advancedMode && showIndicatorLegend}
@@ -2638,29 +2072,29 @@
     {/if}
 
     {#if chartMode === 'agent'}
-      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
       <canvas class="drawing-canvas" bind:this={drawingCanvas}
+        role="application"
+        aria-label="Chart drawing overlay"
         class:drawing-active={drawingMode !== 'none'}
-        on:mousedown={handleDrawingMouseDown} on:mousemove={handleDrawingMouseMove} on:mouseup={handleDrawingMouseUp}></canvas>
+        onmousedown={handleDrawingMouseDown} onmousemove={handleDrawingMouseMove} onmouseup={handleDrawingMouseUp}></canvas>
     {/if}
 
     <!-- ═══ Overlay close button (HTML, always clickable above canvas) ═══ -->
     {#if activeTradeSetup && drawingsVisible && chartMode === 'agent'}
       <button class="overlay-close-btn"
-        on:click|stopPropagation={() => { activeTradeSetup = null; _agentCloseBtn = null; dispatch('clearTradeSetup'); renderDrawings(); }}
+        onclick={(e: MouseEvent) => { e.stopPropagation(); activeTradeSetup = null; _agentCloseBtn = null; emitClearTradeSetup(); renderDrawings(); }}
         title="Close overlay">&#x2715;</button>
     {/if}
 
     <!-- ═══ First-scan CTA (shows before any scan) ═══ -->
     {#if !hasScanned && !activeTradeSetup && chartMode === 'agent'}
       <div class="first-scan-cta">
-        <div class="fsc-inline">
-          <span class="fsc-sub">No agent scan yet</span>
-          <button class="fsc-btn" on:click={requestAgentScan}>
-            <span class="fsc-icon">&#x25C9;</span>
-            <span class="fsc-label">RUN FIRST SCAN</span>
-          </button>
-        </div>
+        <button class="fsc-btn" onclick={requestAgentScan}>
+          <span class="fsc-icon">&#x25C9;</span>
+          <span class="fsc-label">RUN FIRST SCAN</span>
+          <span class="fsc-sub">Generate agent consensus</span>
+        </button>
       </div>
     {/if}
 
@@ -2673,10 +2107,19 @@
         <span class="tcb-conf">{activeTradeSetup.conf}%</span>
         <span class="tcb-rr">R:R 1:{activeTradeSetup.rr.toFixed(1)}</span>
         <button class="tcb-execute" class:long={activeTradeSetup.dir === 'LONG'} class:short={activeTradeSetup.dir === 'SHORT'}
-          on:click={() => {
+          onclick={() => {
             if (activeTradeSetup) openQuickTrade(activeTradeSetup.pair, activeTradeSetup.dir as TradeDirection, activeTradeSetup.entry, activeTradeSetup.tp, activeTradeSetup.sl);
           }}>
           EXECUTE {activeTradeSetup.dir}
+        </button>
+        <button
+          class="tcb-copy"
+          onclick={() => {
+            if (activeTradeSetup) publishCommunitySignal(activeTradeSetup.dir, { openCopyTrade: true, sourceContext: 'trade-cta' });
+          }}
+          title="Publish current setup to community and open copy trade"
+        >
+          SIGNAL + COPY
         </button>
       </div>
     {/if}
@@ -2694,7 +2137,7 @@
         {:else if drawingMode === 'shortentry'}
           SHORT — drag to set ENTRY / SL / TP
         {/if}
-        <button class="drawing-cancel" on:click={() => setDrawingMode('none')}>ESC</button>
+        <button class="drawing-cancel" onclick={() => setDrawingMode('none')}>ESC</button>
       </div>
     {/if}
 
@@ -2722,7 +2165,7 @@
       <div class="trade-plan-overlay">
         <div class="trade-plan-header">
           <span class="plan-title">TRADE PLANNER</span>
-          <button type="button" class="plan-close" on:click={cancelTradePlan}>✕</button>
+          <button type="button" class="plan-close" onclick={cancelTradePlan}>✕</button>
         </div>
         <div class="trade-plan-grid">
           <div class="plan-row"><span>SIGNAL</span><strong>{pendingTradePlan.previewDir}</strong></div>
@@ -2740,22 +2183,22 @@
           type="button"
           class="plan-ratio-track"
           bind:this={ratioTrackEl}
-          on:pointerdown={handleRatioPointerDown}
+          onpointerdown={handleRatioPointerDown}
           aria-label="Adjust long short ratio"
         >
           <div class="plan-ratio-long" style="width:{planned.longRatio}%"></div>
           <div class="plan-ratio-knob" style="left:calc({planned.longRatio}% - 8px)"></div>
         </button>
         <div class="plan-ratio-presets">
-          <button type="button" on:click={() => setTradePlanRatio(80)}>80/20</button>
-          <button type="button" on:click={() => setTradePlanRatio(65)}>65/35</button>
-          <button type="button" on:click={() => setTradePlanRatio(50)}>50/50</button>
-          <button type="button" on:click={() => setTradePlanRatio(35)}>35/65</button>
-          <button type="button" on:click={() => setTradePlanRatio(20)}>20/80</button>
+          <button type="button" onclick={() => setTradePlanRatio(80)}>80/20</button>
+          <button type="button" onclick={() => setTradePlanRatio(65)}>65/35</button>
+          <button type="button" onclick={() => setTradePlanRatio(50)}>50/50</button>
+          <button type="button" onclick={() => setTradePlanRatio(35)}>35/65</button>
+          <button type="button" onclick={() => setTradePlanRatio(20)}>20/80</button>
         </div>
         <div class="plan-actions">
-          <button type="button" class="plan-action ghost" on:click={cancelTradePlan}>CANCEL</button>
-          <button type="button" class="plan-action primary" class:long={planned.dir === 'LONG'} class:short={planned.dir === 'SHORT'} on:click={openTradeFromPlan}>
+          <button type="button" class="plan-action ghost" onclick={cancelTradePlan}>CANCEL</button>
+          <button type="button" class="plan-action primary" class:long={planned.dir === 'LONG'} class:short={planned.dir === 'SHORT'} onclick={openTradeFromPlan}>
             OPEN {planned.dir}
           </button>
         </div>
@@ -2766,7 +2209,7 @@
       {#each agentAnnotations as ann (ann.id)}
         <button class="chart-annotation" style="top:{ann.yPercent}%;left:{ann.xPercent}%;--ann-color:{ann.color}"
           class:active={selectedAnnotation?.id === ann.id}
-          on:click|stopPropagation={() => selectedAnnotation = selectedAnnotation?.id === ann.id ? null : ann}>
+          onclick={(e: MouseEvent) => { e.stopPropagation(); selectedAnnotation = selectedAnnotation?.id === ann.id ? null : ann; }}>
           <span class="ann-icon">{ann.icon}</span>
           {#if selectedAnnotation?.id === ann.id}
             <div class="ann-popup">
@@ -2792,17 +2235,26 @@
     <div class="tv-container" bind:this={tvContainer}>
       <div id="tradingview_widget" style="width:100%;height:100%"></div>
       {#if tvLoading}
-        <div class="loading-overlay"><div class="loader"></div><span>Loading TradingView...</span></div>
+        <div class="loading-overlay tv-skeleton">
+          <div class="tv-skeleton-bars"></div>
+          <div class="tv-skeleton-content">
+            <div class="loader"></div>
+            <span>Loading TradingView...</span>
+            {#if _tvFallbackTried}
+              <button class="tv-fallback-btn" onclick={() => setChartMode('agent')}>Agent 차트로 전환</button>
+            {/if}
+          </div>
+        </div>
       {/if}
       {#if tvError}
         <div class="tv-error-card">
           <div class="tv-error-title">TradingView 연결 오류</div>
           <div class="tv-error-desc">{tvError}</div>
           <div class="tv-error-actions">
-            <button class="tv-retry-btn" on:click={retryTradingView}>다시 시도</button>
+            <button class="tv-retry-btn" onclick={retryTradingView}>다시 시도</button>
             <a
               class="tv-open-link"
-              href={`https://www.tradingview.com/chart/?symbol=${pairToTVSymbol(state.pair)}`}
+              href={`https://www.tradingview.com/chart/?symbol=${pairToTradingViewSymbol(storeState.pair)}`}
               target="_blank"
               rel="noreferrer"
             >
@@ -3068,7 +2520,7 @@
     .mstat-v { font-size: clamp(10px, 0.72vw, 11px); }
   }
 
-  @media (max-width: 1180px) {
+  @media (max-width: 1280px) {
     .tf-btns {
       display: none;
     }
@@ -3250,7 +2702,7 @@
     background: rgba(232,150,125,.16);
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1024px) {
     .scale-tools {
       bottom: 6px;
       gap: 3px;
@@ -3352,6 +2804,27 @@
     border-color: rgba(255, 140, 160, 0.7);
     background: linear-gradient(135deg, rgba(255, 120, 144, 0.4), rgba(255, 120, 144, 0.2));
     color: #fff2f5;
+  }
+  .opinion-actions { display: flex; align-items: center; gap: 4px; margin-left: 2px; }
+  .scan-btn.view-btn.long {
+    border-color: rgba(92,212,160,.52);
+    background: linear-gradient(135deg, rgba(92,212,160,.3), rgba(92,212,160,.14));
+    color: #d9ffe9;
+  }
+  .scan-btn.view-btn.long:hover {
+    border-color: rgba(92,212,160,.78);
+    background: linear-gradient(135deg, rgba(92,212,160,.42), rgba(92,212,160,.2));
+    color: #f4fff9;
+  }
+  .scan-btn.view-btn.short {
+    border-color: rgba(231,127,144,.55);
+    background: linear-gradient(135deg, rgba(231,127,144,.3), rgba(231,127,144,.14));
+    color: #ffe4ea;
+  }
+  .scan-btn.view-btn.short:hover {
+    border-color: rgba(231,127,144,.78);
+    background: linear-gradient(135deg, rgba(231,127,144,.42), rgba(231,127,144,.2));
+    color: #fff5f7;
   }
 
   .draw-tools { display: flex; gap: 2px; margin-left: 0; padding-left: 0; border-left: none; }
@@ -3566,34 +3039,28 @@
     top: 10px;
     right: 10px;
     z-index: 12;
-    pointer-events: none;
-  }
-  .fsc-inline {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px 8px;
-    border-radius: 8px;
-    border: 1px solid rgba(232,150,125,.2);
-    background: rgba(10,9,8,.72);
-    backdrop-filter: blur(4px);
   }
   .fsc-btn {
-    pointer-events: auto;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 8px;
-    border-radius: 6px;
-    background: rgba(232,150,125,.12);
-    border: 1.5px solid rgba(232,150,125,.38);
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(10,9,8,.76);
+    border: 1.5px solid rgba(232,150,125,.3);
     cursor: pointer; transition: all .2s;
+    backdrop-filter: blur(4px);
   }
-  .fsc-btn:hover { border-color: #E8967D; box-shadow: 0 0 12px rgba(232,150,125,.15); background: rgba(232,150,125,.2); }
+  .fsc-btn:hover { border-color: #E8967D; box-shadow: 0 0 12px rgba(232,150,125,.15); background: rgba(232,150,125,.14); }
   .fsc-icon { font-size: 11px; color: #E8967D; animation: fscPulse 2s ease infinite; }
   @keyframes fscPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.92)} }
   .fsc-label { font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px; color: #E8967D; }
-  .fsc-sub { font-family: var(--fm); font-size: 8px; color: rgba(240,237,228,.52); letter-spacing: .4px; }
+  .fsc-sub { font-family: var(--fm); font-size: 8px; color: rgba(240,237,228,.62); letter-spacing: .3px; }
+  @media (max-width: 768px) {
+    .first-scan-cta { top: 6px; right: 6px; }
+    .fsc-sub { display: none; }
+    .fsc-btn { padding: 4px 8px; }
+  }
 
   /* ═══ Post-scan Trade CTA bar ═══ */
   .trade-cta-bar {
@@ -3618,6 +3085,25 @@
   .tcb-execute.long:hover { box-shadow: 0 0 12px rgba(0,255,136,.3); }
   .tcb-execute.short { color: #fff; background: var(--red, #ff2d55); border-color: var(--red, #ff2d55); }
   .tcb-execute.short:hover { box-shadow: 0 0 12px rgba(255,45,85,.3); }
+  .tcb-copy {
+    padding: 5px 10px;
+    border-radius: 4px;
+    border: 1px solid rgba(232,150,125,.45);
+    background: rgba(232,150,125,.16);
+    color: #ffe8d8;
+    font-family: var(--fm);
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .8px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .tcb-copy:hover {
+    border-color: rgba(232,150,125,.65);
+    background: rgba(232,150,125,.24);
+    color: #fff5ee;
+    box-shadow: 0 0 10px rgba(232,150,125,.24);
+  }
 
   .tv-container { flex: 1; position: relative; overflow: hidden; background: #0a0a1a; }
   .tv-container :global(iframe) { width: 100% !important; height: 100% !important; border: none !important; }
@@ -3692,6 +3178,20 @@
   }
 
   .loading-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(10,10,26,.9); z-index: 10; color: #d0d6df; font-size: 10px; font-family: var(--fm); }
+  .tv-skeleton { overflow: hidden; }
+  .tv-skeleton-bars {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(90deg, rgba(232,150,125,.04) 0px, rgba(232,150,125,.08) 12px, rgba(232,150,125,.04) 24px);
+    animation: skeletonShimmer 1.5s ease-in-out infinite;
+  }
+  .tv-skeleton-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  @keyframes skeletonShimmer { 0%,100%{opacity:.5} 50%{opacity:1} }
+  .tv-fallback-btn {
+    margin-top: 6px; padding: 5px 14px; font: 700 9px var(--fm); letter-spacing: .5px;
+    background: rgba(232,150,125,.15); border: 1px solid rgba(232,150,125,.35);
+    border-radius: 4px; color: #E8967D; cursor: pointer; transition: all .15s;
+  }
+  .tv-fallback-btn:hover { background: rgba(232,150,125,.25); }
   .loader { width: 24px; height: 24px; border: 2px solid rgba(232,150,125,.2); border-top-color: #E8967D; border-radius: 50%; animation: spin .6s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -3912,11 +3412,11 @@
     .ind-hint { display: none; }
   }
 
-  @media (max-width: 1450px) {
+  @media (max-width: 1280px) {
     .ind-chip.optional { display: none; }
   }
 
-  @media (max-width: 520px) {
+  @media (max-width: 480px) {
     .sum-title {
       display: none;
     }
@@ -3944,8 +3444,6 @@
   .chart-wrapper.tv-like .indicator-strip {
     border-bottom-color: #2a2e39;
     background: #131722;
-  }
-  .chart-wrapper.tv-like .chart-footer { /* removed */
   }
   .chart-wrapper.tv-like .mode-toggle {
     border-color: rgba(255, 255, 255, 0.18);
@@ -3975,6 +3473,16 @@
     border-color: rgba(38, 166, 154, 0.8);
     background: rgba(38, 166, 154, 0.33);
     color: #f2ffff;
+  }
+  .chart-wrapper.tv-like .scan-btn.view-btn.long {
+    border-color: rgba(38,166,154,.7);
+    background: rgba(38,166,154,.24);
+    color: #e7fffb;
+  }
+  .chart-wrapper.tv-like .scan-btn.view-btn.short {
+    border-color: rgba(239,83,80,.68);
+    background: rgba(239,83,80,.24);
+    color: #ffeef0;
   }
   .chart-wrapper.tv-like .draw-btn.active {
     border-color: rgba(79, 140, 255, 0.8);

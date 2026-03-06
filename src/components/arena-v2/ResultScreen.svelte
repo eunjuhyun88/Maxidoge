@@ -1,44 +1,54 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { createEventDispatcher } from 'svelte';
   import { AGDEFS } from '$lib/data/agents';
   import type { V2BattleResult, AgentBattleReport } from '$lib/engine/v2BattleTypes';
   import type { FBScore, Badge } from '$lib/engine/types';
   import { arenaV2State } from '$lib/stores/arenaV2State';
   import { saveV2ToRAG } from '$lib/engine/v2RagBridge';
 
-  export let battleResult: V2BattleResult | null = null;
-  export let lpDelta: number = 0;
-  export let lpBreakdown: string[] = [];
-  export let fbsScore: FBScore | null = null;
-  export let badges: Badge[] = [];
-
-  const dispatch = createEventDispatcher();
+  interface Props {
+    battleResult?: V2BattleResult | null;
+    lpDelta?: number;
+    lpBreakdown?: string[];
+    fbsScore?: FBScore | null;
+    badges?: Badge[];
+    onGoLobby?: () => void;
+    onPlayAgain?: () => void;
+  }
+  let {
+    battleResult = null,
+    lpDelta = 0,
+    lpBreakdown = [],
+    fbsScore = null,
+    badges = [],
+    onGoLobby = () => {},
+    onPlayAgain = () => {},
+  }: Props = $props();
 
   // ── 5-Stage reveal system ──
-  let stage = 0;
+  let stage = $state(0);
   let stageTimer: ReturnType<typeof setTimeout> | null = null;
-  let skipEnabled = false;
+  let skipEnabled = $state(false);
 
   // Animated LP counter
-  let displayedLP = 0;
+  let displayedLP = $state(0);
   let lpInterval: ReturnType<typeof setInterval> | null = null;
 
   // Animated FBS bars
-  let dsWidth = 0;
-  let reWidth = 0;
-  let ciWidth = 0;
+  let dsWidth = $state(0);
+  let reWidth = $state(0);
+  let ciWidth = $state(0);
 
   // Stage timings (ms)
   const STAGE_DELAYS = [0, 1500, 2000, 2000, 2000, 1500];
 
-  $: isWin = battleResult?.outcome === 'tp_hit' || battleResult?.outcome === 'timeout_win';
-  $: outcomeText = battleResult
+  const isWin = $derived(battleResult?.outcome === 'tp_hit' || battleResult?.outcome === 'timeout_win');
+  const outcomeText = $derived(battleResult
     ? battleResult.outcome === 'tp_hit' ? 'TARGET ACHIEVED'
     : battleResult.outcome === 'sl_hit' ? 'STOPPED OUT'
     : battleResult.outcome === 'timeout_win' ? 'TIME UP — WIN'
     : 'TIME UP — LOSS'
-    : '---';
+    : '---');
 
   // ── Agent data helpers ──
   function getAgentDef(agentId: string) {
@@ -67,7 +77,7 @@
   }
 
   // ── Computed battle LP (simple simulation) ──
-  $: computedLP = (() => {
+  const computedLP = $derived((() => {
     if (!battleResult) return { base: 0, bonuses: [] as Array<{ label: string; val: number }>, total: 0 };
 
     const base = isWin ? 8 : -3;
@@ -99,10 +109,10 @@
 
     const total = base + bonuses.reduce((s, b) => s + b.val, 0);
     return { base, bonuses, total };
-  })();
+  })());
 
   // ── Computed FBS scores ──
-  $: computedFBS = (() => {
+  const computedFBS = $derived((() => {
     if (!battleResult) return { ds: 0, re: 0, ci: 0, total: 0 };
 
     // Direction Score (did we pick the right direction?)
@@ -116,12 +126,12 @@
 
     const total = Math.round((ds + re + ci) / 3);
     return { ds, re, ci, total };
-  })();
+  })());
 
   // ── Sorted agent reports ──
-  $: sortedReports = battleResult?.agentReports
+  const sortedReports = $derived(battleResult?.agentReports
     .slice()
-    .sort((a, b) => b.mvpScore - a.mvpScore) ?? [];
+    .sort((a: AgentBattleReport, b: AgentBattleReport) => b.mvpScore - a.mvpScore) ?? []);
 
   // ── Stage progression ──
   function advanceStage() {
@@ -213,7 +223,7 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="result-screen" on:click={() => { if (skipEnabled && stage < 5) skipToEnd(); }}>
+<div class="result-screen" onclick={() => { if (skipEnabled && stage < 5) skipToEnd(); }}>
 
   {#if stage === 0}
     <!-- Pre-reveal black -->
@@ -366,10 +376,10 @@
 
       <!-- Action buttons -->
       <div class="result-actions">
-        <button class="btn-lobby" on:click={() => dispatch('goLobby')}>
+        <button class="btn-lobby" onclick={() => onGoLobby()}>
           LOBBY
         </button>
-        <button class="btn-again" on:click={() => dispatch('playAgain')}>
+        <button class="btn-again" onclick={() => onPlayAgain()}>
           ⚔ PLAY AGAIN
         </button>
       </div>

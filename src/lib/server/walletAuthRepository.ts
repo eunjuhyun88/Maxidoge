@@ -1,6 +1,7 @@
 import { query } from './db';
 import { isIP } from 'node:net';
 import { recoverMessageAddress, type Hex } from 'viem';
+import { createErrorWithCode, getErrorCode } from '$lib/utils/errorUtils';
 
 const ETH_ADDRESS_RE = /^0x[0-9a-f]{40}$/i;
 const SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -113,9 +114,7 @@ async function ensureNonceInfrastructure(): Promise<void> {
     `SELECT to_regclass('public.auth_nonces') IS NOT NULL AS exists`
   );
   if (!result.rows[0]?.exists) {
-    const error: any = new Error('auth_nonces table is missing. Run migration 0003 first.');
-    error.code = '42P01';
-    throw error;
+    throw createErrorWithCode('auth_nonces table is missing. Run migration 0003 first.', '42P01');
   }
 
   _nonceInfraReady = true;
@@ -251,9 +250,9 @@ export async function linkWalletToUser(args: {
         metaJson,
       ]
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     // wallet_connections is optional in some environments.
-    if (error?.code !== '42P01') {
+    if (getErrorCode(error) !== '42P01') {
       throw error;
     }
   }

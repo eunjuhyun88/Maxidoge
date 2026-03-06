@@ -12,7 +12,9 @@ import {
   type LLMMessage,
 } from '$lib/server/llmService';
 import { getMultiTimeframeIndicatorContext } from '$lib/server/multiTimeframeContext';
-import { getErrorMessage, errorContains } from '$lib/utils/errorUtils';
+import { errorContains, getErrorMessage } from '$lib/utils/errorUtils';
+import { guestChatLimiter } from '$lib/server/rateLimit';
+import { fireAndForget } from '$lib/server/taskUtils';
 
 const SENDER_KINDS = new Set(['user', 'agent', 'system']);
 
@@ -579,7 +581,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
   }
 };
 
-export const POST: RequestHandler = async ({ cookies, request }) => {
+export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
   try {
     const body = await readJsonBody<Record<string, unknown>>(request, 32 * 1024);
 
@@ -607,6 +609,14 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const allowGuestTerminal = !user && channel === 'terminal' && senderKind === 'user';
     if (!user && !allowGuestTerminal) return json({ error: 'Authentication required' }, { status: 401 });
 
+    // Guest rate limit: prevent LLM API cost abuse (3 calls/min per IP)
+    if (!user && allowGuestTerminal) {
+      const ip = getClientAddress();
+      if (!guestChatLimiter.check(ip)) {
+        return json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
+      }
+    }
+
     const userId = user?.id ?? 'guest';
     const requestMeta = user ? meta : { ...meta, guestMode: true };
 
@@ -625,13 +635,13 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       );
 
       persistedMessage = mapRow(insert.rows[0]);
-      await query(
+      fireAndForget('chat-activity', query(
         `
           INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
           VALUES ($1, 'chat_sent', 'terminal', $2, 'info', $3::jsonb)
         `,
         [user.id, insert.rows[0].id, JSON.stringify({ channel, senderKind })]
-      ).catch(() => undefined);
+      ));
     } else {
       persistedMessage = buildEphemeralRow({
         userId,
@@ -676,7 +686,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
             );
             agentResponse = mapRow(replyInsert.rows[0]);
 
-            await query(
+            fireAndForget('chat-reply-activity', query(
               `
                 INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
                 VALUES ($1, 'chat_sent', 'terminal', $2, 'info', $3::jsonb)
@@ -691,7 +701,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
                   source: reply.source,
                 }),
               ]
-            ).catch(() => undefined);
+            ));
           } catch (error) {
             console.warn('[chat/messages/post] failed to persist agent response:', error);
           }

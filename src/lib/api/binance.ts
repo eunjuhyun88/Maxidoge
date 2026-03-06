@@ -108,6 +108,8 @@ export async function fetch24hrMulti(symbols: string[]): Promise<Binance24hr[]> 
 }
 
 // ─── WebSocket for Real-time Klines (with auto-reconnect) ───
+import { createReconnectingWS } from '$lib/api/wsReconnect';
+
 export function subscribeKlines(
   symbol: string,
   interval: string,
@@ -115,22 +117,11 @@ export function subscribeKlines(
 ): () => void {
   const wsSymbol = symbol.toLowerCase();
   const wsInterval = toBinanceInterval(interval);
-  const url = `wss://stream.binance.com:9443/ws/${wsSymbol}@kline_${wsInterval}`;
 
-  let ws: WebSocket | null = null;
-  let destroyed = false;
-  let retryDelay = 1000;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function connect() {
-    if (destroyed) return;
-    ws = new WebSocket(url);
-
-    ws.onopen = () => {
-      retryDelay = 1000; // reset backoff on success
-    };
-
-    ws.onmessage = (event) => {
+  return createReconnectingWS({
+    url: `wss://stream.binance.com:9443/ws/${wsSymbol}@kline_${wsInterval}`,
+    label: 'Binance WS',
+    onMessage: (event) => {
       const msg = JSON.parse(event.data);
       if (msg.e === 'kline') {
         const k = msg.k;
@@ -143,28 +134,8 @@ export function subscribeKlines(
           volume: parseFloat(k.v),
         });
       }
-    };
-
-    ws.onerror = (err) => console.error('[Binance WS] Error:', err);
-
-    ws.onclose = () => {
-      if (destroyed) return;
-      // Auto-reconnect with exponential backoff (max 30s)
-      retryTimer = setTimeout(() => {
-        retryDelay = Math.min(retryDelay * 2, 30000);
-        connect();
-      }, retryDelay);
-    };
-  }
-
-  connect();
-
-  // Return cleanup function
-  return () => {
-    destroyed = true;
-    if (retryTimer) clearTimeout(retryTimer);
-    if (ws) ws.close();
-  };
+    },
+  });
 }
 
 // ─── WebSocket for Real-time Mini Ticker (with auto-reconnect) ─
@@ -182,28 +153,17 @@ export function subscribeMiniTicker(
   onUpdateFull?: (updates: Record<string, MiniTickerUpdate>) => void
 ): () => void {
   const streams = symbols.map(s => `${s.toLowerCase()}@miniTicker`).join('/');
-  const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;
 
-  let ws: WebSocket | null = null;
-  let destroyed = false;
-  let retryDelay = 1000;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function connect() {
-    if (destroyed) return;
-    ws = new WebSocket(url);
-
-    ws.onopen = () => { retryDelay = 1000; };
-
-    ws.onmessage = (event) => {
+  return createReconnectingWS({
+    url: `wss://stream.binance.com:9443/stream?streams=${streams}`,
+    label: 'Binance WS Ticker',
+    onMessage: (event) => {
       const msg = JSON.parse(event.data);
       if (msg.data && msg.data.e === '24hrMiniTicker') {
         const d = msg.data;
         const close = parseFloat(d.c);
         const open = parseFloat(d.o);
-        // 레거시 콜백 (가격만)
         onUpdate({ [d.s]: close });
-        // 풀 콜백 (24h 통계 포함)
         if (onUpdateFull && Number.isFinite(open) && open > 0) {
           onUpdateFull({
             [d.s]: {
@@ -211,29 +171,11 @@ export function subscribeMiniTicker(
               change24h: ((close - open) / open) * 100,
               high24h: parseFloat(d.h),
               low24h: parseFloat(d.l),
-              volume24h: parseFloat(d.q),  // quote volume
+              volume24h: parseFloat(d.q),
             },
           });
         }
       }
-    };
-
-    ws.onerror = (err) => console.error('[Binance WS Ticker] Error:', err);
-
-    ws.onclose = () => {
-      if (destroyed) return;
-      retryTimer = setTimeout(() => {
-        retryDelay = Math.min(retryDelay * 2, 30000);
-        connect();
-      }, retryDelay);
-    };
-  }
-
-  connect();
-
-  return () => {
-    destroyed = true;
-    if (retryTimer) clearTimeout(retryTimer);
-    if (ws) ws.close();
-  };
+    },
+  });
 }

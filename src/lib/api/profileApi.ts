@@ -17,7 +17,8 @@ export interface ApiProfilePayload {
     bestStreak: number;
     totalLp: number;
     totalPnl: number;
-    badges: unknown[];
+    trackedSignals?: number;
+    badges: ApiProfileBadgePayload[];
     updatedAt: number | null;
   };
 }
@@ -26,7 +27,8 @@ export interface ApiProfileBadgePayload {
   id: string;
   name?: string;
   icon?: string;
-  category?: string;
+  description?: string;
+  condition?: string;
   earnedAt?: number | null;
 }
 
@@ -39,7 +41,7 @@ export interface ApiPassportPayload {
   bestStreak: number;
   totalLp: number;
   totalPnl: number;
-  badges: unknown[];
+  badges: ApiProfileBadgePayload[];
   openTrades: number;
   trackedSignals: number;
   winRate: number;
@@ -92,8 +94,6 @@ export async function fetchProfileApi(): Promise<ApiProfilePayload | null> {
 export async function updateProfileApi(payload: {
   nickname?: string;
   avatar?: string;
-  displayTier?: string;
-  badges?: ApiProfileBadgePayload[];
 }): Promise<boolean> {
   if (!canUseBrowserFetch()) return false;
   try {
