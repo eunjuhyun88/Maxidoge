@@ -8,6 +8,16 @@ node scripts/dev/refresh-generated-context.mjs --check
 
 FAIL=0
 
+has_fixed_text() {
+	local needle="$1"
+	local path="$2"
+	if command -v rg >/dev/null 2>&1; then
+		rg -Fq "$needle" "$path"
+	else
+		grep -Fq -- "$needle" "$path"
+	fi
+}
+
 ok() {
 	echo "[docs:check] ok: $1"
 }
@@ -39,7 +49,7 @@ require_text() {
 	local path="$1"
 	local needle="$2"
 	local label="${3:-$needle}"
-	if rg -Fq "$needle" "$path"; then
+	if has_fixed_text "$needle" "$path"; then
 		ok "text present in $path: $label"
 	else
 		fail "missing text in $path: $label"
@@ -50,7 +60,7 @@ require_absent() {
 	local path="$1"
 	local needle="$2"
 	local label="${3:-$needle}"
-	if rg -Fq "$needle" "$path"; then
+	if has_fixed_text "$needle" "$path"; then
 		fail "unexpected text in $path: $label"
 	else
 		ok "text absent in $path: $label"
