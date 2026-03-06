@@ -28,7 +28,8 @@ SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signa
 
 참고:
 - 에이전트 자동 실행 규칙 파일은 `AGENTS.md`다.
-- `docs/README.md`는 호환성 유지를 위한 리다이렉트 문서다.
+- 루트 아키텍처 맵은 `ARCHITECTURE.md`다.
+- `docs/README.md`는 작업별 문서 라우팅용 컨텍스트 맵이다.
 
 ## 1) Overview
 
@@ -38,6 +39,17 @@ SvelteKit + TypeScript 기반으로 `Arena`, `Terminal (War Room/Intel)`, `Signa
   - `Arena`: phase 기반 배틀 루프
   - `Signals`: 시그널 탐색 및 추적
   - `Passport`: 유저/지갑/성과 프로필
+
+## 1.1) Context Routing
+
+긴 작업에서 문서를 많이 여는 것보다, 먼저 올바른 문서를 고르는 것이 더 중요합니다.
+
+1. 협업/실행 규칙은 이 `README.md`와 `AGENTS.md`를 따른다.
+2. 시스템 의도와 상위 구조는 `docs/SYSTEM_INTENT.md`와 `ARCHITECTURE.md`에서 먼저 잡는다.
+3. 설계/스펙/리팩터 계획 탐색은 `docs/README.md`에서 시작한다.
+4. canonical 얇은 진입점은 `docs/DESIGN.md`, `docs/FRONTEND.md`, `docs/PLANS.md`, `docs/PRODUCT_SENSE.md`, `docs/QUALITY_SCORE.md`, `docs/RELIABILITY.md`, `docs/SECURITY.md`다.
+5. `docs/archive/`는 현재 정본이 아니라 과거 참조본이다.
+6. `frontend` 외의 sibling clone 폴더는 레거시/비정본으로 간주하고, 새 작업을 중복 반영하지 않는다.
 
 ## 2) Tech Stack
 
@@ -89,10 +101,11 @@ npm run preview
 ## 4) NPM Scripts
 
 - `npm run dev`: 개발 서버 실행
+- `npm run docs:check`: 컨텍스트 문서 구조/핵심 진입점 검사
 - `npm run check`: Svelte/TypeScript 정적 검사
 - `npm run build`: 프로덕션 빌드
 - `npm run preview`: 빌드 결과 로컬 프리뷰
-- `npm run gate`: `check + build` 통합 게이트
+- `npm run gate`: `docs:check + check + build` 통합 게이트
 - `npm run safe:status`: 현재 브랜치/워크트리/변경 파일 점검
 - `npm run safe:worktree -- <task-name> [base-branch]`: `codex/<task-name>` 브랜치 + 분리 워킹트리 생성
 - `npm run safe:hooks`: 로컬 pre-push/post-merge 훅 설치 (`.githooks/*`)

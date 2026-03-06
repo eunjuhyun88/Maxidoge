@@ -1,7 +1,7 @@
 # Agent Context Compaction Protocol
 
 Last updated: 2026-02-26
-Scope: `/Users/ej/Downloads/maxidoge-clones/backend`
+Scope: `/Users/ej/Downloads/maxidoge-clones/frontend`
 
 ## 1) Why
 

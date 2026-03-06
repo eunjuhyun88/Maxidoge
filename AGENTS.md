@@ -4,20 +4,23 @@ This file defines mandatory execution rules for all coding agents in this reposi
 
 ## Mandatory Start Sequence (Every Task)
 1. Re-read `/Users/ej/Downloads/maxi-doge-unified/README.md` (section: `Agent Collaboration Protocol (SSOT)`).
-2. Run `git status --short --branch` and confirm current branch/worktree state.
-3. Reserve a unique work ID using `W-YYYYMMDD-HHMM-<repo>-<agent>`.
-4. Append a START entry in `/Users/ej/Downloads/maxidoge-clones/integration/docs/AGENT_WATCH_LOG.md` with:
+2. Re-read `/Users/ej/Downloads/maxidoge-clones/frontend/docs/README.md` and load only the docs relevant to the current surface/task.
+   - Do not start with `docs/archive/*`, old audits, or sibling clone folders unless the active docs explicitly send you there.
+3. If the task changes architecture, state ownership, contracts, or product behavior, read `/Users/ej/Downloads/maxidoge-clones/frontend/ARCHITECTURE.md` and the relevant canonical doc under `docs/`.
+4. Run `git status --short --branch` and confirm current branch/worktree state.
+5. Reserve a unique work ID using `W-YYYYMMDD-HHMM-<repo>-<agent>`.
+6. Append a START entry in `/Users/ej/Downloads/maxidoge-clones/integration/docs/AGENT_WATCH_LOG.md` with:
    - Repo path
    - Branch
    - Base `origin/main` hash
    - Working tree status
    - Task summary
    - Overlap/conflict check result
-5. Run `npm run safe:status` and include the result in the start log.
-6. Context snapshot is auto-triggered by `safe:status` (`ctx:auto` hook).
+7. Run `npm run safe:status` and include the result in the start log.
+8. Context snapshot is auto-triggered by `safe:status` (`ctx:auto` hook).
    - If automation is disabled, run manually:
      - `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`
-7. Do not start edits on `main`. Work must run on `codex/<task-name>` branch.
+9. Do not start edits on `main`. Work must run on `codex/<task-name>` branch.
 
 ## Mandatory Branch/Sync Policy
 1. `main` is always protected:
@@ -40,9 +43,10 @@ This file defines mandatory execution rules for all coding agents in this reposi
 6. Keep pre-push hook active via `npm run safe:hooks`.
 
 ## Mandatory Verification Gate (No Exceptions)
-1. Run `npm run check` on the working branch.
-2. Run `npm run build` on the working branch.
-3. If either command fails, stop push/merge and fix errors first.
+1. Run `npm run docs:check` on the working branch.
+2. Run `npm run check` on the working branch.
+3. Run `npm run build` on the working branch.
+4. If either command fails, stop push/merge and fix errors first.
 
 ## Mandatory Context Budgeting (Multi-Agent)
 1. Automatic context save/compact runs at:
@@ -74,7 +78,8 @@ This file defines mandatory execution rules for all coding agents in this reposi
    - Validation results on `main`
    - Merge hash
    - Push status
-5. Push/merge actions require explicit user request or approval.
+6. If the task changed architecture, surface behavior, or authority boundaries, update the relevant canonical doc under `docs/`, not only the watch log.
+7. Push/merge actions require explicit user request or approval.
 
 ## Logging Model
 - Development log (always): `/Users/ej/Downloads/maxidoge-clones/integration/docs/AGENT_WATCH_LOG.md`
@@ -84,7 +89,11 @@ This file defines mandatory execution rules for all coding agents in this reposi
 ## Source of Truth
 - Canonical collaboration and project guide: `/Users/ej/Downloads/maxi-doge-unified/README.md`
 - This repo execution rules: `/Users/ej/Downloads/maxidoge-clones/integration/AGENTS.md`
-- `docs/README.md` is a redirect-only compatibility file.
+- Root architecture map: `/Users/ej/Downloads/maxidoge-clones/frontend/ARCHITECTURE.md`
+- Task-level docs router: `/Users/ej/Downloads/maxidoge-clones/frontend/docs/README.md`
+- Canonical docs layer: `docs/{DESIGN,FRONTEND,PLANS,PRODUCT_SENSE,QUALITY_SCORE,RELIABILITY,SECURITY}.md`
+- Historical/reference-only docs: `/Users/ej/Downloads/maxidoge-clones/frontend/docs/archive/`
+- Sibling clone folders are not canonical implementation targets.
 
 ## Recommended Model Routing
 - Preferred setup:

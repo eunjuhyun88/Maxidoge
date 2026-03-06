@@ -69,7 +69,7 @@ export PATH="$HOME/.local/bin:$HOME/.local/node-v22.14.0-darwin-arm64/bin:$PATH"
 | `/arena-v2` | 아레나 v2 — 간소화 5-phase + 4가지 뷰 전환 (1=arena,2=chart,3=mission,4=card) | arenaV2State, btcPrice | 262 |
 | `/arena-war` | 스피드형 AI 대전 — 8-phase 상태머신 (SETUP→RESULT), v3 배틀엔진(HP+챌린지), PixiJS 렌더링 | arenaWarStore, arenaWarPhase | 54 |
 | `/agents` | 에이전트 컬렉션 (Pokedex 스타일) — 학습레벨, 패턴기억, 레짐적응, 매치업경험, 전적 | agentStats | ~380 |
-| `/terminal` | 마켓 스캐너 터미널 — War Room + Chart + Intel 3패널 리사이즈 | gameState, livePrices, copyTradeStore | 3,333 |
+| `/terminal` | 마켓 스캐너 터미널 — route shell + extracted desktop/tablet/mobile layouts + terminal/intel view-model + War Room/Chart/Intel orchestration | gameState, livePrices, copyTradeStore, trackedSignalStore | 1,175 |
 | `/passport` | 유저 프로필 허브 — 보유, 트레이드, 시그널, 에이전트, ORPO 학습 | userProfileStore, matchHistoryStore, quickTradeStore, agentStats | 2,688 |
 | `/signals` | 트레이딩 시그널 허브 — 커뮤니티/추적/오라클 3뷰 + 필터 | gameState, matchHistoryStore, openTrades, activeSignals | 983 |
 | `/settings` | 유저 환경설정 — TF/SFX/언어/테마/속도/데이터소스 | gameState | 384 |
@@ -87,18 +87,21 @@ src/
 │   │   ├── orpo/       # ORPO 트레이닝 파이프라인 (4 모듈)
 │   │   └── providers/  # 데이터 소스 추상화 (cache, registry, types)
 │   ├── services/     # 클라이언트 서비스 (scanService, providers)
-│   ├── stores/       # Svelte 스토어 (23개 — 아래 상세)
+│   ├── stores/       # Svelte 스토어 (22개 — 아래 상세)
 │   ├── signals/      # 트레이딩 시그널 정의
 │   ├── wallet/       # 지갑 연결 로직
-│   ├── utils/        # 공용 유틸리티
+│   ├── utils/        # 공용 유틸리티 (pnl.ts, storage.ts, price.ts, time.ts, math.ts, errorUtils.ts, timeframe.ts)
+│   │                  # math.ts: clamp(), clampSafe() — 14개 모듈에서 공유
+│   ├── styles/       # 디자인 토큰 (tokens.css, arena-tone.css)
 │   ├── data/         # 정적 데이터/설정
 │   ├── assets/       # 이미지, 아이콘
 │   └── audio/        # 사운드 이펙트
-├── components/       # 72개 Svelte 컴포넌트 (14개 디렉토리)
+├── components/       # 72개+ Svelte 컴포넌트 (14개 디렉토리)
 │   ├── arena/        # 전략 아레나 (15 + 4 views)
 │   ├── arena-v2/     # 아레나 v2 (8 + 1 shared)
 │   ├── arena-war/    # 아레나 워 8-phase (8) + 비주얼 배틀 (BattleCanvas[PixiJS], ChallengeOverlay, AgentSprite, BattleVisualizer, VSMeterBar, ActionFeed, BattleEffects, DraftPhase)
-│   ├── terminal/     # 터미널 패널 (10 + 3 warroom)
+│   ├── terminal/     # 터미널 shell/layouts + 패널 프리미티브 (13 root + warroom + intel/)
+│   ├── ui/           # 공통 UI 프리미티브 (ModalShell)
 │   ├── modals/       # 모달 (5: CopyTrade, Oracle, Passport, Settings, Wallet)
 │   ├── shared/       # 공용 (11: ContextBanner, EmptyState, Toast, P0Banner, TokenDropdown, NotificationTray, PokemonFrame, TypewriterBox, HPBar, PhaseTransition, PartyTray)
 │   ├── layout/       # 레이아웃 (2: Header, BottomBar)
@@ -116,7 +119,7 @@ docs/
 └── warning-priority-2026-03-06.md        # 49 warnings 정리 우선순위표
 ```
 
-### Stores (23개 — Svelte 4 writable 패턴)
+### Stores (22개 — Svelte 4 writable 패턴)
 | Store | Purpose | Lines |
 |-------|---------|-------|
 | **gameState** | 핵심 아레나 상태 (phase, view, hypothesis, squad, position) | 262 |
@@ -124,14 +127,14 @@ docs/
 | **arenaV2State** | Arena v2 상태 (phase, subPhase, currentView) | 326 |
 | **activeGamesStore** | 동시 진행 게임 관리 (최대 3개) | 243 |
 | **walletStore** | 지갑 연결 + 유저 진행 (guest→registered→connected→verified) | 301 |
-| **userProfileStore** | 유저 프로필 (tier, badges, stats) + passport 통합 | 378 |
+| **userProfileStore** | 유저 프로필 cache store (server-authoritative projection hydrate) | 241 |
 | **priceStore** | 통합 가격 계약 (WS/REST, BTC/ETH/SOL) — Header, Chart, Terminal 공용 | 233 |
 | **quickTradeStore** | 터미널 퀵 트레이드 (LONG/SHORT, PnL 추적) | 343 |
 | **trackedSignalStore** | War Room 시그널 추적 (24h 자동만료, QuickTrade 전환) | 301 |
 | **predictStore** | Polymarket 예측 (마켓, 포지션, 투표) | 313 |
 | **notificationStore** | 알림/토스트/P0(Guardian 하드룰) 3-part 스토어 | 309 |
 | **matchHistoryStore** | 아레나 매치 기록 (승률, 연승, PnL) | 186 |
-| **copyTradeStore** | Copy Trade 빌더 (시그널→트레이드 변환) | 285 |
+| **copyTradeStore** | Copy Trade 빌더 + canonical publish + `clientMutationId` reconcile | 415 |
 | **pnlStore** | PnL 추적 (Arena + Polymarket) | 95 |
 | **positionStore** | 통합 포지션 (QuickTrade + Polymarket + GMX) | 186 |
 | **battleFeedStore** | 실시간 배틀 피드 (최대 50 아이템) | 54 |
@@ -140,10 +143,9 @@ docs/
 | **warRoomStore** | 3-라운드 War Room 토론 상태 | 246 |
 | **progressionRules** | LP→Tier 매핑 (BRONZE→SILVER→GOLD→DIAMOND→MASTER) | 119 |
 | **hydration** | 전체 스토어 API 하이드레이션 오케스트레이터 | 61 |
-| **dbStore** | 제네릭 localStorage CRUD 레이어 | 169 |
 | **storageKeys** | localStorage 키 중앙 레지스트리 (19 keys) | 23 |
 
-### Engine Modules (28개 — `src/lib/engine/`)
+### Engine Modules (33개 — `src/lib/engine/`)
 | Module | Purpose | Lines |
 |--------|---------|-------|
 | **factorEngine** | 48-factor 스코어링 (8 에이전트 × 6 팩터) | 909 |
@@ -176,9 +178,8 @@ docs/
 | **gameLoop** | RAF 기반 게임 루프 (phase 전환, 델타 타임) | 87 |
 | **phases** | 5-phase 매치 정의 (DRAFT→ANALYSIS→HYPOTHESIS→BATTLE→RESULT) | 50 |
 | **replay** | 매치 리플레이 엔진 | 76 |
-| **warroomScan** | ⚠️ deprecated — 서버 scanEngine.ts 사용 | 867 |
 
-### Server Modules (54개 — `src/lib/server/`)
+### Server Modules (53개 — `src/lib/server/`)
 
 **데이터 프로바이더 (19):**
 binance (WS+REST), coingecko, coinmarketcap, coinalyze, cryptoquant, coinmetrics (CryptoQuant 대체, 무료), geckoWhale (GeckoTerminal DEX 고래 추적, 무료), defillama, dexscreener, dune, etherscan, feargreed, fred, lunarcrush, santiment (LunarCrush 대체), yahooFinance, polymarketClob, gmxV2, rssParser
@@ -204,8 +205,8 @@ ragService (save/search/analyze — pgvector 256d 코사인 거리, Decision Cha
 **DB & 인프라 (7):**
 db (`getPool`, `query`, `withTransaction`), session, rateLimit (단순), distributedRateLimit (분산), passportOutbox (이벤트 아웃박스), passportMlPipeline, secretCrypto
 
-**유틸리티 (8):**
-apiValidation, requestGuards, ipReputation, progressionUpdater, tournamentService, arenaService, providers/cache, providers/registry
+**유틸리티 (9):**
+apiValidation, requestGuards, ipReputation, progressionUpdater, tournamentService, arenaService, taskUtils (fireAndForget), providers/cache, providers/registry
 
 ### API Endpoints (~110개 — 18 카테고리)
 All routes: `src/routes/api/[group]/+server.ts`
@@ -226,7 +227,7 @@ All routes: `src/routes/api/[group]/+server.ts`
 | **User Profile** | 7 | `/api/profile`, `/api/profile/passport`, `/api/portfolio/holdings`, `/api/preferences`, `/api/progression`, `/api/agents/stats`, `/api/agents/stats/[agentId]` |
 | **Predictions** | 4 | `/api/predictions`, `/api/predictions/{positions/open,positions/[id]/close,vote}` |
 | **Community** | 3 | `/api/community/posts/[id]/react`, `/api/activity`, `/api/activity/reaction` |
-| **Copy Trading** | 3 | `/api/copy-trades/{runs,runs/[id],publish}` |
+| **Copy Trading** | 3 | `/api/copy-trades/{runs,runs/[id],publish}` — publish는 `clientMutationId` idempotency + canonical trade/signal/run 응답 |
 | **Tournaments** | 3 | `/api/tournaments/{active,[id]/bracket,[id]/register}` |
 | **Notifications** | 3 | `/api/notifications`, `/api/notifications/[id]`, `/api/notifications/read` |
 | **Market Alerts** | 1 | `/api/market/alerts/onchain` (GET — MVRV zone + Whale + Liquidation + ExFlow 통합 알림, alertEngine이 5분 주기 폴링) |
@@ -248,6 +249,20 @@ return json({ error: 'message' }, { status: 400 });
 // SQL 결과 매핑: (r: any) 타입 명시
 const records = result.rows.map((r: any) => ({ ... }));
 ```
+
+### 2026-03-06 Refactor Additions
+- `src/lib/server/profileProjection.ts`: 프로필 tier/badge/stats 서버 projection 단일 계산 경로
+- `src/lib/profile/profileAuthority.ts`: profile 표시 규칙 shared helper
+- `src/routes/terminal/terminalTypes.ts`: terminal shell/view type contract
+- `src/components/terminal/{TerminalDesktopLayout,TerminalTabletLayout,TerminalMobileLayout}.svelte`: viewport별 shell 분리
+- `src/components/terminal/terminalShell.css`: terminal route에서 분리한 shared shell/layout styling
+- `src/components/terminal/terminalViewModel.ts`: terminal route의 decision/control/offline-fallback 계산 계층
+- `src/components/terminal/intelViewModel.ts`: IntelPanel의 positions/trend/headline 파생 상태 계산 계층
+- `src/lib/chart/tradingviewEmbed.ts`: TradingView iframe 생성/파괴/URL 조립 어댑터
+- `src/lib/chart/chartTradePlanner.ts`: ChartPanel의 line-entry / trade-plan / community-signal 계산 계층
+- `src/components/arena/chart/chartPatternEngine.ts`: ChartPanel의 패턴 스캔/visible-scope/overlay snapshot 순수 계산 계층
+- `src/components/arena/chart/chartDrawingEngine.ts`: ChartPanel의 canvas drawing / persisted drawing render 순수 렌더 계층
+- `db/migrations/0007_copy_trade_publish_idempotency.sql`, `supabase/migrations/014_copy_trade_publish_idempotency.sql`: copy-trade publish durable idempotency index
 
 ## Environment Variables
 See `.env.example` for all required keys:
@@ -332,6 +347,26 @@ See `.env.example` for all required keys:
 
 ---
 
+## Design-First Protocol (구현 전 설계 고정)
+
+모든 구현/수정 작업은 **설계 확정 후 코드 작성**을 원칙으로 한다.
+
+**필수 설계 체크리스트:**
+1. 문제 정의: 현재 사용자 불편/비즈니스 목표를 1~3문장으로 고정
+2. UX 플로우: 시작 액션 → 중간 상태 → 종료 액션(성공/실패) 정의
+3. 데이터 플로우: 입력(store/API) / 처리 / 출력(store/API/UI) 명시
+4. 경계 조건: 인증 없음, 데이터 없음, 네트워크 실패 시 동작 정의
+5. 수용 기준(DoD): QA가 바로 검증 가능한 체크 항목으로 작성
+
+**실행 순서 (고정):**
+1. 설계 초안 작성
+2. 영향 파일 식별
+3. 구현
+4. `npm run check` + `npm run build`
+5. 설계 대비 구현 diff 점검
+
+---
+
 ## Work Modes (작업 모드)
 
 ### "업데이트" / "Update" 모드
@@ -392,7 +427,12 @@ See `.env.example` for all required keys:
 ## Design Authority (정본 설계)
 
 **Agent Architecture C02 v1.0** (`MAXIDOGE_Agent_Architecture_C02_v1_0_20260223_0430`)이 정본.
-**Arena War 통합 설계서**: `STOCKCLAW_UNIFIED_DESIGN.md` (프로젝트 루트)
+**Arena War 로컬 정본**:
+- `docs/product-specs/arena.md`
+- `docs/design-docs/arena-domain-model.md`
+- `docs/design-docs/learning-loop.md`
+
+프로젝트 루트의 `STOCKCLAW_UNIFIED_DESIGN.md`는 **깊은 예외 케이스용 보조 참조**로만 사용.
 
 ### C02 핵심 구조
 - **Layer 0 — ORPO Model:** 유일한 분석 엔진 (캔들+볼륨+90개 지표 → direction, confidence, pattern, key_levels)
@@ -413,7 +453,8 @@ See `.env.example` for all required keys:
 C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 
 ### Arena War (AI 대전 모드)
-- **통합 설계서**: `STOCKCLAW_UNIFIED_DESIGN.md` (프로젝트 루트)
+- **로컬 정본**: `docs/product-specs/arena.md`, `docs/design-docs/arena-domain-model.md`, `docs/design-docs/learning-loop.md`
+- **외부 보조 참조**: `STOCKCLAW_UNIFIED_DESIGN.md` (프로젝트 루트, edge-case semantics only)
 - **핵심 원칙**: "같은 데이터, 다른 해석" — AI와 인간이 동일 48팩터를 보고 다르게 판단 → 시장이 판정
 - **데이터 파이프라인**: GameRecord → OrpoPair (ORPO 학습) + RAGEntry (AI 기억)
 - **DB 테이블**: `arena_war_records` (마이그레이션: `frontend/src/lib/server/migrations/001_arena_war_records.sql`)
@@ -515,7 +556,8 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 ## Known Pitfalls (함정 — 다음 세션에 전달)
 
 ### Svelte 5 Runes 충돌
-- **변수명 `state` 사용 금지**: `let state = $derived(...)` 하면 `$state()` rune이 store 구독으로 오인됨. 에러: "Cannot use 'state' as a store". **`ws` 또는 다른 이름 사용.**
+- **변수명 `state` 사용 금지**: `let state = $derived(...)` 하면 `$state()` rune이 store 구독으로 오인됨. 에러: "Cannot use 'state' as a store". **`gs` 또는 다른 이름 사용.**
+- **`AgentMatchRecord` vs `MatchRecord`**: agentData.ts는 `AgentMatchRecord`, matchHistoryStore.ts는 `MatchRecord` (아레나 매치). 이름 혼동 주의.
 - **`$components` alias 없음**: `$components/` import path는 미등록. 컴포넌트는 **상대경로** (`../../components/`) 사용.
 
 ### 빌드 관련
@@ -528,9 +570,24 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **`frontend-passport`는 deprecated 로컬 워크스페이스**: `scripts/dev/guard-active-workspace.sh`가 gate/push 전에 차단.
 - **임시 우회**: 꼭 필요한 경우에만 `ALLOW_LEGACY_WORKSPACE=1` 사용 (기본 금지).
 
+### 공통 유틸리티 (Phase 1 리팩토링에서 추출)
+- **`$lib/utils/pnl.ts`**: PnL 계산 단일 소스. `calcPnlPercent(dir, entry, current, decimals)`. quickTradeStore, close/+server.ts에서 사용.
+- **`$lib/utils/storage.ts`**: localStorage 헬퍼. `loadFromStorage<T>()`, `saveToStorage()`, `autoSave()`. 12개 스토어의 보일러플레이트 교체용.
+- **`$components/ui/ModalShell.svelte`**: 공통 모달 오버레이 (overlay + close + stopPropagation + a11y). 5개 모달에서 래핑 사용.
+
 ### 서버 API 패턴
 - **DB 테이블 미존재 대응**: API에서 `errorContains(e, 'does not exist')` 체크 → graceful fallback + warning 반환.
 - **localStorage 사용 금지**: 서버(PostgreSQL)가 있으므로 클라이언트 영속 저장은 서버 API 경유. localStorage는 캐시/임시 용도만.
+- **unknown error 직접 접근 금지**: 서버/API 레이어에서 `error?.code`, `error?.message` 직접 접근하지 말고 `$lib/utils/errorUtils`의 `getErrorCode()` / `getErrorMessage()`를 사용.
+- **copy-trade publish idempotency**: `clientMutationId`는 `copy_trade_runs.draft.clientMutationId`에 저장되고, 고유 인덱스는 `db/migrations/0007_*` / `supabase/migrations/014_*` migration이 있어야 보장된다.
+- **terminal shell CSS 위치**: `/terminal` 레이아웃 스타일은 `src/components/terminal/terminalShell.css`가 canonical. route `<style>`로 되돌리면 `css_unused_selector` 경고가 급증한다.
+- **terminal/intel view-model 경계**: `src/components/terminal/terminalViewModel.ts`, `src/components/terminal/intelViewModel.ts`는 순수 계산 전용이다. fetch/store mutation/gtm side effect를 다시 넣지 말고 route/panel에 남겨야 한다.
+- **IntelPanel 계약 방식**: `src/components/terminal/IntelPanel.svelte`는 `sendchat/gototrade/collapse`를 component event로 dispatch하지 않고 callback prop(`onSendChat`, `onGoToTrade`, `onCollapse`)로 받는다. layout에서 `on:` 리스너를 다시 쓰면 타입 계약이 깨진다.
+- **TradingView embed canonical path**: TradingView iframe URL/cleanup은 `src/lib/chart/tradingviewEmbed.ts`가 단일 진실원이다. `ChartPanel.svelte` 안에 querystring/iframe destroy 로직을 다시 복제하면 fallback·CSP 수정이 분산된다.
+- **Chart trade planner canonical path**: line-entry 정규화, trade-plan ratio/order 계산, community signal draft 생성은 `src/lib/chart/chartTradePlanner.ts`가 단일 진실원이다. `ChartPanel.svelte`에 RR/risk/source/reason 계산을 다시 복제하지 말 것.
+- **Chart pattern/render canonical path**: visible-range candle slice, pattern signature/snapshot, overlay marker selection은 `src/components/arena/chart/chartPatternEngine.ts`가 단일 진실원이고, persisted drawing render loop는 `src/components/arena/chart/chartDrawingEngine.ts`가 단일 진실원이다. `ChartPanel.svelte`에 pattern summary/render for-loop를 다시 복제하지 말 것.
+- **ChartPanel dual contract 유지**: `src/components/arena/ChartPanel.svelte`는 terminal shell을 위해 callback prop(`onScanRequest`, `onChatRequest`, `onCommunitySignal`, `onDrag*`)을 호출하면서, arena legacy route를 위해 `scanrequest/chatrequest/communitysignal/drag*` component events도 같이 dispatch한다. 둘 중 하나만 남기면 `/terminal` 또는 `/arena` 한쪽 타입 계약이 다시 깨진다.
+- **CSP allowlist 변경 규칙**: 외부 font/embed/RPC/WebSocket/data source를 추가하면 `src/hooks.server.ts`의 `buildCsp()`를 같이 수정해야 한다. 현재 allowlist는 Google Fonts, TradingView iframe, Binance websocket을 기준으로 맞춰져 있다.
 
 ### Store vs Rune 패턴
 - Store 파일은 **Svelte 4 `writable()`** 유지 (다수 컴포넌트에서 import하므로)
@@ -573,6 +630,15 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 
 ## Task Backlog
 
+### Refactor Execution Phase
+- [x] RF-01: State authority 정리 (`priceStore` canonical, `gameState` live-price 미러링 제거)
+- [x] RF-02: Domain integrity 정리 (`profileProjection`, tracked-signal reconcile, `dbStore` 제거)
+- [x] RF-03: CopyTrade canonical publish + backend idempotency (`clientMutationId`, migration 0007/014)
+- [x] RF-04: Terminal shell extraction (`TerminalDesktopLayout`, `TerminalTabletLayout`, `TerminalMobileLayout`, `terminalShell.css`)
+- [x] RF-05: terminal view-model extraction (`terminalViewModel`, `intelViewModel`)
+- [ ] RF-06: `ChartPanel.svelte` core/overlay/pattern/service split
+- [x] RF-07: strict CSP / embed allowlist hardening
+
 ### BE Phase
 - [x] B-03: factorEngine + agentPipeline
 - [x] B-09: Terminal Scan endpoints
@@ -601,6 +667,7 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - [ ] AW-16: 잭팟 + 배지 + 일일 미션
 - [ ] AW-17: 실제 C02 파이프라인 연결 (mock → real)
 - [ ] AW-18: 실제 스프라이트 시트 아트 에셋 교체 (현재 colored circle + initial 텍스트)
+
 
 ### UIUX Phase (Loox 테마 적용)
 - [x] UX-01: Terminal 다크 포레스트 전환 (PR #43)
