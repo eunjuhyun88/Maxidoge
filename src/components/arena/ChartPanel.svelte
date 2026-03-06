@@ -2654,11 +2654,13 @@
     <!-- ═══ First-scan CTA (shows before any scan) ═══ -->
     {#if !hasScanned && !activeTradeSetup && chartMode === 'agent'}
       <div class="first-scan-cta">
-        <button class="fsc-btn" on:click={requestAgentScan}>
-          <span class="fsc-icon">&#x25C9;</span>
-          <span class="fsc-label">RUN SCAN</span>
-          <span class="fsc-sub">AI agents analyze current market</span>
-        </button>
+        <div class="fsc-inline">
+          <span class="fsc-sub">No agent scan yet</span>
+          <button class="fsc-btn" on:click={requestAgentScan}>
+            <span class="fsc-icon">&#x25C9;</span>
+            <span class="fsc-label">RUN FIRST SCAN</span>
+          </button>
+        </div>
       </div>
     {/if}
 
@@ -3560,23 +3562,38 @@
 
   /* ═══ First-scan CTA overlay ═══ */
   .first-scan-cta {
-    position: absolute; inset: 0; z-index: 12;
-    display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(ellipse at center, rgba(10,9,8,.6) 0%, transparent 70%);
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 12;
     pointer-events: none;
+  }
+  .fsc-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(232,150,125,.2);
+    background: rgba(10,9,8,.72);
+    backdrop-filter: blur(4px);
   }
   .fsc-btn {
     pointer-events: auto;
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    padding: 20px 36px; border-radius: 8px;
-    background: rgba(10,9,8,.85); border: 1.5px solid rgba(232,150,125,.35);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(232,150,125,.12);
+    border: 1.5px solid rgba(232,150,125,.38);
     cursor: pointer; transition: all .2s;
   }
-  .fsc-btn:hover { border-color: #E8967D; box-shadow: 0 0 20px rgba(232,150,125,.15); background: rgba(10,9,8,.95); }
-  .fsc-icon { font-size: 20px; color: #E8967D; animation: fscPulse 2s ease infinite; }
+  .fsc-btn:hover { border-color: #E8967D; box-shadow: 0 0 12px rgba(232,150,125,.15); background: rgba(232,150,125,.2); }
+  .fsc-icon { font-size: 11px; color: #E8967D; animation: fscPulse 2s ease infinite; }
   @keyframes fscPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.92)} }
-  .fsc-label { font-family: var(--fm); font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #E8967D; }
-  .fsc-sub { font-family: var(--fm); font-size: 9px; color: rgba(240,237,228,.4); letter-spacing: .5px; }
+  .fsc-label { font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px; color: #E8967D; }
+  .fsc-sub { font-family: var(--fm); font-size: 8px; color: rgba(240,237,228,.52); letter-spacing: .4px; }
 
   /* ═══ Post-scan Trade CTA bar ═══ */
   .trade-cta-bar {

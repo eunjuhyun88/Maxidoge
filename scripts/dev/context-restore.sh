@@ -2,15 +2,14 @@
 set -euo pipefail
 
 usage() {
-	echo "Usage: bash scripts/dev/context-restore.sh --mode <context|files> [--branch <name>] [--list] [--snapshot <file>]"
+	echo "Usage: bash scripts/dev/context-restore.sh --mode <brief|handoff|context|files|list> [--branch <name>] [--work-id <id>] [--list]"
 	echo ""
-	echo "Important:"
-	echo "  --mode is mandatory to avoid ambiguity between session-context recovery and file recovery."
-	echo ""
-	echo "Examples:"
-	echo "  npm run ctx:restore -- --mode context"
-	echo "  npm run ctx:restore -- --mode context --list"
-	echo "  npm run ctx:restore -- --mode files"
+	echo "Modes:"
+	echo "  --mode brief    show the compact branch/work brief"
+	echo "  --mode handoff  show the fuller handoff artifact"
+	echo "  --mode context  compatibility alias for --mode brief"
+	echo "  --mode files    show file-recovery guidance only"
+	echo "  --mode list     list available branch artifacts"
 }
 
 sanitize() {
@@ -19,8 +18,8 @@ sanitize() {
 
 MODE=""
 TARGET_BRANCH=""
+WORK_ID=""
 LIST_ONLY=0
-SNAPSHOT_FILE=""
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
@@ -32,8 +31,8 @@ while [ "$#" -gt 0 ]; do
 			TARGET_BRANCH="${2:-}"
 			shift 2
 			;;
-		--snapshot)
-			SNAPSHOT_FILE="${2:-}"
+		--work-id)
+			WORK_ID="${2:-}"
 			shift 2
 			;;
 		--list)
@@ -55,14 +54,9 @@ done
 if [ -z "$MODE" ]; then
 	echo "[ctx:restore] ambiguous request."
 	echo "[ctx:restore] choose explicit mode:"
-	echo "  --mode context   (recover conversation/task context)"
-	echo "  --mode files     (recover file state guidance)"
-	exit 1
-fi
-
-if [ "$MODE" != "context" ] && [ "$MODE" != "files" ]; then
-	echo "[ctx:restore] invalid mode: $MODE"
-	usage
+	echo "  --mode brief"
+	echo "  --mode handoff"
+	echo "  --mode files"
 	exit 1
 fi
 
@@ -75,22 +69,43 @@ fi
 
 BRANCH_SAFE="$(sanitize "${TARGET_BRANCH//\//-}")"
 BASE_DIR="$ROOT_DIR/.agent-context"
-SNAPSHOT_DIR="$BASE_DIR/snapshots/$BRANCH_SAFE"
-COMPACT_FILE="$BASE_DIR/compact/$BRANCH_SAFE-latest.md"
+BRIEF_FILE="$BASE_DIR/briefs/${BRANCH_SAFE}-latest.md"
+HANDOFF_FILE="$BASE_DIR/handoffs/${BRANCH_SAFE}-latest.md"
+CHECKPOINT_FILE="$BASE_DIR/checkpoints/${BRANCH_SAFE}-latest.md"
 
-if [ "$LIST_ONLY" -eq 1 ]; then
+if [ -n "$WORK_ID" ]; then
+	WORK_SAFE="$(sanitize "$WORK_ID")"
+	if [ -f "$BASE_DIR/briefs/${WORK_SAFE}.md" ]; then
+		BRIEF_FILE="$BASE_DIR/briefs/${WORK_SAFE}.md"
+	fi
+	if [ -f "$BASE_DIR/handoffs/${WORK_SAFE}.md" ]; then
+		HANDOFF_FILE="$BASE_DIR/handoffs/${WORK_SAFE}.md"
+	fi
+	if [ -f "$BASE_DIR/checkpoints/${WORK_SAFE}.md" ]; then
+		CHECKPOINT_FILE="$BASE_DIR/checkpoints/${WORK_SAFE}.md"
+	fi
+fi
+
+if [ "$LIST_ONLY" -eq 1 ] || [ "$MODE" = "list" ]; then
 	echo "[ctx:restore] branch=$TARGET_BRANCH"
 	echo ""
-	echo "compact:"
-	if [ -f "$COMPACT_FILE" ]; then
-		echo "- ${COMPACT_FILE#$ROOT_DIR/}"
+	echo "checkpoint:"
+	if [ -f "$CHECKPOINT_FILE" ]; then
+		echo "- ${CHECKPOINT_FILE#$ROOT_DIR/}"
 	else
 		echo "- (none)"
 	fi
 	echo ""
-	echo "snapshots:"
-	if ls -1 "$SNAPSHOT_DIR"/*.md >/dev/null 2>&1; then
-		ls -1t "$SNAPSHOT_DIR"/*.md | sed "s#^$ROOT_DIR/##" | sed -n '1,20p' | sed 's/^/- /'
+	echo "brief:"
+	if [ -f "$BRIEF_FILE" ]; then
+		echo "- ${BRIEF_FILE#$ROOT_DIR/}"
+	else
+		echo "- (none)"
+	fi
+	echo ""
+	echo "handoff:"
+	if [ -f "$HANDOFF_FILE" ]; then
+		echo "- ${HANDOFF_FILE#$ROOT_DIR/}"
 	else
 		echo "- (none)"
 	fi
@@ -109,24 +124,43 @@ if [ "$MODE" = "files" ]; then
 	exit 0
 fi
 
-SOURCE_FILE="$COMPACT_FILE"
-if [ -n "$SNAPSHOT_FILE" ]; then
-	SOURCE_FILE="$SNAPSHOT_FILE"
+if [ "$MODE" = "context" ]; then
+	echo "[ctx:restore] mode=context is now an alias for mode=brief."
+	MODE="brief"
 fi
 
+SOURCE_FILE=""
+case "$MODE" in
+	brief)
+		SOURCE_FILE="$BRIEF_FILE"
+		;;
+	handoff)
+		SOURCE_FILE="$HANDOFF_FILE"
+		;;
+	*)
+		echo "[ctx:restore] invalid mode: $MODE"
+		usage
+		exit 1
+		;;
+esac
+
 if [ ! -f "$SOURCE_FILE" ]; then
-	LATEST_SNAPSHOT="$(ls -1t "$SNAPSHOT_DIR"/*.md 2>/dev/null | head -n 1 || true)"
-	if [ -n "$LATEST_SNAPSHOT" ]; then
-		echo "[ctx:restore] compact file missing; regenerating from latest snapshot."
-		bash scripts/dev/context-compact.sh --source "$LATEST_SNAPSHOT" >/dev/null
+	if [ "$MODE" = "brief" ] && [ -f "$CHECKPOINT_FILE" ]; then
+		echo "[ctx:restore] brief missing; regenerating from latest checkpoint/snapshot."
+		if [ -n "$WORK_ID" ]; then
+			bash scripts/dev/context-compact.sh --work-id "$WORK_ID" >/dev/null
+		else
+			bash scripts/dev/context-compact.sh >/dev/null
+		fi
 	else
-		echo "[ctx:restore] no compact or snapshot found for branch $TARGET_BRANCH."
+		echo "[ctx:restore] no $MODE artifact found for branch $TARGET_BRANCH."
 		echo "[ctx:restore] run: npm run ctx:save -- --title '<task>'"
+		echo "[ctx:restore] and: npm run ctx:checkpoint -- --work-id '<W-ID>' --surface '<surface>' --objective '<objective>'"
 		exit 1
 	fi
 fi
 
-echo "[ctx:restore] mode=context"
+echo "[ctx:restore] mode=$MODE"
 echo "[ctx:restore] source=${SOURCE_FILE#$ROOT_DIR/}"
 echo ""
 cat "$SOURCE_FILE"
