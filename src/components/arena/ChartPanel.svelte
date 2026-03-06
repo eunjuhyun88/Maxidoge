@@ -3250,7 +3250,7 @@
     background: rgba(232,150,125,.16);
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1024px) {
     .scale-tools {
       bottom: 6px;
       gap: 3px;
@@ -3582,18 +3582,24 @@
     pointer-events: auto;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 8px;
-    border-radius: 6px;
-    background: rgba(232,150,125,.12);
-    border: 1.5px solid rgba(232,150,125,.38);
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(10,9,8,.76);
+    border: 1.5px solid rgba(232,150,125,.3);
+    backdrop-filter: blur(4px);
     cursor: pointer; transition: all .2s;
   }
-  .fsc-btn:hover { border-color: #E8967D; box-shadow: 0 0 12px rgba(232,150,125,.15); background: rgba(232,150,125,.2); }
+  .fsc-btn:hover { border-color: #E8967D; box-shadow: 0 0 12px rgba(232,150,125,.15); background: rgba(232,150,125,.14); }
   .fsc-icon { font-size: 11px; color: #E8967D; animation: fscPulse 2s ease infinite; }
   @keyframes fscPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.92)} }
   .fsc-label { font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px; color: #E8967D; }
-  .fsc-sub { font-family: var(--fm); font-size: 8px; color: rgba(240,237,228,.52); letter-spacing: .4px; }
+  .fsc-sub { font-family: var(--fm); font-size: 8px; color: rgba(240,237,228,.62); letter-spacing: .3px; }
+  @media (max-width: 768px) {
+    .first-scan-cta { top: 6px; right: 6px; }
+    .fsc-sub { display: none; }
+    .fsc-btn { padding: 4px 8px; }
+  }
 
   /* ═══ Post-scan Trade CTA bar ═══ */
   .trade-cta-bar {
@@ -3912,11 +3918,11 @@
     .ind-hint { display: none; }
   }
 
-  @media (max-width: 1450px) {
+  @media (max-width: 1280px) {
     .ind-chip.optional { display: none; }
   }
 
-  @media (max-width: 520px) {
+  @media (max-width: 480px) {
     .sum-title {
       display: none;
     }
@@ -3944,8 +3950,6 @@
   .chart-wrapper.tv-like .indicator-strip {
     border-bottom-color: #2a2e39;
     background: #131722;
-  }
-  .chart-wrapper.tv-like .chart-footer { /* removed */
   }
   .chart-wrapper.tv-like .mode-toggle {
     border-color: rgba(255, 255, 255, 0.18);
