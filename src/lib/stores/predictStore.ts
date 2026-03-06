@@ -5,6 +5,7 @@
 import { writable, derived } from 'svelte/store';
 import { fetchPolymarkets, parseOutcomePrices, type PolyMarket } from '$lib/api/polymarket';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import {
   fetchPredictionPositionsApi,
   votePredictionApi,
@@ -37,16 +38,6 @@ interface PredictState {
   positionsHydrated: boolean;
 }
 
-// Load positions from localStorage
-function loadPositions(): PredictPosition[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.predictPositions);
-    if (saved) return JSON.parse(saved);
-  } catch {}
-  return [];
-}
-
 export const predictStore = writable<PredictState>({
   markets: [],
   loading: false,
@@ -54,19 +45,11 @@ export const predictStore = writable<PredictState>({
   lastFetch: 0,
   categoryFilter: '',
   userVotes: {},
-  positions: loadPositions(),
+  positions: loadFromStorage<PredictPosition[]>(STORAGE_KEYS.predictPositions, []),
   positionsHydrated: false,
 });
 
-// Persist positions
-let _posSaveTimer: ReturnType<typeof setTimeout> | null = null;
-predictStore.subscribe(s => {
-  if (typeof window === 'undefined') return;
-  if (_posSaveTimer) clearTimeout(_posSaveTimer);
-  _posSaveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEYS.predictPositions, JSON.stringify(s.positions));
-  }, 300);
-});
+autoSave(predictStore, STORAGE_KEYS.predictPositions, (s) => s.positions);
 
 export const predictMarkets = derived(predictStore, $s => {
   if (!$s.categoryFilter) return $s.markets;

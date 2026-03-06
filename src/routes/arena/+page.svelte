@@ -1734,7 +1734,7 @@
         <div class="wg-icon">🔗</div>
         <div class="wg-title">CONNECT WALLET</div>
         <div class="wg-sub">Connect your wallet to access the Arena and start trading battles</div>
-        <button class="wg-btn" on:click={openWalletModal}>
+        <button class="wg-btn" onclick={openWalletModal}>
           <span>⚡</span> CONNECT WALLET
         </button>
         <div class="wg-hint">Supported: MetaMask · WalletConnect · Coinbase</div>
@@ -1756,7 +1756,7 @@
   {:else}
     <!-- ═══════ TOP ARENA NAV BAR ═══════ -->
     <div class="arena-topbar">
-      <button class="atb-back" on:click={confirmGoLobby}>
+      <button class="atb-back" onclick={confirmGoLobby}>
         {#if confirmingExit}
           <span class="atb-confirm-pulse">EXIT? CLICK AGAIN</span>
         {:else}
@@ -1792,7 +1792,7 @@
           <span class="atb-lp">⚡{state.lp}</span>
           <span class="atb-wl">{state.wins}W-{state.losses}L</span>
         </div>
-        <button class="atb-hist" on:click={() => matchHistoryOpen = !matchHistoryOpen}>📋</button>
+        <button class="atb-hist" onclick={() => matchHistoryOpen = !matchHistoryOpen}>📋</button>
       </div>
     </div>
     <MatchHistory visible={matchHistoryOpen} onclose={() => matchHistoryOpen = false} />
@@ -1896,11 +1896,11 @@
         <!-- Floating LONG/SHORT Direction Bar (hypothesis phase) -->
         {#if hypothesisVisible}
           <div class="dir-float-bar">
-            <button class="dfb-btn long" class:sel={floatDir === 'LONG'} on:click={() => selectFloatDir('LONG')}>
+            <button class="dfb-btn long" class:sel={floatDir === 'LONG'} onclick={() => selectFloatDir('LONG')}>
               ▲ LONG
             </button>
             <div class="dfb-divider"></div>
-            <button class="dfb-btn short" class:sel={floatDir === 'SHORT'} on:click={() => selectFloatDir('SHORT')}>
+            <button class="dfb-btn short" class:sel={floatDir === 'SHORT'} onclick={() => selectFloatDir('SHORT')}>
               ▼ SHORT
             </button>
           </div>
@@ -1937,7 +1937,7 @@
               <div class="preview-config">
                 {state.squadConfig.riskLevel.toUpperCase()} · {formatTimeframeLabel(state.squadConfig.timeframe)} · Lev {state.squadConfig.leverageBias}x
               </div>
-              <button class="preview-confirm" on:click={confirmPreview}>
+              <button class="preview-confirm" onclick={confirmPreview}>
                 ✅ CONFIRM & SCOUT
               </button>
             </div>
@@ -1975,10 +1975,10 @@
           {/if}
           <!-- Chart Toggle Buttons -->
           <div class="chart-toggles">
-            <button class="ct-btn" class:on={showMarkers} on:click={() => showMarkers = !showMarkers} title="에이전트 마커">🏷</button>
-            <button class="ct-btn" class:on={showChartPosition} on:click={() => showChartPosition = !showChartPosition} title="TP/SL 라인">📏</button>
+            <button class="ct-btn" class:on={showMarkers} onclick={() => showMarkers = !showMarkers} title="에이전트 마커">🏷</button>
+            <button class="ct-btn" class:on={showChartPosition} onclick={() => showChartPosition = !showChartPosition} title="TP/SL 라인">📏</button>
           </div>
-          <button class="mbtn" on:click={goLobby}>↺ LOBBY</button>
+          <button class="mbtn" onclick={goLobby}>↺ LOBBY</button>
         </div>
       </div>
 
@@ -1992,7 +1992,7 @@
               <span class="mp-label" style="color:{phaseLabel.color}">{battlePhaseLabel || phaseLabel.name}</span>
               {#if state.timer > 0}<span class="mp-timer">{Math.ceil(state.timer)}s</span>{/if}
             </div>
-            <button class="mission-close" on:click={goLobby} title="LOBBY">✕</button>
+            <button class="mission-close" onclick={goLobby} title="LOBBY">✕</button>
           </div>
           <div class="mission-text">{missionText}</div>
         </div>
@@ -2295,8 +2295,8 @@
                 </div>
               {/if}
               <div class="pvp-btns">
-                <button class="pvp-btn lobby" on:click={goLobby}>↺ LOBBY</button>
-                <button class="pvp-btn again" on:click={playAgain}>🐕 PLAY AGAIN</button>
+                <button class="pvp-btn lobby" onclick={goLobby}>↺ LOBBY</button>
+                <button class="pvp-btn again" onclick={playAgain}>🐕 PLAY AGAIN</button>
               </div>
             </div>
           </div>
@@ -2308,7 +2308,7 @@
             <span class="replay-icon">🎬</span>
             <span class="replay-text">REPLAY — Match #{replayState.data?.matchN}</span>
             <span class="replay-step">{replayState.currentStep + 1}/{replayState.totalSteps}</span>
-            <button class="replay-exit" on:click={exitReplay}>✕ EXIT REPLAY</button>
+            <button class="replay-exit" onclick={exitReplay}>✕ EXIT REPLAY</button>
           </div>
         {/if}
 

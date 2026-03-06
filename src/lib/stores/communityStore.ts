@@ -4,6 +4,7 @@
 
 import { writable, derived, get } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import {
   createCommunityPostApi,
   fetchCommunityPostsApi,
@@ -27,29 +28,11 @@ interface CommunityState {
   hydrated: boolean;
 }
 
-const STORAGE_KEY = STORAGE_KEYS.community;
-
-function loadPosts(): CommunityState {
-  if (typeof window === 'undefined') return { posts: [], hydrated: false };
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return { ...JSON.parse(saved), hydrated: false };
-  } catch {}
-  return { posts: [], hydrated: false };
-}
-
-export const communityStore = writable<CommunityState>(loadPosts());
+const loaded = loadFromStorage<{ posts: CommunityPost[] }>(STORAGE_KEYS.community, { posts: [] });
+export const communityStore = writable<CommunityState>({ ...loaded, hydrated: false });
 let _communityHydratePromise: Promise<void> | null = null;
 
-// Persist to localStorage (debounced)
-let _commSaveTimer: ReturnType<typeof setTimeout> | null = null;
-communityStore.subscribe(s => {
-  if (typeof window === 'undefined') return;
-  if (_commSaveTimer) clearTimeout(_commSaveTimer);
-  _commSaveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ posts: s.posts }));
-  }, 300);
-});
+autoSave(communityStore, STORAGE_KEYS.community, (s) => ({ posts: s.posts }));
 
 export const communityPosts = derived(communityStore, $s => $s.posts);
 

@@ -112,7 +112,7 @@ export function buildMultiSourceFewShotExamples(
 
   for (const g of sorted) {
     if (selected.length >= maxExamples) break;
-    const src = (g as any).source ?? 'arena_war';
+    const src = g.source ?? 'arena_war';
     const count = sourceCounts[src] ?? 0;
     if (count >= 2) continue;
     selected.push(g);
@@ -122,10 +122,10 @@ export function buildMultiSourceFewShotExamples(
   // 3. 각 예시 포맷팅
   const examples = selected.map((g, i) => {
     const similarity = (g.similarity * 100).toFixed(0);
-    const src = (g as any).source ?? 'arena_war';
-    const outcomeType = (g as any).outcome_type ?? '';
-    const outcomeValue = (g as any).outcome_value ?? 0;
-    const agentSignals = (g as any).agent_signals as Record<string, { vote: string; confidence: number }> | undefined;
+    const src = g.source ?? 'arena_war';
+    const outcomeType = g.outcome_type ?? '';
+    const outcomeValue = g.outcome_value ?? 0;
+    const agentSignals = g.agent_signals;
 
     // Source 라벨
     const sourceLabel = src === 'arena_war' ? 'Game'

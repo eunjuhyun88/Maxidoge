@@ -21,6 +21,7 @@ import {
   MAX_CONCURRENT_GAMES,
 } from '$lib/engine/battleEngine';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 
 // ─── Store ───────────────────────────────────────────────────
 
@@ -56,40 +57,15 @@ export const pendingCheckpoints = derived(activeGames, $g =>
 // ─── Load / Save ────────────────────────────────────────────
 
 function loadGames(): ActiveGame[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.activeGames);
-    if (!saved) return [];
-    const parsed: ActiveGame[] = JSON.parse(saved);
-
-    // Filter out expired or resolved games
-    const now = Date.now();
-    return parsed.filter(g =>
-      g.resolution === null && g.expiresAt > now
-    );
-  } catch {
-    return [];
-  }
+  const parsed = loadFromStorage<ActiveGame[]>(STORAGE_KEYS.activeGames, []);
+  const now = Date.now();
+  return parsed.filter(g => g.resolution === null && g.expiresAt > now);
 }
 
-function saveGames(games: ActiveGame[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    // Only persist non-SPRINT games (SPRINT lives only in memory)
-    const persistable = games.filter(g => g.battleMode !== 'SPRINT');
-    localStorage.setItem(STORAGE_KEYS.activeGames, JSON.stringify(persistable));
-  } catch {
-    // Storage full or unavailable — silently fail
-  }
-}
-
-// Auto-save on changes (debounced)
-let _saveTimer: ReturnType<typeof setTimeout> | null = null;
-activeGames.subscribe(games => {
-  if (typeof window === 'undefined') return;
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => saveGames(games), 500);
-});
+// Only persist non-SPRINT games (SPRINT lives only in memory)
+autoSave(activeGames, STORAGE_KEYS.activeGames, (games) =>
+  games.filter(g => g.battleMode !== 'SPRINT'), 500
+);
 
 // ─── Actions ────────────────────────────────────────────────
 

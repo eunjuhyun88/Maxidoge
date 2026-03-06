@@ -445,7 +445,7 @@ async function _collectInternal(
       sopr: cryptoQuant?.onchainMetrics?.sopr ?? null,
       exchangeNetflow: ethNetflow ?? null,
       whaleActivity: cryptoQuant?.whaleData?.whaleNetflow ?? null,
-      minerFlow: cryptoQuant?.minerData ? (cryptoQuant.minerData as any).outflow24h ?? null : null,
+      minerFlow: cryptoQuant?.minerData?.minerOutflow24h ?? null,
       stablecoinFlow: stableMcapChange24h,
       activeAddresses: null, // TODO: Etherscan active address count
       etfFlow: null, // TODO: ETF 유출입 데이터 소스 연결

@@ -5,6 +5,7 @@
 import { writable } from 'svelte/store';
 import { AGDEFS } from '$lib/data/agents';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import { fetchAgentStatsApi, updateAgentStatApi } from '$lib/api/agentStatsApi';
 import { resolveAgentLevelFromMatches } from './progressionRules';
 
@@ -94,18 +95,17 @@ function createDefaultStats(): Record<string, AgentStats> {
 }
 
 function loadAgentData(): Record<string, AgentStats> {
-  if (typeof window === 'undefined') return createDefaultStats();
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.agents);
-    if (saved) return { ...createDefaultStats(), ...JSON.parse(saved) };
-  } catch {}
+  const saved = loadFromStorage<Record<string, AgentStats> | null>(STORAGE_KEYS.agents, null);
+  if (saved) return { ...createDefaultStats(), ...saved };
   return createDefaultStats();
 }
 
 export const agentStats = writable<Record<string, AgentStats>>(loadAgentData());
 
-// Auto-save (debounced to avoid blocking main thread)
-let _agentSaveTimer: ReturnType<typeof setTimeout>;
+// localStorage persistence via shared utility
+autoSave(agentStats, STORAGE_KEYS.agents, undefined, 500);
+
+// Server sync (separate from localStorage persistence)
 let _agentSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let _lastServerHash = '';
 
@@ -198,13 +198,9 @@ export async function hydrateAgentStats(force = false) {
 
 // 자동 hydration은 hydrateDomainStores() 단일 진입점에서 수행한다.
 
+// Debounced server sync (localStorage already handled by autoSave above)
 agentStats.subscribe(data => {
   if (typeof window === 'undefined') return;
-  clearTimeout(_agentSaveTimer);
-  _agentSaveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEYS.agents, JSON.stringify(data));
-  }, 500);
-
   if (_agentSyncTimer) clearTimeout(_agentSyncTimer);
   _agentSyncTimer = setTimeout(() => {
     void syncAgentStatsToServer(data);
