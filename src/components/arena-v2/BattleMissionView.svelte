@@ -91,7 +91,7 @@
         </span>
       </div>
 
-      <div class="divider" />
+      <div class="divider"></div>
 
       <div class="data-row">
         <span class="data-label">TP</span>
@@ -99,7 +99,7 @@
       </div>
       <div class="progress-row">
         <div class="progress-track">
-          <div class="progress-fill tp" style:width="{tpProgress}%" />
+          <div class="progress-fill tp" style:width="{tpProgress}%"></div>
         </div>
         <span class="progress-pct">{tpProgress.toFixed(0)}%</span>
       </div>
@@ -110,12 +110,12 @@
       </div>
       <div class="progress-row">
         <div class="progress-track">
-          <div class="progress-fill sl" style:width="{slProgress}%" />
+          <div class="progress-fill sl" style:width="{slProgress}%"></div>
         </div>
         <span class="progress-pct">{slProgress.toFixed(0)}%</span>
       </div>
 
-      <div class="divider" />
+      <div class="divider"></div>
 
       <div class="data-row">
         <span class="data-label">VS</span>
@@ -144,7 +144,7 @@
               <span class="as-label">NRG</span>
               <div class="as-bar">
                 <div class="as-fill" style:width="{(agent.energy / agent.maxEnergy) * 100}%"
-                  class:low={agent.energy < 25} />
+                  class:low={agent.energy < 25}></div>
               </div>
               <span class="as-val">{Math.round(agent.energy)}</span>
             </div>
@@ -193,7 +193,7 @@
         {/each}
       </div>
 
-      <div class="divider" />
+      <div class="divider"></div>
 
       <div class="col-header">LOG</div>
       <div class="mission-log">
@@ -230,7 +230,7 @@
     flex-shrink: 0;
   }
   .mh-title {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 3px;
     color: #00ff88;
@@ -241,8 +241,8 @@
     color: rgba(240,237,228,0.6);
   }
   .mh-time {
-    font-size: 8px;
-    color: rgba(240,237,228,0.25);
+    font-size: 9px;
+    color: rgba(240,237,228,0.5);
   }
 
   .mission-grid {
@@ -264,10 +264,10 @@
   .mission-col:last-child { border-right: none; }
 
   .col-header {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 3px;
-    color: rgba(240,237,228,0.25);
+    color: rgba(240,237,228,0.5);
     margin-bottom: 4px;
   }
   .divider {
@@ -283,9 +283,9 @@
     padding: 2px 0;
   }
   .data-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
-    color: rgba(240,237,228,0.35);
+    color: rgba(240,237,228,0.5);
     letter-spacing: 1px;
   }
   .data-value {
@@ -300,7 +300,7 @@
   .data-value.combo { color: #FFD700; }
   .positive { color: #00ff88 !important; }
   .negative { color: #ff2d55 !important; }
-  .dim { font-size: 7px; color: rgba(240,237,228,0.25); }
+  .dim { font-size: 9px; color: rgba(240,237,228,0.5); }
 
   .progress-row {
     display: flex;
@@ -323,8 +323,8 @@
   .progress-fill.tp { background: #00ff88; }
   .progress-fill.sl { background: #ff2d55; }
   .progress-pct {
-    font-size: 8px;
-    color: rgba(240,237,228,0.3);
+    font-size: 9px;
+    color: rgba(240,237,228,0.5);
     width: 24px;
     text-align: right;
   }
@@ -353,7 +353,7 @@
     letter-spacing: 1px;
   }
   .agent-action-tag {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     padding: 1px 4px;
     border-radius: 2px;
@@ -372,9 +372,9 @@
     gap: 3px;
   }
   .as-label {
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 700;
-    color: rgba(240,237,228,0.25);
+    color: rgba(240,237,228,0.5);
     letter-spacing: 1px;
     width: 18px;
   }
@@ -392,7 +392,7 @@
   }
   .as-fill.low { background: #ffaa00; }
   .as-val {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240,237,228,0.5);
     min-width: 16px;
@@ -400,7 +400,7 @@
   }
   .as-val.crit { color: #FFD700; }
   .finding-tag {
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
     margin-top: 3px;
@@ -421,12 +421,12 @@
     display: grid;
     grid-template-columns: 20px 36px 48px 28px 28px;
     gap: 4px;
-    font-size: 8px;
+    font-size: 9px;
     align-items: center;
   }
   .tick-header-row {
     font-weight: 700;
-    color: rgba(240,237,228,0.2);
+    color: rgba(240,237,228,0.5);
     letter-spacing: 1px;
     border-bottom: 1px solid rgba(240,237,228,0.04);
     padding-bottom: 2px;
@@ -446,13 +446,13 @@
     flex: 1;
   }
   .mlog-entry {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 600;
     line-height: 1.4;
   }
   .mlog-tick {
     font-weight: 800;
-    color: rgba(240,237,228,0.25);
+    color: rgba(240,237,228,0.5);
     margin-right: 4px;
   }
 </style>

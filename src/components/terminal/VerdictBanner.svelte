@@ -3,6 +3,8 @@
      차트 상단에 최신 스캔 판정을 표시하는 배너
 ═══════════════════════════════════════════════════════════════ -->
 <script lang="ts">
+  import DirectionBadge from './DirectionBadge.svelte';
+
   interface VerdictData {
     pair: string;
     timeframe: string;
@@ -18,16 +20,6 @@
   let expanded = $state(false);
   let justArrived = $state(false);
 
-  const dirColor = $derived(
-    verdict?.consensus === 'long' ? 'var(--grn, #00ff88)'
-    : verdict?.consensus === 'short' ? 'var(--red, #ff2d55)'
-    : 'rgba(240,237,228,.4)'
-  );
-  const dirArrow = $derived(
-    verdict?.consensus === 'long' ? '▲'
-    : verdict?.consensus === 'short' ? '▼'
-    : '—'
-  );
   const agreeCount = $derived(
     verdict?.highlights
       ? verdict.highlights.filter(h => h.vote === verdict.consensus).length
@@ -66,12 +58,16 @@
     class="verdict-banner"
     class:expanded
     class:just-arrived={justArrived}
-    style="--vdir:{dirColor}"
     onclick={() => expanded = !expanded}
   >
     <div class="verdict-row">
-      <span class="verdict-dir" style="color:{dirColor}">{dirArrow} {verdict.consensus.toUpperCase()}</span>
-      <span class="verdict-conf">{Math.round(verdict.avgConfidence)}%</span>
+      <DirectionBadge
+        direction={verdict.consensus}
+        confidence={verdict.avgConfidence}
+        showConfidence
+        size="sm"
+        variant="soft"
+      />
       <span class="verdict-pair">{verdict.pair}</span>
       <span class="verdict-sep">·</span>
       <span class="verdict-meta">{verdict.timeframe.toUpperCase()} · {agreeCount}/{totalCount} agree</span>
@@ -83,10 +79,9 @@
         <p class="verdict-summary">{verdict.summary}</p>
         <div class="verdict-agents">
           {#each verdict.highlights as h}
-            {@const vColor = h.vote === 'long' ? 'var(--grn, #00ff88)' : h.vote === 'short' ? 'var(--red, #ff2d55)' : 'rgba(240,237,228,.4)'}
             <div class="verdict-agent">
               <span class="va-name">{h.agent}</span>
-              <span class="va-vote" style="color:{vColor}">{h.vote.toUpperCase()} {h.conf}%</span>
+              <DirectionBadge direction={h.vote as 'long' | 'short' | 'neutral'} confidence={h.conf} showConfidence size="xs" />
               <span class="va-note">{h.note}</span>
             </div>
           {/each}
@@ -152,20 +147,6 @@
     gap: 8px;
     flex-wrap: wrap;
   }
-  .verdict-dir {
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 1px;
-  }
-  .verdict-conf {
-    font-size: 11px;
-    font-weight: 800;
-    color: var(--vdir);
-    background: rgba(255, 255, 255, 0.05);
-    padding: 1px 6px;
-    border-radius: 4px;
-    border: 1px solid rgba(255,255,255,.06);
-  }
   .verdict-pair {
     font-size: 10px;
     font-weight: 900;
@@ -220,11 +201,6 @@
     font-size: 8px;
     font-weight: 700;
     letter-spacing: 0.5px;
-  }
-  .va-vote {
-    font-weight: 800;
-    min-width: 72px;
-    font-size: 9px;
   }
   .va-note {
     color: rgba(240, 237, 228, 0.35);

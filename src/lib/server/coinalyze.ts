@@ -4,7 +4,7 @@
 // Direct server-side access to Coinalyze (no proxy hop).
 // API key from env, results cached via LRU.
 
-import { COINALYZE_API_KEY } from '$env/static/private';
+import { env as privateEnv } from '$env/dynamic/private';
 import { getCached, setCache } from './providers/cache';
 import { toCoinalyzeInterval } from '$lib/utils/timeframe';
 
@@ -29,9 +29,10 @@ async function coinalyzeFetchDirect(
   endpoint: string,
   params: Record<string, string>
 ): Promise<any> {
-  if (!COINALYZE_API_KEY) throw new Error('COINALYZE_API_KEY not set');
+  const apiKey = privateEnv.COINALYZE_API_KEY?.trim() ?? '';
+  if (!apiKey) throw new Error('COINALYZE_API_KEY not set');
 
-  const qs = new URLSearchParams({ ...params, api_key: COINALYZE_API_KEY });
+  const qs = new URLSearchParams({ ...params, api_key: apiKey });
   const url = `${BASE}/${endpoint}?${qs.toString()}`;
   const res = await fetch(url, {
     headers: { Accept: 'application/json' },
