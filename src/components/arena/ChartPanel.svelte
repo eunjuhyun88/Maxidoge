@@ -44,16 +44,15 @@
     type TradingViewEmbedInstance,
   } from '$lib/chart/tradingviewEmbed';
   import {
-    computeTradePreview as _computeTradePreview,
-    drawTradePreview as _drawTradePreview,
-    drawDrawingItems as _drawDrawingItems,
-    drawAgentTradeOverlay as _drawAgentTradeOverlay,
-    drawPatternOverlays as _drawPatternOverlays,
-    drawPatternTag as _drawPatternTag,
-    roundRect as _roundRect,
     makeTradeBoxDrawing as _makeTradeBoxDrawing,
     type TradePreview,
   } from './chart/chartDrawingEngine';
+  import {
+    drawTrendlineGhost,
+    isTradePreviewMode,
+    renderChartOverlay,
+    resolveTradePreview,
+  } from './chart/chartOverlayRenderer';
   import {
     appendDrawingWithLimit,
     buildHorizontalLineDrawing,
@@ -451,23 +450,6 @@
     bindRatioDrag();
   }
 
-  function computeTradePreview(mode: 'longentry' | 'shortentry' | 'trade', startX: number, startY: number, cursorX: number, cursorY: number): TradePreview | null {
-    if (!drawingCanvas) return null;
-    return _computeTradePreview(mode, startX, startY, cursorX, cursorY, drawingCanvas.width, drawingCanvas.height, { toChartPrice, toChartY }, livePrice);
-  }
-
-  function drawTradePreview(ctx: CanvasRenderingContext2D, preview: TradePreview) {
-    if (!drawingCanvas) return;
-    _drawTradePreview(ctx, preview, chartTheme, drawingCanvas.width);
-  }
-
-  // drawAgentTradeOverlay + _roundRect — extracted to chart/chartDrawingEngine.ts
-  function drawAgentTradeOverlay(ctx: CanvasRenderingContext2D, setup: AgentTradeSetup) {
-    if (!drawingCanvas || !chart) return;
-    const closeBtn = _drawAgentTradeOverlay(ctx, setup, drawingCanvas.width, { toChartY }, chartTheme, livePrice);
-    _agentCloseBtn = closeBtn;
-  }
-
   function applyAgentTradeSetup(setup: AgentTradeSetup | null) {
     // Clear old price lines (no more axis labels — canvas only)
     if (agentPriceLines.tp && series) { try { series.removePriceLine(agentPriceLines.tp); } catch {} }
@@ -771,7 +753,6 @@
   function handleDrawingMouseDown(e: MouseEvent) {
     if (!drawingCanvas) return;
     const rect = drawingCanvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
     if (drawingMode === 'none') return;
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     if (drawingMode === 'hline') {
@@ -810,7 +791,7 @@
       }
       return;
     }
-    if (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade') {
+    if (isTradePreviewMode(drawingMode)) {
       tradePreview = startTradePreviewDraft(drawingMode, x, y);
       currentDrawing = null;
       isDrawing = true;
@@ -822,11 +803,19 @@
 
   function handleDrawingMouseUp(e: MouseEvent) {
     if (!drawingCanvas || !isDrawing || !tradePreview) return;
-    if (drawingMode !== 'longentry' && drawingMode !== 'shortentry' && drawingMode !== 'trade') return;
+    if (!isTradePreviewMode(drawingMode)) return;
     const rect = drawingCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, x, y);
+    const preview = resolveTradePreview({
+      tradePreview,
+      drawingMode,
+      cursor: { x, y },
+      canvasW: rect.width,
+      canvasH: rect.height,
+      coord: { toChartPrice, toChartY },
+      livePrice,
+    });
     if (!preview) {
       pushChartNotice('라인 진입 계산 실패');
     } else {
@@ -884,7 +873,7 @@
       _drawRAF = null;
       if (!drawingCanvas) return;
       const rect = drawingCanvas.getBoundingClientRect();
-      if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade')) {
+      if (tradePreview && isTradePreviewMode(drawingMode)) {
         tradePreview = updateTradePreviewDraft(tradePreview, e.clientX - rect.left, e.clientY - rect.top);
         renderDrawings();
         return;
@@ -894,14 +883,12 @@
       if (!_drawCtx) _drawCtx = drawingCanvas.getContext('2d');
       const ctx = _drawCtx;
       if (!ctx) return;
-      ctx.beginPath();
-      const ghostColor = chartTheme.drawGhost;
-      ctx.strokeStyle = ghostColor;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
-      ctx.moveTo(currentDrawing.points[0].x, currentDrawing.points[0].y);
-      ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-      ctx.stroke(); ctx.setLineDash([]);
+      drawTrendlineGhost(
+        ctx,
+        currentDrawing,
+        { x: e.clientX - rect.left, y: e.clientY - rect.top },
+        chartTheme.drawGhost,
+      );
     });
   }
 
@@ -910,23 +897,22 @@
     if (!_drawCtx) _drawCtx = drawingCanvas.getContext('2d');
     const ctx = _drawCtx;
     if (!ctx) return;
-    ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-    drawPatternOverlays(ctx);
-    // Agent trade overlay (TP/SL zones from scan signals)
-    if (activeTradeSetup && drawingsVisible) drawAgentTradeOverlay(ctx, activeTradeSetup);
-    if (!drawingsVisible) {
-      // Still render active drag preview even when drawings hidden
-      if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade')) {
-        const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
-        if (preview) drawTradePreview(ctx, preview);
-      }
-      return;
-    }
-    _drawDrawingItems(ctx, drawings, { toChartX, toChartY }, chartTheme);
-    if (tradePreview && (drawingMode === 'longentry' || drawingMode === 'shortentry' || drawingMode === 'trade')) {
-      const preview = computeTradePreview(tradePreview.mode, tradePreview.startX, tradePreview.startY, tradePreview.cursorX, tradePreview.cursorY);
-      if (preview) drawTradePreview(ctx, preview);
-    }
+    const { agentCloseBtn } = renderChartOverlay({
+      ctx,
+      canvasW: drawingCanvas.width,
+      canvasH: drawingCanvas.height,
+      chartMode,
+      overlayPatterns,
+      activeTradeSetup,
+      drawingsVisible,
+      drawings,
+      drawingMode,
+      tradePreview,
+      chartTheme,
+      livePrice,
+      coord: { toChartX, toChartY, toChartPrice, toOverlayPoint },
+    });
+    _agentCloseBtn = agentCloseBtn;
   }
 
   function toOverlayPoint(time: number, price: number): { x: number; y: number } | null {
@@ -940,12 +926,6 @@
     } catch {
       return null;
     }
-  }
-
-  // drawPatternTag + drawPatternOverlays — extracted to chart/chartDrawingEngine.ts
-  function drawPatternOverlays(ctx: CanvasRenderingContext2D) {
-    if (!drawingCanvas || !chart || chartMode !== 'agent' || overlayPatterns.length === 0) return;
-    _drawPatternOverlays(ctx, overlayPatterns, drawingCanvas.width, drawingCanvas.height, { toOverlayPoint });
   }
 
   function resizeDrawingCanvas() {
