@@ -12,6 +12,16 @@ sanitize() {
 	printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+|-+$//g'
 }
 
+has_fixed_text() {
+	local needle="$1"
+	local path="$2"
+	if command -v rg >/dev/null 2>&1; then
+		rg -Fq "$needle" "$path"
+	else
+		grep -Fq -- "$needle" "$path"
+	fi
+}
+
 extract_section() {
 	local source="$1"
 	local header="$2"
@@ -125,13 +135,13 @@ if [ -f "$BRIEF_FILE" ]; then
 		fail "brief open questions missing"
 	fi
 
-	if rg -Fq "Watch Log Tail" "$BRIEF_FILE"; then
+	if has_fixed_text "Watch Log Tail" "$BRIEF_FILE"; then
 		fail "brief contains watch log tail"
 	else
 		pass "brief excludes watch log tail"
 	fi
 
-	if [ "$STRICT" -eq 1 ] && rg -Fq "no semantic checkpoint" "$BRIEF_FILE"; then
+	if [ "$STRICT" -eq 1 ] && has_fixed_text "no semantic checkpoint" "$BRIEF_FILE"; then
 		fail "brief is degraded fallback without semantic checkpoint"
 	fi
 fi
