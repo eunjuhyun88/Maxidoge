@@ -22,11 +22,12 @@ Purpose:
 
 ## Active Boundaries
 
-- Active implementation target: `/Users/ej/Downloads/maxidoge-clones/frontend`
+- Active implementation target: the current git worktree rooted at this repository
 - Canonical code lives in: `src/`, `db/`, `supabase/`, `scripts/`, `docs/`
 - Sibling clone folders outside this repo are reference-only unless a current plan explicitly says otherwise.
 - `docs/archive/` is historical context, not current authority.
 - `docs/AGENT_WATCH_LOG.md` is an operations log, not a design spec. Read targeted entries only.
+- `.agent-context/` is runtime memory, not a source of authority.
 
 ## Structured Knowledge Base
 

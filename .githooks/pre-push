@@ -22,6 +22,11 @@ if [ -x scripts/dev/context-auto.sh ]; then
 	bash scripts/dev/context-auto.sh pre-push || true
 fi
 
+if [ -x scripts/dev/check-context-quality.sh ]; then
+	echo "[pre-push] context quality check"
+	bash scripts/dev/check-context-quality.sh --strict
+fi
+
 echo "[pre-push] fetching origin"
 git fetch origin --prune
 

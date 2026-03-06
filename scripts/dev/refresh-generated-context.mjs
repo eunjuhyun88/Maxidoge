@@ -123,6 +123,7 @@ const storeMeta = [
   ['agentData', 'derived/support', 'agent stats and learning presentation layer', 'Should not silently redefine server truth.'],
   ['warRoomStore', 'route/session transient', 'war-room discussion state', 'Runtime coordination state.'],
   ['hydration', 'derived/support', 'orchestrates initial store hydration', 'Not domain truth itself.'],
+  ['dbStore', 'derived/support', 'local persistence helper for browser-side cache/state', 'Support utility only; do not treat as canonical authority.'],
   ['progressionRules', 'derived/support', 'tier and LP mapping logic', 'Rule/helper module, not state owner.'],
   ['storageKeys', 'derived/support', 'local storage key registry', 'Utility only.']
 ];

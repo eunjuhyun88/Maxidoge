@@ -1,8 +1,8 @@
 # Context System Rollout
 
 Date: 2026-03-06
-Status: active
-Scope: `/Users/ej/Downloads/maxidoge-clones/frontend`
+Status: active hardening
+Scope: current git worktree rooted at this repository
 
 ## Goal
 
@@ -14,7 +14,7 @@ Turn the repo's current mixed document set into an agent-first context system th
 
 ## Invariants
 
-1. `frontend` remains the canonical implementation target.
+1. This repository remains the canonical implementation target regardless of worktree path.
 2. `AGENTS.md` stays short and routes into deeper sources of truth.
 3. Canonical docs are stable entry points; dated docs remain supporting material.
 4. Archive does not compete with current authority.
@@ -31,6 +31,8 @@ Turn the repo's current mixed document set into an agent-first context system th
 3. Add a docs validation script and wire it into local checks.
 4. Update routing docs and start-sequence rules.
 5. Gradually promote stable rules from dated docs into canonical docs.
+6. Add semantic checkpoint, brief, and handoff artifacts under `.agent-context/`.
+7. Add strict context quality validation before push.
 
 ## Exit Criteria
 
