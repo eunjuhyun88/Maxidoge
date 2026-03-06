@@ -26,9 +26,10 @@
 
   let liveTickerStr = '';
   let tickerLoaded = false;
-  $: TICKER_STR = tickerLoaded && liveTickerStr
-    ? liveTickerStr
-    : 'Loading market data...';
+  let tickerText = 'Loading market data...';
+  let tickerSegments: string[] = ['Loading market data...'];
+  $: tickerText = tickerLoaded && liveTickerStr ? liveTickerStr : 'Loading market data...';
+  $: tickerSegments = tickerText.split(' | ').filter(Boolean);
   import { gameState } from '$lib/stores/gameState';
   import { livePrices } from '$lib/stores/priceStore';
   import { hydrateQuickTrades, openTradeCount } from '$lib/stores/quickTradeStore';
@@ -41,7 +42,6 @@
   // ── Panel resize state ──
   let leftW = 280;       // War Room width
   let rightW = 300;      // Intel Panel width
-  let containerEl: HTMLDivElement;
   let windowWidth = 1200;
 
   const MIN_LEFT = 200;
@@ -86,6 +86,9 @@
   let dragStartVal = 0;
 
   // Responsive layout mode
+  let isMobile = false;
+  let isTablet = false;
+  let isDesktop = true;
   $: isMobile = windowWidth < BP_MOBILE;
   $: isTablet = windowWidth >= BP_MOBILE && windowWidth < BP_TABLET;
   $: isDesktop = windowWidth >= BP_TABLET;
@@ -98,6 +101,13 @@
     intel: { label: 'Intel', icon: '🧠', desc: 'News, community and agent chat' },
   };
   let mobileTab: MobileTab = 'chart';
+  let densityMode: 'essential' | 'pro' = 'essential';
+  let densityLabel = 'ESSENTIAL';
+  let decisionDirectionLabel = 'UNSCANNED';
+  let decisionDirectionClass = 'neutral';
+  let decisionConfidenceLabel = '--';
+  let decisionPrimaryLabel = 'RUN FIRST SCAN';
+  let decisionPrimaryHint = 'Scan current pair to generate agent consensus';
   let mobileViewTracked = false;
   let mobileNavTracked = false;
   type MobilePanelSize = { widthPct: number; heightPct: number };
@@ -156,6 +166,7 @@
   };
   let tabletLeftWidth = 232;
   let tabletBottomHeight = 260;
+  let tabletLayoutStyle = '';
   $: tabletLayoutStyle = `--tab-left-width: ${tabletLeftWidth}px; --tab-bottom-height: ${tabletBottomHeight}px;`;
   type TabletSplitResizeAxis = 'x' | 'y';
   type TabletSplitResizeState = {
@@ -527,6 +538,57 @@
     });
   }
 
+  function tickerSegmentClass(segment: string): string {
+    if (segment.startsWith('FEAR_GREED:')) {
+      const m = segment.match(/FEAR_GREED:\s*(\d+)/i);
+      const value = m ? Number(m[1]) : null;
+      if (value != null && value <= 25) return 'ticker-chip ticker-chip-fg fear';
+      if (value != null && value >= 75) return 'ticker-chip ticker-chip-fg greed';
+      return 'ticker-chip ticker-chip-fg neutral';
+    }
+    if (segment.startsWith('MCAP_24H:')) {
+      return segment.includes('-')
+        ? 'ticker-chip ticker-chip-neg'
+        : 'ticker-chip ticker-chip-pos';
+    }
+    return 'ticker-chip';
+  }
+
+  $: densityLabel = densityMode === 'essential' ? 'ESSENTIAL' : 'PRO';
+  $: if (terminalScanning) {
+    decisionDirectionLabel = 'SCANNING';
+    decisionDirectionClass = 'scanning';
+    decisionConfidenceLabel = '--';
+  } else if (latestScan) {
+    decisionDirectionLabel = latestScan.consensus.toUpperCase();
+    decisionDirectionClass = latestScan.consensus;
+    decisionConfidenceLabel = `${Math.round(latestScan.avgConfidence)}%`;
+  } else {
+    decisionDirectionLabel = 'UNSCANNED';
+    decisionDirectionClass = 'neutral';
+    decisionConfidenceLabel = '--';
+  }
+  $: if (!latestScan) {
+    decisionPrimaryLabel = 'RUN FIRST SCAN';
+    decisionPrimaryHint = 'Scan current pair to generate agent consensus';
+  } else if (chatTradeReady) {
+    decisionPrimaryLabel = `TRADE ${chatSuggestedDir}`;
+    decisionPrimaryHint = 'Open chart planner with latest consensus direction';
+  } else {
+    decisionPrimaryLabel = 'OPEN CHAT PLAN';
+    decisionPrimaryHint = 'Ask agents for trade-ready setup first';
+  }
+
+  function toggleDensityMode() {
+    const nextMode = densityMode === 'essential' ? 'pro' : 'essential';
+    densityMode = nextMode;
+    gtmEvent('terminal_density_mode_toggle', {
+      mode: nextMode,
+      pair: $gameState.pair,
+      timeframe: $gameState.timeframe,
+    });
+  }
+
   function setMobileTab(tab: MobileTab) {
     if (mobileTab === tab) return;
     const fromTab = mobileTab;
@@ -547,8 +609,10 @@
       pair: $gameState.pair,
       timeframe: $gameState.timeframe,
     });
+  } else if (!isMobile && mobileViewTracked) {
+    mobileViewTracked = false;
   }
-  $: if (!isMobile && mobileViewTracked) mobileViewTracked = false;
+
   $: if (isMobile && !mobileNavTracked) {
     mobileNavTracked = true;
     gtmEvent('terminal_mobile_nav_impression', {
@@ -556,8 +620,9 @@
       pair: $gameState.pair,
       timeframe: $gameState.timeframe,
     });
+  } else if (!isMobile && mobileNavTracked) {
+    mobileNavTracked = false;
   }
-  $: if (!isMobile && mobileNavTracked) mobileNavTracked = false;
 
   function startDrag(target: DragTarget, e: MouseEvent) {
     if (isMobile || isTablet) return;
@@ -784,6 +849,10 @@
   });
 
   // Selected pair display
+  let pair = 'BTC/USDT';
+  let mobileMeta = MOBILE_TAB_META.chart;
+  let mobileOpenTrades = 0;
+  let mobileTrackedSignals = 0;
   $: pair = $gameState.pair || 'BTC/USDT';
   $: mobileMeta = MOBILE_TAB_META[mobileTab];
   $: mobileOpenTrades = $openTradeCount;
@@ -820,12 +889,11 @@
     return true;
   }
 
-  function handleChartScanRequest(e: CustomEvent<{ source?: string; pair?: string; timeframe?: string }>) {
-    const detail = e.detail ?? {};
+  function requestTerminalScan(source: string, pairHint?: string, timeframeHint?: string) {
     gtmEvent('terminal_scan_request_shell', {
-      source: detail.source || 'chart-panel',
-      pair: detail.pair || $gameState.pair,
-      timeframe: detail.timeframe || $gameState.timeframe,
+      source,
+      pair: pairHint || $gameState.pair,
+      timeframe: timeframeHint || $gameState.timeframe,
     });
 
     if (tryTriggerWarRoomScan()) return;
@@ -842,6 +910,11 @@
       });
       setMobileTab('warroom');
     }
+  }
+
+  function handleChartScanRequest(e: CustomEvent<{ source?: string; pair?: string; timeframe?: string }>) {
+    const detail = e.detail ?? {};
+    requestTerminalScan(detail.source || 'chart-panel', detail.pair, detail.timeframe);
   }
 
   $: if (pendingChartScan && tryTriggerWarRoomScan()) {
@@ -1103,6 +1176,19 @@
     void triggerTradePlanFromChat('intel-panel');
   }
 
+  async function handleDecisionPrimaryAction() {
+    if (terminalScanning) return;
+    if (!latestScan) {
+      requestTerminalScan('decision-rail');
+      return;
+    }
+    if (chatTradeReady) {
+      await triggerTradePlanFromChat('decision-rail');
+      return;
+    }
+    focusIntelChat('decision-rail-chat');
+  }
+
   async function handleSendChat(e: CustomEvent<{ text: string }>) {
     const text = e.detail.text;
     if (!text.trim()) return;
@@ -1249,10 +1335,10 @@
     terminalScanning = true;
   }
 
-  function handleScanComplete(e: CustomEvent<ScanIntelDetail>) {
+  function handleScanComplete(payload: ScanIntelDetail | CustomEvent<ScanIntelDetail>) {
     terminalScanning = false;
-    latestScan = e.detail;
-    const d = e.detail;
+    const d = 'detail' in payload ? payload.detail : payload;
+    latestScan = d;
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -1304,8 +1390,8 @@
     }
   }
 
-  function handleShowOnChart(e: CustomEvent<{ signal: { vote: string; conf: number; entry: number; tp: number; sl: number; name: string; pair: string } }>) {
-    const sig = e.detail.signal;
+  function handleShowOnChart(payload: { signal: { vote: string; conf: number; entry: number; tp: number; sl: number; name: string; pair: string } } | CustomEvent<{ signal: { vote: string; conf: number; entry: number; tp: number; sl: number; name: string; pair: string } }>) {
+    const sig = 'detail' in payload ? payload.detail.signal : payload.signal;
     if (sig.vote === 'neutral' || !sig.entry || !sig.tp || !sig.sl) return;
     const risk = Math.abs(sig.entry - sig.sl);
     const reward = Math.abs(sig.tp - sig.entry);
@@ -1327,6 +1413,35 @@
   <div class="term-stars" aria-hidden="true"></div>
   <div class="term-stars term-stars-soft" aria-hidden="true"></div>
   <div class="term-grain" aria-hidden="true"></div>
+  {#if isMobile}
+    <button type="button" class="density-toggle" on:click={toggleDensityMode} title="정보 밀도 전환">
+      {densityLabel}
+    </button>
+  {:else}
+    <div class="decision-rail" role="region" aria-label="Trading decision rail">
+      <div class="decision-context">
+        <span class="dc-pair">{pair}</span>
+        <span class="dc-tf">{formatTimeframeLabel($gameState.timeframe)}</span>
+      </div>
+      <div class="decision-verdict">
+        <span class="dv-label">CONSENSUS</span>
+        <span class="dv-dir {decisionDirectionClass}">{decisionDirectionLabel}</span>
+        <span class="dv-conf">{decisionConfidenceLabel}</span>
+      </div>
+      <button
+        type="button"
+        class="decision-primary"
+        class:trade={latestScan && chatTradeReady}
+        on:click={() => void handleDecisionPrimaryAction()}
+      >
+        <span class="dp-text">{decisionPrimaryLabel}</span>
+        <span class="dp-hint">{decisionPrimaryHint}</span>
+      </button>
+      <button type="button" class="decision-mode" on:click={toggleDensityMode} title="정보 밀도 전환">
+        {densityLabel}
+      </button>
+    </div>
+  {/if}
 
   <!-- ═══ MOBILE LAYOUT ═══ -->
   {#if isMobile}
@@ -1353,10 +1468,16 @@
     <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
       {#if mobileTab === 'warroom'}
         <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('warroom')}>
-          <WarRoom bind:this={warRoomRef} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} on:showonchart={handleShowOnChart} />
+          <WarRoom
+            bind:this={warRoomRef}
+            {densityMode}
+            onScanStart={handleScanStart}
+            onScanComplete={handleScanComplete}
+            onShowOnChart={handleShowOnChart}
+          />
           <button
             type="button"
-            class="mob-resize-handle mob-resize-handle-x"
+            class="resize-handle resize-handle-x mob-resize-handle mob-resize-handle-x"
             title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize war room panel width with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'x', e)}
@@ -1366,7 +1487,7 @@
           ></button>
           <button
             type="button"
-            class="mob-resize-handle mob-resize-handle-y"
+            class="resize-handle resize-handle-y mob-resize-handle mob-resize-handle-y"
             title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize war room panel height with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('warroom', 'y', e)}
@@ -1398,7 +1519,7 @@
             </div>
             <button
               type="button"
-              class="mob-resize-handle mob-resize-handle-x"
+              class="resize-handle resize-handle-x mob-resize-handle mob-resize-handle-x"
               title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
               aria-label="Resize chart panel width with scroll"
               on:wheel={(e) => resizeMobilePanelByWheel('chart', 'x', e)}
@@ -1408,7 +1529,7 @@
             ></button>
             <button
               type="button"
-              class="mob-resize-handle mob-resize-handle-y"
+              class="resize-handle resize-handle-y mob-resize-handle mob-resize-handle-y"
               title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
               aria-label="Resize chart panel height with scroll"
               on:wheel={(e) => resizeMobilePanelByWheel('chart', 'y', e)}
@@ -1421,6 +1542,7 @@
       {:else if mobileTab === 'intel'}
         <div class="mob-panel-wrap mob-panel-resizable" style={getMobilePanelStyle('intel')}>
           <IntelPanel
+            {densityMode}
             {chatMessages}
             {isTyping}
             {latestScan}
@@ -1433,7 +1555,7 @@
           />
           <button
             type="button"
-            class="mob-resize-handle mob-resize-handle-x"
+            class="resize-handle resize-handle-x mob-resize-handle mob-resize-handle-x"
             title="좌우 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize intel panel width with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('intel', 'x', e)}
@@ -1443,7 +1565,7 @@
           ></button>
           <button
             type="button"
-            class="mob-resize-handle mob-resize-handle-y"
+            class="resize-handle resize-handle-y mob-resize-handle mob-resize-handle-y"
             title="위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize intel panel height with scroll"
             on:wheel={(e) => resizeMobilePanelByWheel('intel', 'y', e)}
@@ -1481,11 +1603,17 @@
       <div class="tab-left">
         <div class="tab-panel-resizable" style={getTabletPanelStyle('left')}>
           <div class="tab-panel-body">
-            <WarRoom bind:this={warRoomRef} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} on:showonchart={handleShowOnChart} />
+            <WarRoom
+              bind:this={warRoomRef}
+              {densityMode}
+              onScanStart={handleScanStart}
+              onScanComplete={handleScanComplete}
+              onShowOnChart={handleShowOnChart}
+            />
           </div>
           <button
             type="button"
-            class="tab-resize-handle tab-resize-handle-x"
+            class="resize-handle resize-handle-x tab-resize-handle tab-resize-handle-x"
             title="WAR ROOM 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize tablet war room width with scroll"
             on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
@@ -1494,7 +1622,7 @@
           ></button>
           <button
             type="button"
-            class="tab-resize-handle tab-resize-handle-y"
+            class="resize-handle resize-handle-y tab-resize-handle tab-resize-handle-y"
             title="WAR ROOM 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize tablet war room height with scroll"
             on:wheel={(e) => resizeTabletPanelByWheel('left', 'y', e)}
@@ -1535,7 +1663,7 @@
           </div>
           <button
             type="button"
-            class="tab-resize-handle tab-resize-handle-x"
+            class="resize-handle resize-handle-x tab-resize-handle tab-resize-handle-x"
             title="CHART 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize tablet chart width with scroll"
             on:wheel={(e) => resizeTabletPanelByWheel('center', 'x', e)}
@@ -1544,7 +1672,7 @@
           ></button>
           <button
             type="button"
-            class="tab-resize-handle tab-resize-handle-y"
+            class="resize-handle resize-handle-y tab-resize-handle tab-resize-handle-y"
             title="CHART 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize tablet chart height with scroll"
             on:wheel={(e) => resizeTabletPanelByWheel('center', 'y', e)}
@@ -1569,6 +1697,7 @@
       <div class="tab-panel-resizable" style={getTabletPanelStyle('bottom')}>
         <div class="tab-panel-body">
           <IntelPanel
+            {densityMode}
             {chatMessages}
             {isTyping}
             {latestScan}
@@ -1581,7 +1710,7 @@
         </div>
         <button
           type="button"
-          class="tab-resize-handle tab-resize-handle-x"
+          class="resize-handle resize-handle-x tab-resize-handle tab-resize-handle-x"
           title="좌우 패널 비율 조절: 스크롤 / 더블클릭 초기화"
           aria-label="Resize tablet left and chart split with scroll"
           on:wheel={(e) => resizeTabletPanelByWheel('left', 'x', e)}
@@ -1590,7 +1719,7 @@
         ></button>
         <button
           type="button"
-            class="tab-resize-handle tab-resize-handle-y"
+            class="resize-handle resize-handle-y tab-resize-handle tab-resize-handle-y"
             title="INTEL 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize tablet intel height with scroll"
             on:wheel={(e) => resizeTabletPanelByWheel('bottom', 'y', e)}
@@ -1602,15 +1731,23 @@
 
     <div class="ticker-bar">
       <div class="ticker-inner">
-        <span class="ticker-text">{TICKER_STR}</span>
-        <span class="ticker-text" aria-hidden="true">{TICKER_STR}</span>
+        <div class="ticker-track">
+          {#each tickerSegments as segment, idx (`tab-a-${idx}-${segment}`)}
+            <span class={tickerSegmentClass(segment)}>{segment}</span>
+          {/each}
+        </div>
+        <div class="ticker-track" aria-hidden="true">
+          {#each tickerSegments as segment, idx (`tab-b-${idx}-${segment}`)}
+            <span class={tickerSegmentClass(segment)}>{segment}</span>
+          {/each}
+        </div>
       </div>
     </div>
   </div>
 
   <!-- ═══ DESKTOP LAYOUT (full 3-panel with resizers) ═══ -->
   {:else}
-  <div class="terminal-page" bind:this={containerEl}
+  <div class="terminal-page"
     style="grid-template-columns: {leftCollapsed ? 30 : leftW}px 4px 1fr 4px {rightCollapsed ? 30 : rightW}px">
 
     <!-- Left: WAR ROOM or collapsed strip -->
@@ -1618,11 +1755,18 @@
       <div class="tl" on:wheel={(e) => resizePanelByWheel('left', e)}>
         <div class="desk-panel-resizable" style={getDesktopPanelStyle('left')}>
           <div class="desk-panel-body">
-            <WarRoom bind:this={warRoomRef} on:collapse={toggleLeft} on:scanstart={handleScanStart} on:scancomplete={handleScanComplete} on:showonchart={handleShowOnChart} />
+            <WarRoom
+              bind:this={warRoomRef}
+              {densityMode}
+              onCollapse={toggleLeft}
+              onScanStart={handleScanStart}
+              onScanComplete={handleScanComplete}
+              onShowOnChart={handleShowOnChart}
+            />
           </div>
           <button
             type="button"
-            class="desk-resize-handle desk-resize-handle-x"
+            class="resize-handle resize-handle-x desk-resize-handle desk-resize-handle-x"
             title="WAR ROOM 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize war room panel width with scroll"
             on:wheel={(e) => resizeDesktopPanelByWheel('left', 'x', e)}
@@ -1630,7 +1774,7 @@
           ></button>
           <button
             type="button"
-            class="desk-resize-handle desk-resize-handle-y"
+            class="resize-handle resize-handle-y desk-resize-handle desk-resize-handle-y"
             title="WAR ROOM 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize war room panel height with scroll"
             on:wheel={(e) => resizeDesktopPanelByWheel('left', 'y', e)}
@@ -1687,7 +1831,7 @@
         </div>
         <button
           type="button"
-          class="desk-resize-handle desk-resize-handle-x"
+          class="resize-handle resize-handle-x desk-resize-handle desk-resize-handle-x"
           title="CHART 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
           aria-label="Resize chart panel width with scroll"
           on:wheel={(e) => resizeDesktopPanelByWheel('center', 'x', e)}
@@ -1695,7 +1839,7 @@
         ></button>
         <button
           type="button"
-          class="desk-resize-handle desk-resize-handle-y"
+          class="resize-handle resize-handle-y desk-resize-handle desk-resize-handle-y"
           title="CHART 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
           aria-label="Resize chart panel height with scroll"
           on:wheel={(e) => resizeDesktopPanelByWheel('center', 'y', e)}
@@ -1720,6 +1864,7 @@
         <div class="desk-panel-resizable" style={getDesktopPanelStyle('right')}>
           <div class="desk-panel-body">
             <IntelPanel
+              {densityMode}
               {chatMessages}
               {isTyping}
               {latestScan}
@@ -1732,7 +1877,7 @@
           </div>
           <button
             type="button"
-            class="desk-resize-handle desk-resize-handle-x"
+            class="resize-handle resize-handle-x desk-resize-handle desk-resize-handle-x"
             title="INTEL 좌우 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize intel panel width with scroll"
             on:wheel={(e) => resizeDesktopPanelByWheel('right', 'x', e)}
@@ -1740,7 +1885,7 @@
           ></button>
           <button
             type="button"
-            class="desk-resize-handle desk-resize-handle-y"
+            class="resize-handle resize-handle-y desk-resize-handle desk-resize-handle-y"
             title="INTEL 위아래 크기 조절: 스크롤 / 더블클릭 초기화"
             aria-label="Resize intel panel height with scroll"
             on:wheel={(e) => resizeDesktopPanelByWheel('right', 'y', e)}
@@ -1766,8 +1911,16 @@
     <!-- Ticker -->
     <div class="ticker-bar">
       <div class="ticker-inner">
-        <span class="ticker-text">{TICKER_STR}</span>
-        <span class="ticker-text" aria-hidden="true">{TICKER_STR}</span>
+        <div class="ticker-track">
+          {#each tickerSegments as segment, idx (`desk-a-${idx}-${segment}`)}
+            <span class={tickerSegmentClass(segment)}>{segment}</span>
+          {/each}
+        </div>
+        <div class="ticker-track" aria-hidden="true">
+          {#each tickerSegments as segment, idx (`desk-b-${idx}-${segment}`)}
+            <span class={tickerSegmentClass(segment)}>{segment}</span>
+          {/each}
+        </div>
       </div>
     </div>
 
@@ -1839,6 +1992,152 @@
         rgba(0, 0, 0, 0.14) 3px
       );
     opacity: 0.52;
+  }
+  .density-toggle {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 30;
+    font: 800 9px/1 var(--fm);
+    letter-spacing: .9px;
+    color: rgba(240,237,228,.9);
+    border: 1px solid rgba(232,150,125,.35);
+    border-radius: 999px;
+    background: rgba(10,9,8,.72);
+    padding: 6px 10px;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: all .12s ease;
+  }
+  .density-toggle:hover {
+    border-color: rgba(232,150,125,.55);
+    background: rgba(232,150,125,.14);
+    color: #fff;
+  }
+  .decision-rail {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    z-index: 28;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border: 1px solid rgba(232,150,125,.28);
+    border-radius: 10px;
+    background: rgba(7, 15, 10, .72);
+    box-shadow: 0 8px 22px rgba(0,0,0,.25);
+    backdrop-filter: blur(6px);
+  }
+  .decision-context {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-family: var(--fm);
+  }
+  .dc-pair {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,.92);
+  }
+  .dc-tf {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    color: rgba(255,255,255,.62);
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 999px;
+    padding: 2px 6px;
+  }
+  .decision-verdict {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--fm);
+    min-width: 0;
+  }
+  .dv-label {
+    font-size: 8px;
+    letter-spacing: .9px;
+    color: rgba(255,255,255,.55);
+  }
+  .dv-dir {
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .9px;
+  }
+  .dv-dir.long { color: #00e676; }
+  .dv-dir.short { color: #ff6b6b; }
+  .dv-dir.neutral { color: #ffd54f; }
+  .dv-dir.scanning { color: #87dcbe; }
+  .dv-conf {
+    font-size: 9px;
+    font-weight: 800;
+    color: rgba(255,255,255,.84);
+  }
+  .decision-primary {
+    margin-left: auto;
+    min-width: 0;
+    border: 1px solid rgba(135,220,190,.34);
+    border-radius: 8px;
+    background: rgba(135,220,190,.14);
+    color: #dff9ef;
+    font-family: var(--fm);
+    padding: 6px 9px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    cursor: pointer;
+    transition: all .12s ease;
+  }
+  .decision-primary.trade {
+    border-color: rgba(0,230,118,.45);
+    background: rgba(0,230,118,.14);
+  }
+  .decision-primary:hover {
+    border-color: rgba(232,150,125,.55);
+    background: rgba(232,150,125,.16);
+    color: #fff;
+  }
+  .dp-text {
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .9px;
+    line-height: 1;
+  }
+  .dp-hint {
+    font-size: 8px;
+    color: rgba(255,255,255,.66);
+    letter-spacing: .4px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  .decision-mode {
+    font: 800 9px/1 var(--fm);
+    letter-spacing: .9px;
+    color: rgba(240,237,228,.9);
+    border: 1px solid rgba(232,150,125,.35);
+    border-radius: 999px;
+    background: rgba(10,9,8,.72);
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all .12s ease;
+    white-space: nowrap;
+  }
+  .decision-mode:hover {
+    border-color: rgba(232,150,125,.55);
+    background: rgba(232,150,125,.14);
+    color: #fff;
+  }
+  @media (max-width: 1180px) {
+    .decision-rail { gap: 6px; padding: 6px 8px; }
+    .dc-pair { font-size: 9px; }
+    .dc-tf { font-size: 8px; padding: 2px 5px; }
+    .dp-hint { display: none; }
   }
   .term-stars,
   .term-grain {
@@ -1913,6 +2212,8 @@
     grid-template-columns: 280px 4px 1fr 4px 300px; /* overridden by inline style */
     grid-template-rows: 1fr auto;
     height: 100%;
+    padding-top: 50px;
+    box-sizing: border-box;
     overflow: hidden;
     overflow-x: clip;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
@@ -1988,9 +2289,8 @@
     flex-direction: column;
     overflow: hidden;
   }
-  .desk-resize-handle {
+  .resize-handle {
     position: absolute;
-    z-index: 18;
     border: 0;
     background: transparent;
     padding: 0;
@@ -1998,7 +2298,7 @@
     opacity: 0;
     transition: opacity .2s ease;
   }
-  .desk-resize-handle::before {
+  .resize-handle::before {
     content: '';
     position: absolute;
     inset: 50% auto auto 50%;
@@ -2006,32 +2306,42 @@
     border-radius: 999px;
     background: rgba(232, 150, 125, 0.5);
   }
-  .desk-resize-handle:hover,
-  .desk-resize-handle:focus-visible {
+  .resize-handle:hover,
+  .resize-handle:focus-visible {
     opacity: 0.7;
     outline: none;
   }
-  .desk-resize-handle-x {
-    top: 12px;
+  .resize-handle-x {
+    top: var(--rh-x-top, 10px);
     right: 0;
-    width: 8px;
-    height: calc(100% - 24px);
+    width: var(--rh-x-width, 12px);
+    height: calc(100% - var(--rh-pad, 20px));
     cursor: ew-resize;
   }
-  .desk-resize-handle-x::before {
+  .resize-handle-x::before {
     width: 2px;
-    height: 36%;
+    height: var(--rh-x-indicator, 42%);
   }
-  .desk-resize-handle-y {
-    left: 12px;
+  .resize-handle-y {
+    left: var(--rh-y-left, 10px);
     bottom: 0;
-    width: calc(100% - 24px);
-    height: 8px;
+    width: calc(100% - var(--rh-pad, 20px));
+    height: var(--rh-y-height, 12px);
     cursor: ns-resize;
   }
-  .desk-resize-handle-y::before {
-    width: 36%;
+  .resize-handle-y::before {
+    width: var(--rh-y-indicator, 42%);
     height: 2px;
+  }
+  .desk-resize-handle {
+    z-index: 18;
+    --rh-x-top: 12px;
+    --rh-pad: 24px;
+    --rh-x-width: 8px;
+    --rh-x-indicator: 36%;
+    --rh-y-left: 12px;
+    --rh-y-height: 8px;
+    --rh-y-indicator: 36%;
   }
 
   /* Shared live status dot */
@@ -2146,19 +2456,52 @@
   }
   .ticker-inner {
     display: flex;
-    white-space: nowrap;
     animation: tickerScroll 40s linear infinite;
     will-change: transform;
     contain: layout style;
   }
-  .ticker-text {
+  .ticker-track {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+  .ticker-chip {
     font-size: 9px;
     font-family: var(--fm);
     color: var(--term-live);
     font-weight: 600;
     letter-spacing: 0.35px;
-    line-height: 22px;
-    padding: 0 20px;
+    line-height: 1;
+    padding: 3px 8px;
+    margin: 0 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+  }
+  .ticker-chip-pos {
+    color: #98f5cc;
+    border-color: rgba(152,245,204,.22);
+    background: rgba(152,245,204,.1);
+  }
+  .ticker-chip-neg {
+    color: #ff9eb0;
+    border-color: rgba(255,158,176,.24);
+    background: rgba(255,158,176,.12);
+  }
+  .ticker-chip-fg {
+    font-weight: 800;
+    border-color: rgba(232,150,125,.3);
+    background: rgba(232,150,125,.12);
+  }
+  .ticker-chip-fg.fear {
+    color: #ff8ca1;
+    box-shadow: 0 0 8px rgba(255,140,161,.24);
+  }
+  .ticker-chip-fg.greed {
+    color: #86f7b4;
+    box-shadow: 0 0 8px rgba(134,247,180,.24);
+  }
+  .ticker-chip-fg.neutral {
+    color: #ffd89d;
   }
   @keyframes tickerScroll {
     0% { transform: translateX(0); }
@@ -2316,51 +2659,16 @@
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   }
   .mob-resize-handle {
-    position: absolute;
     z-index: 8;
-    border: 0;
-    background: transparent;
-    padding: 0;
-    margin: 0;
-    opacity: 0;
-    transition: opacity .2s ease;
     touch-action: none;
     user-select: none;
-  }
-  .mob-resize-handle::before {
-    content: '';
-    position: absolute;
-    inset: 50% auto auto 50%;
-    transform: translate(-50%, -50%);
-    border-radius: 999px;
-    background: rgba(232, 150, 125, 0.5);
-  }
-  .mob-resize-handle:hover,
-  .mob-resize-handle:focus-visible {
-    opacity: 0.7;
-    outline: none;
-  }
-  .mob-resize-handle-x {
-    top: 10px;
-    right: 0;
-    width: 12px;
-    height: calc(100% - 20px);
-    cursor: ew-resize;
-  }
-  .mob-resize-handle-x::before {
-    width: 2px;
-    height: 42%;
-  }
-  .mob-resize-handle-y {
-    left: 10px;
-    bottom: 0;
-    width: calc(100% - 20px);
-    height: 12px;
-    cursor: ns-resize;
-  }
-  .mob-resize-handle-y::before {
-    width: 42%;
-    height: 2px;
+    --rh-x-top: 10px;
+    --rh-pad: 20px;
+    --rh-x-width: 12px;
+    --rh-x-indicator: 42%;
+    --rh-y-left: 10px;
+    --rh-y-height: 12px;
+    --rh-y-indicator: 42%;
   }
   .mob-chart-area {
     flex: 1 1 auto;
@@ -2447,6 +2755,8 @@
     display: grid;
     grid-template-rows: minmax(0, 1fr) 6px var(--tab-bottom-height) auto;
     height: 100%;
+    padding-top: 50px;
+    box-sizing: border-box;
     background: linear-gradient(180deg, var(--term-panel) 0%, var(--term-panel-2) 100%);
     box-shadow: inset 0 0 0 1px var(--term-border-soft);
     overflow: hidden;
@@ -2504,49 +2814,14 @@
     overflow: hidden;
   }
   .tab-resize-handle {
-    position: absolute;
     z-index: 16;
-    border: 0;
-    background: transparent;
-    padding: 0;
-    margin: 0;
-    opacity: 0;
-    transition: opacity .2s ease;
-  }
-  .tab-resize-handle::before {
-    content: '';
-    position: absolute;
-    inset: 50% auto auto 50%;
-    transform: translate(-50%, -50%);
-    border-radius: 999px;
-    background: rgba(232, 150, 125, 0.5);
-  }
-  .tab-resize-handle:hover,
-  .tab-resize-handle:focus-visible {
-    opacity: 0.7;
-    outline: none;
-  }
-  .tab-resize-handle-x {
-    top: 10px;
-    right: 0;
-    width: 20px;
-    height: calc(100% - 20px);
-    cursor: ew-resize;
-  }
-  .tab-resize-handle-x::before {
-    width: 2px;
-    height: 44%;
-  }
-  .tab-resize-handle-y {
-    left: 10px;
-    bottom: 0;
-    width: calc(100% - 20px);
-    height: 20px;
-    cursor: ns-resize;
-  }
-  .tab-resize-handle-y::before {
-    width: 44%;
-    height: 2px;
+    --rh-x-top: 10px;
+    --rh-pad: 20px;
+    --rh-x-width: 20px;
+    --rh-x-indicator: 44%;
+    --rh-y-left: 10px;
+    --rh-y-height: 20px;
+    --rh-y-indicator: 44%;
   }
   .tab-chart-area {
     flex: 1;

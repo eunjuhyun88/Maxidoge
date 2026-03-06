@@ -7,6 +7,7 @@ usage() {
 	echo "Env flags:"
 	echo "  CTX_AUTO_DISABLED=1         # disable automation"
 	echo "  CTX_AUTO_STRICT=1           # fail caller on save/compact error"
+	echo "  CTX_AUTO_SKIP_COMPACT=1     # save only, skip brief/handoff refresh"
 	echo "  CTX_AUTO_MIN_INTERVAL_SEC   # throttle per branch+stage (default: 300)"
 	echo "  CTX_WORK_ID                 # optional explicit work id"
 	echo "  CTX_AGENT_ID                # optional agent id"
@@ -94,7 +95,11 @@ run_step bash scripts/dev/context-save.sh \
 	--work-id "$WORK_ID" \
 	--agent "$AGENT_ID" \
 	--notes "$NOTES"
-run_step bash scripts/dev/context-compact.sh
+if [ "${CTX_AUTO_SKIP_COMPACT:-0}" = "1" ]; then
+	echo "[ctx:auto] compact refresh skipped by CTX_AUTO_SKIP_COMPACT=1"
+else
+	run_step bash scripts/dev/context-compact.sh --work-id "$WORK_ID"
+fi
 
 echo "$NOW_EPOCH" > "$MARKER_FILE"
 echo "[ctx:auto] done"

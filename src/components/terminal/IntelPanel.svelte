@@ -45,6 +45,7 @@
   export let chatFocusKey = 0;
   export let chatTradeReady = false;
   export let chatConnectionStatus: 'connected' | 'degraded' | 'disconnected' = 'connected';
+  export let densityMode: 'essential' | 'pro' = 'essential';
   type ScanHighlight = {
     agent: string;
     vote: 'long' | 'short' | 'neutral';
@@ -64,8 +65,23 @@
   };
   export let latestScan: ScanBrief | null = null;
 
+  type FeedFilter = 'all' | 'news' | 'events' | 'flow' | 'trending' | 'community';
   let activeTab: 'chat' | 'feed' | 'positions' = 'chat';
-  let feedFilter: 'all' | 'news' | 'events' | 'flow' | 'trending' | 'community' = 'all';
+  let feedFilter: FeedFilter = 'trending';
+  const FEED_FILTER_OPTIONS_ALL: Array<{ key: FeedFilter; label: string }> = [
+    { key: 'all', label: 'ALL' },
+    { key: 'flow', label: 'FLOW' },
+    { key: 'events', label: 'EVENTS' },
+    { key: 'trending', label: 'TRENDING' },
+    { key: 'news', label: 'NEWS' },
+    { key: 'community', label: 'COMMUNITY' },
+  ];
+  const FEED_FILTER_OPTIONS_ESSENTIAL: Array<{ key: FeedFilter; label: string }> = [
+    { key: 'trending', label: 'TRENDING' },
+    { key: 'news', label: 'NEWS' },
+    { key: 'events', label: 'EVENTS' },
+  ];
+  let feedFilterOptions: Array<{ key: FeedFilter; label: string }> = FEED_FILTER_OPTIONS_ALL;
   let posView: 'mine' | 'markets' = 'mine';
   let betMarket: any = null; // market to open in BetPanel
   let showGmxPanel = false;  // GmxTradePanel visibility
@@ -79,6 +95,60 @@
   const POSITIONS_MIN_REFRESH_MS = 8_000;
   const POSITIONS_PENDING_POLL_MS = 6_000;
   const POSITIONS_FULL_REFRESH_MS = 30_000;
+
+  type PositionTradeRow = {
+    id: string;
+    pair: string;
+    dir: 'LONG' | 'SHORT';
+    entry: number;
+    pnlPercent: number;
+    demo?: boolean;
+  };
+
+  type PositionMarketRow = {
+    id: string;
+    asset: string;
+    direction: string;
+    amountUsdc: number | null;
+    pnlPercent: number;
+    pnlUsdc: number | null;
+    status: string;
+    meta: Record<string, unknown>;
+    demo?: boolean;
+  };
+
+  const DEMO_QUICK_TRADES: PositionTradeRow[] = [
+    { id: 'demo-trade-btc', pair: 'BTC/USDT', dir: 'LONG', entry: 103450, pnlPercent: 1.8, demo: true },
+    { id: 'demo-trade-sol', pair: 'SOL/USDT', dir: 'SHORT', entry: 184.2, pnlPercent: -0.7, demo: true },
+  ];
+
+  const DEMO_GMX_POSITIONS: PositionMarketRow[] = [
+    {
+      id: 'demo-gmx-eth',
+      asset: 'ETH',
+      direction: 'LONG',
+      amountUsdc: 600,
+      pnlPercent: 2.34,
+      pnlUsdc: 14.04,
+      status: 'open',
+      meta: { leverage: 5 },
+      demo: true,
+    },
+  ];
+
+  const DEMO_POLYMARKET_POSITIONS: PositionMarketRow[] = [
+    {
+      id: 'demo-poly-1',
+      asset: 'BTC closes above $105k this week?',
+      direction: 'YES',
+      amountUsdc: 120,
+      pnlPercent: 6.1,
+      pnlUsdc: 7.32,
+      status: 'filled',
+      meta: {},
+      demo: true,
+    },
+  ];
 
   // ═══ Live data from API (replaces hardcoded) ═══
   interface HeadlineEx extends Headline {
@@ -144,6 +214,16 @@
   interface TrendingCoin { rank: number; symbol: string; name: string; price: number; change1h: number; change24h: number; change7d: number; volume24h: number; sentiment?: number | null; socialVolume?: number | null; galaxyScore?: number | null; }
   interface GainerLoser extends TrendingCoin { direction: 'gainer' | 'loser'; }
   type TrendTab = 'hot' | 'gainers' | 'dex' | 'picks';
+  const TREND_TAB_OPTIONS_ALL: Array<{ key: TrendTab; label: string; icon: string }> = [
+    { key: 'picks', label: 'PICKS', icon: '🎯' },
+    { key: 'hot', label: 'HOT', icon: '🔥' },
+    { key: 'gainers', label: 'GAINERS', icon: '📈' },
+    { key: 'dex', label: 'DEX', icon: '💎' },
+  ];
+  const TREND_TAB_OPTIONS_ESSENTIAL: Array<{ key: TrendTab; label: string; icon: string }> = [
+    { key: 'picks', label: 'PICKS', icon: '🎯' },
+    { key: 'hot', label: 'HOT', icon: '🔥' },
+  ];
   interface DexHot {
     chainId: string;
     tokenAddress: string;
@@ -163,6 +243,7 @@
   let trendLosers: GainerLoser[] = [];
   let trendDexHot: DexHot[] = [];
   let trendSubTab: TrendTab = 'picks';
+  let trendTabOptions: Array<{ key: TrendTab; label: string; icon: string }> = TREND_TAB_OPTIONS_ALL;
   let trendLoading = false;
   let trendUpdatedAt = 0;
   let dexChainFilter = 'all';
@@ -294,6 +375,37 @@
   let chatInput = '';
   let chatEl: HTMLDivElement;
   let _lastChatFocusKey = 0;
+  let showDebugModel = false;
+  let opens: PositionTradeRow[] = [];
+  let openCount = 0;
+  let latestScanTime = '';
+  let livePositionCount = 0;
+  let hasLivePositions = false;
+  let useDemoPositions = false;
+  let displayTrades: PositionTradeRow[] = [];
+  let displayGmxPositions: PositionMarketRow[] = [];
+  let displayPolymarketPositions: PositionMarketRow[] = [];
+  let displayOpenCount = 0;
+  let displayGmxCount = 0;
+  let displayPolymarketCount = 0;
+  let positionCount = 0;
+  let pendingCount = 0;
+  let positionsSyncStatus = 'NOT SYNCED';
+  let trendBasisText = TREND_BASIS.picks;
+  let trendUpdatedLabel = '';
+  let dexChains: string[] = ['all'];
+  let filteredDexHot: DexHot[] = [];
+  let currentToken = 'BTC';
+  let tokenAliases: string[] = [];
+  let headlineSource: HeadlineEx[] = [];
+  let filteredHeadlines: HeadlineEx[] = [];
+  let displayHeadlines: HeadlineEx[] = [];
+  let visibleHeadlines: HeadlineEx[] = [];
+  let visibleTopPicks: OpScore[] = [];
+  let visibleTrendingCoins: TrendingCoin[] = [];
+  let visibleTrendGainers: GainerLoser[] = [];
+  let visibleTrendLosers: GainerLoser[] = [];
+  let visibleDexHot: DexHot[] = [];
 
   function setTab(tab: 'chat' | 'feed' | 'positions') {
     if (activeTab === tab) {
@@ -304,10 +416,15 @@
       queueUiStateSave({ terminalActiveTab: activeTab });
     }
   }
-  function setFeedFilter(f: typeof feedFilter) {
+  function setFeedFilter(f: FeedFilter) {
     feedFilter = f;
     queueUiStateSave({ terminalFeedFilter: feedFilter });
     if (f === 'trending') { fetchTopPicks(); fetchTrendingData(); }
+  }
+
+  function activateTrendTab(tab: TrendTab) {
+    trendSubTab = tab;
+    if (tab === 'picks') fetchTopPicks();
   }
 
   function queueUiStateSave(partial: Record<string, unknown>) {
@@ -389,15 +506,26 @@
   $: opens = $openTrades;
   $: openCount = opens.length;
   $: latestScanTime = latestScan ? new Date(latestScan.createdAt).toTimeString().slice(0, 5) : '';
-  $: positionCount = openCount + $gmxPositions.length + $polymarketPositions.length;
+  $: livePositionCount = openCount + $gmxPositions.length + $polymarketPositions.length;
+  $: hasLivePositions = livePositionCount > 0;
+  $: useDemoPositions = !!$positionsError && !$positionsLoading && !hasLivePositions;
+  $: displayTrades = useDemoPositions ? DEMO_QUICK_TRADES : opens;
+  $: displayGmxPositions = useDemoPositions ? DEMO_GMX_POSITIONS : $gmxPositions;
+  $: displayPolymarketPositions = useDemoPositions ? DEMO_POLYMARKET_POSITIONS : $polymarketPositions;
+  $: displayOpenCount = displayTrades.length;
+  $: displayGmxCount = displayGmxPositions.length;
+  $: displayPolymarketCount = displayPolymarketPositions.length;
+  $: positionCount = displayOpenCount + displayGmxCount + displayPolymarketCount;
   $: pendingCount = $pendingPositions.length;
-  $: positionsSyncStatus = $positionsLoading
-    ? 'SYNCING...'
-    : $positionsError
-      ? 'SYNC ERROR'
-      : $positionsLastSyncedAt
-        ? `SYNCED ${formatRelativeTime($positionsLastSyncedAt)} AGO`
-        : 'NOT SYNCED';
+  $: positionsSyncStatus = useDemoPositions
+    ? 'DEMO MODE'
+    : $positionsLoading
+      ? 'SYNCING...'
+      : $positionsError
+        ? 'RETRY NEEDED'
+        : $positionsLastSyncedAt
+          ? `SYNCED ${formatRelativeTime($positionsLastSyncedAt)} AGO`
+          : 'NOT SYNCED';
   $: trendBasisText = TREND_BASIS[trendSubTab];
   $: trendUpdatedLabel = trendUpdatedAt > 0 ? `${formatRelativeTime(trendUpdatedAt)} ago` : '';
   $: dexChains = ['all', ...Array.from(new Set(trendDexHot.map((token) => token.chainId)))];
@@ -405,6 +533,19 @@
   $: filteredDexHot = dexChainFilter === 'all'
     ? trendDexHot
     : trendDexHot.filter((token) => token.chainId === dexChainFilter);
+  $: visibleTopPicks = densityMode === 'essential' ? topPicks.slice(0, 3) : topPicks.slice(0, 5);
+  $: visibleTrendingCoins = densityMode === 'essential' ? trendingCoins.slice(0, 8) : trendingCoins;
+  $: visibleTrendGainers = densityMode === 'essential' ? trendGainers.slice(0, 6) : trendGainers;
+  $: visibleTrendLosers = densityMode === 'essential' ? trendLosers.slice(0, 6) : trendLosers;
+  $: visibleDexHot = densityMode === 'essential' ? filteredDexHot.slice(0, 8) : filteredDexHot;
+  $: feedFilterOptions = densityMode === 'essential' ? FEED_FILTER_OPTIONS_ESSENTIAL : FEED_FILTER_OPTIONS_ALL;
+  $: trendTabOptions = densityMode === 'essential' ? TREND_TAB_OPTIONS_ESSENTIAL : TREND_TAB_OPTIONS_ALL;
+  $: if (densityMode === 'essential' && (feedFilter === 'all' || feedFilter === 'flow' || feedFilter === 'community')) {
+    setFeedFilter('trending');
+  }
+  $: if (densityMode === 'essential' && (trendSubTab === 'gainers' || trendSubTab === 'dex')) {
+    trendSubTab = 'picks';
+  }
   $: policyCardsForTab = feedFilter === 'news'
     ? policyPanels.headlines
     : feedFilter === 'events'
@@ -437,6 +578,7 @@
   );
   // Show all if no matches
   $: displayHeadlines = filteredHeadlines.length >= 2 ? filteredHeadlines : headlineSource;
+  $: visibleHeadlines = densityMode === 'essential' ? displayHeadlines.slice(0, 8) : displayHeadlines;
 
   async function fetchLiveHeadlines(append = false) {
     if (headlineLoading) return;
@@ -836,6 +978,10 @@
       fetchLiveFlow(),
       fetchOnchainData(),
     ]);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      showDebugModel = params.get('debug') === '1' || params.get('debug') === 'true';
+    }
 
     // Refresh onchain data every 2 min
     _onchainTimer = setInterval(() => void fetchOnchainData(), 120_000);
@@ -859,6 +1005,7 @@
     <button class="rp-tab" class:active={activeTab === 'chat'} on:click={() => setTab('chat')}>CHAT</button>
     <button class="rp-tab" class:active={activeTab === 'feed'} on:click={() => setTab('feed')}>FEED</button>
     <button class="rp-tab" class:active={activeTab === 'positions'} on:click={() => setTab('positions')}>POSITIONS</button>
+    <span class="rp-density-chip">{densityMode === 'essential' ? 'ESSENTIAL VIEW' : 'PRO VIEW'}</span>
     <button class="rp-collapse" on:click={() => tabCollapsed = !tabCollapsed} title={tabCollapsed ? 'Expand' : 'Collapse'}>
       {tabCollapsed ? '▲' : '▼'}
     </button>
@@ -883,7 +1030,8 @@
           edgePct={policyDecision?.edgePct ?? null}
           gateScore={policyDecision?.qualityGateScore ?? null}
           shouldExecute={shadowDecision?.enforced.shouldExecute ?? false}
-          model={shadowDecision ? shadowSourceLabel(shadowDecision) : null}
+          model={shadowDecision && showDebugModel ? shadowSourceLabel(shadowDecision) : null}
+          showModelMeta={showDebugModel}
           loading={policyLoading || shadowLoading}
           executionEnabled={shadowExecutionEnabled}
           on:execute={executeShadowTrade}
@@ -941,8 +1089,8 @@
       {:else if activeTab === 'feed'}
         <!-- Feed filter chips -->
         <div class="feed-chips">
-          {#each [['all','ALL'],['flow','FLOW'],['events','EVENTS'],['trending','TRENDING'],['news','NEWS'],['community','COMMUNITY']] as [key, label] (key)}
-            <button class="feed-chip" class:active={feedFilter === key} on:click={() => setFeedFilter(key as typeof feedFilter)}>{label}</button>
+          {#each feedFilterOptions as option (option.key)}
+            <button class="feed-chip" class:active={feedFilter === option.key} on:click={() => setFeedFilter(option.key)}>{option.label}</button>
           {/each}
         </div>
 
@@ -976,10 +1124,10 @@
               </button>
             </div>
             <div class="hl-list hl-scrollable" on:scroll={handleHeadlineScroll}>
-              {#if displayHeadlines.length === 0 && !headlineLoading}
+              {#if visibleHeadlines.length === 0 && !headlineLoading}
                 <div class="flow-empty">No headlines yet</div>
               {/if}
-              {#each displayHeadlines as hl}
+              {#each visibleHeadlines as hl}
                 {#if hl.link}
                   <a class="hl-row hl-linked" href={hl.link} target="_blank" rel="noopener noreferrer">
                     <span class="hl-icon">{hl.icon}</span>
@@ -990,10 +1138,10 @@
                         {#if hl.network && hl.network !== 'rss'}
                           <span class="hl-net">{hl.network}</span>
                         {/if}
-                        {#if hl.interactions && hl.interactions > 0}
+                        {#if densityMode === 'pro' && hl.interactions && hl.interactions > 0}
                           <span class="hl-engage">🔥 {hl.interactions > 1000 ? `${(hl.interactions / 1000).toFixed(1)}K` : hl.interactions}</span>
                         {/if}
-                        {#if hl.creator && hl.network !== 'rss'}
+                        {#if densityMode === 'pro' && hl.creator && hl.network !== 'rss'}
                           <span class="hl-creator">@{hl.creator.slice(0, 15)}</span>
                         {/if}
                       </div>
@@ -1018,7 +1166,7 @@
               {#if headlineLoading}
                 <div class="hl-loading">Loading more...</div>
               {/if}
-              {#if !headlineHasMore && displayHeadlines.length > 0}
+              {#if densityMode === 'pro' && !headlineHasMore && visibleHeadlines.length > 0}
                 <div class="hl-end">— end of headlines —</div>
               {/if}
             </div>
@@ -1045,10 +1193,9 @@
           {#if feedFilter === 'all' || feedFilter === 'trending'}
             <div class="trend-panel">
               <div class="trend-sub-tabs">
-                <button class="trend-sub" class:active={trendSubTab === 'picks'} on:click={() => { trendSubTab = 'picks'; fetchTopPicks(); }}>🎯 PICKS</button>
-                <button class="trend-sub" class:active={trendSubTab === 'hot'} on:click={() => trendSubTab = 'hot'}>🔥 HOT</button>
-                <button class="trend-sub" class:active={trendSubTab === 'gainers'} on:click={() => trendSubTab = 'gainers'}>📈 GAINERS</button>
-                <button class="trend-sub" class:active={trendSubTab === 'dex'} on:click={() => trendSubTab = 'dex'}>💎 DEX</button>
+                {#each trendTabOptions as option (option.key)}
+                  <button class="trend-sub" class:active={trendSubTab === option.key} on:click={() => activateTrendTab(option.key)}>{option.icon} {option.label}</button>
+                {/each}
               </div>
               <div class="trend-meta">
                 <span class="trend-basis">{trendBasisText}</span>
@@ -1081,7 +1228,7 @@
 
                     <!-- Top 5 ranked picks -->
                     <div class="picks-section-lbl">🎯 TOP OPPORTUNITIES</div>
-                    {#each topPicks.slice(0, 5) as pick, i (pick.symbol)}
+                    {#each visibleTopPicks as pick, i (pick.symbol)}
                       <div class="pick-card">
                         <div class="pick-head">
                           <span class="pick-rank" style="color:{scoreColor(pick.totalScore)}">#{i + 1}</span>
@@ -1128,7 +1275,7 @@
                 <div class="trend-loading">Loading trending data...</div>
               {:else if trendSubTab === 'hot'}
                 <div class="trend-list">
-                  {#each trendingCoins as coin, i (coin.symbol + i)}
+                  {#each visibleTrendingCoins as coin, i (coin.symbol + i)}
                     <div class="trend-row">
                       <span class="trend-rank">#{coin.rank}</span>
                       <div class="trend-coin">
@@ -1141,26 +1288,28 @@
                           {coin.change24h >= 0 ? '+' : ''}{coin.change24h.toFixed(1)}%
                         </span>
                       </div>
-                      <div class="trend-social">
-                        {#if coin.socialVolume != null && coin.socialVolume > 0}
-                          <span class="trend-soc" title="Social volume">💬 {coin.socialVolume > 1000 ? (coin.socialVolume / 1000).toFixed(0) + 'K' : coin.socialVolume}</span>
-                        {/if}
-                        {#if coin.galaxyScore != null && coin.galaxyScore > 0}
-                          <span class="trend-galaxy" title="Galaxy Score">⭐ {coin.galaxyScore}</span>
-                        {/if}
-                      </div>
+                      {#if densityMode === 'pro'}
+                        <div class="trend-social">
+                          {#if coin.socialVolume != null && coin.socialVolume > 0}
+                            <span class="trend-soc" title="Social volume">💬 {coin.socialVolume > 1000 ? (coin.socialVolume / 1000).toFixed(0) + 'K' : coin.socialVolume}</span>
+                          {/if}
+                          {#if coin.galaxyScore != null && coin.galaxyScore > 0}
+                            <span class="trend-galaxy" title="Galaxy Score">⭐ {coin.galaxyScore}</span>
+                          {/if}
+                        </div>
+                      {/if}
                     </div>
                   {/each}
-                  {#if trendingCoins.length === 0}
+                  {#if visibleTrendingCoins.length === 0}
                     <div class="trend-empty">No trending data available</div>
                   {/if}
                 </div>
 
               {:else if trendSubTab === 'gainers'}
                 <div class="trend-list">
-                  {#if trendGainers.length > 0}
+                  {#if visibleTrendGainers.length > 0}
                     <div class="trend-section-lbl up">▲ TOP GAINERS 24H</div>
-                    {#each trendGainers as coin, i (coin.symbol + '-g-' + i)}
+                    {#each visibleTrendGainers as coin, i (coin.symbol + '-g-' + i)}
                       <div class="trend-row gainer">
                         <span class="trend-rank">#{i + 1}</span>
                         <div class="trend-coin">
@@ -1175,9 +1324,9 @@
                       </div>
                     {/each}
                   {/if}
-                  {#if trendLosers.length > 0}
+                  {#if visibleTrendLosers.length > 0}
                     <div class="trend-section-lbl dn">▼ TOP LOSERS 24H</div>
-                    {#each trendLosers as coin, i (coin.symbol + '-l-' + i)}
+                    {#each visibleTrendLosers as coin, i (coin.symbol + '-l-' + i)}
                       <div class="trend-row loser">
                         <span class="trend-rank">#{i + 1}</span>
                         <div class="trend-coin">
@@ -1192,7 +1341,7 @@
                       </div>
                     {/each}
                   {/if}
-                  {#if trendGainers.length === 0 && trendLosers.length === 0}
+                  {#if visibleTrendGainers.length === 0 && visibleTrendLosers.length === 0}
                     <div class="trend-empty">No gainers/losers data</div>
                   {/if}
                 </div>
@@ -1207,7 +1356,7 @@
                       </button>
                     {/each}
                   </div>
-                  {#each filteredDexHot as token, i (token.chainId + token.tokenAddress)}
+                  {#each visibleDexHot as token, i (token.chainId + token.tokenAddress)}
                     <a class="trend-row dex-row" href={token.url} target="_blank" rel="noopener">
                       <span class="trend-rank">#{i + 1}</span>
                       {#if token.icon}
@@ -1238,7 +1387,7 @@
                       <span class="dex-link">↗</span>
                     </a>
                   {/each}
-                  {#if filteredDexHot.length === 0}
+                  {#if visibleDexHot.length === 0}
                     <div class="trend-empty">No DEX trending data</div>
                   {/if}
                 </div>
@@ -1257,6 +1406,8 @@
                   {@const zoneInfo = MVRV_ZONE_LABELS[onchainData.mvrv.zone ?? ''] ?? { label: '—', emoji: '⚪', color: '#666' }}
                   {@const nuplVal = onchainData.mvrv.nupl}
                   {@const nuplColor = nuplVal == null ? '#666' : nuplVal > 0.5 ? '#ef4444' : nuplVal > 0.25 ? '#f97316' : nuplVal > 0 ? '#22c55e' : '#3b82f6'}
+                  {@const mvrvGauge = onchainData.mvrv.value == null ? 0 : Math.max(0, Math.min(100, onchainData.mvrv.value * 22))}
+                  {@const nuplGauge = nuplVal == null ? 0 : Math.max(0, Math.min(100, (nuplVal + 1) * 50))}
                   {@const wNet = onchainData.whale.netflow}
                   {@const wBullish = wNet < 0}
                   {@const ef = onchainData.exchangeFlow.netflow24h}
@@ -1265,12 +1416,18 @@
                     <div class="oc-card">
                       <div class="oc-card-lbl">MVRV</div>
                       <div class="oc-card-val" style="color:{zoneInfo.color}">{onchainData.mvrv.value?.toFixed(3) ?? '—'}</div>
+                      <div class="oc-mini-gauge">
+                        <span style="width:{mvrvGauge}%;background:{zoneInfo.color};"></span>
+                      </div>
                       <div class="oc-card-tag" style="background:{zoneInfo.color}20;color:{zoneInfo.color}">{zoneInfo.emoji} {zoneInfo.label}</div>
                     </div>
 
                     <div class="oc-card">
                       <div class="oc-card-lbl">NUPL</div>
                       <div class="oc-card-val" style="color:{nuplColor}">{nuplVal?.toFixed(3) ?? '—'}</div>
+                      <div class="oc-mini-gauge">
+                        <span style="width:{nuplGauge}%;background:{nuplColor};"></span>
+                      </div>
                       <div class="oc-card-sub">{nuplVal == null ? '' : nuplVal > 0.5 ? 'Euphoria' : nuplVal > 0.25 ? 'Belief' : nuplVal > 0 ? 'Hope' : 'Capitulation'}</div>
                     </div>
 
@@ -1382,6 +1539,7 @@
                 class:loading={$positionsLoading}
                 class:error={!!$positionsError}
                 class:ok={!$positionsLoading && !$positionsError}
+                class:demo={useDemoPositions}
               >
                 {positionsSyncStatus}
               </span>
@@ -1396,21 +1554,30 @@
 
             {#if $positionsError}
               <div class="pos-sync-error-msg">
-                {$positionsError}
-                {#if !$positionsLoading}
-                  <button class="pos-sync-inline-btn" on:click={refreshPositionsNow}>retry</button>
-                {/if}
+                <div class="pos-sync-error-text">
+                  <span class="pos-sync-error-title">포지션 동기화에 실패했습니다</span>
+                  <span class="pos-sync-error-body">{$positionsError}</span>
+                  {#if useDemoPositions}
+                    <span class="pos-sync-error-note">연결 복구 전까지 데모 포지션을 표시합니다.</span>
+                  {/if}
+                </div>
+                <div class="pos-sync-error-actions">
+                  {#if !$positionsLoading}
+                    <button class="pos-sync-inline-btn" on:click={refreshPositionsNow}>RETRY</button>
+                  {/if}
+                  <button class="pos-sync-inline-btn ghost" on:click={() => { posView = 'markets'; }}>MARKETS</button>
+                </div>
               </div>
             {/if}
 
             <!-- TRADES -->
-            {#if openCount > 0}
+            {#if displayOpenCount > 0}
               <div class="pos-header">
                 <span class="pos-title">📊 TRADES</span>
-                <span class="pos-cnt">{openCount}</span>
+                <span class="pos-cnt">{displayOpenCount}</span>
               </div>
-              {#each opens as trade (trade.id)}
-                <div class="pos-row">
+              {#each displayTrades as trade (trade.id)}
+                <div class="pos-row" class:demo={!!trade.demo}>
                   <span class="pos-dir" class:long={trade.dir === 'LONG'} class:short={trade.dir === 'SHORT'}>
                     {trade.dir === 'LONG' ? '▲' : '▼'}
                   </span>
@@ -1421,19 +1588,23 @@
                   <span class="pos-pnl" style="color:{trade.pnlPercent >= 0 ? 'var(--grn)' : 'var(--red)'}">
                     {trade.pnlPercent >= 0 ? '+' : ''}{trade.pnlPercent.toFixed(1)}%
                   </span>
-                  <button class="pos-close" on:click={() => handleClosePos(trade.id)}>CLOSE</button>
+                  {#if trade.demo}
+                    <span class="pos-status-badge demo">DEMO</span>
+                  {:else}
+                    <button class="pos-close" on:click={() => handleClosePos(trade.id)}>CLOSE</button>
+                  {/if}
                 </div>
               {/each}
             {/if}
 
             <!-- PERPS -->
-            {#if $gmxPositions.length > 0}
+            {#if displayGmxCount > 0}
               <div class="pos-header">
                 <span class="pos-title">⚡ PERPS</span>
-                <span class="pos-cnt">{$gmxPositions.length}</span>
+                <span class="pos-cnt">{displayGmxCount}</span>
               </div>
-              {#each $gmxPositions as pos (pos.id)}
-                <div class="pos-row gmx-row">
+              {#each displayGmxPositions as pos (pos.id)}
+                <div class="pos-row gmx-row" class:demo={!!pos.demo}>
                   <span class="pos-dir" class:long={pos.direction === 'LONG'} class:short={pos.direction === 'SHORT'}>
                     {pos.direction === 'LONG' ? '▲' : '▼'}
                   </span>
@@ -1453,7 +1624,7 @@
                       </span>
                     {/if}
                   </div>
-                  <span class="pos-status-badge gmx-status">{pos.status}</span>
+                  <span class="pos-status-badge gmx-status" class:demo={!!pos.demo}>{pos.demo ? 'DEMO' : pos.status}</span>
                 </div>
               {/each}
             {/if}
@@ -1462,13 +1633,13 @@
             </button>
 
             <!-- MARKET BETS -->
-            {#if $polymarketPositions.length > 0}
+            {#if displayPolymarketCount > 0}
               <div class="pos-header">
                 <span class="pos-title">🔮 MARKET BETS</span>
-                <span class="pos-cnt">{$polymarketPositions.length}</span>
+                <span class="pos-cnt">{displayPolymarketCount}</span>
               </div>
-              {#each $polymarketPositions as pos (pos.id)}
-                <div class="pos-row poly-row">
+              {#each displayPolymarketPositions as pos (pos.id)}
+                <div class="pos-row poly-row" class:demo={!!pos.demo}>
                   <span class="pos-dir" class:long={pos.direction === 'YES'} class:short={pos.direction === 'NO'}>
                     {pos.direction === 'YES' ? '↑' : '↓'}
                   </span>
@@ -1479,16 +1650,21 @@
                   <span class="pos-pnl" style="color:{(pos.pnlUsdc ?? 0) >= 0 ? 'var(--grn)' : 'var(--red)'}">
                     {(pos.pnlUsdc ?? 0) >= 0 ? '+' : ''}{(pos.pnlUsdc ?? 0).toFixed(2)}$
                   </span>
-                  <span class="pos-status-badge">{pos.status}</span>
+                  <span class="pos-status-badge" class:demo={!!pos.demo}>{pos.demo ? 'DEMO' : pos.status}</span>
                 </div>
               {/each}
             {/if}
 
             <!-- Empty state -->
-            {#if openCount === 0 && $polymarketPositions.length === 0 && $gmxPositions.length === 0}
-              <div class="pos-empty-mini">
+            {#if !useDemoPositions && displayOpenCount === 0 && displayPolymarketCount === 0 && displayGmxCount === 0}
+              <div class="pos-empty-state">
                 <span class="pos-empty-icon">📊</span>
                 <span class="pos-empty-txt">NO OPEN POSITIONS</span>
+                <span class="pos-empty-sub">War Room 시그널을 차트에 적용하거나 바로 포지션을 생성할 수 있습니다.</span>
+                <div class="pos-empty-actions">
+                  <button class="pos-empty-btn primary" on:click={() => showGmxPanel = true}>OPEN PERP</button>
+                  <button class="pos-empty-btn" on:click={() => { posView = 'markets'; }}>BROWSE MARKETS</button>
+                </div>
               </div>
             {/if}
 
@@ -1604,6 +1780,19 @@
   .rp-tab.active { background: rgba(232,150,125,0.15); color: #E8967D; }
   .rp-tab:not(.active) { color: rgba(255,255,255,.6); }
   .rp-tab:not(.active):hover { color: var(--yel); }
+  .rp-density-chip {
+    margin-left: auto;
+    align-self: center;
+    margin-right: 4px;
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .7px;
+    color: rgba(255,255,255,.56);
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 999px;
+    background: rgba(255,255,255,.05);
+    padding: 2px 6px;
+    white-space: nowrap;
+  }
   .rp-collapse {
     width: 28px; flex-shrink: 0;
     background: rgba(232,150,125,.08); border: none; border-left: 1px solid rgba(232,150,125,.15);
@@ -1698,10 +1887,12 @@
     transition: all .12s;
   }
   .hl-sort-btn:hover { background: rgba(232,150,125,.12); color: var(--yel); }
-  .hl-list { display: flex; flex-direction: column; }
+  .hl-list { display: flex; flex-direction: column; min-height: 0; }
   .hl-scrollable {
+    flex: 1 1 auto;
+    min-height: 140px;
     overflow-y: auto;
-    max-height: calc(100vh - 300px);
+    max-height: none;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
@@ -1756,6 +1947,19 @@
   .oc-card { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); padding: 7px 8px; display: flex; flex-direction: column; gap: 2px; }
   .oc-card-lbl { font-family: var(--fm); font-size: 8px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,.5); }
   .oc-card-val { font-family: var(--fm); font-size: 15px; font-weight: 800; line-height: 1.1; }
+  .oc-mini-gauge {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.08);
+    overflow: hidden;
+    margin-top: 1px;
+  }
+  .oc-mini-gauge > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    transition: width .2s ease;
+  }
   .oc-card-tag { font-family: var(--fm); font-size: 8px; font-weight: 600; padding: 1px 5px; border-radius: 2px; display: inline-block; width: fit-content; letter-spacing: .3px; }
   .oc-card-sub { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.55); letter-spacing: .3px; }
 
@@ -1831,6 +2035,10 @@
     background: rgba(255,255,255,.02);
     border: 1px solid rgba(255,255,255,.06);
   }
+  .pos-row.demo {
+    border-color: rgba(232,150,125,.22);
+    background: rgba(232,150,125,.06);
+  }
   .pos-dir {
     font-family: var(--fm); font-size: 12px; font-weight: 900;
     width: 20px; text-align: center;
@@ -1853,15 +2061,51 @@
   }
   .pos-close:hover { background: rgba(255,45,85,.25); border-color: var(--red); }
 
-  .pos-empty-mini {
-    display: flex; align-items: center; gap: 6px;
-    padding: 12px 8px;
+  .pos-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 12px 10px;
+    border: 1px dashed rgba(232,150,125,.22);
+    background: rgba(232,150,125,.05);
+    border-radius: 8px;
     color: rgba(255,255,255,.3);
   }
-  .pos-empty-icon { font-size: 14px; opacity: .5; }
+  .pos-empty-icon { font-size: 14px; opacity: .6; }
   .pos-empty-txt {
     font-family: var(--fm); font-size: 10px; font-weight: 700;
     letter-spacing: 1.5px;
+  }
+  .pos-empty-sub {
+    font-family: var(--fm);
+    font-size: 9px;
+    color: rgba(255,255,255,.58);
+    line-height: 1.4;
+  }
+  .pos-empty-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .pos-empty-btn {
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .8px;
+    padding: 6px 9px;
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 5px;
+    background: rgba(255,255,255,.05);
+    color: rgba(255,255,255,.82);
+    cursor: pointer;
+  }
+  .pos-empty-btn.primary {
+    border-color: rgba(0,230,138,.34);
+    background: rgba(0,230,138,.14);
+    color: #d8ffef;
+  }
+  .pos-empty-btn:hover {
+    background: rgba(232,150,125,.12);
+    border-color: rgba(232,150,125,.34);
   }
 
   /* Removed: pos-sub-tabs (positions flattened — no sub-tabs) */
@@ -1892,6 +2136,11 @@
     color: rgba(255,95,130,.9);
     border-color: rgba(255,95,130,.34);
     background: rgba(255,95,130,.12);
+  }
+  .pos-sync-badge.demo {
+    color: rgba(232,150,125,.95);
+    border-color: rgba(232,150,125,.38);
+    background: rgba(232,150,125,.16);
   }
   .pos-sync-badge.ok {
     color: rgba(0,230,138,.86);
@@ -1937,11 +2186,36 @@
     padding: 5px 7px;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 10px;
     word-break: break-word;
   }
-  .pos-sync-inline-btn {
+  .pos-sync-error-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .pos-sync-error-title {
+    font: 700 8px/1 var(--fm);
+    letter-spacing: .7px;
+    color: rgba(255,180,180,.95);
+  }
+  .pos-sync-error-body {
+    font: 400 9px/1.35 var(--fm);
+    color: rgba(255,150,150,.9);
+  }
+  .pos-sync-error-note {
+    font: 700 8px/1.25 var(--fm);
+    letter-spacing: .5px;
+    color: rgba(255,210,170,.92);
+  }
+  .pos-sync-error-actions {
     margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .pos-sync-inline-btn {
+    margin-left: 0;
     font: 700 8px/1 var(--fm);
     letter-spacing: .6px;
     border: 1px solid rgba(255,120,120,.34);
@@ -1950,6 +2224,12 @@
     color: rgba(255,160,160,.95);
     padding: 2px 6px;
     cursor: pointer;
+  }
+  .pos-sync-inline-btn.ghost {
+    margin-left: 0;
+    border-color: rgba(255,255,255,.24);
+    background: rgba(255,255,255,.08);
+    color: rgba(255,255,255,.84);
   }
   .pos-sync-inline-btn:hover {
     background: rgba(255,120,120,.2);
@@ -1962,6 +2242,11 @@
     font: 700 8px/1 var(--fm); padding: 2px 5px; border-radius: 3px;
     background: rgba(232,150,125,.1); color: rgba(232,150,125,.7); letter-spacing: .5px;
     text-transform: uppercase; flex-shrink: 0;
+  }
+  .pos-status-badge.demo {
+    background: rgba(232,150,125,.2);
+    color: rgba(255,227,196,.95);
+    border: 1px solid rgba(232,150,125,.3);
   }
 
   /* ── Market Browse Card ── */
@@ -2219,6 +2504,9 @@
     padding: 4px 6px 5px;
     border-bottom: 1px solid rgba(255,255,255,.05);
     background: rgba(255,255,255,.02);
+    position: sticky;
+    top: 0;
+    z-index: 2;
   }
   .trend-basis {
     font-family: var(--fm);
@@ -2249,7 +2537,7 @@
   }
 
   .trend-row {
-    display: flex; align-items: center; gap: 6px; padding: 5px 4px;
+    display: flex; align-items: center; gap: 8px; padding: 7px 4px;
     border-bottom: 1px solid rgba(255,255,255,.03); transition: background .1s;
   }
   .trend-row:hover { background: rgba(255,255,255,.03); }
@@ -2259,7 +2547,7 @@
   }
   .trend-coin { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .trend-sym { font-family: var(--fm); font-size: 10px; font-weight: 800; color: #fff; letter-spacing: .3px; }
-  .trend-name { font-size: 8px; color: rgba(255,255,255,.35); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trend-name { font-size: 8px; color: rgba(255,255,255,.48); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .trend-data { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
   .trend-price { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.8); }
   .trend-chg { font-family: var(--fm); font-size: 9px; font-weight: 700; }

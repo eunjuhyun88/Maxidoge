@@ -1,8 +1,4 @@
-import {
-  PUBLIC_EVM_CHAIN_ID,
-  PUBLIC_EVM_RPC_URL,
-  PUBLIC_WALLETCONNECT_PROJECT_ID,
-} from '$env/static/public';
+import { env as publicEnv } from '$env/dynamic/public';
 
 export type WalletProviderKey = 'metamask' | 'coinbase' | 'walletconnect' | 'phantom';
 
@@ -93,6 +89,7 @@ function resolveInjectedEvmProvider(key: WalletProviderKey): Eip1193Provider | n
 
 let _walletConnectProvider: Eip1193Provider | null = null;
 let _coinbaseProvider: Eip1193Provider | null = null;
+const PUBLIC_ENV = publicEnv as Record<string, string | undefined>;
 
 function isPlaceholderWalletConnectProjectId(value: string): boolean {
   const normalized = value.trim().toLowerCase();
@@ -103,14 +100,14 @@ function isPlaceholderWalletConnectProjectId(value: string): boolean {
 }
 
 export function isWalletConnectConfigured(): boolean {
-  const projectId = PUBLIC_WALLETCONNECT_PROJECT_ID
+  const projectId = PUBLIC_ENV.PUBLIC_WALLETCONNECT_PROJECT_ID
     || import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
     || '';
   return !isPlaceholderWalletConnectProjectId(projectId);
 }
 
 function getWalletConnectProjectId(): string {
-  const projectId = PUBLIC_WALLETCONNECT_PROJECT_ID
+  const projectId = PUBLIC_ENV.PUBLIC_WALLETCONNECT_PROJECT_ID
     || import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
     || '';
   if (isPlaceholderWalletConnectProjectId(projectId)) {
@@ -120,7 +117,7 @@ function getWalletConnectProjectId(): string {
 }
 
 function getPreferredChainId(): number {
-  const raw = PUBLIC_EVM_CHAIN_ID
+  const raw = PUBLIC_ENV.PUBLIC_EVM_CHAIN_ID
     || import.meta.env.VITE_EVM_CHAIN_ID
     || '';
   const value = raw ? Number(raw) : 42161;
@@ -128,7 +125,7 @@ function getPreferredChainId(): number {
 }
 
 function getPreferredRpcUrl(chainId: number): string {
-  const envUrl = PUBLIC_EVM_RPC_URL
+  const envUrl = PUBLIC_ENV.PUBLIC_EVM_RPC_URL
     || import.meta.env.VITE_EVM_RPC_URL
     || '';
   if (envUrl) return envUrl;

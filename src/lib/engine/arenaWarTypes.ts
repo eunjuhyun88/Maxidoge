@@ -65,12 +65,15 @@ export const ALL_REASON_TAGS: { tag: ReasonTag; category: ReasonTagCategory }[] 
 
 export type ArenaWarPhase =
   | 'SETUP'         // Phase 1: Pair/TF/Wager 선택 (10s)
+  | 'DRAFT'         // Phase 1.5: 밴/픽 에이전트 드래프트 (draft 모드)
   | 'AI_ANALYZE'    // Phase 2: C02 파이프라인 실행 (8s)
   | 'HUMAN_CALL'    // Phase 3: 인간의 결정 (45s) — 핵심 데이터 생산
   | 'REVEAL'        // Phase 4: 최종 확인 (3s)
   | 'BATTLE'        // Phase 5: 실시간 캔들 전투 (2min, 24캔들)
   | 'JUDGE'         // Phase 6: FBS 점수 연출 (3s)
   | 'RESULT';       // Phase 7: 피드백 + 리매치
+
+export type ArenaWarMode = 'pvai' | 'spectator' | 'draft';
 
 // ─── Consensus Types ────────────────────────────────────────
 

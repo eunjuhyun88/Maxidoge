@@ -6,7 +6,7 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { COINALYZE_API_KEY } from '$env/static/private';
+import { env as privateEnv } from '$env/dynamic/private';
 
 const BASE = 'https://api.coinalyze.net/v1';
 
@@ -25,12 +25,13 @@ const ALLOWED_ENDPOINTS = [
 
 export const GET: RequestHandler = async ({ url }) => {
   const endpoint = url.searchParams.get('endpoint');
+  const apiKey = privateEnv.COINALYZE_API_KEY?.trim() ?? '';
 
   if (!endpoint || !ALLOWED_ENDPOINTS.includes(endpoint)) {
     return json({ error: 'Invalid endpoint' }, { status: 400 });
   }
 
-  if (!COINALYZE_API_KEY) {
+  if (!apiKey) {
     return json({ error: 'Missing API key' }, { status: 500 });
   }
 
@@ -40,7 +41,7 @@ export const GET: RequestHandler = async ({ url }) => {
     for (const [key, value] of url.searchParams.entries()) {
       if (key !== 'endpoint') params.set(key, value);
     }
-    params.set('api_key', COINALYZE_API_KEY);
+    params.set('api_key', apiKey);
 
     const res = await fetch(`${BASE}/${endpoint}?${params.toString()}`, {
       headers: { 'Accept': 'application/json' }

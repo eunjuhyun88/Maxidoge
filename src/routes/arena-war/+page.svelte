@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { arenaWarStore, arenaWarPhase, resetArenaWar } from '$lib/stores/arenaWarStore';
+  import { arenaWarStore, arenaWarPhase, resetArenaWar, setTeams, startMatch } from '$lib/stores/arenaWarStore';
+  import type { AgentId } from '$lib/engine/types';
   import SetupPhase from '../../components/arena-war/SetupPhase.svelte';
+  import DraftPhase from '../../components/arena-war/DraftPhase.svelte';
   import AnalyzePhase from '../../components/arena-war/AnalyzePhase.svelte';
   import HumanCallPhase from '../../components/arena-war/HumanCallPhase.svelte';
   import RevealPhase from '../../components/arena-war/RevealPhase.svelte';
@@ -10,6 +12,12 @@
   import ResultPhase from '../../components/arena-war/ResultPhase.svelte';
 
   let phase = $derived($arenaWarPhase);
+  let store = $derived($arenaWarStore);
+
+  function handleDraftComplete(humanTeam: AgentId[], aiTeam: AgentId[], banned: AgentId[]) {
+    setTeams(humanTeam, aiTeam, banned);
+    startMatch(store.setup);
+  }
 
   onDestroy(() => {
     resetArenaWar();
@@ -23,6 +31,11 @@
 <div class="arena-war-page">
   {#if phase === 'SETUP'}
     <SetupPhase />
+  {:else if phase === 'DRAFT'}
+    <DraftPhase
+      onDraftComplete={handleDraftComplete}
+      mode={store.selectedMode === 'spectator' ? 'spectator' : 'pvai'}
+    />
   {:else if phase === 'AI_ANALYZE'}
     <AnalyzePhase />
   {:else if phase === 'HUMAN_CALL'}
