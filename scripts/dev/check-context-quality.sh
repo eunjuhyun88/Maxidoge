@@ -125,13 +125,13 @@ if [ -f "$BRIEF_FILE" ]; then
 		fail "brief open questions missing"
 	fi
 
-	if rg -Fq "Watch Log Tail" "$BRIEF_FILE"; then
+	if grep -Fq "Watch Log Tail" "$BRIEF_FILE"; then
 		fail "brief contains watch log tail"
 	else
 		pass "brief excludes watch log tail"
 	fi
 
-	if [ "$STRICT" -eq 1 ] && rg -Fq "no semantic checkpoint" "$BRIEF_FILE"; then
+	if [ "$STRICT" -eq 1 ] && grep -Fq "no semantic checkpoint" "$BRIEF_FILE"; then
 		fail "brief is degraded fallback without semantic checkpoint"
 	fi
 fi
