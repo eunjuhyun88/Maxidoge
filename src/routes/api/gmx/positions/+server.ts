@@ -6,6 +6,7 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import type { GmxPosition } from '$lib/contracts/positions';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { query } from '$lib/server/db';
 import { gmxReadLimiter } from '$lib/server/rateLimit';
@@ -74,11 +75,11 @@ export const GET: RequestHandler = async ({ cookies, url, getClientAddress }) =>
       [user.id, status, limit]
     );
 
-    const positions = result.rows.map((row: GmxPositionRow) => ({
+    const positions: GmxPosition[] = result.rows.map((row: GmxPositionRow) => ({
       id: row.id,
       marketAddress: row.market_address,
       marketLabel: row.market_label,
-      direction: row.direction,
+      direction: row.direction === 'SHORT' ? 'SHORT' : 'LONG',
       collateralToken: row.collateral_token,
       collateralUsd: Number(row.collateral_usd),
       sizeUsd: Number(row.size_usd),

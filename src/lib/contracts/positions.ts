@@ -137,6 +137,103 @@ export interface SubmitPolymarketOrderData {
   orderStatus: string;
 }
 
+export interface GmxMarket {
+  address: string;
+  label: string;
+  indexToken: string;
+  longToken: string;
+  shortToken: string;
+  maxLeverage: number;
+  indexPrice?: number;
+}
+
+export interface GmxCalldata {
+  to: string;
+  data: string;
+  value: string;
+}
+
+export interface GmxPrepareOrderParams {
+  market: string;
+  direction: 'LONG' | 'SHORT';
+  collateralUsd: number;
+  sizeUsd: number;
+  leverage: number;
+  executionFee: string;
+}
+
+export interface GmxPrepareOrderRequest {
+  market: string;
+  direction: 'LONG' | 'SHORT';
+  collateralUsd: number;
+  leverage: number;
+  walletAddress: string;
+  slPrice?: number;
+  tpPrice?: number;
+}
+
+export interface GmxPrepareResponse {
+  ok: boolean;
+  positionId: string;
+  calldata: GmxCalldata;
+  approveCalldata: GmxCalldata;
+  orderParams: GmxPrepareOrderParams;
+}
+
+export interface GmxPosition {
+  id: string;
+  marketAddress: string;
+  marketLabel: string;
+  direction: 'LONG' | 'SHORT';
+  collateralToken: string;
+  collateralUsd: number;
+  sizeUsd: number;
+  leverage: number;
+  entryPrice: number | null;
+  markPrice: number | null;
+  liquidationPrice: number | null;
+  pnlUsd: number | null;
+  pnlPercent: number | null;
+  orderKey: string | null;
+  orderType: string | null;
+  orderStatus: string | null;
+  txHash: string | null;
+  positionKey: string | null;
+  walletAddress: string | null;
+  slPrice: number | null;
+  tpPrice: number | null;
+  createdAt: number;
+  updatedAt: number;
+  executedAt: number | null;
+  closedAt: number | null;
+  status: string;
+}
+
+export interface GmxBalanceInfo {
+  ok?: boolean;
+  usdcBalance: number;
+  ethBalance: number;
+  usdcAllowance: number;
+  needsApproval: boolean;
+  usdcBalanceRaw?: string;
+  ethBalanceRaw?: string;
+  usdcAllowanceRaw?: string;
+}
+
+export interface GmxCloseResponse {
+  ok: boolean;
+  calldata: GmxCalldata;
+  positionId: string;
+  closeSizeUsd: number;
+  closePercent: number;
+}
+
+export interface GmxPositionsData {
+  ok: boolean;
+  positions: GmxPosition[];
+  total: number;
+}
+
 export interface PortfolioHolding {
   id: string;
   symbol: string;
