@@ -1,7 +1,8 @@
 <script lang="ts">
-  import ChartAgentSurface from './ChartAgentSurface.svelte';
-  import ChartHeaderBar from './ChartHeaderBar.svelte';
   import type { ChartPanelShellProps } from '$lib/chart/chartPanelViewModel';
+
+  const chartHeaderBarModule = import('./ChartHeaderBar.svelte');
+  const chartAgentSurfaceModule = import('./ChartAgentSurface.svelte');
 
   let {
     chartMode,
@@ -118,43 +119,46 @@
 </script>
 
 <div class="chart-wrapper" class:tv-like={isTvLikePreset}>
-  <ChartHeaderBar
-    {chartMode}
-    {pair}
-    {timeframe}
-    {pairBaseLabel}
-    {pairQuoteLabel}
-    {livePrice}
-    {priceChange24h}
-    {low24h}
-    {high24h}
-    {quoteVolume24h}
-    {error}
-    {isTvLikePreset}
-    {advancedMode}
-    {chatFirstMode}
-    {chatTradeReady}
-    {chatTradeDir}
-    {indicatorStripState}
-    {drawingMode}
-    {hasActiveTradeSetup}
-    {klineCount}
-    {ma7Val}
-    {ma25Val}
-    {ma99Val}
-    {rsiVal}
-    {latestVolume}
-    {chartTheme}
-    onChangePair={onChangePair}
-    onChangeTimeframe={onChangeTimeframe}
-    onSetChartMode={onSetChartMode}
-    onSetDrawingMode={onSetDrawingMode}
-    onRequestChatAssist={onRequestChatAssist}
-    onRequestAgentScan={onRequestAgentScan}
-    onForcePatternScan={onForcePatternScan}
-    onPublishCommunitySignal={onPublishHeaderCommunitySignal}
-    onRestoreIndicatorStrip={onRestoreIndicatorStrip}
-  />
+  {#await chartHeaderBarModule then chartHeaderBarNs}
+    {@const ChartHeaderBar = chartHeaderBarNs.default}
+    <ChartHeaderBar
+      {chartMode}
+      {pair}
+      {timeframe}
+      {pairBaseLabel}
+      {pairQuoteLabel}
+      {livePrice}
+      {priceChange24h}
+      {low24h}
+      {high24h}
+      {quoteVolume24h}
+      {error}
+      {isTvLikePreset}
+      {advancedMode}
+      {chatFirstMode}
+      {chatTradeReady}
+      {chatTradeDir}
+      {indicatorStripState}
+      {drawingMode}
+      {hasActiveTradeSetup}
+      {klineCount}
+      {ma7Val}
+      {ma25Val}
+      {ma99Val}
+      {rsiVal}
+      {latestVolume}
+      {chartTheme}
+      onChangePair={onChangePair}
+      onChangeTimeframe={onChangeTimeframe}
+      onSetChartMode={onSetChartMode}
+      onSetDrawingMode={onSetDrawingMode}
+      onRequestChatAssist={onRequestChatAssist}
+      onRequestAgentScan={onRequestAgentScan}
+      onForcePatternScan={onForcePatternScan}
+      onPublishCommunitySignal={onPublishHeaderCommunitySignal}
+      onRestoreIndicatorStrip={onRestoreIndicatorStrip}
+    />
+  {/await}
 
   {#if chartMode === 'agent' && advancedMode && indicatorStripState !== 'hidden' && chartIndicatorStripModule}
     {#await chartIndicatorStripModule then chartIndicatorStripNs}
@@ -175,6 +179,7 @@
         {showIndicatorLegend}
         {enableTradeLineEntry}
         {isTvLikePreset}
+        {pair}
         onSetChartVisualMode={onSetChartVisualMode}
         onToggleIndicator={onToggleIndicator}
         onToggleIndicatorLegend={onToggleIndicatorLegend}
@@ -183,70 +188,73 @@
     {/await}
   {/if}
 
-  <ChartAgentSurface
-    {chartMode}
-    {symbol}
-    {isLoading}
-    {error}
-    advancedMode={advancedMode}
-    showIndicatorLegend={showIndicatorLegend}
-    {indicatorEnabled}
-    {chartTheme}
-    {ma7Val}
-    {ma20Val}
-    {ma25Val}
-    {ma60Val}
-    {ma99Val}
-    {ma120Val}
-    {rsiVal}
-    {latestVolume}
-    {activeTradeSetup}
-    {drawingsVisible}
-    {drawingCount}
-    {enableTradeLineEntry}
-    {hasScanned}
-    {drawingMode}
-    {chartNotice}
-    {showPosition}
-    {posEntry}
-    {posTp}
-    {posSl}
-    {posDir}
-    {hoverLine}
-    {isDragging}
-    {pendingTradePlan}
-    {agentAnnotations}
-    {autoScaleY}
-    onContainerReady={onAgentSurfaceContainerReady}
-    onChartMouseDown={onChartMouseDown}
-    onChartMouseMove={onChartMouseMove}
-    onChartMouseUp={onChartMouseUp}
-    onChartWheel={onChartWheel}
-    onZoomOut={onZoomOut}
-    onZoomIn={onZoomIn}
-    onFitRange={onFitRange}
-    onToggleAutoScaleY={onToggleAutoScaleY}
-    onResetScale={onResetScale}
-    onCloseActiveTradeSetup={onCloseActiveTradeSetup}
-    onRequestAgentScan={onRequestAgentScan}
-    onExecuteActiveTrade={onExecuteActiveTrade}
-    onPublishTradeSignal={onPublishTradeSignal}
-    onCancelDrawing={onCancelDrawing}
-    onCanvasReady={onCanvasReady}
-    onDrawingMouseDown={onDrawingMouseDown}
-    onDrawingMouseMove={onDrawingMouseMove}
-    onDrawingMouseUp={onDrawingMouseUp}
-    onCancelTradePlan={onCancelTradePlan}
-    onOpenTradeFromPlan={onOpenTradeFromPlan}
-    onSetTradePlanRatio={onSetTradePlanRatio}
-    onRatioPointerDown={onRatioPointerDown}
-    onRatioTrackReady={onRatioTrackReady}
-    onCancelCurrentAction={onCancelCurrentAction}
-    onDeleteSelectedDrawing={onDeleteSelectedDrawing}
-    onSetDrawingMode={onSetDrawingMode}
-    onToggleDrawingsVisible={onToggleDrawingsVisible}
-    onClearAllDrawings={onClearAllDrawings}
-  />
+  {#await chartAgentSurfaceModule then chartAgentSurfaceNs}
+    {@const ChartAgentSurface = chartAgentSurfaceNs.default}
+    <ChartAgentSurface
+      {chartMode}
+      {symbol}
+      {isLoading}
+      {error}
+      advancedMode={advancedMode}
+      showIndicatorLegend={showIndicatorLegend}
+      {indicatorEnabled}
+      {chartTheme}
+      {ma7Val}
+      {ma20Val}
+      {ma25Val}
+      {ma60Val}
+      {ma99Val}
+      {ma120Val}
+      {rsiVal}
+      {latestVolume}
+      {activeTradeSetup}
+      {drawingsVisible}
+      {drawingCount}
+      {enableTradeLineEntry}
+      {hasScanned}
+      {drawingMode}
+      {chartNotice}
+      {showPosition}
+      {posEntry}
+      {posTp}
+      {posSl}
+      {posDir}
+      {hoverLine}
+      {isDragging}
+      {pendingTradePlan}
+      {agentAnnotations}
+      {autoScaleY}
+      onContainerReady={onAgentSurfaceContainerReady}
+      onChartMouseDown={onChartMouseDown}
+      onChartMouseMove={onChartMouseMove}
+      onChartMouseUp={onChartMouseUp}
+      onChartWheel={onChartWheel}
+      onZoomOut={onZoomOut}
+      onZoomIn={onZoomIn}
+      onFitRange={onFitRange}
+      onToggleAutoScaleY={onToggleAutoScaleY}
+      onResetScale={onResetScale}
+      onCloseActiveTradeSetup={onCloseActiveTradeSetup}
+      onRequestAgentScan={onRequestAgentScan}
+      onExecuteActiveTrade={onExecuteActiveTrade}
+      onPublishTradeSignal={onPublishTradeSignal}
+      onCancelDrawing={onCancelDrawing}
+      onCanvasReady={onCanvasReady}
+      onDrawingMouseDown={onDrawingMouseDown}
+      onDrawingMouseMove={onDrawingMouseMove}
+      onDrawingMouseUp={onDrawingMouseUp}
+      onCancelTradePlan={onCancelTradePlan}
+      onOpenTradeFromPlan={onOpenTradeFromPlan}
+      onSetTradePlanRatio={onSetTradePlanRatio}
+      onRatioPointerDown={onRatioPointerDown}
+      onRatioTrackReady={onRatioTrackReady}
+      onCancelCurrentAction={onCancelCurrentAction}
+      onDeleteSelectedDrawing={onDeleteSelectedDrawing}
+      onSetDrawingMode={onSetDrawingMode}
+      onToggleDrawingsVisible={onToggleDrawingsVisible}
+      onClearAllDrawings={onClearAllDrawings}
+    />
+  {/await}
 
   {#if chartMode === 'trading' && chartTradingViewPaneModule}
     {#await chartTradingViewPaneModule then chartTradingViewPaneNs}

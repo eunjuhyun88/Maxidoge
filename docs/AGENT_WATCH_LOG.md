@@ -5255,6 +5255,34 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - the next slice should target `ChartHeaderBar`/`ChartAgentSurface` boundaries or trim state ownership inside `ChartPanel.svelte`
 - Status: DONE
 
+## [2026-03-08 03:36:16 +0900] FINISH chart-panel-shell-child-lazy-split-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cutting arena chart SSR weight by splitting the remaining static shell chain under `ChartPanelShell`
+- What changed:
+  - Updated `src/components/arena/chart/ChartPanelShell.svelte`
+    - `ChartHeaderBar.svelte` is now loaded through a dynamic import instead of a static shell import
+    - `ChartAgentSurface.svelte` is now loaded through a dynamic import instead of a static shell import
+    - `ChartPanelShell` remains the composition boundary, but header/surface now live as separate split chunks
+  - Updated `CLAUDE.md`
+    - locked the chart shell child lazy boundaries as canonical rules
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/chart/ChartPanelShell.svelte`: `306` lines
+  - `src/components/arena/chart/ChartHeaderBar.svelte`: `663` lines
+  - `src/components/arena/chart/ChartAgentSurface.svelte`: `335` lines
+  - server chunk `src/components/arena/chart/ChartPanelShell.svelte`: `8.08 kB` (was `56.29 kB` before this slice)
+  - split server chunk `src/components/arena/chart/ChartHeaderBar.svelte`: `9.24 kB`
+  - split server chunk `src/components/arena/chart/ChartAgentSurface.svelte`: `40.65 kB`
+  - server chunk `src/components/arena/ChartPanel.svelte`: `49.08 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.25 kB`
+- Residual risks:
+  - `ChartAgentSurface` is now the largest presentation-adjacent chart chunk
+  - `chartPanelSupportRuntime` and `drawingManager` still dominate chart SSR pressure more than presentation code
+  - the next slice should either split `ChartAgentSurface` internals or further narrow `chartPanelSupportRuntime`/`drawingManager` entry paths
+- Status: DONE
+
 ## [2026-03-08 03:46:55 +0900] FINISH arena-battle-host-child-split-cleanup-slice-20260308 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
