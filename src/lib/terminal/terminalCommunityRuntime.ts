@@ -2,6 +2,7 @@ import type { SignalAttachment } from '$lib/stores/communityStore';
 import { notifySignalTracked } from '$lib/stores/notificationStore';
 import { trackSignal } from '$lib/stores/trackedSignalStore';
 import { incrementTrackedSignals } from '$lib/stores/userProfileStore';
+import { readonly, writable } from 'svelte/store';
 import {
   buildCommunitySignalAttachment,
   formatCommunitySignalPost,
@@ -14,16 +15,17 @@ import type {
 
 export function createTerminalCommunityRuntime(params: {
   getTimeframeLabel: () => string;
-  setShareModalOpen: (open: boolean) => void;
-  setSharePrefill: (prefill: TerminalSharePrefill | null) => void;
   /** Current pair from gameState */
   getCurrentPair: () => string;
   /** Live price for given pair */
   getLivePrice: (pair: string) => number;
 }) {
+  const shareModalOpenStore = writable(false);
+  const sharePrefillStore = writable<TerminalSharePrefill | null>(null);
+
   function closeShareModal() {
-    params.setShareModalOpen(false);
-    params.setSharePrefill(null);
+    shareModalOpenStore.set(false);
+    sharePrefillStore.set(null);
   }
 
   /**
@@ -42,16 +44,22 @@ export function createTerminalCommunityRuntime(params: {
         : null;
     if (detail) {
       const confidence = normalizeCommunitySignalConfidence(detail.conf);
-      params.setSharePrefill({
+      const attachment = buildCommunitySignalAttachment(detail, params.getTimeframeLabel(), confidence);
+      // evidence가 있으면 attachment에도 포함
+      if (detail.evidence) {
+        attachment.evidence = detail.evidence;
+      }
+      sharePrefillStore.set({
         text: formatCommunitySignalPost(detail, params.getTimeframeLabel()),
         signal: detail.dir === 'LONG' ? 'long' : 'short',
-        attachment: buildCommunitySignalAttachment(detail, params.getTimeframeLabel(), confidence),
+        attachment,
+        evidence: detail.evidence,
       });
     } else {
       // No chart signal — provide context hints for the form
       const pair = params.getCurrentPair();
       const livePrice = params.getLivePrice(pair);
-      params.setSharePrefill({
+      sharePrefillStore.set({
         text: '',
         signal: null,
         attachment: null,
@@ -60,7 +68,7 @@ export function createTerminalCommunityRuntime(params: {
         contextTimeframe: params.getTimeframeLabel(),
       });
     }
-    params.setShareModalOpen(true);
+    shareModalOpenStore.set(true);
   }
 
   /**
@@ -91,5 +99,7 @@ export function createTerminalCommunityRuntime(params: {
     handleChartCommunitySignal,
     handlePostCompleted,
     openShareModal,
+    shareModalOpen: readonly(shareModalOpenStore),
+    sharePrefill: readonly(sharePrefillStore),
   };
 }

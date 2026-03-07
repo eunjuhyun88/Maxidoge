@@ -1,4 +1,5 @@
 import { getTerminalLiveTicker } from '$lib/api/terminalApi';
+import { readonly, writable } from 'svelte/store';
 
 type TerminalViewport = 'mobile' | 'tablet' | 'desktop';
 
@@ -37,13 +38,14 @@ export function createTerminalGtmEmitter(params: {
 
 export function createTerminalShellRuntime(params: {
   getAbortSignal: () => AbortSignal;
-  setLiveTicker: (ticker: string) => void;
-  setTickerLoaded: (loaded: boolean) => void;
   startAlertEngine: () => void;
   stopAlertEngine: () => void;
   openCopyTradeDraft: (draft: CopyTradeBootstrapDraft) => void;
   warn: (message: string) => void;
 }) {
+  const liveTickerStore = writable('');
+  const tickerLoadedStore = writable(false);
+
   function mount() {
     void loadTerminalLiveTicker(AbortSignal.any([AbortSignal.timeout(5000), params.getAbortSignal()]))
       .then((ticker) => {
@@ -51,8 +53,8 @@ export function createTerminalShellRuntime(params: {
           params.warn('[Terminal] Live ticker fetch failed, using fallback');
           return;
         }
-        params.setLiveTicker(ticker);
-        params.setTickerLoaded(true);
+        liveTickerStore.set(ticker);
+        tickerLoadedStore.set(true);
       });
 
     params.startAlertEngine();
@@ -74,7 +76,9 @@ export function createTerminalShellRuntime(params: {
 
   return {
     destroy,
+    liveTicker: readonly(liveTickerStore),
     mount,
+    tickerLoaded: readonly(tickerLoadedStore),
   };
 }
 

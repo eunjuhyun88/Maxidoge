@@ -3934,6 +3934,42 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - the branch remains broadly dirty from unrelated in-flight refactor work
 - Status: DONE
 
+## [2026-03-07 12:18:42 +0900] START terminal-shell-community-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving shell/community modal state out of `terminal/+page.svelte`
+- Planned work:
+  - move live ticker state ownership into `terminalShellRuntime`
+  - move share modal open/prefill state ownership into `terminalCommunityRuntime`
+  - rewire `terminal/+page.svelte` to consume runtime-owned stores instead of local state
+- Status: IN PROGRESS
+
+## [2026-03-07 12:18:42 +0900] FINISH terminal-shell-community-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving shell/community modal state out of `terminal/+page.svelte`
+- What changed:
+  - Updated `src/lib/terminal/terminalShellRuntime.ts`
+    - live ticker text and loaded-flag now live inside runtime-owned stores
+    - route now consumes runtime state instead of injecting setter closures
+  - Updated `src/lib/terminal/terminalCommunityRuntime.ts`
+    - share modal open/prefill state now lives inside runtime-owned stores
+    - chart-origin share prefill and manual share-open now mutate canonical runtime state directly
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local live ticker/share modal state
+    - rewired shell/community boundaries through runtime-owned stores
+    - line count reduced from 505 to 495
+  - Updated `CLAUDE.md`
+    - documented the expanded shell/community runtime boundaries
+- Validation:
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns large state allocation for layout/session refs
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
 ## [2026-03-07 11:46:42 +0900] START terminal-message-runtime-extraction-slice-20260307 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

@@ -39,22 +39,14 @@
     ChatMsg,
     ScanIntelDetail,
     AgentTradeSetup,
-    ChartCommunitySignal,
     ChatTradeDirection,
     TerminalChatConnectionStatus,
     TerminalDensityMode,
     TerminalPanelResizeTarget,
-    TerminalSharePrefill,
     WarRoomHandle,
     ChartPanelHandle,
   } from '$lib/terminal/terminalTypes';
 
-  let liveTickerStr = $state('');
-  let tickerLoaded = $state(false);
-  let showShareModal = $state(false);
-  let sharePrefill: TerminalSharePrefill | null = $state(null);
-  const tickerText = $derived(tickerLoaded && liveTickerStr ? liveTickerStr : 'Loading market data...');
-  const tickerSegments = $derived(tickerText.split(' | ').filter(Boolean));
   import { gameState } from '$lib/stores/gameState';
   import { livePrice, livePrices } from '$lib/stores/priceStore';
   import { openTradeCount } from '$lib/stores/quickTradeStore';
@@ -100,14 +92,12 @@
     getViewport: () => isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop',
   });
 
-  const terminalShellRuntime = createTerminalShellRuntime({
+  const {
+    liveTicker,
+    tickerLoaded,
+    ...terminalShellRuntime
+  } = createTerminalShellRuntime({
     getAbortSignal: () => _pageAbort.signal,
-    setLiveTicker: (ticker) => {
-      liveTickerStr = ticker;
-    },
-    setTickerLoaded: (loaded) => {
-      tickerLoaded = loaded;
-    },
     startAlertEngine: () => {
       alertEngine.start();
     },
@@ -121,6 +111,8 @@
       console.warn(message);
     },
   });
+  const tickerText = $derived($tickerLoaded && $liveTicker ? $liveTicker : 'Loading market data...');
+  const tickerSegments = $derived(tickerText.split(' | ').filter(Boolean));
 
   const terminalEngagementRuntime = createTerminalEngagementRuntime({
     emitGtm: gtmEvent,
@@ -369,14 +361,12 @@
     getAbortSignal: () => AbortSignal.any([AbortSignal.timeout(20000), _pageAbort.signal]),
   });
 
-  const terminalCommunityRuntime = createTerminalCommunityRuntime({
+  const {
+    shareModalOpen,
+    sharePrefill,
+    ...terminalCommunityRuntime
+  } = createTerminalCommunityRuntime({
     getTimeframeLabel: () => timeframeLabel,
-    setShareModalOpen: (open) => {
-      showShareModal = open;
-    },
-    setSharePrefill: (prefill) => {
-      sharePrefill = prefill;
-    },
     getCurrentPair: () => $gameState.pair || 'BTC/USDT',
     getLivePrice: (p) => {
       const base = (p.split('/')[0] || 'BTC').toUpperCase();
@@ -494,8 +484,8 @@
 <CopyTradeModalHost isOpen={$isCopyTradeOpen} />
 
 <TerminalShareModalHost
-  show={showShareModal}
-  prefill={sharePrefill}
+  show={$shareModalOpen}
+  prefill={$sharePrefill}
   livePrices={$livePrice}
   onClose={terminalCommunityRuntime.closeShareModal}
   onPosted={(attachment) => {
