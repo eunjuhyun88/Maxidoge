@@ -10,8 +10,10 @@ Goal: turn `arena/+page.svelte` from a game-engine monolith into a page shell ov
 
 Current measured hotspots:
 
-- [`src/routes/arena/+page.svelte`](../../../src/routes/arena/+page.svelte): `3398` lines
-- [`src/components/arena/ChartPanel.svelte`](../../../src/components/arena/ChartPanel.svelte): `1189` lines
+- [`src/routes/arena/+page.svelte`](../../../src/routes/arena/+page.svelte): `1392` lines
+- [`src/components/arena/ArenaBattleLayout.svelte`](../../../src/components/arena/ArenaBattleLayout.svelte): `1030` lines
+- [`src/components/arena/ChartPanel.svelte`](../../../src/components/arena/ChartPanel.svelte): `1269` lines
+- [`src/components/arena/chart/chartDerivativesRuntime.ts`](../../../src/components/arena/chart/chartDerivativesRuntime.ts): `259` lines
 - [`src/components/arena/Lobby.svelte`](../../../src/components/arena/Lobby.svelte): `1459` lines
 - [`src/components/arena/HypothesisPanel.svelte`](../../../src/components/arena/HypothesisPanel.svelte): `572` lines
 - [`src/components/arena/ResultPanel.svelte`](../../../src/components/arena/ResultPanel.svelte): `279` lines
@@ -23,6 +25,13 @@ Route-level complexity markers inside [`src/routes/arena/+page.svelte`](../../..
 - replay lifecycle, reward/result lifecycle, bracket loading, exit confirmation, chart drag bridge, and battle resolver wiring all live in one file
 - server API calls for match create/draft/analyze/hypothesis/resolve/bracket live directly in the route
 - timer ownership is spread across replay, speech typing, live events, preview auto-close, battle turn sequencing, and exit confirmation
+
+Implemented since draft:
+
+- battle-stage DOM and battle-only responsive CSS moved under [`src/components/arena/ArenaBattleLayout.svelte`](../../../src/components/arena/ArenaBattleLayout.svelte)
+- battle/system feed payload shaping moved under [`src/lib/arena/feed/arenaBattleFeedRuntime.ts`](../../../src/lib/arena/feed/arenaBattleFeedRuntime.ts)
+- hidden phase timer handles moved under [`src/lib/arena/state/arenaPhaseTimerRuntime.ts`](../../../src/lib/arena/state/arenaPhaseTimerRuntime.ts)
+- `ChartPanel` OI/Funding/Liquidation pane creation and sync moved under [`src/components/arena/chart/chartDerivativesRuntime.ts`](../../../src/components/arena/chart/chartDerivativesRuntime.ts)
 
 ## Current Problem
 
@@ -72,6 +81,8 @@ src/lib/arena/
   battle/
     arenaBattlePresentationRuntime.ts
     arenaBattleTurnRuntime.ts
+  feed/
+    arenaBattleFeedRuntime.ts
     arenaLiveEventRuntime.ts
   reward/
     arenaRewardRuntime.ts
@@ -79,8 +90,9 @@ src/lib/arena/
     arenaChartBridge.ts
     arenaServerSync.ts
   state/
-    arenaFeedRuntime.ts
     arenaTimerRegistry.ts
+    arenaPhaseTimerRuntime.ts
+    arenaVisualEffectsRuntime.ts
     arenaTypes.ts
   selectors/
     arenaViewModel.ts
@@ -203,16 +215,18 @@ Important rule:
 Move out of route:
 
 - `safeTimeout`
-- `_pendingTimers`
-- `feedMessages`, `feedCursorTimer`
-- `liveEvents`, `liveEventTimer`
-- `addFeed`, `pushLiveEvent`, `trimExpiredEvents`, `startLiveEventStream`, `clearLiveEventTimer`
-- speech timer bookkeeping
+- `addFeed` payload shape
+- `SYSTEM` feed payload shape
+- hidden `hypothesisInterval`, `previewAutoTimer`, `pvpShowTimer`
+- visual particle / floating-word effect helpers
 
 Target:
 
-- `src/lib/arena/state/arenaFeedRuntime.ts`
+- `src/lib/arena/feed/arenaBattleFeedRuntime.ts`
+- `src/lib/arena/feed/arenaLiveEventRuntime.ts`
 - `src/lib/arena/state/arenaTimerRegistry.ts`
+- `src/lib/arena/state/arenaPhaseTimerRuntime.ts`
+- `src/lib/arena/state/arenaVisualEffectsRuntime.ts`
 
 This removes a large amount of invisible lifecycle risk from the page.
 

@@ -5091,3 +5091,73 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - route line count is improving, but server entry size is not; the next slice should bias toward view-host extraction or larger composition boundaries
   - `ChartPanel` remains the dominant arena-adjacent chunk and still limits SSR weight gains
 - Status: DONE
+
+## [2026-03-08 00:26:10 +0900] FINISH arena-feed-phase-timer-runtime-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning the arena route, remove more route-local shell helpers, and lock the new canonical boundaries in the docs
+- What changed:
+  - Added `src/lib/arena/feed/arenaBattleFeedRuntime.ts`
+    - battle/system/event feed payload normalization now lives in one canonical runtime
+    - route no longer calls `pushFeedItem()` or manually shapes `SYSTEM` feed entries
+  - Added `src/lib/arena/state/arenaPhaseTimerRuntime.ts`
+    - hidden `hypothesisInterval`, `previewAutoTimer`, and `pvpShowTimer` ownership moved out of the route
+    - clear/destroy sequencing for those timers now lives behind one canonical runtime
+  - Updated `src/routes/arena/+page.svelte`
+    - rewired battle, result, analysis, live-event, and match-controller feed writes through `arenaBattleFeedRuntime`
+    - rewired hypothesis countdown, preview auto-confirm, and PvP reveal timer lifecycle through `arenaPhaseTimerRuntime`
+    - removed route-local `addFeed()`, `clearHypothesisCountdown()`, `clearPreviewAutoAdvance()`, and `clearPvpShowTimer()` helpers
+  - Updated `src/lib/arena/controllers/arenaAnalysisPresentationRuntime.ts`
+    - tightened the feed callback contract to `Direction` instead of an unbounded string
+  - Updated `CLAUDE.md`
+    - documented `arenaBattleFeedRuntime.ts`, `arenaTimerRegistry.ts`, `arenaPhaseTimerRuntime.ts`, and `arenaVisualEffectsRuntime.ts` as canonical arena boundaries
+  - Updated `docs/exec-plans/active/arena-page-controller-design-2026-03-07.md`
+    - synced the active arena controller plan to the implemented feed/timer/visual runtime paths
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `2472`
+  - `src/lib/arena/feed/arenaBattleFeedRuntime.ts`: `47` lines
+  - `src/lib/arena/state/arenaPhaseTimerRuntime.ts`: `59` lines
+  - server entry `src/routes/arena/+page.svelte`: `149.08 kB`
+  - server chunk `src/components/arena/ChartPanel.svelte`: `100.39 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `144.85 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns `clearArenaDynamics()`, agent/chat wrapper helpers, and large phase-specific markup
+  - structure improved, but arena SSR weight regressed again; the next slice should bias toward server-chunk reduction rather than more thin helper extraction
+  - `chartPanelSupportRuntime` remains extremely heavy, so arena cleanup and chart chunk work are still coupled
+- Status: DONE
+
+## [2026-03-08 03:15:50 +0900] FINISH arena-battle-layout-derivatives-cleanup-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: organize the remaining arena WIP, resolve route/layout conflicts, and make the slice commit-ready
+- What changed:
+  - Added `src/components/arena/ArenaBattleLayout.svelte`
+    - battle-stage chart/sidebar/reward/result/PvP/floating-word markup moved out of `arena/+page.svelte`
+    - battle-only responsive CSS now lives with the extracted layout instead of the route shell
+  - Added `src/components/arena/chart/chartDerivativesRuntime.ts`
+    - OI/Funding/Liquidation pane lazy creation and Coinalyze sync now live behind one chart runtime
+    - `ChartPanel.svelte` only toggles visibility and triggers sync through the runtime
+  - Updated `src/routes/arena/+page.svelte`
+    - route now renders `ArenaBattleLayout` as the battle-stage presentation boundary
+    - removed duplicated battle layout CSS that was left behind after extraction, eliminating route-local warning noise
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - wired derivative indicator toggle/sync through `chartDerivativesRuntime`
+  - Updated `src/components/arena/ChartTheme.ts`, `src/components/arena/chart/ChartIndicatorStrip.svelte`, `src/components/arena/chart/chartViewportRuntime.ts`, `src/lib/chart/chartIndicators.ts`, `src/lib/chart/chartTypes.ts`
+    - added theme colors, indicator keys, strip controls, pane refs, and viewport visibility support for `oi`, `funding`, and `liq`
+  - Updated `CLAUDE.md` and `docs/exec-plans/active/arena-page-controller-design-2026-03-07.md`
+    - locked `ArenaBattleLayout.svelte` and `chartDerivativesRuntime.ts` as canonical boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `1392`
+  - `src/components/arena/ArenaBattleLayout.svelte`: `1030` lines
+  - `src/components/arena/chart/chartDerivativesRuntime.ts`: `259` lines
+- Residual risks:
+  - `ArenaBattleLayout.svelte` is now the main battle presentation hotspot and still deserves smaller child boundaries later
+  - `ChartPanel.svelte` remains heavy at `1269` lines even after moving derivative pane ownership out
+  - arena SSR weight is still dominated by chart-related chunks, so the next slice should reduce `ChartPanel`/support-runtime weight rather than only moving route helpers
+- Status: DONE

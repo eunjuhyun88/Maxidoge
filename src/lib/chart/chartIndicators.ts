@@ -8,9 +8,9 @@ export type { IndicatorKey };
 export type IndicatorProfile = Record<IndicatorKey, boolean>;
 
 export const INDICATOR_PROFILES = {
-  basic: { ma20: false, ma60: false, ma120: false, ma7: true, ma25: true, ma99: true, rsi: true, vol: true, bb: false, macd: false, stoch: false } as IndicatorProfile,
-  advancedFocus: { ma20: true, ma60: true, ma120: true, ma7: false, ma25: false, ma99: false, rsi: true, vol: true, bb: false, macd: false, stoch: false } as IndicatorProfile,
-  advancedFull: { ma20: true, ma60: true, ma120: true, ma7: true, ma25: true, ma99: true, rsi: true, vol: true, bb: false, macd: false, stoch: false } as IndicatorProfile,
+  basic: { ma20: false, ma60: false, ma120: false, ma7: true, ma25: true, ma99: true, rsi: true, vol: true, bb: false, macd: false, stoch: false, oi: false, funding: false, liq: false } as IndicatorProfile,
+  advancedFocus: { ma20: true, ma60: true, ma120: true, ma7: false, ma25: false, ma99: false, rsi: true, vol: true, bb: false, macd: false, stoch: false, oi: false, funding: false, liq: false } as IndicatorProfile,
+  advancedFull: { ma20: true, ma60: true, ma120: true, ma7: true, ma25: true, ma99: true, rsi: true, vol: true, bb: false, macd: false, stoch: false, oi: false, funding: false, liq: false } as IndicatorProfile,
 } as const;
 
 export function getIndicatorProfile(advancedMode: boolean, chartVisualMode: 'focus' | 'full'): IndicatorProfile {

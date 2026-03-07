@@ -48,9 +48,13 @@ export interface IndicatorSeries {
   macdHist: ISeriesApi<'Histogram'> | null;
   stochK: ISeriesApi<'Line'> | null;
   stochD: ISeriesApi<'Line'> | null;
+  oi: ISeriesApi<'Line'> | null;
+  funding: ISeriesApi<'Histogram'> | null;
+  liqLong: ISeriesApi<'Histogram'> | null;
+  liqShort: ISeriesApi<'Histogram'> | null;
 }
 
-export type IndicatorKey = 'ma7' | 'ma20' | 'ma25' | 'ma60' | 'ma99' | 'ma120' | 'rsi' | 'vol' | 'bb' | 'macd' | 'stoch';
+export type IndicatorKey = 'ma7' | 'ma20' | 'ma25' | 'ma60' | 'ma99' | 'ma120' | 'rsi' | 'vol' | 'bb' | 'macd' | 'stoch' | 'oi' | 'funding' | 'liq';
 
 // ── Position / Price Lines ───────────────────────────────────
 

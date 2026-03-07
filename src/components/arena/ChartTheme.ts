@@ -39,6 +39,11 @@ export type ChartTheme = {
   stochD: string;
   stochOB: string;
   stochOS: string;
+  oiLine: string;
+  fundingUp: string;
+  fundingDown: string;
+  liqLong: string;
+  liqShort: string;
 };
 
 export const FALLBACK_THEME: ChartTheme = {
@@ -77,6 +82,11 @@ export const FALLBACK_THEME: ChartTheme = {
   stochD: '#ff9800',
   stochOB: 'rgba(255,45,85,.35)',
   stochOS: 'rgba(0,255,136,.35)',
+  oiLine: '#00bcd4',
+  fundingUp: 'rgba(0,255,136,.65)',
+  fundingDown: 'rgba(255,45,85,.65)',
+  liqLong: 'rgba(0,255,136,.55)',
+  liqShort: 'rgba(255,45,85,.55)',
 };
 
 // ─── Color Utility Helpers ────────────────────────────────────
@@ -185,5 +195,10 @@ export function resolveChartTheme(el: HTMLElement | null): ChartTheme {
     stochD: orange,
     stochOB: withAlpha(down, 0.35),
     stochOS: withAlpha(up, 0.35),
+    oiLine: cyan,
+    fundingUp: withAlpha(up, 0.65),
+    fundingDown: withAlpha(down, 0.65),
+    liqLong: withAlpha(up, 0.55),
+    liqShort: withAlpha(down, 0.55),
   };
 }

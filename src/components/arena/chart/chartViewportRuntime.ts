@@ -31,12 +31,19 @@ export interface CreateChartViewportRuntimeOptions {
     macdHistSeries: ISeriesApi<'Histogram'> | null;
     stochKSeries: ISeriesApi<'Line'> | null;
     stochDSeries: ISeriesApi<'Line'> | null;
+    oiSeries: ISeriesApi<'Line'> | null;
+    fundingSeries: ISeriesApi<'Histogram'> | null;
+    liqLongSeries: ISeriesApi<'Histogram'> | null;
+    liqShortSeries: ISeriesApi<'Histogram'> | null;
   };
   getPaneIndexes: () => {
     volumePaneIndex: number | null;
     rsiPaneIndex: number | null;
     macdPaneIndex: number | null;
     stochPaneIndex: number | null;
+    oiPaneIndex: number | null;
+    fundingPaneIndex: number | null;
+    liqPaneIndex: number | null;
   };
   getIndicatorEnabled: () => Record<IndicatorKey, boolean>;
   getBarSpacing: () => number;
@@ -56,12 +63,15 @@ export function createChartViewportRuntime(
 
     try {
       const panes = chart.panes();
-      const { volumePaneIndex, rsiPaneIndex, macdPaneIndex, stochPaneIndex } = options.getPaneIndexes();
+      const { volumePaneIndex, rsiPaneIndex, macdPaneIndex, stochPaneIndex, oiPaneIndex, fundingPaneIndex, liqPaneIndex } = options.getPaneIndexes();
       const mainPane = panes?.[0];
       const volPane = volumePaneIndex !== null ? panes?.[volumePaneIndex] : null;
       const rsiPane = rsiPaneIndex !== null ? panes?.[rsiPaneIndex] : null;
       const macdPane = macdPaneIndex !== null ? panes?.[macdPaneIndex] : null;
       const stochPane = stochPaneIndex !== null ? panes?.[stochPaneIndex] : null;
+      const oiPane = oiPaneIndex !== null ? panes?.[oiPaneIndex] : null;
+      const fundingPane = fundingPaneIndex !== null ? panes?.[fundingPaneIndex] : null;
+      const liqPane = liqPaneIndex !== null ? panes?.[liqPaneIndex] : null;
       if (!mainPane) return;
 
       const indicatorEnabled = options.getIndicatorEnabled();
@@ -69,6 +79,9 @@ export function createChartViewportRuntime(
       const rsiOn = indicatorEnabled.rsi;
       const macdOn = indicatorEnabled.macd;
       const stochOn = indicatorEnabled.stoch;
+      const oiOn = indicatorEnabled.oi;
+      const fundingOn = indicatorEnabled.funding;
+      const liqOn = indicatorEnabled.liq;
 
       // Count active sub-panes (each gets ~9% share)
       const subPanes: Array<{ pane: typeof volPane; on: boolean }> = [
@@ -76,6 +89,9 @@ export function createChartViewportRuntime(
         { pane: rsiPane, on: rsiOn },
         { pane: macdPane, on: macdOn },
         { pane: stochPane, on: stochOn },
+        { pane: oiPane, on: oiOn },
+        { pane: fundingPane, on: fundingOn },
+        { pane: liqPane, on: liqOn },
       ];
       const activeCount = subPanes.filter((s) => s.on).length;
       const subPaneShare = activeCount > 0 ? Math.min(0.10, 0.36 / activeCount) : 0;
@@ -127,6 +143,12 @@ export function createChartViewportRuntime(
     if (macdHistSeries) macdHistSeries.applyOptions({ visible: indicatorEnabled.macd });
     if (stochKSeries) stochKSeries.applyOptions({ visible: indicatorEnabled.stoch });
     if (stochDSeries) stochDSeries.applyOptions({ visible: indicatorEnabled.stoch });
+
+    const derivRefs = options.getSeriesRefs();
+    if (derivRefs.oiSeries) derivRefs.oiSeries.applyOptions({ visible: indicatorEnabled.oi });
+    if (derivRefs.fundingSeries) derivRefs.fundingSeries.applyOptions({ visible: indicatorEnabled.funding });
+    if (derivRefs.liqLongSeries) derivRefs.liqLongSeries.applyOptions({ visible: indicatorEnabled.liq });
+    if (derivRefs.liqShortSeries) derivRefs.liqShortSeries.applyOptions({ visible: indicatorEnabled.liq });
 
     applyPaneLayout();
   }

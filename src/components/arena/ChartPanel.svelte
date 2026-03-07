@@ -53,6 +53,10 @@
   import type { PrepareChartMountResult } from './chart/chartMountRuntime';
   import type { ChartPanelController } from './chart/chartPanelController';
   import type { ChartPanelSupportRuntimeController } from './chart/chartPanelSupportRuntime';
+  import {
+    createChartDerivativesRuntime,
+    type ChartDerivativesRuntimeController,
+  } from './chart/chartDerivativesRuntime';
 
   type ChartMountRuntimeModule = typeof import('./chart/chartMountRuntime');
   type ChartPanelControllerModule = typeof import('./chart/chartPanelController');
@@ -200,6 +204,7 @@
   let macdHistSeries: ISeriesApi<'Histogram'> | null = null;
   let stochKSeries: ISeriesApi<'Line'> | null = null;
   let stochDSeries: ISeriesApi<'Line'> | null = null;
+  // OI/Funding/Liq series & pane indexes are managed by derivativesRuntime (lazy creation)
   let volumePaneIndex: number | null = null;
   let rsiPaneIndex: number | null = null;
   let macdPaneIndex: number | null = null;
@@ -241,6 +246,7 @@
   let pendingTradePlan: TradePlanDraft | null = $state(null);
   let ratioTrackEl = $state<HTMLButtonElement | null>(null);
   let chartSupportRuntime: ChartPanelSupportRuntimeController | null = null;
+  let derivativesRuntime: ChartDerivativesRuntimeController | null = null;
   let isDrawing = $state(false);
   let drawingsVisible = $state(true);
   let selectedDrawingId = $state<string | null>(null);
@@ -282,6 +288,9 @@
     bb: false,
     macd: false,
     stoch: false,
+    oi: false,
+    funding: false,
+    liq: false,
   });
   let chartVisualMode: 'focus' | 'full' = $state('focus');
   let showIndicatorLegend = $state(true);
@@ -397,30 +406,43 @@
       },
       viewport: {
         getChart: () => chart,
-        getSeriesRefs: () => ({
-          ma7Series,
-          ma20Series,
-          ma25Series,
-          ma60Series,
-          ma99Series,
-          ma120Series,
-          rsiSeries,
-          volumeSeries,
-          bbUpperSeries,
-          bbMiddleSeries,
-          bbLowerSeries,
-          macdLineSeries,
-          macdSignalSeries,
-          macdHistSeries,
-          stochKSeries,
-          stochDSeries,
-        }),
-        getPaneIndexes: () => ({
-          volumePaneIndex,
-          rsiPaneIndex,
-          macdPaneIndex,
-          stochPaneIndex,
-        }),
+        getSeriesRefs: () => {
+          const derivRefs = derivativesRuntime?.getPaneRefs();
+          return {
+            ma7Series,
+            ma20Series,
+            ma25Series,
+            ma60Series,
+            ma99Series,
+            ma120Series,
+            rsiSeries,
+            volumeSeries,
+            bbUpperSeries,
+            bbMiddleSeries,
+            bbLowerSeries,
+            macdLineSeries,
+            macdSignalSeries,
+            macdHistSeries,
+            stochKSeries,
+            stochDSeries,
+            oiSeries: derivRefs?.oiSeries ?? null,
+            fundingSeries: derivRefs?.fundingSeries ?? null,
+            liqLongSeries: derivRefs?.liqLongSeries ?? null,
+            liqShortSeries: derivRefs?.liqShortSeries ?? null,
+          };
+        },
+        getPaneIndexes: () => {
+          const derivRefs = derivativesRuntime?.getPaneRefs();
+          return {
+            volumePaneIndex,
+            rsiPaneIndex,
+            macdPaneIndex,
+            stochPaneIndex,
+            oiPaneIndex: derivRefs?.oiPaneIndex ?? null,
+            fundingPaneIndex: derivRefs?.fundingPaneIndex ?? null,
+            liqPaneIndex: derivRefs?.liqPaneIndex ?? null,
+          };
+        },
         getIndicatorEnabled: () => indicatorEnabled,
         getBarSpacing: () => barSpacing,
         setBarSpacing: (next) => {
@@ -592,6 +614,10 @@
   function toggleIndicator(key: IndicatorKey) {
     indicatorEnabled = { ...indicatorEnabled, [key]: !indicatorEnabled[key] };
     applyIndicatorVisibility();
+    // Trigger derivatives data fetch when OI/Funding/Liq toggled on
+    if ((key === 'oi' || key === 'funding' || key === 'liq') && indicatorEnabled[key]) {
+      derivativesRuntime?.forceSync(storeState.pair, storeState.timeframe);
+    }
     gtmEvent('terminal_indicator_toggle', { indicator: key, enabled: indicatorEnabled[key] });
   }
 
@@ -634,7 +660,17 @@
     }
   });
 
-  // OI/OBV removed — 3-pane layout (candles, volume, RSI) for stability
+  // ── Derivatives data sync (OI / Funding / Liquidations) ─────
+  $effect(() => {
+    const pair = storeState.pair;
+    const timeframe = storeState.timeframe;
+    const oi = indicatorEnabled.oi;
+    const funding = indicatorEnabled.funding;
+    const liq = indicatorEnabled.liq;
+    if ((oi || funding || liq) && pair && timeframe) {
+      derivativesRuntime?.sync(pair, timeframe);
+    }
+  });
 
   $effect(() => {
     chartMode;
@@ -744,6 +780,7 @@
     macdHistSeries = bootstrap.macdHistSeries;
     stochKSeries = bootstrap.stochKSeries;
     stochDSeries = bootstrap.stochDSeries;
+    // OI/Funding/Liq series are created lazily by derivativesRuntime
     volumePaneIndex = bootstrap.volumePaneIndex;
     rsiPaneIndex = bootstrap.rsiPaneIndex;
     macdPaneIndex = bootstrap.macdPaneIndex;
@@ -1013,6 +1050,16 @@
         chartSupportRuntime.syncDrawingPersistence();
       }
 
+      if (!derivativesRuntime) {
+        derivativesRuntime = createChartDerivativesRuntime({
+          getChart: () => chart,
+          getLwc: () => lwcModule,
+          getIndicatorEnabled: () => indicatorEnabled,
+          getTheme: () => chartTheme,
+          onPanesChanged: () => applyIndicatorVisibility(),
+        });
+      }
+
       if (!chartPanelController) {
         chartPanelController = createChartPanelControllerInstance(
           controllerModule.createChartPanelController,
@@ -1073,6 +1120,8 @@
     chartPanelController?.dispose();
     chartPanelController = null;
     chartSupportRuntime = null;
+    derivativesRuntime?.dispose();
+    derivativesRuntime = null;
     chartClientRuntimePromise = null;
   });
 

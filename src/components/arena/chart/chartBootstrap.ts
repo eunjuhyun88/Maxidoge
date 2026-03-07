@@ -231,6 +231,9 @@ export function createChartBootstrap({
   stochKSeries.createPriceLine({ price: 50, color: 'rgba(255,255,255,.06)', lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: '' });
   chart.panes()[stochPaneIndex].setStretchFactor(0.02); // start collapsed
 
+  // OI / Funding / Liquidation panes are created lazily by chartDerivativesRuntime
+  // to avoid wasting vertical space with collapsed empty panes.
+
   return {
     chart,
     series,

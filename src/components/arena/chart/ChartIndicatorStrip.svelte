@@ -93,6 +93,16 @@
     <button class="ind-chip" class:on={indicatorEnabled.vol} onclick={() => onToggleIndicator('vol')} style="--ind-color:{chartTheme.candleUp}">
       VOL <span>{formatCompact(latestVolume)}</span>
     </button>
+    <span class="deriv-sep">│</span>
+    <button class="ind-chip" class:on={indicatorEnabled.oi} onclick={() => onToggleIndicator('oi')} style="--ind-color:{chartTheme.oiLine}">
+      OI
+    </button>
+    <button class="ind-chip" class:on={indicatorEnabled.funding} onclick={() => onToggleIndicator('funding')} style="--ind-color:{chartTheme.fundingUp}">
+      FR
+    </button>
+    <button class="ind-chip" class:on={indicatorEnabled.liq} onclick={() => onToggleIndicator('liq')} style="--ind-color:{chartTheme.liqLong}">
+      LIQ
+    </button>
     <button class="legend-chip" class:on={showIndicatorLegend} onclick={onToggleIndicatorLegend}>LABELS</button>
     <button class="legend-chip" onclick={() => onSetIndicatorStripState('collapsed')}>접기</button>
     <button class="legend-chip danger" onclick={() => onSetIndicatorStripState('hidden')}>끄기</button>
@@ -259,6 +269,14 @@
   .ind-chip:hover {
     color: #fff;
     border-color: rgba(255,255,255,.24);
+  }
+
+  .deriv-sep {
+    color: rgba(255,255,255,.18);
+    font-size: 10px;
+    line-height: 1;
+    user-select: none;
+    flex-shrink: 0;
   }
 
   .ind-hint {
