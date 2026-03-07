@@ -4011,3 +4011,19 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - add those modules so the pushed branch better matches local build state
   - rerun validation and push the consistency slice
 - Status: IN PROGRESS
+
+## [2026-03-07 11:57:23 +0900] FINISH extracted-module-tracking-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by making the current extracted import graph trackable on remote
+- What changed:
+  - Added tracked copies of the extracted `src/components/arena/chart/**` child boundaries and runtime modules already imported by `ChartPanel.svelte`
+  - Added tracked copies of the extracted `src/lib/terminal/**`, `src/lib/terminal/intel/**`, and `src/lib/terminal/warroom/**` modules already imported by terminal route and panels
+  - Added tracked copies of the extracted terminal/community leaf components and `src/lib/api/intelApi.ts` needed by the current terminal/signals/intel import graph
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - the branch still contains many unrelated modified tracked files outside this consistency slice
+  - `/terminal` and `ChartPanel` artifact sizes remain volatile while the broader extraction branch is still in flux
+- Status: DONE
