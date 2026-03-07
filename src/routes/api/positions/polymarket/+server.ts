@@ -5,6 +5,7 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import type { PolymarketPosition } from '$lib/contracts/positions';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { query } from '$lib/server/db';
 
@@ -63,13 +64,13 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
       params,
     );
 
-    const positions = result.rows.map((row: PolymarketPositionRow) => ({
+    const positions: PolymarketPosition[] = result.rows.map((row: PolymarketPositionRow) => ({
       id: row.id,
       marketId: row.market_id,
       marketTitle: row.market_title,
       marketSlug: row.market_slug,
       tokenId: row.token_id,
-      direction: row.direction,
+      direction: row.direction === 'NO' ? 'NO' : 'YES',
       side: row.side,
       price: Number(row.price),
       size: Number(row.size),

@@ -7,23 +7,9 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import type { UnifiedPosition } from '$lib/contracts/positions';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { query } from '$lib/server/db';
-
-interface UnifiedPosition {
-  id: string;
-  type: 'quick_trade' | 'polymarket' | 'gmx';
-  asset: string;
-  direction: string;
-  entryPrice: number;
-  currentPrice: number;
-  pnlPercent: number;
-  pnlUsdc: number | null;
-  amountUsdc: number | null;
-  status: string;
-  openedAt: number;
-  meta: Record<string, unknown>;
-}
 
 export const GET: RequestHandler = async ({ cookies, url }) => {
   try {
