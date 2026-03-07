@@ -3970,6 +3970,40 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - the branch remains broadly dirty from unrelated in-flight refactor work
 - Status: DONE
 
+## [2026-03-07 12:31:54 +0900] START terminal-layout-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving panel width/collapse/drag state out of `terminal/+page.svelte`
+- Planned work:
+  - move desktop panel width/collapse/drag state into `terminalLayoutRuntime`
+  - move tablet intel split width state into `terminalLayoutRuntime`
+  - rewire `terminal/+page.svelte` to consume runtime-owned stores for layout props
+- Status: IN PROGRESS
+
+## [2026-03-07 12:31:54 +0900] FINISH terminal-layout-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving panel width/collapse/drag state out of `terminal/+page.svelte`
+- What changed:
+  - Updated `src/lib/terminal/terminalLayoutRuntime.ts`
+    - layout runtime now owns viewport width, desktop panel widths, saved widths, collapse flags, drag target, and tablet intel width
+    - resize/drag/toggle methods now mutate canonical runtime-owned stores directly
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local panel width/collapse/drag/window-width state
+    - rewired desktop/tablet layout props through runtime-owned stores
+    - line count reduced from 495 to 453
+  - Updated `CLAUDE.md`
+    - documented the expanded terminal layout runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns mobile tab/density/session/ref state allocation
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
 ## [2026-03-07 11:46:42 +0900] START terminal-message-runtime-extraction-slice-20260307 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

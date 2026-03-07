@@ -59,33 +59,30 @@
   // ── Page-level abort controller (cancels pending fetches on unmount) ──
   const _pageAbort = new AbortController();
 
-  // ── Panel resize state (chart-centric: maximize chart area) ──
-  let leftW = $state(272);       // War Room width — compact to prioritize chart
-  let rightW = $state(288);      // Intel Panel width — compact to prioritize chart
-  let windowWidth = $state(1200);
-
-  let leftCollapsed = $state(false);
-  let rightCollapsed = $state(false);
-  let savedLeftW = $state(308);
-  let savedRightW = $state(332);
-
   // Responsive breakpoints
   const BP_MOBILE = TERMINAL_BREAKPOINTS.mobile;
   const BP_TABLET = TERMINAL_BREAKPOINTS.tablet;
-
-  let dragTarget: DragTarget = $state(null);
-
-  // Responsive layout mode
-  const isMobile = $derived(windowWidth < BP_MOBILE);
-  const isTablet = $derived(windowWidth >= BP_MOBILE && windowWidth < BP_TABLET);
 
   // Mobile tab control
   let mobileTab: MobileTab = $state('chart');
   const MAX_CHAT_MESSAGES = 200;
   const DENSITY_STORAGE_KEY = 'stockclaw:terminal:densityMode';
   let densityMode: TerminalDensityMode = $state(readTerminalDensityMode(DENSITY_STORAGE_KEY));
-  let tabletIntelWidth = $state(320);    // new: intel panel width for horizontal split
-  const tabletLayoutStyle = $derived(`--tab-intel-width: ${tabletIntelWidth}px;`);
+  const {
+    viewportWidth,
+    leftPanelWidth,
+    rightPanelWidth,
+    leftPanelCollapsed,
+    rightPanelCollapsed,
+    panelDragTarget,
+    tabletIntelWidth,
+    ...terminalLayoutRuntime
+  } = createTerminalLayoutRuntime();
+
+  // Responsive layout mode
+  const isMobile = $derived($viewportWidth < BP_MOBILE);
+  const isTablet = $derived($viewportWidth >= BP_MOBILE && $viewportWidth < BP_TABLET);
+  const tabletLayoutStyle = $derived(`--tab-intel-width: ${$tabletIntelWidth}px;`);
 
   const gtmEvent = createTerminalGtmEmitter({
     component: 'terminal-shell',
@@ -128,45 +125,6 @@
       densityMode = mode;
     },
     densityStorageKey: DENSITY_STORAGE_KEY,
-  });
-
-  const terminalLayoutRuntime = createTerminalLayoutRuntime({
-    getViewport: () => isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop',
-    getWindowWidth: () => windowWidth,
-    setWindowWidth: (width) => {
-      windowWidth = width;
-    },
-    getLeftWidth: () => leftW,
-    setLeftWidth: (width) => {
-      leftW = width;
-    },
-    getRightWidth: () => rightW,
-    setRightWidth: (width) => {
-      rightW = width;
-    },
-    getSavedLeftWidth: () => savedLeftW,
-    setSavedLeftWidth: (width) => {
-      savedLeftW = width;
-    },
-    getSavedRightWidth: () => savedRightW,
-    setSavedRightWidth: (width) => {
-      savedRightW = width;
-    },
-    getLeftCollapsed: () => leftCollapsed,
-    setLeftCollapsed: (collapsed) => {
-      leftCollapsed = collapsed;
-    },
-    getRightCollapsed: () => rightCollapsed,
-    setRightCollapsed: (collapsed) => {
-      rightCollapsed = collapsed;
-    },
-    setDragTarget: (target) => {
-      dragTarget = target;
-    },
-    getTabletIntelWidth: () => tabletIntelWidth,
-    setTabletIntelWidth: (width) => {
-      tabletIntelWidth = width;
-    },
   });
 
   const toggleLeft = () => terminalLayoutRuntime.toggleLeft();
@@ -330,9 +288,9 @@
     getViewport: () => isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop',
     getMobileTab: () => mobileTab,
     setMobileTab,
-    isLeftCollapsed: () => leftCollapsed,
+    isLeftCollapsed: () => $leftPanelCollapsed,
     toggleLeft,
-    isRightCollapsed: () => rightCollapsed,
+    isRightCollapsed: () => $rightPanelCollapsed,
     toggleRight,
     tryTriggerWarRoomScan: terminalPanelRuntime.tryTriggerWarRoomScan,
     hasPendingChartScan: terminalPanelRuntime.hasPendingChartScan,
@@ -451,11 +409,11 @@
       bind:warRoomRef
       bind:chartRef={desktopChartRef}
       {densityMode}
-      {leftCollapsed}
-      {rightCollapsed}
-      {leftW}
-      {rightW}
-      {dragTarget}
+      leftCollapsed={$leftPanelCollapsed}
+      rightCollapsed={$rightPanelCollapsed}
+      leftW={$leftPanelWidth}
+      rightW={$rightPanelWidth}
+      dragTarget={$panelDragTarget}
       {terminalControlBarProps}
       {sharedChartPanelProps}
       {sharedIntelPanelProps}

@@ -303,7 +303,7 @@ const records = result.rows.map((r: any) => ({ ... }));
 - `src/lib/terminal/terminalPanelRuntime.ts`: terminal route의 warroom/chart ref registry + active chart lookup + pending scan flush 계층
 - `src/lib/terminal/terminalShellRuntime.ts`: terminal shell의 GTM emitter/live ticker state/bootstrap query parsing + shell mount lifecycle 계층
 - `src/lib/terminal/terminalScanRuntime.ts`: terminal route의 scan start/complete/chart-show state transition 계층
-- `src/lib/terminal/terminalLayoutRuntime.ts`: terminal shell의 desktop side-panel resize/drag + tablet intel split lifecycle 계층
+- `src/lib/terminal/terminalLayoutRuntime.ts`: terminal shell의 desktop side-panel state/resize/drag + tablet intel split lifecycle 계층
 - `src/lib/terminal/terminalMessageRuntime.ts`: terminal route의 chat message append/trim + focus key orchestration 계층
 - `src/lib/terminal/terminalSessionRuntime.ts`: terminal route의 scan/chat/trade session state getter-setter boundary 계층
 - `src/lib/api/terminalApi.ts`: terminal scan/chat/live-ticker browser transport 계층
@@ -680,7 +680,7 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **terminal message runtime 경계**: chat message append, max-length trim, intel chat focus key bump는 `src/lib/terminal/terminalMessageRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 message buffer slice와 append helper를 다시 풀어쓰지 말 것.
 - **terminal session runtime 경계**: `latestScan`, `terminalScanning`, `chatTradeReady`, `chatSuggestedDir`, `chatConnectionStatus`, `activeTradeSetup`, `isTyping` 접근자는 `src/lib/terminal/terminalSessionRuntime.ts`가 canonical이다. `terminal/+page.svelte`에서 각 runtime wiring마다 동일한 getter/setter closure를 다시 복제하지 말 것.
 - **terminal shell runtime 경계**: shell GTM emitter, live ticker state/로드, alert engine mount lifecycle, `copyTrade=1` query bootstrap 파싱은 `src/lib/terminal/terminalShellRuntime.ts`가 canonical이다. route에서 raw URL param delete/rewrite, shell mount bootstrap, live ticker state mutation, raw market ticker JSON shape 해석을 다시 복제하지 말 것.
-- **terminal layout runtime 경계**: desktop left/right panel resize drag, wheel 기반 side-panel resize, tablet intel split drag/wheel/reset, viewport resize lifecycle은 `src/lib/terminal/terminalLayoutRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 `mousemove/pointermove/resize` listener와 panel clamp 로직을 다시 인라인하지 말 것.
+- **terminal layout runtime 경계**: desktop left/right panel width/collapse/drag state, wheel 기반 side-panel resize, tablet intel split width/drag/reset, viewport resize lifecycle은 `src/lib/terminal/terminalLayoutRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 panel width/collapse local state, `mousemove/pointermove/resize` listener, panel clamp 로직을 다시 인라인하지 말 것.
 - **terminal modal lazy boundary**: `CopyTradeModal`과 `SignalPostForm`의 lazy host는 `src/components/terminal/{CopyTradeModalHost,TerminalShareModalHost}.svelte`가 canonical이다. `terminal/+page.svelte`에 dynamic import 상태/host markup/CSS를 다시 인라인하지 말 것.
 - **terminal API transport 경계**: terminal scan/chat/live-ticker 브라우저 fetch는 `src/lib/api/terminalApi.ts`가 canonical이다. `terminal/+page.svelte`에서 `/api/chat/messages`, `/api/feargreed`, `/api/coingecko/global`를 직접 fetch하지 말 것.
 - **terminal dead layout 금지**: 예전 tablet 좌/하단 2축 split(`tabletLeftWidth`, `tabletBottomHeight`) 경로는 제거됐다. 새 tablet layout은 intel width 단일 split만 유지하며, 폐기된 2축 split 상태/헬퍼를 다시 부활시키지 말 것.
