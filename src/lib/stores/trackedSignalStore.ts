@@ -4,8 +4,9 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived, get } from 'svelte/store';
-import { openQuickTrade, replaceQuickTradeId, type TradeDirection } from './quickTradeStore';
+import { openQuickTrade, replaceQuickTradeId } from './quickTradeStore';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import {
   convertSignalApi,
   fetchTrackedSignalsApi,
@@ -14,30 +15,16 @@ import {
   type ApiTrackedSignal,
   untrackSignalApi,
 } from '$lib/api/tradingApi';
+import type { TradeDirection, TrackedSignal, TrackedSignalStatus } from '$lib/contracts/trading';
 import { buildPriceMapHash, getBaseSymbolFromPair, toNumericPriceMap, type PriceLikeMap } from '$lib/utils/price';
 
-export type SignalStatus = 'tracking' | 'expired' | 'converted';
-
-export interface TrackedSignal {
-  id: string;
-  pair: string;
-  dir: 'LONG' | 'SHORT';
-  source: string;
-  confidence: number;
-  trackedAt: number;
-  currentPrice: number;
-  entryPrice: number;
-  pnlPercent: number;
-  status: SignalStatus;
-  expiresAt: number;
-  note: string;
-}
+export type { TrackedSignal };
+export type SignalStatus = TrackedSignalStatus;
 
 interface TrackedSignalState {
   signals: TrackedSignal[];
 }
 
-const STORAGE_KEY = STORAGE_KEYS.trackedSignals;
 const MAX_SIGNALS = 50;
 const EXPIRE_MS = 24 * 60 * 60 * 1000;
 const TRACK_SIGNAL_RECONCILE_WINDOW_MS = 45_000;
@@ -47,36 +34,21 @@ const _pendingTrackedSignalSyncs = new Map<string, Promise<ApiTrackedSignal | nu
 const _localTrackedSignalIds = new Set<string>();
 
 function loadState(): TrackedSignalState {
-  if (typeof window === 'undefined') return { signals: [] };
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const now = Date.now();
-      const signals = (parsed.signals || []).map((signal: TrackedSignal) => {
-        if (signal.status === 'tracking' && signal.expiresAt < now) {
-          return { ...signal, status: 'expired' as SignalStatus };
-        }
-        return signal;
-      });
-      return { signals };
-    }
-  } catch {
-    // ignore invalid cache
-  }
-  return { signals: [] };
+  const raw = loadFromStorage<{ signals: TrackedSignal[] }>(STORAGE_KEYS.trackedSignals, { signals: [] });
+  const now = Date.now();
+  return {
+    signals: raw.signals.map((signal) => {
+      if (signal.status === 'tracking' && signal.expiresAt < now) {
+        return { ...signal, status: 'expired' as SignalStatus };
+      }
+      return signal;
+    }),
+  };
 }
 
 export const trackedSignalStore = writable<TrackedSignalState>(loadState());
 
-let _saveTimer: ReturnType<typeof setTimeout> | null = null;
-trackedSignalStore.subscribe((state) => {
-  if (typeof window === 'undefined') return;
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, 400);
-});
+autoSave(trackedSignalStore, STORAGE_KEYS.trackedSignals, undefined, 400);
 
 export const activeSignals = derived(trackedSignalStore, ($state) =>
   $state.signals.filter((signal) => signal.status === 'tracking')
@@ -96,17 +68,14 @@ export const activeSignalCount = derived(trackedSignalStore, ($state) =>
 
 function mapApiTrackedSignal(row: ApiTrackedSignal): TrackedSignal {
   return {
-    id: row.id,
-    pair: row.pair,
-    dir: row.dir,
-    source: row.source || 'manual',
+    ...row,
     confidence: Number(row.confidence ?? 0),
     trackedAt: Number(row.trackedAt),
     currentPrice: Number(row.currentPrice),
     entryPrice: Number(row.entryPrice),
     pnlPercent: Number(row.pnlPercent ?? 0),
-    status: row.status,
     expiresAt: Number(row.expiresAt),
+    source: row.source || 'manual',
     note: row.note || '',
   };
 }

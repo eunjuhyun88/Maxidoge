@@ -7,6 +7,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { calcPnlPercent } from '$lib/utils/pnl';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import {
   closeQuickTradeApi,
   fetchQuickTradesApi,
@@ -14,63 +15,27 @@ import {
   updateQuickTradePricesApi,
   type ApiQuickTrade,
 } from '$lib/api/tradingApi';
+import type { QuickTrade, QuickTradeStatus, TradeDirection } from '$lib/contracts/trading';
 import { buildPriceMapHash, getBaseSymbolFromPair, toNumericPriceMap, type PriceLikeMap } from '$lib/utils/price';
 
-export type TradeDirection = 'LONG' | 'SHORT';
-export type TradeStatus = 'open' | 'closed' | 'stopped';
-
-export interface QuickTrade {
-  id: string;
-  pair: string;
-  dir: TradeDirection;
-  entry: number;
-  tp: number | null;       // take profit (optional)
-  sl: number | null;       // stop loss (optional)
-  currentPrice: number;
-  pnlPercent: number;
-  status: TradeStatus;
-  openedAt: number;
-  closedAt: number | null;
-  closePnl: number | null; // final PnL when closed
-  source: string;          // 'manual' | agent name
-  note: string;
-}
+export type { QuickTrade, TradeDirection };
+export type TradeStatus = QuickTradeStatus;
 
 interface QuickTradeState {
   trades: QuickTrade[];
   showPanel: boolean;      // toggle trade panel visibility
 }
 
-const STORAGE_KEY = STORAGE_KEYS.quickTrades;
 const MAX_TRADES = 200;
 const PRICE_SYNC_DEBOUNCE_MS = 1200;
 const QUICK_TRADE_RECONCILE_WINDOW_MS = 45_000;
 let _quickTradesHydrated = false;
 let _quickTradesHydratePromise: Promise<void> | null = null;
 
-function loadState(): QuickTradeState {
-  if (typeof window === 'undefined') return { trades: [], showPanel: false };
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return { trades: parsed.trades || [], showPanel: false };
-    }
-  } catch {}
-  return { trades: [], showPanel: false };
-}
+const loaded = loadFromStorage<{ trades: QuickTrade[] }>(STORAGE_KEYS.quickTrades, { trades: [] });
+export const quickTradeStore = writable<QuickTradeState>({ trades: loaded.trades, showPanel: false });
 
-export const quickTradeStore = writable<QuickTradeState>(loadState());
-
-// Persist (debounced)
-let _saveTimer: ReturnType<typeof setTimeout> | null = null;
-quickTradeStore.subscribe(s => {
-  if (typeof window === 'undefined') return;
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ trades: s.trades }));
-  }, 400);
-});
+autoSave(quickTradeStore, STORAGE_KEYS.quickTrades, (s) => ({ trades: s.trades }), 400);
 
 // ═══ Derived ═══
 export const openTrades = derived(quickTradeStore, $s =>
@@ -93,15 +58,12 @@ export const openTradeCount = derived(quickTradeStore, $s =>
 
 function mapApiQuickTrade(row: ApiQuickTrade): QuickTrade {
   return {
-    id: row.id,
-    pair: row.pair,
-    dir: row.dir,
+    ...row,
     entry: Number(row.entry),
     tp: row.tp == null ? null : Number(row.tp),
     sl: row.sl == null ? null : Number(row.sl),
     currentPrice: Number(row.currentPrice),
     pnlPercent: Number(row.pnlPercent ?? 0),
-    status: row.status,
     openedAt: Number(row.openedAt),
     closedAt: row.closedAt == null ? null : Number(row.closedAt),
     closePnl: row.closePnl == null ? null : Number(row.closePnl),

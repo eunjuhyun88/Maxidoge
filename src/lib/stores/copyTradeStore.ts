@@ -11,20 +11,16 @@ import { removeTracked, replaceTrackedSignalId, trackSignal } from './trackedSig
 import { hydrateUserProfile } from './userProfileStore';
 import { notifications } from './notificationStore';
 import { publishCopyTradeApi } from '$lib/api/tradingApi';
+import type { CopyTradeEvidenceItem, PublishCopyTradeDraft, TradeDirection } from '$lib/contracts/trading';
 
-export interface CopyTradeDraft {
-  pair: string;
-  dir: 'LONG' | 'SHORT';
+export interface CopyTradeDraft extends Omit<PublishCopyTradeDraft, 'orderType' | 'marginMode' | 'evidence'> {
+  dir: TradeDirection;
   orderType: 'market' | 'limit';
-  entry: number;
-  tp: number[];
-  sl: number;
   leverage: number;
   sizePercent: number;
   marginMode: 'cross' | 'isolated';
-  evidence: { icon: string; name: string; text: string; conf: number; color: string }[];
+  evidence: CopyTradeEvidenceItem[];
   note: string;
-  source?: string;
 }
 
 interface CopyTradeState {
@@ -39,7 +35,7 @@ interface CopyTradeState {
 
 export interface ExternalCopySignal {
   pair: string;
-  dir: 'LONG' | 'SHORT';
+  dir: TradeDirection;
   entry: number;
   tp: number;
   sl: number;
