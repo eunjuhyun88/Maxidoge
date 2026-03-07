@@ -30,8 +30,9 @@ import { PriceRangePrimitive } from './priceRangePrimitive';
 import { PositionPrimitive, type PositionData, type PositionStyleOptions } from './positionPrimitive';
 import { ExtendedLinePrimitive } from './extendedLinePrimitive';
 import { ChannelPrimitive } from './channelPrimitive';
-import type { AnchorPoint, DrawingStyleOptions } from './drawingPrimitiveTypes';
-import { DEFAULT_DRAWING_STYLE } from './drawingPrimitiveTypes';
+import type { AnchorPoint, AnchorHitResult, DrawingStyleOptions } from './drawingPrimitiveTypes';
+import { DEFAULT_DRAWING_STYLE, constrainAnchor } from './drawingPrimitiveTypes';
+import { DrawingUndoStack, type DrawingAction } from './drawingUndoStack';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -85,6 +86,8 @@ export interface DrawingManagerCallbacks {
   getDrawingColor: () => string;
   /** Return kline data for magnet snap (optional — snap disabled if null) */
   getKlines?: () => CandleOHLC[];
+  /** Fired when user right-clicks a selected drawing (context menu) */
+  onContextMenu?: (x: number, y: number, drawingId: string) => void;
 }
 
 // ── Manager ──────────────────────────────────────────────────
@@ -109,23 +112,36 @@ export class DrawingManager {
   private _dragStart: AnchorPoint | null = null;
   private _previewPrimitive: PluginBase | null = null;
 
-  // Drag-to-move state
+  // Undo/Redo stack
+  private _undoStack = new DrawingUndoStack();
+
+  // Drag-to-move / drag-to-resize state
   private _dragState: {
+    mode: 'move' | 'resize';
     primitiveId: string;
     startPaneX: number;
     startPaneY: number;
     originalP1: AnchorPoint;
     originalP2: AnchorPoint;
+    /** Which anchor is being resized (only for mode='resize') */
+    resizeAnchorIndex?: number;
   } | null = null;
+  /** Snapshot of dragged drawing before move/resize, for undo */
+  private _dragSnapshotBefore: DrawingData | null = null;
   /** Suppress the next subscribeClick so auto-select in mousedown doesn't get toggled off */
   private _suppressNextClick = false;
+  private _shiftHeld = false;
   private _chartEl: HTMLElement | null = null;
+  /** Suppress wheel events during drag to prevent zoom */
+  private _wheelSuppressBound: ((e: WheelEvent) => void) | null = null;
 
   // Event handlers (bound for unsubscribe)
   private _onClickBound: (param: MouseEventParams<Time>) => void;
   private _onCrosshairMoveBound: (param: MouseEventParams<Time>) => void;
   private _onKeyDownBound: (e: KeyboardEvent) => void;
+  private _onKeyUpBound: (e: KeyboardEvent) => void;
   private _onChartMouseDownBound: (e: MouseEvent) => void;
+  private _onContextMenuBound: (e: MouseEvent) => void;
   private _onDragMoveBound: (e: MouseEvent) => void;
   private _onDragEndBound: (e: MouseEvent) => void;
 
@@ -144,18 +160,22 @@ export class DrawingManager {
     this._chart.subscribeClick(this._onClickBound);
     this._chart.subscribeCrosshairMove(this._onCrosshairMoveBound);
 
-    // Keyboard handler (Delete / Escape)
+    // Keyboard handler (Delete / Escape / Shift tracking)
     this._onKeyDownBound = this._onKeyDown.bind(this);
+    this._onKeyUpBound = this._onKeyUp.bind(this);
     document.addEventListener('keydown', this._onKeyDownBound);
+    document.addEventListener('keyup', this._onKeyUpBound);
 
     // Drag-to-move: intercept mousedown on chart container
     this._onChartMouseDownBound = this._onChartMouseDown.bind(this);
+    this._onContextMenuBound = this._onContextMenu.bind(this);
     this._onDragMoveBound = this._onDragMove.bind(this);
     this._onDragEndBound = this._onDragEnd.bind(this);
     try {
       this._chartEl = (chart as any).chartElement?.() ?? null;
       if (this._chartEl) {
         this._chartEl.addEventListener('mousedown', this._onChartMouseDownBound, true);
+        this._chartEl.addEventListener('contextmenu', this._onContextMenuBound, true);
       }
     } catch { /* chartElement not available */ }
   }
@@ -205,6 +225,10 @@ export class DrawingManager {
 
   clearAllDrawings(): void {
     this._cancelPreview();
+
+    // Snapshot all for undo
+    const before = this.exportDrawings();
+
     this._primitives.forEach((p) => {
       try { this._series.detachPrimitive(p as unknown as PluginBase); } catch { /* already detached */ }
     });
@@ -212,6 +236,10 @@ export class DrawingManager {
     this._selectedId = null;
     this._callbacks.onSelectedChanged(null);
     this._callbacks.onDrawingsChanged(0);
+
+    if (before.length > 0) {
+      this._undoStack.push({ type: 'clear', before, after: [] });
+    }
   }
 
   cancelCurrentAction(): void {
@@ -232,9 +260,97 @@ export class DrawingManager {
 
   deleteSelectedDrawing(): void {
     if (this._selectedId === null) return;
+    if (this.isSelectedLocked()) return; // Can't delete locked drawings
+
+    const before = this._snapshotDrawing(this._selectedId);
     this._removeDrawing(this._selectedId);
+
+    if (before) {
+      this._undoStack.push({ type: 'delete', before: [before], after: [] });
+    }
+
     this._selectedId = null;
     this._callbacks.onSelectedChanged(null);
+  }
+
+  // ══ Context Menu API ═════════════════════════════════════════
+
+  /** Get serialized data for the currently selected drawing */
+  getSelectedDrawingData(): DrawingData | null {
+    if (this._selectedId === null) return null;
+    const p = this._primitives.get(this._selectedId);
+    if (!p || !('toJSON' in p)) return null;
+    const json = (p as any).toJSON();
+    return this._primitiveJsonToDrawingData(json);
+  }
+
+  /** Update visual options on the selected drawing */
+  updateSelectedOptions(opts: Partial<DrawingStyleOptions>): void {
+    if (this._selectedId === null) return;
+    const p = this._primitives.get(this._selectedId);
+    if (!p || !('updateOptions' in p)) return;
+
+    // Snapshot before for undo
+    const before = this._snapshotDrawing(this._selectedId);
+    (p as any).updateOptions(opts);
+    const after = this._snapshotDrawing(this._selectedId);
+
+    if (before && after) {
+      this._undoStack.push({ type: 'style', before: [before], after: [after] });
+    }
+    this._callbacks.onDrawingsChanged(this._primitives.size);
+  }
+
+  /** Duplicate the currently selected drawing */
+  duplicateSelected(): void {
+    if (this._selectedId === null) return;
+    const data = this.getSelectedDrawingData();
+    if (!data) return;
+
+    const newId = generateDrawingId();
+    const newData = { ...data, id: newId };
+    this.addDrawingFromData(newData);
+
+    // Record as create action for undo
+    const after = this._snapshotDrawing(newId);
+    if (after) {
+      this._undoStack.push({ type: 'create', before: [], after: [after] });
+    }
+
+    // Select the duplicate
+    this._setSelected(newId);
+  }
+
+  /** Toggle lock state on the selected drawing */
+  toggleLockSelected(): void {
+    if (this._selectedId === null) return;
+    const data = this.getSelectedDrawingData();
+    if (!data) return;
+    const isLocked = data.options.locked ?? false;
+    this.updateSelectedOptions({ locked: !isLocked });
+  }
+
+  /** Check if the selected drawing is locked */
+  isSelectedLocked(): boolean {
+    const data = this.getSelectedDrawingData();
+    return data?.options.locked ?? false;
+  }
+
+  // ══ Undo / Redo API ════════════════════════════════════════
+
+  get canUndo(): boolean { return this._undoStack.canUndo; }
+  get canRedo(): boolean { return this._undoStack.canRedo; }
+
+  undo(): void {
+    const action = this._undoStack.popUndo();
+    if (!action) return;
+    this._applyUndoAction(action);
+  }
+
+  redo(): void {
+    const action = this._undoStack.popRedo();
+    if (!action) return;
+    this._applyRedoAction(action);
   }
 
   /** Add a drawing from serialized data (e.g. restore from storage) */
@@ -276,15 +392,18 @@ export class DrawingManager {
     if (this._dragState) {
       window.removeEventListener('mousemove', this._onDragMoveBound);
       window.removeEventListener('mouseup', this._onDragEndBound);
+      this._unbindWheelSuppress();
       this._dragState = null;
     }
 
-    // Remove keyboard listener
+    // Remove keyboard listeners
     document.removeEventListener('keydown', this._onKeyDownBound);
+    document.removeEventListener('keyup', this._onKeyUpBound);
 
-    // Remove chart container listener
+    // Remove chart container listeners
     if (this._chartEl) {
       this._chartEl.removeEventListener('mousedown', this._onChartMouseDownBound, true);
+      this._chartEl.removeEventListener('contextmenu', this._onContextMenuBound, true);
       this._chartEl = null;
     }
 
@@ -318,7 +437,9 @@ export class DrawingManager {
         this._series.attachPrimitive(p);
       }
       this._callbacks.onDrawingsChanged(this._primitives.size);
-      // Sticky: stay in hline mode
+      // Undo: record creation
+      const after = this._snapshotDrawing(id);
+      if (after) this._undoStack.push({ type: 'create', before: [], after: [after] });
       return;
     }
 
@@ -333,7 +454,9 @@ export class DrawingManager {
         this._series.attachPrimitive(p);
       }
       this._callbacks.onDrawingsChanged(this._primitives.size);
-      // Sticky
+      // Undo: record creation
+      const after = this._snapshotDrawing(id);
+      if (after) this._undoStack.push({ type: 'create', before: [], after: [after] });
       return;
     }
 
@@ -342,9 +465,10 @@ export class DrawingManager {
     if (this._drawingMode === 'eraser') {
       const hit = this._hitTestAll(x, y);
       if (hit) {
+        const before = this._snapshotDrawing(hit);
         this._removeDrawing(hit);
+        if (before) this._undoStack.push({ type: 'delete', before: [before], after: [] });
       }
-      // Sticky: stay in eraser mode
       return;
     }
 
@@ -419,7 +543,7 @@ export class DrawingManager {
   handleMouseMove(x: number, y: number): void {
     if (!this._isDrawing || !this._previewPrimitive || !this._dragStart) return;
 
-    const anchor = this._coordToAnchor(x, y);
+    const anchor = this._coordToAnchorConstrained(x, y, this._dragStart);
     if (!anchor) return;
 
     // Special handling for position preview
@@ -438,7 +562,7 @@ export class DrawingManager {
   handleMouseUp(x: number, y: number): void {
     if (!this._isDrawing || !this._dragStart) return;
 
-    const anchor = this._coordToAnchor(x, y);
+    const anchor = this._coordToAnchorConstrained(x, y, this._dragStart);
     if (!anchor) {
       this._cancelPreview();
       this._isDrawing = false;
@@ -479,6 +603,9 @@ export class DrawingManager {
         this._series.attachPrimitive(finalPrimitive as unknown as PluginBase);
       }
       this._callbacks.onDrawingsChanged(this._primitives.size);
+      // Undo: record creation
+      const after = this._snapshotDrawing(id);
+      if (after) this._undoStack.push({ type: 'create', before: [], after: [after] });
 
       this._isDrawing = false;
       this._dragStart = null;
@@ -497,6 +624,9 @@ export class DrawingManager {
     const opts: Partial<DrawingStyleOptions> = { lineColor: color };
 
     this._createAndAttach(this._drawingMode, id, this._dragStart, anchor, opts);
+    // Undo: record creation
+    const afterDraw = this._snapshotDrawing(id);
+    if (afterDraw) this._undoStack.push({ type: 'create', before: [], after: [afterDraw] });
 
     // Reset drag state
     this._isDrawing = false;
@@ -551,11 +681,21 @@ export class DrawingManager {
       this._setHovered(hit);
     }
 
-    // Update cursor based on hover/selection state
+    // Update cursor based on hover/selection/anchor state
     if (this._dragState) {
-      this._setCursor('grabbing');
+      this._setCursor(this._dragState.mode === 'resize' ? 'crosshair' : 'grabbing');
+    } else if (this._selectedId !== null) {
+      // Check anchor hover on selected primitive
+      const anchorHit = this._anchorHitTestSelected(param.point.x, param.point.y);
+      if (anchorHit) {
+        this._setCursor(anchorHit.cursorStyle);
+      } else if (hit) {
+        this._setCursor(this._selectedId === hit ? 'grab' : 'pointer');
+      } else {
+        this._setCursor('default');
+      }
     } else if (hit) {
-      this._setCursor(this._selectedId === hit ? 'grab' : 'pointer');
+      this._setCursor('pointer');
     } else {
       this._setCursor('default');
     }
@@ -564,9 +704,28 @@ export class DrawingManager {
   // ══ Private: Keyboard ══════════════════════════════════════
 
   private _onKeyDown(e: KeyboardEvent): void {
+    if (e.key === 'Shift') { this._shiftHeld = true; return; }
+
     // Ignore if user is typing in an input/textarea
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+    // Ctrl+Z / Cmd+Z = Undo, Ctrl+Shift+Z / Cmd+Shift+Z = Redo
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        this.redo();
+      } else {
+        this.undo();
+      }
+      return;
+    }
+    // Ctrl+Y = Redo (Windows convention)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      e.preventDefault();
+      this.redo();
+      return;
+    }
 
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (this._selectedId !== null) {
@@ -576,6 +735,10 @@ export class DrawingManager {
     } else if (e.key === 'Escape') {
       this.cancelCurrentAction();
     }
+  }
+
+  private _onKeyUp(e: KeyboardEvent): void {
+    if (e.key === 'Shift') { this._shiftHeld = false; }
   }
 
   // ══ Private: Drag-to-Move ═════════════════════════════════
@@ -588,6 +751,45 @@ export class DrawingManager {
     const paneX = e.clientX - rect.left;
     const paneY = e.clientY - rect.top;
 
+    // ── Priority 1: Anchor resize on already-selected primitive ──
+    if (this._selectedId !== null) {
+      // Block all interaction on locked drawings
+      if (this.isSelectedLocked()) return;
+
+      const anchorHit = this._anchorHitTestSelected(paneX, paneY);
+      if (anchorHit) {
+        const p = this._primitives.get(this._selectedId);
+        if (p) {
+          const origAnchors = this._extractAnchors(p);
+          if (origAnchors) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            this._suppressNextClick = true;
+            this._setCursor(anchorHit.cursorStyle);
+
+            // Snapshot before resize for undo
+            this._dragSnapshotBefore = this._snapshotDrawing(this._selectedId);
+
+            this._dragState = {
+              mode: 'resize',
+              primitiveId: this._selectedId,
+              startPaneX: paneX,
+              startPaneY: paneY,
+              originalP1: origAnchors.p1,
+              originalP2: origAnchors.p2,
+              resizeAnchorIndex: anchorHit.anchorIndex,
+            };
+
+            window.addEventListener('mousemove', this._onDragMoveBound);
+            window.addEventListener('mouseup', this._onDragEndBound);
+            this._bindWheelSuppress();
+            return;
+          }
+        }
+      }
+    }
+
+    // ── Priority 2: Regular hit-test → auto-select + move ──
     const hit = this._hitTestAll(paneX, paneY);
     if (!hit) return;
 
@@ -600,48 +802,73 @@ export class DrawingManager {
     const p = this._primitives.get(hit);
     if (!p) return;
 
-    const json = 'toJSON' in p && typeof (p as any).toJSON === 'function'
-      ? (p as any).toJSON()
-      : null;
-    if (!json) return;
-
-    let originalP1: AnchorPoint;
-    let originalP2: AnchorPoint;
-
-    if (json.type === 'hline') {
-      originalP1 = { time: 0 as unknown as Time, price: json.price };
-      originalP2 = { time: 0 as unknown as Time, price: json.price };
-    } else if (json.type === 'vline') {
-      originalP1 = { time: json.time, price: 0 };
-      originalP2 = { time: json.time, price: 0 };
-    } else if (json.type === 'position') {
-      originalP1 = { time: json.entryTime, price: json.entryPrice };
-      originalP2 = { time: json.exitTime, price: json.entryPrice };
-    } else if (json.p1 && json.p2) {
-      originalP1 = { ...json.p1 };
-      originalP2 = { ...json.p2 };
-    } else {
-      return;
-    }
+    const origAnchors = this._extractAnchors(p);
+    if (!origAnchors) return;
 
     // Prevent chart from panning
     e.preventDefault();
     e.stopImmediatePropagation();
 
+    // Block move on locked drawings
+    const hitData = this.getSelectedDrawingData();
+    if (hitData?.options.locked) return;
+
     // Suppress the subscribeClick that will fire after this mousedown
     this._suppressNextClick = true;
     this._setCursor('grabbing');
 
+    // Snapshot before move for undo
+    this._dragSnapshotBefore = this._snapshotDrawing(hit);
+
     this._dragState = {
+      mode: 'move',
       primitiveId: hit,
       startPaneX: paneX,
       startPaneY: paneY,
-      originalP1,
-      originalP2,
+      originalP1: origAnchors.p1,
+      originalP2: origAnchors.p2,
     };
 
     window.addEventListener('mousemove', this._onDragMoveBound);
     window.addEventListener('mouseup', this._onDragEndBound);
+    this._bindWheelSuppress();
+  }
+
+  /** Extract p1/p2 anchors from a primitive's toJSON */
+  private _extractAnchors(p: any): { p1: AnchorPoint; p2: AnchorPoint } | null {
+    const json = 'toJSON' in p && typeof p.toJSON === 'function' ? p.toJSON() : null;
+    if (!json) return null;
+
+    if (json.type === 'hline') {
+      return {
+        p1: { time: 0 as unknown as Time, price: json.price },
+        p2: { time: 0 as unknown as Time, price: json.price },
+      };
+    } else if (json.type === 'vline') {
+      return {
+        p1: { time: json.time, price: 0 },
+        p2: { time: json.time, price: 0 },
+      };
+    } else if (json.type === 'position') {
+      return {
+        p1: { time: json.entryTime, price: json.entryPrice },
+        p2: { time: json.exitTime, price: json.entryPrice },
+      };
+    } else if (json.p1 && json.p2) {
+      return { p1: { ...json.p1 }, p2: { ...json.p2 } };
+    }
+    return null;
+  }
+
+  /** Anchor hit-test on the currently selected primitive */
+  private _anchorHitTestSelected(x: number, y: number): AnchorHitResult | null {
+    if (this._selectedId === null) return null;
+    const p = this._primitives.get(this._selectedId);
+    if (!p) return null;
+    if ('anchorHitTest' in p && typeof (p as any).anchorHitTest === 'function') {
+      return (p as any).anchorHitTest(x, y) as AnchorHitResult | null;
+    }
+    return null;
   }
 
   private _onDragMove(e: MouseEvent): void {
@@ -651,32 +878,36 @@ export class DrawingManager {
     const paneX = e.clientX - rect.left;
     const paneY = e.clientY - rect.top;
 
-    const dx = paneX - this._dragState.startPaneX;
-    const dy = paneY - this._dragState.startPaneY;
-
     const p = this._primitives.get(this._dragState.primitiveId);
     if (!p) return;
+
+    // ── Resize mode: move only the targeted anchor ──
+    if (this._dragState.mode === 'resize') {
+      this._handleResizeDrag(p, paneX, paneY);
+      return;
+    }
+
+    // ── Move mode: translate entire drawing ──
+    const dx = paneX - this._dragState.startPaneX;
+    const dy = paneY - this._dragState.startPaneY;
 
     const { originalP1, originalP2 } = this._dragState;
     const json = (p as any).toJSON?.();
     if (!json) return;
 
     if (json.type === 'hline') {
-      // Only vertical (price) movement
       const origY = this._series.priceToCoordinate(originalP1.price);
       if (origY === null) return;
       const newPrice = this._series.coordinateToPrice((origY as number + dy) as any);
       if (newPrice === null) return;
       (p as any).updatePrice(newPrice as number);
     } else if (json.type === 'vline') {
-      // Only horizontal (time) movement
       const origX = this._chart.timeScale().timeToCoordinate(originalP1.time);
       if (origX === null) return;
       const newTime = this._chart.timeScale().coordinateToTime((origX as number + dx) as any);
       if (newTime === null) return;
       (p as any).updateTime(newTime as Time);
     } else {
-      // 2-point primitives: move both points by the same delta
       const origP1X = this._chart.timeScale().timeToCoordinate(originalP1.time);
       const origP1Y = this._series.priceToCoordinate(originalP1.price);
       const origP2X = this._chart.timeScale().timeToCoordinate(originalP2.time);
@@ -698,17 +929,223 @@ export class DrawingManager {
     }
   }
 
+  /** Handle resize drag: move only the targeted anchor point */
+  private _handleResizeDrag(p: any, paneX: number, paneY: number): void {
+    if (!this._dragState || this._dragState.mode !== 'resize') return;
+
+    const anchorIdx = this._dragState.resizeAnchorIndex ?? 0;
+    // Constrain relative to the fixed anchor (the one NOT being resized)
+    const fixedAnchor = anchorIdx === 0 ? this._dragState.originalP2 : this._dragState.originalP1;
+    const newAnchor = this._coordToAnchorConstrained(paneX, paneY, fixedAnchor);
+    if (!newAnchor) return;
+
+    const json = p.toJSON?.();
+    if (!json) return;
+
+    // ── hline: resize = change price ──
+    if (json.type === 'hline') {
+      p.updatePrice(newAnchor.price);
+      return;
+    }
+
+    // ── vline: resize = change time ──
+    if (json.type === 'vline') {
+      p.updateTime(newAnchor.time);
+      return;
+    }
+
+    // ── position: 3 anchors (entry=0, TP=1, SL=2) ──
+    if (json.type === 'position' && p instanceof PositionPrimitive) {
+      const data = p.positionData;
+      if (anchorIdx === 0) {
+        // Move entry → TP and SL move by same delta
+        const entryDelta = newAnchor.price - data.entryPrice;
+        p.updatePrices(newAnchor.price, data.takeProfitPrice + entryDelta, data.stopLossPrice + entryDelta);
+      } else if (anchorIdx === 1) {
+        // Move TP only
+        p.updatePrices(data.entryPrice, newAnchor.price, data.stopLossPrice);
+      } else if (anchorIdx === 2) {
+        // Move SL only
+        p.updatePrices(data.entryPrice, data.takeProfitPrice, newAnchor.price);
+      }
+      return;
+    }
+
+    // ── 2-point primitives: move only the targeted anchor ──
+    if ('updatePoints' in p) {
+      const { originalP1, originalP2 } = this._dragState;
+      if (anchorIdx === 0) {
+        p.updatePoints(newAnchor, originalP2);
+      } else {
+        p.updatePoints(originalP1, newAnchor);
+      }
+    }
+  }
+
   private _onDragEnd(_e: MouseEvent): void {
+    // Record undo action for the completed move/resize
+    if (this._dragState && this._dragSnapshotBefore) {
+      const after = this._snapshotDrawing(this._dragState.primitiveId);
+      if (after) {
+        const actionType = this._dragState.mode === 'resize' ? 'resize' : 'move';
+        this._undoStack.push({
+          type: actionType,
+          before: [this._dragSnapshotBefore],
+          after: [after],
+        });
+      }
+      this._callbacks.onDrawingsChanged(this._primitives.size);
+    }
+    this._dragSnapshotBefore = null;
     this._dragState = null;
     this._setCursor('default');
     window.removeEventListener('mousemove', this._onDragMoveBound);
     window.removeEventListener('mouseup', this._onDragEndBound);
+    this._unbindWheelSuppress();
+  }
+
+  /** Bind wheel event suppression during drag to prevent zoom */
+  private _bindWheelSuppress(): void {
+    if (this._wheelSuppressBound || !this._chartEl) return;
+    this._wheelSuppressBound = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    this._chartEl.addEventListener('wheel', this._wheelSuppressBound, { passive: false });
+  }
+
+  /** Unbind wheel event suppression */
+  private _unbindWheelSuppress(): void {
+    if (!this._wheelSuppressBound || !this._chartEl) return;
+    this._chartEl.removeEventListener('wheel', this._wheelSuppressBound);
+    this._wheelSuppressBound = null;
   }
 
   /** Set cursor on the chart container element */
   private _setCursor(cursor: string): void {
     if (!this._chartEl) return;
     this._chartEl.style.cursor = cursor;
+  }
+
+  // ══ Private: Context Menu ════════════════════════════════════
+
+  private _onContextMenu(e: MouseEvent): void {
+    if (this._drawingMode !== 'none') return;
+    if (!this._chartEl) return;
+
+    const rect = this._chartEl.getBoundingClientRect();
+    const paneX = e.clientX - rect.left;
+    const paneY = e.clientY - rect.top;
+
+    // Only show menu if right-clicking on a drawing
+    const hit = this._hitTestAll(paneX, paneY);
+    if (!hit) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Auto-select the drawing
+    if (this._selectedId !== hit) {
+      this._setSelected(hit);
+    }
+
+    this._callbacks.onContextMenu?.(e.clientX, e.clientY, hit);
+  }
+
+  // ══ Private: Undo/Redo Helpers ═════════════════════════════
+
+  /** Snapshot a single drawing by id */
+  private _snapshotDrawing(id: string): DrawingData | null {
+    const p = this._primitives.get(id);
+    if (!p || !('toJSON' in p)) return null;
+    const json = (p as any).toJSON();
+    return this._primitiveJsonToDrawingData(json);
+  }
+
+  /** Apply an undo action (reverse: after → before) */
+  private _applyUndoAction(action: DrawingAction): void {
+    switch (action.type) {
+      case 'create':
+        // Undo create = delete
+        for (const d of action.after) {
+          this._removeDrawing(d.id);
+        }
+        break;
+      case 'delete':
+        // Undo delete = re-create
+        for (const d of action.before) {
+          this.addDrawingFromData(d);
+        }
+        break;
+      case 'move':
+      case 'resize':
+      case 'style':
+        // Restore before state
+        for (const d of action.before) {
+          this._restoreDrawingState(d);
+        }
+        break;
+      case 'clear':
+        // Restore all drawings
+        for (const d of action.before) {
+          this.addDrawingFromData(d);
+        }
+        break;
+    }
+    this._setSelected(null);
+    this._callbacks.onDrawingsChanged(this._primitives.size);
+  }
+
+  /** Apply a redo action (forward: before → after) */
+  private _applyRedoAction(action: DrawingAction): void {
+    switch (action.type) {
+      case 'create':
+        // Redo create = re-create
+        for (const d of action.after) {
+          this.addDrawingFromData(d);
+        }
+        break;
+      case 'delete':
+        // Redo delete = delete again
+        for (const d of action.before) {
+          this._removeDrawing(d.id);
+        }
+        break;
+      case 'move':
+      case 'resize':
+      case 'style':
+        // Restore after state
+        for (const d of action.after) {
+          this._restoreDrawingState(d);
+        }
+        break;
+      case 'clear':
+        // Re-clear: remove all drawings in before list
+        for (const d of action.before) {
+          this._removeDrawing(d.id);
+        }
+        break;
+    }
+    this._setSelected(null);
+    this._callbacks.onDrawingsChanged(this._primitives.size);
+  }
+
+  /** Restore a drawing to a specific state (remove + re-create) */
+  private _restoreDrawingState(data: DrawingData): void {
+    // Remove existing if present
+    const existing = this._primitives.get(data.id);
+    if (existing) {
+      try { this._series.detachPrimitive(existing as unknown as PluginBase); } catch { /* */ }
+      this._primitives.delete(data.id);
+    }
+    // Re-create from data
+    const primitive = this._createPrimitiveFromData(data);
+    if (primitive) {
+      this._primitives.set(data.id, primitive);
+      if (this._drawingsVisible) {
+        this._series.attachPrimitive(primitive as unknown as PluginBase);
+      }
+    }
   }
 
   // ══ Private: Position Preview ═══════════════════════════════
@@ -742,6 +1179,26 @@ export class DrawingManager {
   }
 
   // ══ Private: Helpers ═══════════════════════════════════════
+
+  /**
+   * Convert pixel coords to anchor, optionally applying Shift constraint
+   * relative to an origin anchor.
+   */
+  private _coordToAnchorConstrained(x: number, y: number, origin?: AnchorPoint): AnchorPoint | null {
+    const anchor = this._coordToAnchor(x, y);
+    if (!anchor || !origin || !this._shiftHeld) return anchor;
+
+    // Get origin pixel coords
+    const originPxX = this._chart.timeScale().timeToCoordinate(origin.time);
+    const originPxY = this._series.priceToCoordinate(origin.price);
+    if (originPxX === null || originPxY === null) return anchor;
+
+    return constrainAnchor(
+      origin, anchor,
+      { x: originPxX as number, y: originPxY as number },
+      { x, y },
+    );
+  }
 
   private _coordToAnchor(x: number, y: number): AnchorPoint | null {
     try {

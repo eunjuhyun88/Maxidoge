@@ -25,6 +25,8 @@ import {
   applyLineStyle,
   drawAnchorCircle,
   colorWithAlpha,
+  type AnchorHitResult,
+  isNearAnchor,
 } from './drawingPrimitiveTypes';
 
 // ── Renderer ─────────────────────────────────────────────────
@@ -157,6 +159,15 @@ export class RectanglePrimitive extends PluginBase {
     if (isPointInBBox(x, y, vp1.x as number, vp1.y as number, vp2.x as number, vp2.y as number, HIT_THRESHOLD)) {
       return { cursorStyle: this._selection.selected ? 'move' : 'pointer', externalId: this._id, zOrder: 'normal' };
     }
+    return null;
+  }
+
+  anchorHitTest(x: number, y: number): AnchorHitResult | null {
+    const vp1 = this._paneView.viewP1;
+    const vp2 = this._paneView.viewP2;
+    if (vp1.x === null || vp1.y === null || vp2.x === null || vp2.y === null) return null;
+    if (isNearAnchor(x, y, vp1.x as number, vp1.y as number)) return { anchorIndex: 0, cursorStyle: 'crosshair' };
+    if (isNearAnchor(x, y, vp2.x as number, vp2.y as number)) return { anchorIndex: 1, cursorStyle: 'crosshair' };
     return null;
   }
 

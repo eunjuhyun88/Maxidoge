@@ -26,6 +26,7 @@ export interface DrawingStyleOptions {
   showLabels?: boolean;
   labelBgColor?: string;
   labelTextColor?: string;
+  locked?: boolean;
 }
 
 export const DEFAULT_DRAWING_STYLE: DrawingStyleOptions = {
@@ -55,6 +56,46 @@ export const SELECTION_HANDLE_BORDER = '#ffffff';
 
 // ── Hit-test threshold ───────────────────────────────────────
 export const HIT_THRESHOLD = 6; // pixels
+
+// ── Anchor resize hit-test ──────────────────────────────────
+export const ANCHOR_HIT_RADIUS = 8; // pixels — larger than HIT_THRESHOLD for easy grab
+
+export interface AnchorHitResult {
+  /** Which anchor was hit (0-based index) */
+  anchorIndex: number;
+  /** Suggested cursor style for this anchor */
+  cursorStyle: string;
+}
+
+/** Check if point (px, py) is within ANCHOR_HIT_RADIUS of anchor at (ax, ay) */
+export function isNearAnchor(px: number, py: number, ax: number, ay: number): boolean {
+  return Math.hypot(px - ax, py - ay) <= ANCHOR_HIT_RADIUS;
+}
+
+// ── Constraint drawing ──────────────────────────────────────
+
+/**
+ * Constrain target anchor relative to origin:
+ * - Shift: snap to horizontal or vertical (whichever is closer in pixel space)
+ * Uses pixel coordinates for comparison (not price).
+ */
+export function constrainAnchor(
+  origin: AnchorPoint,
+  target: AnchorPoint,
+  originPx: { x: number; y: number },
+  targetPx: { x: number; y: number },
+): AnchorPoint {
+  const dx = Math.abs(targetPx.x - originPx.x);
+  const dy = Math.abs(targetPx.y - originPx.y);
+
+  if (dx > dy) {
+    // Horizontal: keep target time, use origin price
+    return { time: target.time, price: origin.price };
+  } else {
+    // Vertical: keep target price, use origin time
+    return { time: origin.time, price: target.price };
+  }
+}
 
 // ── Hit-test utilities ───────────────────────────────────────
 

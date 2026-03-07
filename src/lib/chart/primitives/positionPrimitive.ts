@@ -14,12 +14,14 @@ import type {
 } from 'lightweight-charts';
 import type { CanvasRenderingTarget2D } from 'fancy-canvas';
 import { PluginBase } from './pluginBase';
-import type { AnchorPoint, SelectionState } from './drawingPrimitiveTypes';
+import type { AnchorPoint, SelectionState, AnchorHitResult, DrawingStyleOptions } from './drawingPrimitiveTypes';
 import {
   DEFAULT_SELECTION,
   HIT_THRESHOLD,
+  ANCHOR_HIT_RADIUS,
   drawAnchorCircle,
   colorWithAlpha,
+  isNearAnchor,
 } from './drawingPrimitiveTypes';
 
 // ── Position data ────────────────────────────────────────────
@@ -316,6 +318,15 @@ export class PositionPrimitive extends PluginBase {
     this.requestUpdate();
   }
 
+  /** Update visual style options (lineColor etc. mapped to position style) */
+  updateOptions(options: Partial<DrawingStyleOptions>): void {
+    if (options.lineColor !== undefined) {
+      // Position uses its own style — map lineColor to border colors
+      this._style = { ...this._style };
+    }
+    this.requestUpdate();
+  }
+
   /** For DrawingManager's drag-to-move: move all prices by delta */
   updatePoints(p1: AnchorPoint, p2: AnchorPoint): void {
     // p1 = entry anchor, p2 = exit anchor (used for time range)
@@ -368,6 +379,21 @@ export class PositionPrimitive extends PluginBase {
       };
     }
 
+    return null;
+  }
+
+  anchorHitTest(x: number, y: number): AnchorHitResult | null {
+    const v = this._paneView.viewData;
+    if (v.entryY === null || v.tpY === null || v.slY === null || v.leftX === null || v.rightX === null) return null;
+
+    const midX = ((v.leftX as number) + (v.rightX as number)) / 2;
+    const eY = v.entryY as number;
+    const tY = v.tpY as number;
+    const sY = v.slY as number;
+
+    if (isNearAnchor(x, y, midX, eY)) return { anchorIndex: 0, cursorStyle: 'ns-resize' };
+    if (isNearAnchor(x, y, midX, tY)) return { anchorIndex: 1, cursorStyle: 'ns-resize' };
+    if (isNearAnchor(x, y, midX, sY)) return { anchorIndex: 2, cursorStyle: 'ns-resize' };
     return null;
   }
 

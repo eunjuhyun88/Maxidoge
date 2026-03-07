@@ -10,6 +10,7 @@
   import ChartAgentOverlayChrome from './ChartAgentOverlayChrome.svelte';
   import ChartAnnotationLayer from './ChartAnnotationLayer.svelte';
   import ChartDrawingCanvas from './ChartDrawingCanvas.svelte';
+  import ChartDrawingContextMenu from './ChartDrawingContextMenu.svelte';
   import ChartToolbar from './ChartToolbar.svelte';
   import ChartTradePlanOverlay from './ChartTradePlanOverlay.svelte';
 
@@ -88,6 +89,23 @@
     onSetDrawingMode?: (mode: DrawingMode) => void;
     onToggleDrawingsVisible?: () => void;
     onClearAllDrawings?: () => void;
+    /** Context menu callbacks */
+    onContextMenuChangeColor?: (color: string) => void;
+    onContextMenuChangeWidth?: (width: number) => void;
+    onContextMenuChangeStyle?: (style: 'solid' | 'dashed' | 'dotted') => void;
+    onContextMenuDuplicate?: () => void;
+    onContextMenuToggleLock?: () => void;
+    onContextMenuDelete?: () => void;
+    /** Current drawing options for context menu display */
+    selectedDrawingColor?: string;
+    selectedDrawingWidth?: number;
+    selectedDrawingStyle?: 'solid' | 'dashed' | 'dotted';
+    selectedDrawingLocked?: boolean;
+    /** Context menu state from DrawingManager */
+    contextMenuVisible?: boolean;
+    contextMenuX?: number;
+    contextMenuY?: number;
+    onContextMenuClose?: () => void;
   }
 
   let {
@@ -153,6 +171,20 @@
     onSetDrawingMode = () => {},
     onToggleDrawingsVisible = () => {},
     onClearAllDrawings = () => {},
+    onContextMenuChangeColor = () => {},
+    onContextMenuChangeWidth = () => {},
+    onContextMenuChangeStyle = () => {},
+    onContextMenuDuplicate = () => {},
+    onContextMenuToggleLock = () => {},
+    onContextMenuDelete = () => {},
+    selectedDrawingColor = '#2962ff',
+    selectedDrawingWidth = 1,
+    selectedDrawingStyle = 'solid',
+    selectedDrawingLocked = false,
+    contextMenuVisible = false,
+    contextMenuX = 0,
+    contextMenuY = 0,
+    onContextMenuClose = () => {},
   }: Props = $props();
 
   let containerEl: HTMLDivElement | null = $state(null);
@@ -269,6 +301,26 @@
     <ChartAnnotationLayer annotations={agentAnnotations} />
   {/if}
 </div>
+
+<!-- Drawing context menu (portal to body — fixed position) -->
+{#if chartMode === 'agent'}
+  <ChartDrawingContextMenu
+    visible={contextMenuVisible}
+    x={contextMenuX}
+    y={contextMenuY}
+    currentColor={selectedDrawingColor}
+    currentWidth={selectedDrawingWidth}
+    currentStyle={selectedDrawingStyle}
+    isLocked={selectedDrawingLocked}
+    onChangeColor={onContextMenuChangeColor}
+    onChangeWidth={onContextMenuChangeWidth}
+    onChangeStyle={onContextMenuChangeStyle}
+    onDuplicate={onContextMenuDuplicate}
+    onToggleLock={onContextMenuToggleLock}
+    onDelete={onContextMenuDelete}
+    onClose={onContextMenuClose}
+  />
+{/if}
 
 <style>
   .chart-container {

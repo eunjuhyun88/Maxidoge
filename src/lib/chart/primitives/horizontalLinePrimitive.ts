@@ -20,9 +20,11 @@ import {
   DEFAULT_DRAWING_STYLE,
   DEFAULT_SELECTION,
   HIT_THRESHOLD,
+  ANCHOR_HIT_RADIUS,
   positionsLine,
   applyLineStyle,
   drawAnchorCircle,
+  type AnchorHitResult,
 } from './drawingPrimitiveTypes';
 
 // ── Renderer ─────────────────────────────────────────────────
@@ -191,6 +193,15 @@ export class HorizontalLinePrimitive extends PluginBase {
         externalId: this._id,
         zOrder: 'top',
       };
+    }
+    return null;
+  }
+
+  anchorHitTest(x: number, y: number): AnchorHitResult | null {
+    const viewY = this._paneView.viewY;
+    if (viewY === null) return null;
+    if (Math.abs(y - (viewY as number)) <= ANCHOR_HIT_RADIUS) {
+      return { anchorIndex: 0, cursorStyle: 'ns-resize' };
     }
     return null;
   }

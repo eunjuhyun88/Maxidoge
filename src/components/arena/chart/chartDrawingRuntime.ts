@@ -42,6 +42,24 @@ export interface ChartDrawingRuntimeController {
   toggleMagnet(): void;
   /** Get magnet enabled state */
   getMagnetEnabled(): boolean;
+  /** Undo last drawing action */
+  undo(): void;
+  /** Redo last undone action */
+  redo(): void;
+  /** Update style options on the selected drawing (context menu) */
+  updateSelectedOptions(opts: Partial<import('$lib/chart/primitives/drawingPrimitiveTypes').DrawingStyleOptions>): void;
+  /** Duplicate the selected drawing */
+  duplicateSelected(): void;
+  /** Toggle lock on the selected drawing */
+  toggleLockSelected(): void;
+  /** Check if selected drawing is locked */
+  isSelectedLocked(): boolean;
+  /** Get serialized data for selected drawing */
+  getSelectedDrawingData(): import('$lib/chart/primitives/drawingManager').DrawingData | null;
+  /** Export all drawings */
+  exportDrawings(): import('$lib/chart/primitives/drawingManager').DrawingData[];
+  /** Import drawings */
+  importDrawings(drawings: import('$lib/chart/primitives/drawingManager').DrawingData[]): void;
   dispose(): void;
 }
 
@@ -90,6 +108,8 @@ export interface CreateChartDrawingRuntimeOptions {
   getPrimitiveDrawingCount: () => number;
   setPrimitiveDrawingCount: (count: number) => void;
   getKlines: () => Array<{ time: unknown; open: number; high: number; low: number; close: number }>;
+  /** Callback when context menu should be shown on a drawing */
+  onContextMenu?: (x: number, y: number, drawingId: string) => void;
 }
 
 export function createChartDrawingRuntime(
@@ -119,6 +139,7 @@ export function createChartDrawingRuntime(
       },
       getDrawingColor: () => options.getChartTheme().draw,
       getKlines: () => options.getKlines(),
+      onContextMenu: options.onContextMenu,
     };
 
     drawingManager = new DrawingManager(chart, series, callbacks);
@@ -447,6 +468,48 @@ export function createChartDrawingRuntime(
     return drawingManager?.magnetEnabled ?? true;
   }
 
+  function undo() {
+    const dm = ensureDrawingManager();
+    if (dm) dm.undo();
+  }
+
+  function redo() {
+    const dm = ensureDrawingManager();
+    if (dm) dm.redo();
+  }
+
+  function updateSelectedOptions(opts: Partial<import('$lib/chart/primitives/drawingPrimitiveTypes').DrawingStyleOptions>) {
+    const dm = ensureDrawingManager();
+    if (dm) dm.updateSelectedOptions(opts);
+  }
+
+  function duplicateSelected() {
+    const dm = ensureDrawingManager();
+    if (dm) dm.duplicateSelected();
+  }
+
+  function toggleLockSelected() {
+    const dm = ensureDrawingManager();
+    if (dm) dm.toggleLockSelected();
+  }
+
+  function isSelectedLocked(): boolean {
+    return drawingManager?.isSelectedLocked() ?? false;
+  }
+
+  function getSelectedDrawingData() {
+    return drawingManager?.getSelectedDrawingData() ?? null;
+  }
+
+  function exportDrawings() {
+    return drawingManager?.exportDrawings() ?? [];
+  }
+
+  function importDrawings(drawings: import('$lib/chart/primitives/drawingManager').DrawingData[]) {
+    const dm = ensureDrawingManager();
+    if (dm) dm.importDrawings(drawings);
+  }
+
   return {
     setDrawingMode,
     toggleDrawingsVisible,
@@ -458,6 +521,15 @@ export function createChartDrawingRuntime(
     deleteSelectedDrawing,
     toggleMagnet,
     getMagnetEnabled,
+    undo,
+    redo,
+    updateSelectedOptions,
+    duplicateSelected,
+    toggleLockSelected,
+    isSelectedLocked,
+    getSelectedDrawingData,
+    exportDrawings,
+    importDrawings,
     dispose,
   };
 }
