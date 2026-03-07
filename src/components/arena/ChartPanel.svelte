@@ -13,12 +13,10 @@
   import { openQuickTrade, type TradeDirection } from '$lib/stores/quickTradeStore';
   import type { ChartPatternDetection } from '$lib/engine/patternDetector';
   import type { IChartApi, ISeriesApi } from 'lightweight-charts';
-  import ChartAgentSurface from './chart/ChartAgentSurface.svelte';
-  import ChartHeaderBar from './chart/ChartHeaderBar.svelte';
+  import ChartPanelShell from './chart/ChartPanelShell.svelte';
   import {
     type ChartTheme,
     FALLBACK_THEME,
-    resolveChartTheme,
   } from './ChartTheme';
   import type { DrawingMode, DrawingAnchorPoint, DrawingItem, AgentTradeSetup, TradePlanDraft, ChartMarker, PatternScanScope, PatternScanReport } from '$lib/chart/chartTypes';
   import type { IndicatorKey } from '$lib/chart/chartTypes';
@@ -41,7 +39,6 @@
     createChartTradePlanRuntime,
     type ChartTradePlanRuntimeController,
   } from './chart/chartTradePlanRuntime';
-  import { createChartBootstrap } from './chart/chartBootstrap';
   import {
     type TradePreviewDraft,
     type TrendlineDraft,
@@ -68,9 +65,16 @@
     type ChartPriceRuntimeController,
   } from './chart/chartPriceRuntime';
   import {
-    createChartRuntimeBundle,
     type ChartRuntimeBundleController,
+    type CreateChartRuntimeBundleOptions,
   } from './chart/chartRuntimeBundle';
+  import {
+    createChartMaPeriodBindings,
+    prepareChartMount,
+  } from './chart/chartMountRuntime';
+  import {
+    createChartPanelController,
+  } from './chart/chartPanelController';
 
   // ═══ Props ═══
   interface Props {
@@ -119,6 +123,7 @@
       source: string;
       reason: string;
       openCopyTrade: boolean;
+      evidence?: import('$lib/terminal/signalEvidence').SignalEvidence;
     };
     priceUpdate: { price: number };
     dragTP: { price: number };
@@ -226,24 +231,12 @@
 
   // ═══ Chart Mode ═══
   let chartMode: 'agent' | 'trading' = $state('agent');
-  let chartIndicatorStripModule = $state<Promise<typeof import('./chart/ChartIndicatorStrip.svelte')> | null>(null);
-  let chartTradingViewPaneModule = $state<Promise<typeof import('./chart/ChartTradingViewPane.svelte')> | null>(null);
   let tvContainer = $state<HTMLDivElement | null>(null);
   let tvLoading = $state(false);
   let tvError = $state('');
   let tvSafeMode = $state(false);
   let _tvFallbackTried = $state(false);
   let chartTradingViewRuntime: ChartTradingViewRuntimeController | null = null;
-
-  $effect(() => {
-    if (chartMode !== 'agent' || !advancedMode || indicatorStripState === 'hidden' || chartIndicatorStripModule) return;
-    chartIndicatorStripModule = import('./chart/ChartIndicatorStrip.svelte');
-  });
-
-  $effect(() => {
-    if (chartMode !== 'trading' || chartTradingViewPaneModule) return;
-    chartTradingViewPaneModule = import('./chart/ChartTradingViewPane.svelte');
-  });
 
   // ═══ Drawing Tools ═══
   let drawingCanvas = $state<HTMLCanvasElement | null>(null);
@@ -572,65 +565,38 @@
     }
   }
 
-  function runChartCleanup() {
-    if (cleanup) {
-      const dispose = cleanup;
-      cleanup = null;
-      dispose();
-      return;
-    }
-    if (chartRuntimeBundle) {
-      chartRuntimeBundle.dispose();
-      chartRuntimeBundle = null;
-      chartDataRuntime = null;
-      chartTradingViewRuntime = null;
-      chartPositionRuntime = null;
-      chartPatternRuntime = null;
-    }
-    if (chartDataRuntime) {
-      chartDataRuntime.dispose();
-      chartDataRuntime = null;
-    }
-    if (chartTradingViewRuntime) {
-      chartTradingViewRuntime.dispose();
-      chartTradingViewRuntime = null;
-    }
-    if (chartPatternRuntime) {
-      chartPatternRuntime.dispose();
-      chartPatternRuntime = null;
-    }
-    if (chartPositionRuntime) {
-      chartPositionRuntime.dispose();
-      chartPositionRuntime = null;
-    }
-    disposeChartSupportRuntimes();
-  }
-
   async function setChartMode(mode: 'agent' | 'trading') {
     if (mode === chartMode) return;
     chartMode = mode;
     gtmEvent('terminal_chart_mode_change', { mode });
-    await tick(); await tick();
+    await tick();
+    await tick();
     if (mode === 'trading') {
       chartTradingViewRuntime?.setMode('trading');
-    } else {
-      chartTradingViewRuntime?.setMode('agent');
-      await tick();
-      if (chart && chartContainer) { chart.resize(chartContainer.clientWidth, chartContainer.clientHeight); chart.timeScale().fitContent(); }
+      return;
+    }
+
+    chartTradingViewRuntime?.setMode('agent');
+    await tick();
+    if (chart && chartContainer) {
+      chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
+      chart.timeScale().fitContent();
     }
   }
 
   $effect(() => {
-    if (!chartTradingViewRuntime) return;
     chartMode;
     tvContainer;
     storeState.pair;
     storeState.timeframe;
-    chartTradingViewRuntime.sync(chartMode);
+    chartTradingViewRuntime?.sync(chartMode);
   });
 
   function retryTradingView() {
-    gtmEvent('terminal_tradingview_retry', { pair: storeState.pair, timeframe: storeState.timeframe });
+    gtmEvent('terminal_tradingview_retry', {
+      pair: storeState.pair,
+      timeframe: storeState.timeframe,
+    });
     chartTradingViewRuntime?.retry();
   }
 
@@ -670,6 +636,19 @@
     emitScanRequest,
     emitChatRequest,
     emitCommunitySignal,
+    getIndicatorSnapshot: () => ({
+      rsi: rsiVal,
+      ma20: ma20Val,
+      ma60: ma60Val,
+      ma120: ma120Val,
+    }),
+    getOverlayPatterns: () => overlayPatterns.map((p) => ({
+      kind: p.kind,
+      shortName: p.shortName,
+      direction: p.direction,
+      status: p.status,
+      confidence: p.confidence,
+    })),
     emitGtm: gtmEvent,
     pushChartNotice,
   });
@@ -716,7 +695,9 @@
     pushChartNotice(result.message);
   }
 
-  export async function runPatternScanFromIntel(options: { scope?: PatternScanScope; focus?: boolean } = {}): Promise<PatternScanReport> {
+  export async function runPatternScanFromIntel(
+    options: { scope?: PatternScanScope; focus?: boolean } = {},
+  ): Promise<PatternScanReport> {
     const scope = options.scope ?? 'visible';
     if (chartMode !== 'agent') {
       await setChartMode('agent');
@@ -802,18 +783,251 @@
   const resetChartDataLoadTransientState = () => chartPriceRuntime?.resetTransientState();
   const getFallbackLivePrice = () => chartPriceRuntime?.getFallbackLivePrice() ?? null;
 
+  function applyBootstrapState(bootstrap: Awaited<ReturnType<typeof prepareChartMount>>['bootstrap']) {
+    chart = bootstrap.chart;
+    series = bootstrap.series;
+    ma7Series = bootstrap.ma7Series;
+    ma20Series = bootstrap.ma20Series;
+    ma25Series = bootstrap.ma25Series;
+    ma60Series = bootstrap.ma60Series;
+    ma99Series = bootstrap.ma99Series;
+    ma120Series = bootstrap.ma120Series;
+    volumeSeries = bootstrap.volumeSeries;
+    rsiSeries = bootstrap.rsiSeries;
+    volumePaneIndex = bootstrap.volumePaneIndex;
+    rsiPaneIndex = bootstrap.rsiPaneIndex;
+  }
+
+  function applyPreparedMount(preparedMount: Awaited<ReturnType<typeof prepareChartMount>>) {
+    lwcModule = preparedMount.lwcModule;
+    chartTheme = preparedMount.chartTheme;
+    indicatorStripState = preparedMount.nextIndicatorStripState;
+    showIndicatorLegend = preparedMount.nextShowIndicatorLegend;
+    chartVisualMode = preparedMount.nextChartVisualMode;
+    _indicatorProfileApplied = preparedMount.nextIndicatorProfileApplied;
+    applyBootstrapState(preparedMount.bootstrap);
+    _maPeriods = createChartMaPeriodBindings({
+      bootstrap: preparedMount.bootstrap,
+      setMa7Val: (value) => { ma7Val = value; },
+      setMa20Val: (value) => { ma20Val = value; },
+      setMa25Val: (value) => { ma25Val = value; },
+      setMa60Val: (value) => { ma60Val = value; },
+      setMa99Val: (value) => { ma99Val = value; },
+      setMa120Val: (value) => { ma120Val = value; },
+    });
+  }
+
+  function buildRuntimeBundleOptions(): CreateChartRuntimeBundleOptions {
+    return {
+      pattern: {
+        getChart: () => chart,
+        getSeries: () => series,
+        getLwcModule: () => lwcModule,
+        getKlineCache: () => klineCache,
+        getAgentMarkers: () => agentMarkers,
+        getOverlayPatterns: () => overlayPatterns,
+        setOverlayPatterns: (patterns) => {
+          overlayPatterns = patterns;
+        },
+        setPatternMarkers: (markers) => {
+          patternMarkers = markers;
+        },
+        renderDrawings,
+      },
+      position: {
+        getSeries: () => series,
+        getChartContainer: () => chartContainer,
+        getTheme: () => chartTheme,
+        getShowPosition: () => showPosition,
+        getPositionLevels: () => ({
+          entry: posEntry,
+          tp: posTp,
+          sl: posSl,
+          dir: posDir,
+        }),
+        getLivePrice: () => livePrice,
+        getDragState: () => isDragging,
+        setDragState: (target) => {
+          isDragging = target;
+        },
+        getHoverState: () => hoverLine,
+        setHoverState: (target) => {
+          hoverLine = target;
+        },
+        emitDrag: (target, detail) => {
+          emitDrag(
+            target === 'tp' ? 'dragTP' : target === 'sl' ? 'dragSL' : 'dragEntry',
+            detail,
+          );
+        },
+      },
+      tradingView: {
+        getContainer: () => tvContainer,
+        getThemeTarget: () => tvContainer || chartContainer,
+        getPair: () => storeState.pair,
+        getTimeframe: () => storeState.timeframe,
+        setTheme: (theme) => {
+          chartTheme = theme;
+        },
+        setState: (patch) => {
+          if (patch.loading !== undefined) tvLoading = patch.loading;
+          if (patch.error !== undefined) tvError = patch.error;
+          if (patch.safeMode !== undefined) tvSafeMode = patch.safeMode;
+          if (patch.fallbackTried !== undefined) _tvFallbackTried = patch.fallbackTried;
+        },
+      },
+      data: {
+        getSeriesContext: () => ({
+          chart,
+          series,
+          volumeSeries,
+          rsiSeries,
+          maPeriods: _maPeriods,
+          chartTheme,
+        }),
+        getKlineCache: () => klineCache,
+        setKlineCache: (next) => {
+          klineCache = next;
+        },
+        getIndicatorState,
+        setIndicatorState,
+        setRsiValue: (value) => {
+          rsiVal = value;
+        },
+        setLatestVolume: (value) => {
+          latestVolume = value;
+        },
+        setLivePrice: (value) => {
+          livePrice = value;
+        },
+        set24hStats,
+        setLoading: (value) => {
+          isLoading = value;
+        },
+        setError: (value) => {
+          error = value;
+        },
+        clearDetectedPatterns: () => {
+          chartPatternRuntime?.clearDetectedPatterns();
+        },
+        onPatternRefresh: () => {
+          chartPatternRuntime?.runPatternDetection('visible', { fallbackToFull: true });
+        },
+        onFlushPriceUpdate: flushPriceUpdate,
+        onThrottledPriceUpdate: throttledPriceUpdate,
+        onEmitPriceUpdate: emitPriceUpdate,
+        getFallbackPrice: getFallbackLivePrice,
+        onError: (context, err) => {
+          console.error(`[ChartPanel] ${context} error:`, err);
+        },
+      },
+      bindings: {
+        chart: chart!,
+        chartContainer,
+        isAgentMode: () => chartMode === 'agent',
+        isTradeLineEntryEnabled: () => enableTradeLineEntry,
+        onScheduleVisiblePatternScan: scheduleVisiblePatternScan,
+        onRenderDrawings: renderDrawings,
+        onResizeDrawingCanvas: resizeDrawingCanvas,
+        onSetDrawingMode: setDrawingMode,
+        onZoomChart: zoomChart,
+        onResetChartScale: resetChartScale,
+        onFitChartRange: fitChartRange,
+        onToggleDrawingsVisible: toggleDrawingsVisible,
+      },
+      removeChart: () => {
+        if (chart) {
+          chart.remove();
+          chart = null;
+        }
+      },
+    };
+  }
+
+  const chartPanelController = createChartPanelController({
+    getPrepareMountOptions: () => ({
+      chartContainer,
+      advancedMode,
+      indicatorStripState,
+      showIndicatorLegend,
+      chartVisualMode,
+      indicatorProfileApplied: _indicatorProfileApplied,
+      barSpacing,
+      compactViewport: isCompactViewport(),
+      applyIndicatorProfile,
+    }),
+    applyPreparedMount,
+    afterPreparedMount: () => {
+      applyTimeScale();
+      applyIndicatorVisibility();
+    },
+    buildRuntimeBundleOptions,
+    getCleanup: () => cleanup,
+    setCleanup: (next) => {
+      cleanup = next;
+    },
+    getRuntimeBundle: () => chartRuntimeBundle,
+    setRuntimeBundle: (bundle) => {
+      chartRuntimeBundle = bundle;
+    },
+    getDataRuntime: () => chartDataRuntime,
+    setDataRuntime: (runtime) => {
+      chartDataRuntime = runtime;
+    },
+    getTradingViewRuntime: () => chartTradingViewRuntime,
+    setTradingViewRuntime: (runtime) => {
+      chartTradingViewRuntime = runtime;
+    },
+    getPatternRuntime: () => chartPatternRuntime,
+    setPatternRuntime: (runtime) => {
+      chartPatternRuntime = runtime;
+    },
+    getPositionRuntime: () => chartPositionRuntime,
+    setPositionRuntime: (runtime) => {
+      chartPositionRuntime = runtime;
+    },
+    disposeChartSupportRuntimes,
+    handleMountError: (mountError) => {
+      error = 'Chart initialization failed';
+      console.error(mountError);
+    },
+    resetChartDataLoadTransientState,
+    resolveLoadRequest: (options = {}) => ({
+      symbol: options.symbol || symbol,
+      interval: options.interval || interval,
+      pairBase: options.pairBase || (storeState.pair.split('/')[0] || 'BTC').toUpperCase(),
+    }),
+    getChartMode: () => chartMode,
+    setChartModeState: (mode) => {
+      chartMode = mode;
+    },
+    getChartPair: () => storeState.pair,
+    getChartTimeframe: () => storeState.timeframe,
+    emitGtm: gtmEvent,
+    resizeAgentChart: () => {
+      if (chart && chartContainer) {
+        chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
+        chart.timeScale().fitContent();
+      }
+    },
+    getActionRuntime: () => chartActionRuntime,
+    runPatternDetection,
+    getOverlayPatterns: () => overlayPatterns,
+    focusPatternRange,
+    renderDrawings,
+    pushChartNotice,
+    clearScheduledPatternScan: () => {
+      chartPatternRuntime?.clearScheduledScan();
+    },
+  });
+  const runChartCleanup = () => chartPanelController.runCleanup();
+
   async function reloadChartData(options: {
     symbol?: string;
     interval?: string;
     pairBase?: string;
   } = {}) {
-    if (!chartDataRuntime) return;
-    resetChartDataLoadTransientState();
-    await chartDataRuntime.load({
-      symbol: options.symbol || symbol,
-      interval: options.interval || interval,
-      pairBase: options.pairBase || (storeState.pair.split('/')[0] || 'BTC').toUpperCase(),
-    });
+    await chartPanelController.reloadChartData(options);
   }
 
   $effect(() => {
@@ -849,216 +1063,20 @@
   // ═══════════════════════════════════════════
 
   onMount(async () => {
-    try {
-      lwcModule = await import('lightweight-charts');
-      const lwc = lwcModule;
-      chartTheme = resolveChartTheme(chartContainer);
-
-      if (advancedMode && indicatorStripState === 'expanded') {
-        indicatorStripState = 'collapsed';
-        showIndicatorLegend = false;
-        chartVisualMode = 'focus';
-      }
-
-      if (_indicatorProfileApplied === null) {
-        applyIndicatorProfile();
-        _indicatorProfileApplied = advancedMode ? `advanced:${chartVisualMode}` : 'basic';
-      }
-
-      const compactViewport = isCompactViewport();
-      const bootstrap = createChartBootstrap({
-        lwc,
-        chartContainer,
-        chartTheme,
-        barSpacing,
-        compactViewport,
-      });
-      chart = bootstrap.chart;
-      series = bootstrap.series;
-      ma7Series = bootstrap.ma7Series;
-      ma20Series = bootstrap.ma20Series;
-      ma25Series = bootstrap.ma25Series;
-      ma60Series = bootstrap.ma60Series;
-      ma99Series = bootstrap.ma99Series;
-      ma120Series = bootstrap.ma120Series;
-      volumeSeries = bootstrap.volumeSeries;
-      rsiSeries = bootstrap.rsiSeries;
-      volumePaneIndex = bootstrap.volumePaneIndex;
-      rsiPaneIndex = bootstrap.rsiPaneIndex;
-
-      // Rebuild _maPeriods with fresh series refs (no $: reactive — only needed after series creation)
-      _maPeriods = [
-        { p: 7, s: ma7Series, setVal: (v: number) => { ma7Val = v; } },
-        { p: 20, s: ma20Series, setVal: (v: number) => { ma20Val = v; } },
-        { p: 25, s: ma25Series, setVal: (v: number) => { ma25Val = v; } },
-        { p: 60, s: ma60Series, setVal: (v: number) => { ma60Val = v; } },
-        { p: 99, s: ma99Series, setVal: (v: number) => { ma99Val = v; } },
-        { p: 120, s: ma120Series, setVal: (v: number) => { ma120Val = v; } },
-      ];
-      applyTimeScale();
-      applyIndicatorVisibility();
-      chartRuntimeBundle = createChartRuntimeBundle({
-        pattern: {
-          getChart: () => chart,
-          getSeries: () => series,
-          getLwcModule: () => lwcModule,
-          getKlineCache: () => klineCache,
-          getAgentMarkers: () => agentMarkers,
-          getOverlayPatterns: () => overlayPatterns,
-          setOverlayPatterns: (patterns) => {
-            overlayPatterns = patterns;
-          },
-          setPatternMarkers: (markers) => {
-            patternMarkers = markers;
-          },
-          renderDrawings,
-        },
-        position: {
-          getSeries: () => series,
-          getChartContainer: () => chartContainer,
-          getTheme: () => chartTheme,
-          getShowPosition: () => showPosition,
-          getPositionLevels: () => ({
-            entry: posEntry,
-            tp: posTp,
-            sl: posSl,
-            dir: posDir,
-          }),
-          getLivePrice: () => livePrice,
-          getDragState: () => isDragging,
-          setDragState: (target) => {
-            isDragging = target;
-          },
-          getHoverState: () => hoverLine,
-          setHoverState: (target) => {
-            hoverLine = target;
-          },
-          emitDrag: (target, detail) => {
-            emitDrag(
-              target === 'tp' ? 'dragTP' : target === 'sl' ? 'dragSL' : 'dragEntry',
-              detail,
-            );
-          },
-        },
-        tradingView: {
-          getContainer: () => tvContainer,
-          getThemeTarget: () => tvContainer || chartContainer,
-          getPair: () => storeState.pair,
-          getTimeframe: () => storeState.timeframe,
-          setTheme: (theme) => {
-            chartTheme = theme;
-          },
-          setState: (patch) => {
-            if (patch.loading !== undefined) tvLoading = patch.loading;
-            if (patch.error !== undefined) tvError = patch.error;
-            if (patch.safeMode !== undefined) tvSafeMode = patch.safeMode;
-            if (patch.fallbackTried !== undefined) _tvFallbackTried = patch.fallbackTried;
-          },
-        },
-        data: {
-          getSeriesContext: () => ({
-            chart,
-            series,
-            volumeSeries,
-            rsiSeries,
-            maPeriods: _maPeriods,
-            chartTheme,
-          }),
-          getKlineCache: () => klineCache,
-          setKlineCache: (next) => {
-            klineCache = next;
-          },
-          getIndicatorState,
-          setIndicatorState,
-          setRsiValue: (value) => {
-            rsiVal = value;
-          },
-          setLatestVolume: (value) => {
-            latestVolume = value;
-          },
-          setLivePrice: (value) => {
-            livePrice = value;
-          },
-          set24hStats,
-          setLoading: (value) => {
-            isLoading = value;
-          },
-          setError: (value) => {
-            error = value;
-          },
-          clearDetectedPatterns: () => {
-            chartPatternRuntime?.clearDetectedPatterns();
-          },
-          onPatternRefresh: () => {
-            chartPatternRuntime?.runPatternDetection('visible', { fallbackToFull: true });
-          },
-          onFlushPriceUpdate: flushPriceUpdate,
-          onThrottledPriceUpdate: throttledPriceUpdate,
-          onEmitPriceUpdate: emitPriceUpdate,
-          getFallbackPrice: getFallbackLivePrice,
-          onError: (context, err) => {
-            console.error(`[ChartPanel] ${context} error:`, err);
-          },
-        },
-        bindings: {
-          chart,
-          chartContainer,
-          isAgentMode: () => chartMode === 'agent',
-          isTradeLineEntryEnabled: () => enableTradeLineEntry,
-          onScheduleVisiblePatternScan: scheduleVisiblePatternScan,
-          onRenderDrawings: renderDrawings,
-          onResizeDrawingCanvas: resizeDrawingCanvas,
-          onSetDrawingMode: setDrawingMode,
-          onZoomChart: zoomChart,
-          onResetChartScale: resetChartScale,
-          onFitChartRange: fitChartRange,
-          onToggleDrawingsVisible: toggleDrawingsVisible,
-        },
-        removeChart: () => {
-          if (chart) {
-            chart.remove();
-            chart = null;
-          }
-        },
-      });
-      chartPatternRuntime = chartRuntimeBundle.patternRuntime;
-      chartPositionRuntime = chartRuntimeBundle.positionRuntime;
-      chartTradingViewRuntime = chartRuntimeBundle.tradingViewRuntime;
-      chartDataRuntime = chartRuntimeBundle.dataRuntime;
-
-      cleanup = () => {
-        if (chartRuntimeBundle) {
-          chartRuntimeBundle.dispose();
-          chartRuntimeBundle = null;
-        }
-        chartDataRuntime = null;
-        chartTradingViewRuntime = null;
-        chartPositionRuntime = null;
-        chartPatternRuntime = null;
-        disposeChartSupportRuntimes();
-      };
-
-      await reloadChartData();
-    } catch (e) {
-      error = 'Chart initialization failed';
-      console.error(e);
-      runChartCleanup();
-    }
+    await chartPanelController.mount();
   });
 
   export async function activateTradeDrawing(dir?: 'LONG' | 'SHORT') {
-    await chartActionRuntime?.activateTradeDrawing(dir);
+    await chartPanelController.activateTradeDrawing(dir);
   }
 
   onDestroy(() => {
-    chartPatternRuntime?.clearScheduledScan();
     if (_chartNoticeTimer) clearTimeout(_chartNoticeTimer);
-    runChartCleanup();
+    chartPanelController.dispose();
   });
 </script>
 
-<div class="chart-wrapper" class:tv-like={isTvLikePreset}>
-  <ChartHeaderBar
+<ChartPanelShell
     {chartMode}
     pair={storeState.pair}
     timeframe={storeState.timeframe}
@@ -1069,7 +1087,10 @@
     {low24h}
     {high24h}
     {quoteVolume24h}
+    {symbol}
     {error}
+    {isLoading}
+    {autoScaleY}
     {isTvLikePreset}
     {advancedMode}
     {enableTradeLineEntry}
@@ -1077,71 +1098,12 @@
     {chatTradeReady}
     {chatTradeDir}
     {indicatorStripState}
+    {chartVisualMode}
     {drawingMode}
     {drawingsVisible}
     drawingCount={drawings.length}
     hasActiveTradeSetup={!!activeTradeSetup}
     klineCount={klineCache.length}
-    {ma7Val}
-    {ma25Val}
-    {ma99Val}
-    {rsiVal}
-    {latestVolume}
-    {chartTheme}
-    onChangePair={changePair}
-    onChangeTimeframe={changeTF}
-    onSetChartMode={(mode) => {
-      void setChartMode(mode);
-    }}
-    onSetDrawingMode={setDrawingMode}
-    onToggleDrawingsVisible={toggleDrawingsVisible}
-    onClearAllDrawings={clearAllDrawings}
-    onRequestChatAssist={requestChatAssist}
-    onRequestAgentScan={requestAgentScan}
-    onForcePatternScan={forcePatternScan}
-    onPublishCommunitySignal={(dir) => {
-      publishCommunitySignal(dir, {
-        openCopyTrade: false,
-        sourceContext: dir === 'LONG' ? 'chart-view-long' : 'chart-view-short',
-      });
-    }}
-    onRestoreIndicatorStrip={() => setIndicatorStripState('expanded')}
-  />
-
-  {#if chartMode === 'agent' && advancedMode && indicatorStripState !== 'hidden' && chartIndicatorStripModule}
-    {#await chartIndicatorStripModule then chartIndicatorStripNs}
-      {@const ChartIndicatorStrip = chartIndicatorStripNs.default}
-      <ChartIndicatorStrip
-        {chartVisualMode}
-        {indicatorStripState}
-        {indicatorEnabled}
-        {chartTheme}
-        {ma7Val}
-        {ma20Val}
-        {ma25Val}
-        {ma60Val}
-        {ma99Val}
-        {ma120Val}
-        {rsiVal}
-        {latestVolume}
-        {showIndicatorLegend}
-        {enableTradeLineEntry}
-        {isTvLikePreset}
-        onSetChartVisualMode={setChartVisualMode}
-        onToggleIndicator={toggleIndicator}
-        onToggleIndicatorLegend={toggleIndicatorLegend}
-        onSetIndicatorStripState={setIndicatorStripState}
-      />
-    {/await}
-  {/if}
-
-  <ChartAgentSurface
-    {chartMode}
-    {symbol}
-    {isLoading}
-    {error}
-    {autoScaleY}
-    {advancedMode}
     {showIndicatorLegend}
     {indicatorEnabled}
     {chartTheme}
@@ -1154,9 +1116,7 @@
     {rsiVal}
     {latestVolume}
     {activeTradeSetup}
-    {drawingsVisible}
     {hasScanned}
-    {drawingMode}
     {chartNotice}
     {showPosition}
     {posEntry}
@@ -1167,7 +1127,33 @@
     {isDragging}
     {pendingTradePlan}
     agentAnnotations={agentAnnotations}
-    onContainerReady={(container) => {
+    {tvLoading}
+    tvFallbackTried={_tvFallbackTried}
+    {tvError}
+    {tvSafeMode}
+    onChangePair={changePair}
+    onChangeTimeframe={changeTF}
+    onSetChartMode={(mode) => {
+      void setChartMode(mode);
+    }}
+    onSetDrawingMode={setDrawingMode}
+    onToggleDrawingsVisible={toggleDrawingsVisible}
+    onClearAllDrawings={clearAllDrawings}
+    onRequestChatAssist={requestChatAssist}
+    onRequestAgentScan={requestAgentScan}
+    onForcePatternScan={forcePatternScan}
+    onPublishHeaderCommunitySignal={(dir) => {
+      publishCommunitySignal(dir, {
+        openCopyTrade: false,
+        sourceContext: dir === 'LONG' ? 'chart-view-long' : 'chart-view-short',
+      });
+    }}
+    onRestoreIndicatorStrip={() => setIndicatorStripState('expanded')}
+    onSetChartVisualMode={setChartVisualMode}
+    onToggleIndicator={toggleIndicator}
+    onToggleIndicatorLegend={toggleIndicatorLegend}
+    onSetIndicatorStripState={setIndicatorStripState}
+    onAgentSurfaceContainerReady={(container) => {
       chartContainer = container as HTMLDivElement;
     }}
     onChartMouseDown={handleChartMouseDown}
@@ -1185,7 +1171,6 @@
       emitClearTradeSetup();
       renderDrawings();
     }}
-    onRequestAgentScan={requestAgentScan}
     onExecuteActiveTrade={() => {
       if (activeTradeSetup) openQuickTrade(activeTradeSetup.pair, activeTradeSetup.dir as TradeDirection, activeTradeSetup.entry, activeTradeSetup.tp, activeTradeSetup.sl);
     }}
@@ -1206,59 +1191,11 @@
     onRatioTrackReady={(element) => {
       ratioTrackEl = element;
     }}
+    onRetryTradingView={retryTradingView}
+    onSwitchAgentMode={() => {
+      void setChartMode('agent');
+    }}
+    onTradingViewContainerReady={(container) => {
+      tvContainer = container;
+    }}
   />
-
-  {#if chartMode === 'trading' && chartTradingViewPaneModule}
-    {#await chartTradingViewPaneModule then chartTradingViewPaneNs}
-      {@const ChartTradingViewPane = chartTradingViewPaneNs.default}
-      <ChartTradingViewPane
-        pair={storeState.pair}
-        {tvLoading}
-        tvFallbackTried={_tvFallbackTried}
-        {tvError}
-        {tvSafeMode}
-        onRetry={retryTradingView}
-        onSwitchAgent={() => {
-          void setChartMode('agent');
-        }}
-        onContainerReady={(container) => {
-          tvContainer = container;
-        }}
-      />
-    {/await}
-  {/if}
-
-  <!-- chart-footer removed: pattern info shown on chart overlay, indicators in legend -->
-</div>
-
-<style>
-  .chart-wrapper {
-    --cp-font-2xs: clamp(8px, 0.56vw, 9px);
-    --cp-font-xs: clamp(9px, 0.64vw, 10px);
-    --cp-font-sm: clamp(10px, 0.74vw, 11px);
-    --cp-font-md: clamp(11px, 0.86vw, 13px);
-    --cp-font-lg: clamp(15px, 1.15vw, 18px);
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    background: #0a0a1a;
-    overflow: hidden;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  /* chart-footer removed — pattern pills shown on chart annotations, indicators in legend */
-
-  .chart-wrapper.tv-like {
-    --blk: #131722;
-    --fg: #b2b5be;
-    --yel: #4f8cff;
-    --grn: #26a69a;
-    --red: #ef5350;
-    --pk: #b388ff;
-    --cyan: #5ea1ff;
-    --ora: #ffb74d;
-    background: #131722;
-  }
-</style>
