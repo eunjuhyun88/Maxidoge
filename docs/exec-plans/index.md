@@ -5,7 +5,17 @@ Purpose:
 
 ## Active
 
+- `docs/exec-plans/active/web-api-worker-phased-migration-map-2026-03-07.md`
+- `docs/exec-plans/active/full-stack-redesign-validation-2026-03-07.md`
+- `docs/exec-plans/active/arena-uiux-layout-design-2026-03-07.md`
+- `docs/exec-plans/active/arena-core-loop-design-2026-03-07.md`
+- `docs/exec-plans/active/arena-page-controller-design-2026-03-07.md`
+- `docs/exec-plans/active/frontend-backend-separation-plan-2026-03-07.md`
+- `docs/exec-plans/active/internal-extraction-folder-map-2026-03-07.md`
+- `docs/exec-plans/active/remaining-structure-refactor-batches-2026-03-07.md`
 - `docs/exec-plans/active/context-system-rollout-2026-03-06.md`
+- `docs/exec-plans/active/canonical-frontend-refactor-plan-2026-03-06.md`
+- `docs/exec-plans/active/wip-branch-split-plan-2026-03-06.md`
 - `docs/FRONTEND_REFACTOR_EXECUTION_DESIGN_2026-03-06.md`
 - `docs/terminal-refactor-master-plan-2026-03-06.md`
 
