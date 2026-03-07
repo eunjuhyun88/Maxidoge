@@ -47,10 +47,9 @@ export interface DrawingData {
   positionStyle?: Partial<PositionStyleOptions>;
 }
 
-/** Modes that stay active after completing a drawing */
+/** Modes that stay active after completing a drawing (eraser only) */
 const STICKY_MODES: Set<DrawingMode> = new Set([
-  'hline', 'vline', 'trendline', 'ray',
-  'fib_retracement', 'rect', 'eraser', 'channel', 'extended_line',
+  'eraser',
 ]);
 
 /** Modes that use 2-point drag (mousedown→drag→mouseup) */
@@ -440,6 +439,8 @@ export class DrawingManager {
       // Undo: record creation
       const after = this._snapshotDrawing(id);
       if (after) this._undoStack.push({ type: 'create', before: [], after: [after] });
+      // One-shot: reset to select mode
+      this.setDrawingMode('none');
       return;
     }
 
@@ -455,8 +456,10 @@ export class DrawingManager {
       }
       this._callbacks.onDrawingsChanged(this._primitives.size);
       // Undo: record creation
-      const after = this._snapshotDrawing(id);
-      if (after) this._undoStack.push({ type: 'create', before: [], after: [after] });
+      const afterV = this._snapshotDrawing(id);
+      if (afterV) this._undoStack.push({ type: 'create', before: [], after: [afterV] });
+      // One-shot: reset to select mode
+      this.setDrawingMode('none');
       return;
     }
 
