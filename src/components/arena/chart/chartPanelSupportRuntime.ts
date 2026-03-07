@@ -66,6 +66,8 @@ export interface ChartPanelSupportRuntimeController {
   }): void;
   resetTransientState(): void;
   getFallbackLivePrice(): number | null;
+  /** Load persisted drawings for the current pair/timeframe */
+  syncDrawingPersistence(): void;
   dispose(): void;
 }
 
@@ -120,8 +122,16 @@ export function createChartPanelSupportRuntime(
     handleDrawingMouseDown: (event) => drawingRuntime.handleMouseDown(event),
     handleDrawingMouseMove: (event) => drawingRuntime.handleMouseMove(event),
     handleDrawingMouseUp: (event) => drawingRuntime.handleMouseUp(event),
-    changePair: (pair) => actionRuntime.changePair(pair),
-    changeTimeframe: (timeframe) => actionRuntime.changeTimeframe(timeframe),
+    changePair: (pair) => {
+      actionRuntime.changePair(pair);
+      // Sync drawing persistence after pair store updates
+      setTimeout(() => drawingRuntime.syncPairTimeframe(), 0);
+    },
+    changeTimeframe: (timeframe) => {
+      actionRuntime.changeTimeframe(timeframe);
+      // Sync drawing persistence after timeframe store updates
+      setTimeout(() => drawingRuntime.syncPairTimeframe(), 0);
+    },
     requestAgentScan: () => actionRuntime.requestAgentScan(),
     publishCommunitySignal: (dir, runtimeOptions) =>
       actionRuntime.publishCommunitySignal(dir, runtimeOptions),
@@ -132,6 +142,7 @@ export function createChartPanelSupportRuntime(
     update24hStats: (next) => priceRuntime.update24hStats(next),
     resetTransientState: () => priceRuntime.resetTransientState(),
     getFallbackLivePrice: () => priceRuntime.getFallbackLivePrice(),
+    syncDrawingPersistence: () => drawingRuntime.syncPairTimeframe(),
     dispose,
   };
 }

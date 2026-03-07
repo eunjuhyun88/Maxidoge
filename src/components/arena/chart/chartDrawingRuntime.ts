@@ -23,7 +23,12 @@ import {
   DrawingManager,
   isPrimitiveDrawingMode,
   type DrawingManagerCallbacks,
+  type DrawingData,
 } from '$lib/chart/primitives/drawingManager';
+import {
+  loadDrawings,
+  createDrawingAutoSaver,
+} from '$lib/chart/primitives/drawingPersistence';
 
 // ── Controller interface ─────────────────────────────────────
 
@@ -60,6 +65,8 @@ export interface ChartDrawingRuntimeController {
   exportDrawings(): import('$lib/chart/primitives/drawingManager').DrawingData[];
   /** Import drawings */
   importDrawings(drawings: import('$lib/chart/primitives/drawingManager').DrawingData[]): void;
+  /** Call when pair or timeframe changes — saves current, loads new */
+  syncPairTimeframe(): void;
   dispose(): void;
 }
 
@@ -84,6 +91,7 @@ export interface CreateChartDrawingRuntimeOptions {
   setSelectedDrawingId: (id: string | null) => void;
   getLivePrice: () => number;
   getPair: () => string;
+  getTimeframe: () => string;
   getRequireTradeConfirm: () => boolean;
   getToChartPrice: () => (y: number) => number | null;
   getToChartY: () => (price: number) => number | null;
@@ -118,6 +126,17 @@ export function createChartDrawingRuntime(
   let globalDrawingMouseUpBound = false;
   let drawRaf: number | null = null;
 
+  // ── Persistence: auto-save on mutation, load on pair/timeframe change ──
+  let lastPair = '';
+  let lastTimeframe = '';
+
+  const autoSaver = createDrawingAutoSaver(
+    () => options.getPair(),
+    () => options.getTimeframe(),
+    () => drawingManager?.exportDrawings() ?? [],
+    500,
+  );
+
   // ── DrawingManager (lazy-initialized) ──
   let drawingManager: DrawingManager | null = null;
 
@@ -133,6 +152,8 @@ export function createChartDrawingRuntime(
       },
       onDrawingsChanged: (count) => {
         options.setPrimitiveDrawingCount(count);
+        // Trigger debounced auto-save on every mutation
+        autoSaver.trigger();
       },
       onSelectedChanged: (id) => {
         options.setSelectedDrawingId(id);
@@ -144,6 +165,31 @@ export function createChartDrawingRuntime(
 
     drawingManager = new DrawingManager(chart, series, callbacks);
     return drawingManager;
+  }
+
+  /** Load saved drawings when pair or timeframe changes */
+  function syncPairTimeframe(): void {
+    const pair = options.getPair();
+    const timeframe = options.getTimeframe();
+    if (pair === lastPair && timeframe === lastTimeframe) return;
+
+    // Flush pending saves for the old pair/timeframe
+    if (lastPair && lastTimeframe) {
+      autoSaver.flush();
+    }
+
+    lastPair = pair;
+    lastTimeframe = timeframe;
+
+    // Load drawings for the new pair/timeframe
+    const dm = ensureDrawingManager();
+    if (!dm) return;
+
+    dm.clearAllDrawings();
+    const saved = loadDrawings(pair, timeframe);
+    if (saved.length > 0) {
+      dm.importDrawings(saved);
+    }
   }
 
   function getCanvasRect() {
@@ -446,6 +492,9 @@ export function createChartDrawingRuntime(
   }
 
   function dispose() {
+    // Flush any pending auto-save before teardown
+    autoSaver.flush();
+    autoSaver.dispose();
     if (drawRaf) {
       cancelAnimationFrame(drawRaf);
       drawRaf = null;
@@ -530,6 +579,7 @@ export function createChartDrawingRuntime(
     getSelectedDrawingData,
     exportDrawings,
     importDrawings,
+    syncPairTimeframe,
     dispose,
   };
 }

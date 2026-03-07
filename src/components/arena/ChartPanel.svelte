@@ -483,6 +483,7 @@
         },
         getLivePrice: () => livePrice,
         getPair: () => storeState.pair || 'BTC/USDT',
+        getTimeframe: () => storeState.timeframe || '1h',
         getRequireTradeConfirm: () => requireTradeConfirm,
         getToChartPrice: () => toChartPrice,
         getToChartY: () => toChartY,
@@ -1008,6 +1009,8 @@
         chartSupportRuntime = createChartSupportRuntimeInstance(
           supportRuntimeModule.createChartPanelSupportRuntime,
         );
+        // Load persisted drawings for current pair/timeframe
+        chartSupportRuntime.syncDrawingPersistence();
       }
 
       if (!chartPanelController) {
