@@ -14,7 +14,7 @@ Source of truth remains `src/routes/` plus canonical docs under `docs/`.
 | `/arena-war` | fast AI battle mode | phase machine, battle rendering, GameRecord flow | `arenaWarStore` | `docs/design-docs/arena-domain-model.md` |
 | `/holdings` | redirect route | redirect to canonical profile/holdings experience | none | `docs/product-specs/passport.md` |
 | `/live` | auxiliary live route/data hook | limited runtime support surface | route-level data | `docs/PRODUCT_SENSE.md` |
-| `/oracle` | redirect route | redirect into signals/oracle view | none | `docs/product-specs/signals.md` |
+| `/oracle` | redirect route | redirect into signals ai leaderboard view | none | `docs/product-specs/signals.md` |
 | `/passport` | profile/progression surface | identity, stats, learning, history | `userProfileStore`, `matchHistoryStore`, `quickTradeStore` | `docs/product-specs/passport.md` |
 | `/settings` | preferences surface | local settings and user controls | `gameState` and preference state | `docs/FRONTEND.md` |
 | `/signals` | signal discovery surface | community, track, convert flows | `gameState`, `matchHistoryStore`, signal state | `docs/product-specs/signals.md` |

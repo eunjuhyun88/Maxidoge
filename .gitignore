@@ -32,3 +32,5 @@ vite.config.ts.timestamp-*
 
 # Agent context runtime snapshots (local only)
 .agent-context/
+context-kit.local.json
+.codex/

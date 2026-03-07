@@ -17,6 +17,18 @@ fail() {
 	FAIL=1
 }
 
+require_max_lines() {
+	local path="$1"
+	local max_lines="$2"
+	local actual_lines
+	actual_lines="$(wc -l < "$path" | tr -d ' ')"
+	if [ "$actual_lines" -le "$max_lines" ]; then
+		ok "line budget ok for $path: ${actual_lines} <= ${max_lines}"
+	else
+		fail "line budget exceeded for $path: ${actual_lines} > ${max_lines}"
+	fi
+}
+
 require_file() {
 	local path="$1"
 	if [ -f "$path" ]; then
@@ -39,7 +51,7 @@ require_text() {
 	local path="$1"
 	local needle="$2"
 	local label="${3:-$needle}"
-	if rg -Fq "$needle" "$path"; then
+	if grep -Fq "$needle" "$path"; then
 		ok "text present in $path: $label"
 	else
 		fail "missing text in $path: $label"
@@ -50,7 +62,7 @@ require_absent() {
 	local path="$1"
 	local needle="$2"
 	local label="${3:-$needle}"
-	if rg -Fq "$needle" "$path"; then
+	if grep -Fq "$needle" "$path"; then
 		fail "unexpected text in $path: $label"
 	else
 		ok "text absent in $path: $label"
@@ -62,6 +74,7 @@ REQUIRED_DIRS=(
 	"docs/archive"
 	"docs/design-docs"
 	"docs/product-specs"
+	"docs/page-specs"
 	"docs/exec-plans"
 	"docs/exec-plans/active"
 	"docs/exec-plans/completed"
@@ -74,6 +87,7 @@ REQUIRED_FILES=(
 	"AGENTS.md"
 	"ARCHITECTURE.md"
 	"docs/README.md"
+	"docs/CONTEXT_ENGINEERING.md"
 	"docs/SYSTEM_INTENT.md"
 	"docs/DESIGN.md"
 	"docs/FRONTEND.md"
@@ -88,10 +102,23 @@ REQUIRED_FILES=(
 	"docs/design-docs/arena-domain-model.md"
 	"docs/design-docs/learning-loop.md"
 	"docs/product-specs/index.md"
+	"docs/product-specs/home.md"
 	"docs/product-specs/arena.md"
 	"docs/product-specs/terminal.md"
 	"docs/product-specs/signals.md"
 	"docs/product-specs/passport.md"
+	"docs/product-specs/agents.md"
+	"docs/page-specs/index.md"
+	"docs/page-specs/home-onboarding.md"
+	"docs/page-specs/terminal-page.md"
+	"docs/page-specs/arena-page.md"
+	"docs/page-specs/signals-page.md"
+	"docs/page-specs/passport-page.md"
+	"docs/page-specs/agents-page.md"
+	"docs/page-specs/oracle-page.md"
+	"docs/page-specs/settings-page.md"
+	"docs/page-specs/arena-war-page.md"
+	"docs/page-specs/arena-v2-page.md"
 	"docs/exec-plans/index.md"
 	"docs/exec-plans/active/README.md"
 	"docs/exec-plans/active/context-system-rollout-2026-03-06.md"
@@ -124,8 +151,15 @@ require_text "README.md" "## 1.1) Context Routing" "context routing section"
 require_text "README.md" "ctx:checkpoint" "checkpoint command in readme"
 require_text "README.md" "Context Artifact Model" "context artifact model section"
 require_text "ARCHITECTURE.md" "## Canonical Doc Entry Points" "canonical doc entry section"
+require_text "ARCHITECTURE.md" "docs/CONTEXT_ENGINEERING.md" "context engineering entry point"
 require_text "docs/README.md" "## Canonical Entry Docs" "canonical entry docs"
 require_text "docs/README.md" "## Structured Knowledge Base" "structured knowledge base"
+require_text "docs/README.md" "docs/CONTEXT_ENGINEERING.md" "context engineering router"
+require_text "docs/README.md" "docs/page-specs/" "page specs router"
+require_text "docs/CONTEXT_ENGINEERING.md" "## Context Layers" "context layers section"
+require_text "docs/CONTEXT_ENGINEERING.md" "## Retrieval Order" "retrieval order section"
+require_text "docs/CONTEXT_ENGINEERING.md" "## Anti-Patterns" "anti-patterns section"
+require_text "docs/CONTEXT_ENGINEERING.md" "## Mechanical Enforcement" "mechanical enforcement section"
 require_text "docs/SYSTEM_INTENT.md" "## Non-Negotiable Invariants" "system invariants"
 require_text "docs/DESIGN.md" "## Design Authority Stack" "design authority stack"
 require_text "docs/design-docs/arena-domain-model.md" "## Canonical Record: GameRecord" "arena domain GameRecord section"
@@ -139,6 +173,8 @@ require_text "docs/RELIABILITY.md" "## Reliability Rules" "reliability rules"
 require_text "docs/SECURITY.md" "## Security Non-Negotiables" "security non-negotiables"
 require_text "docs/design-docs/core-beliefs.md" "## Beliefs" "beliefs section"
 require_text "docs/product-specs/index.md" "## Surface Specs" "surface specs section"
+require_text "docs/product-specs/index.md" "## Page Specs" "page specs section"
+require_text "docs/page-specs/index.md" "## Page Specs" "page specs index"
 require_text "docs/generated/game-record-schema.md" "## Primary Structure" "game record schema structure"
 require_text "docs/generated/route-map.md" "## App Routes" "route map section"
 require_text "docs/generated/store-authority-map.md" "## Stores" "store authority section"
@@ -153,6 +189,10 @@ require_absent "docs/product-specs/index.md" "../STOCKCLAW_UNIFIED_DESIGN.md" "e
 require_absent "docs/product-specs/arena.md" "../STOCKCLAW_UNIFIED_DESIGN.md" "external arena design ref in arena spec"
 require_absent "docs/PRODUCT_SENSE.md" "../STOCKCLAW_UNIFIED_DESIGN.md" "external arena design ref in product sense"
 require_absent "AGENTS.md" "/Users/ej/Downloads/maxi-doge-unified/README.md" "broken external ssot readme path in agents"
+require_max_lines "AGENTS.md" 130
+require_max_lines "ARCHITECTURE.md" 90
+require_max_lines "docs/README.md" 140
+require_max_lines "docs/DESIGN.md" 90
 
 if [ "$FAIL" -ne 0 ]; then
 	echo "[docs:check] failed."

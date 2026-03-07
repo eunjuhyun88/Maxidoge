@@ -55,7 +55,8 @@ if [ "$BRANCH" = "HEAD" ]; then
 	exit 0
 fi
 
-if [ ! -x scripts/dev/context-save.sh ] || [ ! -x scripts/dev/context-compact.sh ]; then
+# These scripts are invoked through `bash ...`; they do not both need an exec bit.
+if [ ! -f scripts/dev/context-save.sh ] || [ ! -f scripts/dev/context-compact.sh ]; then
 	echo "[ctx:auto] context-save/compact scripts missing; skipping."
 	exit 0
 fi

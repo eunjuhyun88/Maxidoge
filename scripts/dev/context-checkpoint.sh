@@ -27,11 +27,15 @@ sanitize() {
 }
 
 print_list() {
-	local items=("$@")
-	if [ "${#items[@]}" -eq 0 ]; then
+	local array_name="$1"
+	local count=0
+	eval "count=\${#$array_name[@]}"
+	if [ "$count" -eq 0 ]; then
 		echo "- none"
 		return
 	fi
+	local items=()
+	eval "items=(\"\${$array_name[@]}\")"
 
 	for item in "${items[@]}"; do
 		[ -n "$item" ] && echo "- $item"
@@ -173,25 +177,25 @@ mkdir -p "$CHECKPOINT_DIR" "$RUNTIME_DIR"
 	fi
 	echo ""
 	echo "## Owned Files"
-	print_list "${FILES[@]}"
+	print_list FILES
 	echo ""
 	echo "## Canonical Docs Opened"
-	print_list "${DOCS[@]}"
+	print_list DOCS
 	echo ""
 	echo "## Decisions Made"
-	print_list "${DECISIONS[@]}"
+	print_list DECISIONS
 	echo ""
 	echo "## Rejected Alternatives"
-	print_list "${REJECTED[@]}"
+	print_list REJECTED
 	echo ""
 	echo "## Open Questions"
-	print_list "${QUESTIONS[@]}"
+	print_list QUESTIONS
 	echo ""
 	echo "## Next Actions"
-	print_list "${NEXT_ACTIONS[@]}"
+	print_list NEXT_ACTIONS
 	echo ""
 	echo "## Exit Criteria"
-	print_list "${EXIT_CRITERIA[@]}"
+	print_list EXIT_CRITERIA
 } > "$CHECKPOINT_FILE"
 
 cp "$CHECKPOINT_FILE" "$BRANCH_LATEST_FILE"

@@ -68,7 +68,7 @@ const routeMeta = [
   {
     route: '/oracle',
     role: 'redirect route',
-    primaryConcern: 'redirect into signals/oracle view',
+    primaryConcern: 'redirect into signals ai leaderboard view',
     keyState: 'none',
     deepDocs: '`docs/product-specs/signals.md`'
   },
