@@ -25,6 +25,7 @@
   } from '$lib/terminal/terminalShellRuntime';
   import { createTerminalMessageRuntime } from '$lib/terminal/terminalMessageRuntime';
   import { createTerminalPanelRuntime } from '$lib/terminal/terminalPanelRuntime';
+  import { createTerminalSessionRuntime } from '$lib/terminal/terminalSessionRuntime';
   import { createTerminalScanRuntime } from '$lib/terminal/terminalScanRuntime';
   import {
     buildSharedChartPanelProps,
@@ -248,6 +249,37 @@
   let chatSuggestedDir: ChatTradeDirection = $state('LONG');
   let chatFocusKey = $state(0);
   let activeTradeSetup: AgentTradeSetup | null = $state(null);
+  let chatConnectionStatus: TerminalChatConnectionStatus = $state('connected');
+  const terminalSessionRuntime = createTerminalSessionRuntime({
+    getIsTyping: () => isTyping,
+    setIsTyping: (typing) => {
+      isTyping = typing;
+    },
+    getLatestScan: () => latestScan,
+    setLatestScan: (detail) => {
+      latestScan = detail;
+    },
+    getTerminalScanning: () => terminalScanning,
+    setTerminalScanning: (scanning) => {
+      terminalScanning = scanning;
+    },
+    getChatTradeReady: () => chatTradeReady,
+    setChatTradeReady: (ready) => {
+      chatTradeReady = ready;
+    },
+    getChatSuggestedDir: () => chatSuggestedDir,
+    setChatSuggestedDir: (dir) => {
+      chatSuggestedDir = dir;
+    },
+    getChatConnectionStatus: () => chatConnectionStatus,
+    setChatConnectionStatus: (status) => {
+      chatConnectionStatus = status;
+    },
+    getActiveTradeSetup: () => activeTradeSetup,
+    setActiveTradeSetup: (setup) => {
+      activeTradeSetup = setup;
+    },
+  });
   const terminalMessageRuntime = createTerminalMessageRuntime({
     getChatMessages: () => chatMessages,
     setChatMessages: (messages) => {
@@ -259,10 +291,10 @@
     },
   });
   const terminalDecisionState = $derived(deriveTerminalDecisionState({
-    terminalScanning,
-    latestScan,
-    chatTradeReady,
-    chatSuggestedDir,
+    terminalScanning: terminalSessionRuntime.getTerminalScanning(),
+    latestScan: terminalSessionRuntime.getLatestScan(),
+    chatTradeReady: terminalSessionRuntime.getChatTradeReady(),
+    chatSuggestedDir: terminalSessionRuntime.getChatSuggestedDir(),
   }));
   $effect(() => {
     chatMessages;
@@ -284,22 +316,19 @@
   }));
 
   const sharedChartPanelProps = $derived(buildSharedChartPanelProps({
-    chatTradeReady,
-    chatSuggestedDir,
-    activeTradeSetup,
-    latestScan,
+    chatTradeReady: terminalSessionRuntime.getChatTradeReady(),
+    chatSuggestedDir: terminalSessionRuntime.getChatSuggestedDir(),
+    activeTradeSetup: terminalSessionRuntime.getActiveTradeSetup(),
+    latestScan: terminalSessionRuntime.getLatestScan(),
   }));
-
-  // Chat connection status for UI dot indicator
-  let chatConnectionStatus: TerminalChatConnectionStatus = $state('connected');
 
   const sharedIntelPanelProps = $derived(buildSharedIntelPanelProps({
     densityMode,
     chatMessages,
-    isTyping,
-    chatTradeReady,
+    isTyping: terminalSessionRuntime.getIsTyping(),
+    chatTradeReady: terminalSessionRuntime.getChatTradeReady(),
     chatFocusKey,
-    chatConnectionStatus,
+    chatConnectionStatus: terminalSessionRuntime.getChatConnectionStatus(),
   }));
 
   const terminalActionRuntime = createTerminalActionRuntime({
@@ -320,8 +349,8 @@
     waitForUi: tick,
     appendChatMessage: terminalMessageRuntime.appendChatMessage,
     focusChatInput: terminalMessageRuntime.focusChatInput,
-    getChatTradeReady: () => chatTradeReady,
-    getChatSuggestedDir: () => chatSuggestedDir,
+    getChatTradeReady: terminalSessionRuntime.getChatTradeReady,
+    getChatSuggestedDir: terminalSessionRuntime.getChatSuggestedDir,
   });
 
   const terminalChatRuntime = createTerminalChatRuntime({
@@ -329,20 +358,12 @@
     getPair: () => $gameState.pair || 'BTC/USDT',
     getTimeframe: () => $gameState.timeframe || '4h',
     getLivePrices: () => ({ ...$livePrices }),
-    getLatestScan: () => latestScan,
-    getChatSuggestedDir: () => chatSuggestedDir,
-    setChatSuggestedDir: (dir) => {
-      chatSuggestedDir = dir;
-    },
-    setChatTradeReady: (ready) => {
-      chatTradeReady = ready;
-    },
-    setChatConnectionStatus: (status) => {
-      chatConnectionStatus = status;
-    },
-    setIsTyping: (typing) => {
-      isTyping = typing;
-    },
+    getLatestScan: terminalSessionRuntime.getLatestScan,
+    getChatSuggestedDir: terminalSessionRuntime.getChatSuggestedDir,
+    setChatSuggestedDir: terminalSessionRuntime.setChatSuggestedDir,
+    setChatTradeReady: terminalSessionRuntime.setChatTradeReady,
+    setChatConnectionStatus: terminalSessionRuntime.setChatConnectionStatus,
+    setIsTyping: terminalSessionRuntime.setIsTyping,
     appendChatMessage: terminalMessageRuntime.appendChatMessage,
     triggerPatternScanFromChat: (source, time) => terminalActionRuntime.triggerPatternScanFromChat(source, time),
     getAbortSignal: () => AbortSignal.any([AbortSignal.timeout(20000), _pageAbort.signal]),
@@ -364,21 +385,11 @@
   });
 
   const terminalScanRuntime = createTerminalScanRuntime({
-    setTerminalScanning: (scanning) => {
-      terminalScanning = scanning;
-    },
-    setLatestScan: (detail) => {
-      latestScan = detail;
-    },
-    setActiveTradeSetup: (setup) => {
-      activeTradeSetup = setup;
-    },
-    setChatSuggestedDir: (dir) => {
-      chatSuggestedDir = dir;
-    },
-    setChatTradeReady: (ready) => {
-      chatTradeReady = ready;
-    },
+    setTerminalScanning: terminalSessionRuntime.setTerminalScanning,
+    setLatestScan: terminalSessionRuntime.setLatestScan,
+    setActiveTradeSetup: terminalSessionRuntime.setActiveTradeSetup,
+    setChatSuggestedDir: terminalSessionRuntime.setChatSuggestedDir,
+    setChatTradeReady: terminalSessionRuntime.setChatTradeReady,
     appendChatMessages: terminalMessageRuntime.appendChatMessages,
   });
 

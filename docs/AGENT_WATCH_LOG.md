@@ -3940,3 +3940,35 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `terminal/+page.svelte` still owns top-level state allocation and decision/control derived wiring
   - the branch remains broadly dirty from unrelated in-flight refactor work
 - Status: DONE
+
+## [2026-03-07 11:52:39 +0900] START terminal-session-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by removing repeated session-state accessors from `terminal/+page.svelte`
+- Planned work:
+  - extract scan/chat/trade session getter-setter wiring into a dedicated terminal session runtime
+  - rewire action/chat/scan runtimes and derived props to consume the new session boundary
+  - document the new boundary in `CLAUDE.md`
+- Status: IN PROGRESS
+
+## [2026-03-07 11:52:39 +0900] FINISH terminal-session-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by removing repeated session-state accessors from `terminal/+page.svelte`
+- What changed:
+  - Added `src/lib/terminal/terminalSessionRuntime.ts`
+    - canonical getter-setter boundary for terminal scan/chat/trade session state
+    - exposes shared accessors for `latestScan`, `terminalScanning`, `chatTradeReady`, `chatSuggestedDir`, `chatConnectionStatus`, `activeTradeSetup`, `isTyping`
+  - Updated `src/routes/terminal/+page.svelte`
+    - rewired decision state and shared panel props through `terminalSessionRuntime`
+    - action/chat/scan runtimes now consume session accessors from the shared runtime instead of route-local duplicated closures
+  - Updated `CLAUDE.md`
+    - documented the new terminal session runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns top-level state declarations and layout-level derived prop assembly
+  - `/terminal` build artifact size remains volatile while the broader branch is still in heavy refactor
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
