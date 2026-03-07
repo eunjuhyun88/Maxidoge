@@ -1160,21 +1160,41 @@ export class DrawingManager {
     const cursorPrice = cursor.price;
     const side = preview.positionData.side;
     const defaultRR = 2;
+    const diff = cursorPrice - entryPrice;
 
-    // SL is where the cursor is; TP is calculated from RR
+    // Ignore if cursor is too close to entry (dead zone)
+    if (Math.abs(diff) < entryPrice * 0.0001) {
+      preview.updateTimes(this._dragStart.time, cursor.time);
+      return;
+    }
+
     let slPrice: number;
     let tpPrice: number;
 
     if (side === 'long') {
-      // Long: SL below entry, TP above
-      slPrice = Math.min(cursorPrice, entryPrice - 0.0001);
-      const risk = entryPrice - slPrice;
-      tpPrice = entryPrice + risk * defaultRR;
+      if (diff < 0) {
+        // Drag DOWN → cursor = SL, auto-calc TP
+        slPrice = cursorPrice;
+        const risk = entryPrice - slPrice;
+        tpPrice = entryPrice + risk * defaultRR;
+      } else {
+        // Drag UP → cursor = TP, auto-calc SL
+        tpPrice = cursorPrice;
+        const reward = tpPrice - entryPrice;
+        slPrice = entryPrice - reward / defaultRR;
+      }
     } else {
-      // Short: SL above entry, TP below
-      slPrice = Math.max(cursorPrice, entryPrice + 0.0001);
-      const risk = slPrice - entryPrice;
-      tpPrice = entryPrice - risk * defaultRR;
+      if (diff > 0) {
+        // Drag UP → cursor = SL, auto-calc TP
+        slPrice = cursorPrice;
+        const risk = slPrice - entryPrice;
+        tpPrice = entryPrice - risk * defaultRR;
+      } else {
+        // Drag DOWN → cursor = TP, auto-calc SL
+        tpPrice = cursorPrice;
+        const reward = entryPrice - tpPrice;
+        slPrice = entryPrice + reward / defaultRR;
+      }
     }
 
     preview.updatePrices(entryPrice, tpPrice, slPrice);
