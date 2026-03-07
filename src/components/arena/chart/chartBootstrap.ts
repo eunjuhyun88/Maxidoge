@@ -12,8 +12,18 @@ export interface ChartBootstrapResult {
   ma60Series: ISeriesApi<'Line'>;
   ma99Series: ISeriesApi<'Line'>;
   ma120Series: ISeriesApi<'Line'>;
+  bbUpperSeries: ISeriesApi<'Line'>;
+  bbMiddleSeries: ISeriesApi<'Line'>;
+  bbLowerSeries: ISeriesApi<'Line'>;
+  macdLineSeries: ISeriesApi<'Line'>;
+  macdSignalSeries: ISeriesApi<'Line'>;
+  macdHistSeries: ISeriesApi<'Histogram'>;
+  stochKSeries: ISeriesApi<'Line'>;
+  stochDSeries: ISeriesApi<'Line'>;
   volumePaneIndex: number;
   rsiPaneIndex: number;
+  macdPaneIndex: number;
+  stochPaneIndex: number;
 }
 
 interface ChartBootstrapOptions {
@@ -133,6 +143,94 @@ export function createChartBootstrap({
   rsiSeries.createPriceLine({ price: 50, color: chartTheme.rsiMid, lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: '' });
   chart.panes()[rsiPaneIndex].setStretchFactor(0.12);
 
+  // ── Bollinger Bands (main pane overlay) ──────────────────────
+  const bbOpts = (color: string) => ({
+    color,
+    lineWidth: 1 as any,
+    lineStyle: 0,
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false,
+    visible: false, // start hidden
+  });
+  const bbUpperSeries = chart.addSeries(lwc.LineSeries, bbOpts(chartTheme.bbUpper));
+  const bbMiddleSeries = chart.addSeries(lwc.LineSeries, { ...bbOpts(chartTheme.bbMiddle), lineStyle: 2 });
+  const bbLowerSeries = chart.addSeries(lwc.LineSeries, bbOpts(chartTheme.bbLower));
+
+  // ── MACD pane ────────────────────────────────────────────────
+  chart.addPane();
+  const macdPaneIndex = chart.panes().length - 1;
+  const macdLineSeries = chart.addSeries(
+    lwc.LineSeries,
+    {
+      color: chartTheme.macdLine,
+      lineWidth: 1.5 as any,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+      visible: false,
+    },
+    macdPaneIndex,
+  );
+  const macdSignalSeries = chart.addSeries(
+    lwc.LineSeries,
+    {
+      color: chartTheme.macdSignal,
+      lineWidth: 1 as any,
+      lineStyle: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      visible: false,
+    },
+    macdPaneIndex,
+  );
+  const macdHistSeries = chart.addSeries(
+    lwc.HistogramSeries,
+    {
+      priceFormat: { type: 'price', precision: 4, minMove: 0.0001 },
+      lastValueVisible: false,
+      priceLineVisible: false,
+      visible: false,
+    },
+    macdPaneIndex,
+  );
+  macdLineSeries.createPriceLine({ price: 0, color: 'rgba(255,255,255,.08)', lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: '' });
+  chart.panes()[macdPaneIndex].setStretchFactor(0.02); // start collapsed
+
+  // ── Stochastic pane ──────────────────────────────────────────
+  chart.addPane();
+  const stochPaneIndex = chart.panes().length - 1;
+  const stochKSeries = chart.addSeries(
+    lwc.LineSeries,
+    {
+      color: chartTheme.stochK,
+      lineWidth: 1.5 as any,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+      visible: false,
+    },
+    stochPaneIndex,
+  );
+  const stochDSeries = chart.addSeries(
+    lwc.LineSeries,
+    {
+      color: chartTheme.stochD,
+      lineWidth: 1 as any,
+      lineStyle: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      visible: false,
+    },
+    stochPaneIndex,
+  );
+  stochKSeries.createPriceLine({ price: 80, color: chartTheme.stochOB, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+  stochKSeries.createPriceLine({ price: 20, color: chartTheme.stochOS, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+  stochKSeries.createPriceLine({ price: 50, color: 'rgba(255,255,255,.06)', lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: '' });
+  chart.panes()[stochPaneIndex].setStretchFactor(0.02); // start collapsed
+
   return {
     chart,
     series,
@@ -144,7 +242,17 @@ export function createChartBootstrap({
     ma60Series,
     ma99Series,
     ma120Series,
+    bbUpperSeries,
+    bbMiddleSeries,
+    bbLowerSeries,
+    macdLineSeries,
+    macdSignalSeries,
+    macdHistSeries,
+    stochKSeries,
+    stochDSeries,
     volumePaneIndex,
     rsiPaneIndex,
+    macdPaneIndex,
+    stochPaneIndex,
   };
 }

@@ -35,9 +35,9 @@ export interface CreateChartOverlayRuntimeOptions {
   getToChartX: () => (time: number) => number | null;
   getToChartY: () => (price: number) => number | null;
   getToChartPrice: () => (y: number) => number | null;
+  getSelectedDrawingId: () => string | null;
   getAgentPriceLines: () => AgentPriceLines;
   setAgentPriceLines: (lines: AgentPriceLines) => void;
-  setAgentCloseButton: (button: { x: number; y: number; r: number } | null) => void;
 }
 
 export function createChartOverlayRuntime(
@@ -68,7 +68,7 @@ export function createChartOverlayRuntime(
     const ctx = drawCtx;
     if (!ctx) return;
 
-    const { agentCloseBtn } = renderChartOverlay({
+    renderChartOverlay({
       ctx,
       canvasW: drawingCanvas.width,
       canvasH: drawingCanvas.height,
@@ -81,6 +81,7 @@ export function createChartOverlayRuntime(
       tradePreview: options.getTradePreview(),
       chartTheme: options.getChartTheme(),
       livePrice: options.getLivePrice(),
+      selectedDrawingId: options.getSelectedDrawingId(),
       coord: {
         toChartX: options.getToChartX(),
         toChartY: options.getToChartY(),
@@ -88,8 +89,6 @@ export function createChartOverlayRuntime(
         toOverlayPoint,
       },
     });
-
-    options.setAgentCloseButton(agentCloseBtn);
   }
 
   function resizeCanvas() {
@@ -123,13 +122,11 @@ export function createChartOverlayRuntime(
     }
 
     options.setAgentPriceLines({ tp: null, entry: null, sl: null });
-    if (!setup) options.setAgentCloseButton(null);
     render();
   }
 
   function dispose() {
     drawCtx = null;
-    options.setAgentCloseButton(null);
   }
 
   return {

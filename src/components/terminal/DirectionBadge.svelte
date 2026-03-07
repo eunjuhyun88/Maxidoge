@@ -67,7 +67,7 @@
   }
   .dir-badge.soft.neutral {
     color: var(--db-neutral);
-    border-color: rgba(240, 237, 228, 0.2);
+    border-color: rgba(240, 237, 228, 0.5);
     background: rgba(240, 237, 228, 0.08);
   }
 
@@ -89,7 +89,7 @@
 
   .dir-badge.xs {
     padding: 2px 5px;
-    font-size: 8px;
+    font-size: 9px;
   }
   .dir-badge.sm {
     padding: 3px 7px;

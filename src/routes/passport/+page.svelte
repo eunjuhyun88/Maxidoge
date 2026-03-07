@@ -1285,7 +1285,7 @@
     max-width: 1080px;
     height: 100%;
     overflow-y: auto;
-    padding: var(--sp-space-5) var(--sp-space-4) var(--sp-space-5);
+    padding: var(--sp-space-5) var(--sp-space-4) calc(var(--sp-space-5) + var(--sc-bottom-bar-h));
     box-sizing: border-box;
   }
 
@@ -1547,7 +1547,7 @@
     margin-top: 4px;
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.18px;
   }
 
@@ -1568,12 +1568,12 @@
   }
 
   .stamp-text {
-    font-size: 6px;
+    font-size: 9px;
     letter-spacing: 1px;
   }
 
   .stamp-icon {
-    font-size: 6px;
+    font-size: 9px;
     opacity: 0.8;
   }
 
@@ -1589,7 +1589,7 @@
     margin-bottom: 8px;
     color: var(--sp-dim);
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 1px;
   }
 
@@ -2089,7 +2089,7 @@
     color: var(--sp-pk-l);
     border: 1px solid var(--sp-soft);
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
   }
 
   .apc-bar-wrap {
@@ -2571,6 +2571,7 @@
     margin: var(--sp-space-1) 0 0;
   }
 
+  /* ── Tablet ≤1024px ── */
   @media (max-width: 1024px) {
     .passport-scroll {
       padding: var(--sp-space-2);
@@ -2610,9 +2611,37 @@
     .ap-grid {
       grid-template-columns: repeat(6, minmax(0, 1fr));
     }
+
+    .tab-content {
+      padding: var(--sp-space-3);
+    }
+
+    .content-panel {
+      padding: var(--sp-space-3);
+    }
   }
 
+  /* ── Mobile ≤768px ── */
   @media (max-width: 768px) {
+    .passport-scroll {
+      padding: var(--sp-space-1);
+    }
+
+    .passport-card {
+      border-radius: 10px;
+    }
+
+    .unified-header {
+      padding: var(--sp-space-3);
+      gap: var(--sp-space-2);
+    }
+
+    .doge-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 10px;
+    }
+
     .agent-perf-grid,
     .badges-grid {
       grid-template-columns: 1fr;
@@ -2635,7 +2664,7 @@
     }
 
     .uhs {
-      min-width: 66px;
+      min-width: 62px;
       padding: 6px 4px;
       border-radius: 7px;
     }
@@ -2645,7 +2674,7 @@
     }
 
     .uhs-lbl {
-      font-size: 8px;
+      font-size: 9px;
       margin-top: 3px;
     }
 
@@ -2653,8 +2682,18 @@
       justify-content: flex-start;
     }
 
+    .qa-btn {
+      min-height: var(--sc-touch-sm, 36px);
+    }
+
     .focus-strip {
       grid-template-columns: 1fr;
+      padding: var(--sp-space-2);
+    }
+
+    .focus-item {
+      min-height: 60px;
+      padding: var(--sp-space-2);
     }
 
     .holdings-body {
@@ -2670,10 +2709,37 @@
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
+    .tab-bar {
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tab-bar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab-btn {
+      flex: 0 0 auto;
+      min-width: 80px;
+      min-height: 42px;
+      padding: 0 10px;
+    }
+
+    .tab-icon {
+      font-size: 14px;
+    }
+
+    .tab-label {
+      font-size: 9px;
+    }
+
     .pos-row,
     .match-row {
       flex-direction: column;
       align-items: flex-start;
+      gap: 4px;
     }
 
     .pr-right,
@@ -2688,6 +2754,295 @@
       right: 10px;
       transform: rotate(0deg);
       margin-top: 0;
+    }
+
+    .tab-content {
+      padding: var(--sp-space-2);
+    }
+
+    .content-panel {
+      padding: var(--sp-space-2);
+      border-radius: 9px;
+    }
+
+    .htable {
+      min-width: 360px;
+    }
+
+    .hc {
+      font-size: 11px;
+    }
+
+    .mc-value,
+    .psi-value,
+    .asi-val,
+    .wk-v {
+      font-size: 15px;
+    }
+
+    .ml-action-row {
+      gap: var(--sp-space-1);
+    }
+
+    .ml-action-row .qa-btn {
+      font-size: 9px;
+      padding: 0 8px;
+    }
+  }
+
+  /* ── Small Mobile ≤480px ── */
+  @media (max-width: 480px) {
+    .passport-scroll {
+      padding: 2px;
+    }
+
+    .passport-card {
+      border-radius: 8px;
+    }
+
+    .card-ribbon {
+      padding: 4px 8px;
+    }
+
+    .ribbon-text {
+      font-size: 9px;
+    }
+
+    .unified-header {
+      padding: var(--sp-space-2);
+      gap: var(--sp-space-1);
+    }
+
+    .doge-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+    }
+
+    .avatar-edit {
+      width: 14px;
+      height: 14px;
+      font-size: 8px;
+    }
+
+    .player-name {
+      font-size: clamp(14px, 4vw, 17px);
+    }
+
+    .pv-amount {
+      font-size: clamp(18px, 6vw, 24px);
+    }
+
+    .uhs {
+      min-width: 56px;
+      padding: 5px 3px;
+      border-radius: 6px;
+    }
+
+    .uhs-val {
+      font-size: 12px;
+    }
+
+    .metrics-grid,
+    .pos-summary,
+    .arena-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--sp-space-1);
+    }
+
+    .wallet-kpis {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--sp-space-1);
+    }
+
+    .metric-card,
+    .ps-item,
+    .as-item,
+    .wk-item {
+      padding: var(--sp-space-2) var(--sp-space-1);
+    }
+
+    .mc-value,
+    .psi-value,
+    .asi-val,
+    .wk-v {
+      font-size: 14px;
+    }
+
+    .mc-icon {
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .mc-label,
+    .psi-label,
+    .asi-label,
+    .wk-k {
+      font-size: var(--sc-fs-2xs, 9px);
+    }
+
+    .focus-strip {
+      padding: var(--sp-space-1);
+      gap: var(--sp-space-1);
+    }
+
+    .focus-item {
+      min-height: auto;
+      padding: var(--sp-space-1) var(--sp-space-2);
+      gap: var(--sp-space-1);
+    }
+
+    .focus-v {
+      font-size: clamp(13px, 3.5vw, 16px);
+    }
+
+    .focus-sub {
+      font-size: 10px;
+    }
+
+    .tab-btn {
+      min-width: 72px;
+      min-height: 40px;
+      padding: 0 8px;
+      gap: 3px;
+    }
+
+    .tab-icon {
+      font-size: 12px;
+    }
+
+    .tab-label {
+      font-size: var(--sc-fs-2xs, 9px);
+    }
+
+    .ap-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 4px;
+    }
+
+    .badges-grid {
+      gap: 4px;
+      padding: 4px;
+    }
+
+    .badge-card {
+      padding: 6px 4px;
+    }
+
+    .badge-icon {
+      font-size: 14px;
+    }
+
+    .badge-name {
+      font-size: 9px;
+    }
+
+    .agent-perf-card {
+      padding: 7px;
+    }
+
+    .apc-img {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+    }
+
+    .htable {
+      min-width: 320px;
+      font-size: 10px;
+    }
+
+    .hrow {
+      grid-template-columns: 1.5fr 0.8fr 0.8fr 0.8fr;
+      gap: 3px;
+      padding: var(--sp-space-1) var(--sp-space-1);
+    }
+
+    .hc {
+      font-size: 10px;
+    }
+
+    .ai {
+      width: 20px;
+      height: 20px;
+      font-size: 9px;
+    }
+
+    .an {
+      font-size: 10px;
+    }
+
+    .af {
+      font-size: 9px;
+    }
+
+    .donut-wrap svg {
+      max-width: 140px;
+    }
+
+    .pr-pair {
+      font-size: 11px;
+    }
+
+    .pr-src {
+      font-size: 9px;
+      padding: 2px 6px;
+    }
+
+    .pr-pnl,
+    .mr-lp {
+      font-size: 11px;
+      min-width: 48px;
+    }
+
+    .summary-line {
+      font-size: 11px;
+      padding: var(--sp-space-1) var(--sp-space-2);
+    }
+
+    .section-header {
+      font-size: 11px;
+      margin-bottom: var(--sp-space-2);
+    }
+
+    .detail-block summary {
+      font-size: 10px;
+      padding: var(--sp-space-1) var(--sp-space-2);
+    }
+
+    .vb-amount {
+      font-size: clamp(16px, 5vw, 22px);
+    }
+
+    .passport-stamp {
+      top: 4px;
+      right: 6px;
+      padding: 3px 6px;
+    }
+
+    .stamp-text {
+      font-size: var(--sc-fs-2xs, 9px);
+      letter-spacing: 0.5px;
+    }
+
+    .control-rail {
+      padding: var(--sp-space-1) var(--sp-space-2);
+    }
+
+    .quick-actions {
+      gap: var(--sp-space-1);
+    }
+
+    .qa-btn {
+      min-height: var(--sc-touch-sm, 36px);
+      padding: 0 8px;
+      font-size: 9px;
+    }
+
+    .ml-action-row .qa-btn {
+      min-height: 32px;
+      padding: 0 6px;
+      font-size: var(--sc-fs-2xs, 9px);
     }
   }
 </style>

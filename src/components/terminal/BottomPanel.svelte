@@ -211,7 +211,7 @@
   .bp-tab {
     padding: 6px 12px;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1.5px;
     color: rgba(255,255,255,.3);
@@ -231,7 +231,7 @@
     background: rgba(var(--t-accent-rgb),.04);
   }
   .bp-badge {
-    font-size: 7px;
+    font-size: 9px;
     background: var(--yel);
     color: #000;
     padding: 1px 4px;
@@ -289,7 +289,7 @@
   .bp-row-closed { opacity: .4; }
 
   .bp-dir {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     padding: 2px 5px;
     border-radius: 3px;
@@ -302,18 +302,18 @@
 
   .bp-pair { font-size: 9px; font-weight: 700; color: rgba(255,255,255,.7); }
   .bp-src {
-    font-size: 6px;
-    color: rgba(255,255,255,.25);
+    font-size: 9px;
+    color: rgba(255,255,255,.5);
     background: rgba(255,255,255,.04);
     padding: 1px 4px;
     border-radius: 3px;
   }
   .bp-conf {
-    font-size: 8px;
+    font-size: 9px;
     color: var(--cyan);
     font-weight: 700;
   }
-  .bp-entry { font-size: 8px; color: rgba(255,255,255,.4); }
+  .bp-entry { font-size: 9px; color: rgba(255,255,255,.4); }
   .bp-pnl-val {
     font-family: var(--fd);
     font-size: 10px;
@@ -321,12 +321,12 @@
     min-width: 45px;
     text-align: right;
   }
-  .bp-time { font-size: 7px; color: rgba(255,255,255,.2); }
+  .bp-time { font-size: 9px; color: rgba(255,255,255,.5); }
   .bp-expire { color: var(--ora); }
 
   .bp-action-btn {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: .5px;
     padding: 3px 6px;
@@ -358,16 +358,16 @@
   .bp-empty {
     padding: 20px;
     text-align: center;
-    font-size: 8px;
-    color: rgba(255,255,255,.2);
+    font-size: 9px;
+    color: rgba(255,255,255,.5);
     letter-spacing: 1px;
   }
   .bp-section-lbl {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
-    color: rgba(255,255,255,.25);
+    color: rgba(255,255,255,.5);
     padding: 6px 4px 3px;
     border-bottom: 1px solid rgba(255,255,255,.06);
     margin-bottom: 2px;
@@ -381,8 +381,8 @@
     width: 100%;
     padding: 4px;
     font-family: var(--fm);
-    font-size: 7px;
-    color: rgba(255,255,255,.2);
+    font-size: 9px;
+    color: rgba(255,255,255,.5);
     background: none;
     border: none;
     cursor: pointer;
@@ -393,6 +393,6 @@
   /* Activity */
   .bp-act-row { gap: 8px; }
   .bp-act-icon { font-size: 11px; }
-  .bp-act-text { font-size: 8px; flex: 1; }
+  .bp-act-text { font-size: 9px; flex: 1; }
 
 </style>

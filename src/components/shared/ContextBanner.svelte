@@ -135,13 +135,13 @@
   .ctx-i { font-size: 10px; }
   .ctx-t {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: .5px;
   }
   .ctx-arrow {
-    font-size: 8px;
-    color: rgba(255,255,255,.25);
+    font-size: 9px;
+    color: rgba(255,255,255,.5);
     transition: color .15s;
   }
   .ctx-item:hover .ctx-arrow { color: rgba(255,255,255,.5); }

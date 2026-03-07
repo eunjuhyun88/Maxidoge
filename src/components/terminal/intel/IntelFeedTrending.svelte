@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { TrendingCoin, GainerLoser, DexHot, OpScore, OpAlert, TrendTab } from '../intelTypes';
-  import { scoreColor, dirIcon, dirColor, fmtTrendPrice, fmtTrendVol, safeExternalUrl } from '../intelHelpers';
+  import type { TrendingCoin, GainerLoser, DexHot, OpScore, OpAlert, TrendTab } from '$lib/terminal/intel/intelTypes';
+  import { scoreColor, dirIcon, dirColor, fmtTrendPrice, fmtTrendVol, safeExternalUrl } from '$lib/terminal/intel/intelHelpers';
 
   interface Props {
     trendSubTab?: TrendTab;
@@ -280,11 +280,11 @@
     background: rgba(255,255,255,.02); position: sticky; top: 0; z-index: 2;
   }
   .trend-basis {
-    font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.55);
+    font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.55);
     letter-spacing: .25px; line-height: 1.35; flex: 1; min-width: 0;
   }
   .trend-updated {
-    font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.42); white-space: nowrap;
+    font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.42); white-space: nowrap;
   }
 
   .trend-list {
@@ -308,15 +308,15 @@
   }
   .trend-coin { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .trend-sym { font-family: var(--fm); font-size: 10px; font-weight: 800; color: #fff; letter-spacing: .3px; }
-  .trend-name { font-size: 8px; color: rgba(255,255,255,.48); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trend-name { font-size: 9px; color: rgba(255,255,255,.48); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .trend-data { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
   .trend-price { font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.8); }
   .trend-chg { font-family: var(--fm); font-size: 9px; font-weight: 700; }
   .trend-chg.up { color: #00e676; }
   .trend-chg.dn { color: #ff1744; }
-  .trend-vol { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.3); flex-shrink: 0; width: 48px; text-align: right; }
+  .trend-vol { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); flex-shrink: 0; width: 48px; text-align: right; }
   .trend-social { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 1px; }
-  .trend-soc, .trend-galaxy { font-size: 8px; color: rgba(255,255,255,.4); white-space: nowrap; }
+  .trend-soc, .trend-galaxy { font-size: 9px; color: rgba(255,255,255,.4); white-space: nowrap; }
   .trend-section-lbl {
     font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: 1px;
     padding: 6px 2px 3px; color: rgba(255,255,255,.45);
@@ -339,7 +339,7 @@
     padding: 4px 7px; border-radius: 999px; cursor: pointer; white-space: nowrap;
   }
   .dex-chain-btn.active { color: var(--yel); border-color: rgba(var(--t-accent-rgb),.3); background: rgba(var(--t-accent-rgb),.1); }
-  .dex-addr { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.32); line-height: 1.2; }
+  .dex-addr { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.32); line-height: 1.2; }
   .dex-metrics { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 1px; min-width: 58px; }
   .dex-price { font: 700 9px/1 var(--fm); color: rgba(255,255,255,.85); }
   .dex-vol { font: 400 8px/1 var(--fm); color: rgba(255,255,255,.42); }
@@ -348,7 +348,7 @@
     border: 1px solid rgba(var(--t-accent-rgb),.2); border-radius: 999px;
     padding: 2px 5px; flex-shrink: 0;
   }
-  .dex-desc { font-size: 8px; color: rgba(255,255,255,.3); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .dex-desc { font-size: 9px; color: rgba(255,255,255,.3); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .dex-link { color: rgba(var(--t-accent-rgb),.5); font-size: 10px; flex-shrink: 0; }
 
   /* Picks */
@@ -367,12 +367,12 @@
   }
   .picks-macro.risk-on { background: rgba(0,230,118,.08); border-color: rgba(0,230,118,.2); color: #00e676; }
   .picks-macro.risk-off { background: rgba(255,23,68,.08); border-color: rgba(255,23,68,.2); color: #ff1744; }
-  .picks-time { font-size: 8px; opacity: .5; margin-left: 4px; font-weight: 400; }
+  .picks-time { font-size: 9px; opacity: .5; margin-left: 4px; font-weight: 400; }
 
   .picks-alerts { display: flex; flex-direction: column; gap: 3px; }
   .pa-row {
     display: flex; align-items: center; gap: 4px; padding: 3px 6px; border-radius: 3px;
-    font-family: var(--fm); font-size: 8px; font-weight: 600;
+    font-family: var(--fm); font-size: 9px; font-weight: 600;
     background: rgba(255,140,59,.06); border-left: 2px solid rgba(255,140,59,.4); color: rgba(255,140,59,.85);
   }
   .pa-row.critical { background: rgba(255,23,68,.08); border-left-color: #ff1744; color: #ff5252; }
@@ -411,13 +411,13 @@
   .pb-seg.onc { background: #ffd600; }
   .pick-reasons { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 2px; }
   .pr-tag {
-    font-family: var(--fm); font-size: 7px; font-weight: 600; letter-spacing: .3px;
+    font-family: var(--fm); font-size: 9px; font-weight: 600; letter-spacing: .3px;
     padding: 1px 5px; border-radius: 3px;
     background: rgba(255,255,255,.05); color: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.06);
   }
   .pick-alerts { display: flex; flex-wrap: wrap; gap: 3px; }
   .pa-mini {
-    font-family: var(--fm); font-size: 7px; font-weight: 700;
+    font-family: var(--fm); font-size: 9px; font-weight: 700;
     padding: 1px 4px; border-radius: 2px;
     background: rgba(255,140,59,.08); color: rgba(255,140,59,.75); border: 1px solid rgba(255,140,59,.15);
   }

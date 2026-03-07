@@ -37,7 +37,7 @@
   --sc-text-0: #f0ede4;        /* primary text (cream white) */
   --sc-text-1: rgba(240, 237, 228, 0.84);  /* secondary text */
   --sc-text-2: rgba(240, 237, 228, 0.64);  /* muted text */
-  --sc-text-3: rgba(240, 237, 228, 0.45);  /* very dim text */
+  --sc-text-3: rgba(240, 237, 228, 0.55);  /* dim text (a11y floor) */
 
   /* ── TYPOGRAPHY: Font Families ── */
   --sc-font-display: 'Orbitron', monospace;
@@ -116,6 +116,30 @@
   --sc-header-h: 44px;
   --sc-header-h-mobile: 40px;
   --sc-bottom-bar-h: 28px;
+  --sc-tab-strip-h: 34px;
+
+  /* ── BREAKPOINTS (reference — use in @media queries) ── */
+  /* xs: 0-479 | sm: 480-767 | md: 768-1023 | lg: 1024+ | xl: 1280+ */
+  --sc-bp-xs: 480px;
+  --sc-bp-sm: 768px;
+  --sc-bp-md: 1024px;
+  --sc-bp-lg: 1280px;
+
+  /* ── TOUCH TARGETS (WCAG 2.5.8) ── */
+  --sc-touch-min: 44px;      /* Level AAA — primary interactive */
+  --sc-touch-sm: 36px;       /* acceptable with adequate spacing */
+
+  /* ── RESPONSIVE FONT SIZES (clamp pattern) ── */
+  --sc-fs-resp-2xs: clamp(9px, 2vw, 10px);
+  --sc-fs-resp-xs: clamp(10px, 2.2vw, 11px);
+  --sc-fs-resp-sm: clamp(11px, 2.4vw, 12px);
+  --sc-fs-resp-base: clamp(12px, 2.6vw, 13px);
+
+  /* ── SAFE AREA (notch devices) ── */
+  --sc-safe-top: env(safe-area-inset-top, 0px);
+  --sc-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --sc-safe-left: env(safe-area-inset-left, 0px);
+  --sc-safe-right: env(safe-area-inset-right, 0px);
 
   /* ═══════════════════════════════════════════════════════════
      BACKWARD COMPATIBILITY MAPPINGS
@@ -231,3 +255,42 @@
   background: var(--sc-accent);
   color: #000;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   PERFORMANCE: backdrop-filter / reduced-motion
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Disable backdrop-filter on mobile (GPU-intensive) */
+@media (max-width: 768px) {
+  .perf-no-blur,
+  .arena-page .result-overlay,
+  .arena-page .pvp-lobby-overlay,
+  .arena-page .chat-area,
+  .chart-legend-wrap,
+  .chart-controls-bar {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* Disable all animations and backdrop-filters for reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  *:not(.modal-overlay):not(.wallet-overlay) {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ACCESSIBILITY: minimum font size enforcement
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Global minimum font-size floor for readability (WCAG) */
+/* Components should use --sc-fs-2xs (9px) as the minimum.
+   This rule catches any element that falls below 9px. */

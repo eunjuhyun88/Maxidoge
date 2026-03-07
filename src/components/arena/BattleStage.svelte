@@ -135,7 +135,7 @@
     transition: all .15s;
   }
   .dl {
-    font-size: 6px; color: rgba(240,237,228,.6); letter-spacing: 1.5px; font-family: var(--fd); font-weight: 900;
+    font-size: 9px; color: rgba(240,237,228,.6); letter-spacing: 1.5px; font-family: var(--fd); font-weight: 900;
     background: rgba(10,26,18,.8); padding: 1px 4px; border-radius: 6px;
   }
 
@@ -152,7 +152,7 @@
     background: rgba(232,150,125,.06);
     box-shadow: 0 0 30px rgba(232,150,125,.1);
   }
-  #ctable .cl { font-size: 6px; color: rgba(240,237,228,.2); letter-spacing: 2px; font-family: var(--fcomic); font-weight: 900; }
+  #ctable .cl { font-size: 9px; color: rgba(240,237,228,.5); letter-spacing: 2px; font-family: var(--fcomic); font-weight: 900; }
   #ctable.on .cl { color: rgba(240,237,228,.6); }
 
   /* Agent Sprites */
@@ -186,7 +186,7 @@
   }
   .ag .react { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); font-size: 14px; opacity: 0; }
   .ag .nm {
-    font-size: 7px; font-weight: 900; letter-spacing: 1.5px; margin-top: 4px;
+    font-size: 9px; font-weight: 900; letter-spacing: 1.5px; margin-top: 4px;
     font-family: var(--fcomic); color: #f0ede4;
     background: rgba(10,26,18,.85); padding: 1px 5px; border-radius: 6px;
   }
@@ -202,7 +202,7 @@
     background: rgba(10,26,18,.92); border-radius: 12px; padding: 6px 12px;
     border: 1px solid rgba(232,150,125,.25); box-shadow: 0 4px 16px rgba(0,0,0,.4);
   }
-  #phase .pt { font-size: 7px; color: rgba(240,237,228,.4); letter-spacing: 2px; font-family: var(--fm); font-weight: 700; }
+  #phase .pt { font-size: 9px; color: rgba(240,237,228,.55); letter-spacing: 2px; font-family: var(--fm); font-weight: 700; }
   #phase .pn {
     font-size: 12px; font-weight: 900; font-family: var(--fc); letter-spacing: 2px; color: #e8967d;
   }
@@ -223,17 +223,17 @@
   .fcard.vis { opacity: 1; transform: none; }
   .fcard .fh { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; }
   .fcard .fi { font-size: 10px; }
-  .fcard .fn { font-size: 7px; font-weight: 900; letter-spacing: 1px; color: rgba(240,237,228,.7); }
+  .fcard .fn { font-size: 9px; font-weight: 900; letter-spacing: 1px; color: rgba(240,237,228,.7); }
   .fcard .fdir {
-    font-size: 7px; padding: 1px 5px; border-radius: 10px; font-weight: 900;
+    font-size: 9px; padding: 1px 5px; border-radius: 10px; font-weight: 900;
     margin-left: auto; border: 1px solid;
   }
   .fdir.long { background: rgba(0,204,136,.15); color: #00cc88; border-color: rgba(0,204,136,.3); }
   .fdir.short { background: rgba(255,94,122,.15); color: #ff5e7a; border-color: rgba(255,94,122,.3); }
   .fdir.neutral { background: rgba(232,150,125,.15); color: #e8967d; border-color: rgba(232,150,125,.3); }
-  .fcard .fd { font-size: 7px; color: rgba(240,237,228,.45); line-height: 1.4; }
+  .fcard .fd { font-size: 9px; color: rgba(240,237,228,.45); line-height: 1.4; }
   .fcard .fconf { margin-top: 3px; display: flex; align-items: center; gap: 4px; }
   .fcard .fconf-bar { flex: 1; height: 4px; border-radius: 3px; background: rgba(240,237,228,.08); overflow: hidden; border: 1px solid rgba(240,237,228,.1); }
   .fcard .fconf-fill { height: 100%; border-radius: 2px; transition: width .4s; }
-  .fcard .fconf-val { font-size: 7px; font-weight: 900; width: 20px; text-align: right; color: rgba(240,237,228,.6); }
+  .fcard .fconf-val { font-size: 9px; font-weight: 900; width: 20px; text-align: right; color: rgba(240,237,228,.6); }
 </style>

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { OnchainData } from '../intelTypes';
-  import { MVRV_ZONE_LABELS } from '../intelTypes';
-  import { formatRelativeTime, fmtUsd } from '../intelHelpers';
-  import { communityPosts, likeCommunityPost } from '$lib/stores/communityStore';
+  import type { OnchainData } from '$lib/terminal/intel/intelTypes';
+  import { MVRV_ZONE_LABELS } from '$lib/terminal/intel/intelTypes';
+  import { formatRelativeTime, fmtUsd } from '$lib/terminal/intel/intelHelpers';
+  import { communityPosts, toggleReaction } from '$lib/stores/communityStore';
 
   interface Props {
     onchainData?: OnchainData | null;
@@ -136,15 +136,42 @@
       <div class="comm-head">
         <div class="comm-avatar" style="background:{post.avatarColor}20;color:{post.avatarColor}">{post.avatar}</div>
         <span class="comm-name">{post.author}</span>
-        <span class="comm-time">now</span>
+        {#if post.signal}
+          <span class="comm-sig {post.signal}">{post.signal === 'long' ? '▲' : '▼'} {post.signal.toUpperCase()}</span>
+        {/if}
+        <span class="comm-time">{formatRelativeTime(post.timestamp)}</span>
       </div>
       <div class="comm-txt">{post.text}</div>
+
+      {#if post.signalAttachment}
+        {@const att = post.signalAttachment}
+        {@const rr = Math.abs(att.entry - att.sl) > 0 ? Math.abs(att.tp - att.entry) / Math.abs(att.entry - att.sl) : 0}
+        <div class="comm-signal-card">
+          <div class="comm-sig-top">
+            <span class="comm-sig-pair">{att.pair}</span>
+            <span class="comm-sig-dir {att.dir === 'LONG' ? 'long' : 'short'}">{att.dir === 'LONG' ? '▲' : '▼'} {att.dir}</span>
+            <span class="comm-sig-conf">{att.conf}%</span>
+            {#if rr > 0}<span class="comm-sig-rr">R:R {rr.toFixed(1)}</span>{/if}
+            {#if att.timeframe}<span class="comm-sig-tf">{att.timeframe}</span>{/if}
+          </div>
+          <div class="comm-sig-levels">
+            <span class="comm-sig-lv">E ${att.entry.toLocaleString()}</span>
+            <span class="comm-sig-lv tp">TP ${att.tp.toLocaleString()}</span>
+            <span class="comm-sig-lv sl">SL ${att.sl.toLocaleString()}</span>
+          </div>
+        </div>
+      {/if}
+
       <div class="comm-actions">
-        {#if post.signal}
-          <span class="comm-sig {post.signal}">{post.signal.toUpperCase()}</span>
+        <button class="comm-react" class:reacted={post.userReacted} onclick={() => toggleReaction(post.id)}>
+          👍 {post.likes > 0 ? post.likes : ''}
+        </button>
+        {#if post.commentCount > 0}
+          <span class="comm-meta">💬 {post.commentCount}</span>
         {/if}
-        <button class="comm-react" onclick={() => likeCommunityPost(post.id)}>👍</button>
-        <button class="comm-react" onclick={() => likeCommunityPost(post.id)}>🔥</button>
+        {#if post.copyCount > 0}
+          <span class="comm-meta">📋 {post.copyCount}</span>
+        {/if}
       </div>
     </div>
   {/each}
@@ -154,71 +181,149 @@
 {/if}
 
 <style>
-  .ev-list { display: flex; flex-direction: column; gap: 5px; }
-  .ev-card { border-left: 2px solid; padding: 6px 8px; background: rgba(255,255,255,.03); }
-  .ev-head { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; }
-  .ev-tag { font-family: var(--fm); font-size: 9px; font-weight: 700; padding: 2px 5px; }
-  .ev-etime { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.6); }
-  .ev-body { font-family: var(--fm); font-size: 11px; line-height: 1.45; color: rgba(255,255,255,.8); }
-  .ev-src { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); display: block; margin-top: 3px; }
+  /* ── Events ── */
+  .ev-list { display: flex; flex-direction: column; gap: var(--sc-sp-1); }
+  .ev-card {
+    border-left: 2px solid;
+    padding: var(--sc-sp-1_5) var(--sc-sp-2);
+    background: var(--sc-accent-bg-subtle);
+  }
+  .ev-head { display: flex; align-items: center; gap: var(--sc-sp-1); margin-bottom: 2px; }
+  .ev-tag { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); font-weight: 700; padding: 2px 5px; }
+  .ev-etime { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); color: var(--sc-text-2); }
+  .ev-body { font-family: var(--sc-font-mono); font-size: var(--sc-fs-sm); line-height: var(--sc-lh-normal); color: var(--sc-text-1); }
+  .ev-src { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); color: var(--sc-text-3); display: block; margin-top: 3px; }
 
-  .oc-dashboard { margin-bottom: 8px; }
-  .oc-header { font-family: var(--fm); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #a78bfa; padding: 4px 0 6px; border-bottom: 1px solid rgba(255,255,255,.1); }
-  .oc-loading { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.4); text-align: center; padding: 12px 0; }
-  .oc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; }
-  .oc-card { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); padding: 7px 8px; display: flex; flex-direction: column; gap: 2px; }
-  .oc-card-lbl { font-family: var(--fm); font-size: 8px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,.5); }
-  .oc-card-val { font-family: var(--fm); font-size: 15px; font-weight: 800; line-height: 1.1; }
-  .oc-mini-gauge { height: 4px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 1px; }
-  .oc-mini-gauge > span { display: block; height: 100%; border-radius: 999px; transition: width .2s ease; }
-  .oc-card-tag { font-family: var(--fm); font-size: 8px; font-weight: 600; padding: 1px 5px; border-radius: 2px; display: inline-block; width: fit-content; letter-spacing: .3px; }
-  .oc-card-sub { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.55); letter-spacing: .3px; }
+  /* ── On-chain dashboard ── */
+  .oc-dashboard { margin-bottom: var(--sc-sp-2); }
+  .oc-header {
+    font-family: var(--sc-font-mono); font-size: var(--sc-fs-xs); font-weight: 700;
+    letter-spacing: 1.5px; color: #a78bfa;
+    padding: var(--sc-sp-1) 0 var(--sc-sp-1_5);
+    border-bottom: 1px solid var(--sc-line-soft);
+  }
+  .oc-loading { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); color: var(--sc-text-3); text-align: center; padding: var(--sc-sp-3) 0; }
+  .oc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sc-sp-1); margin-top: var(--sc-sp-1_5); }
+  .oc-card {
+    background: var(--sc-accent-bg-subtle);
+    border: 1px solid var(--sc-line-soft);
+    padding: var(--sc-sp-2);
+    display: flex; flex-direction: column; gap: 2px;
+    border-radius: var(--sc-radius-sm);
+  }
+  .oc-card-lbl { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); font-weight: 700; letter-spacing: 1px; color: var(--sc-text-3); }
+  .oc-card-val { font-family: var(--sc-font-mono); font-size: var(--sc-fs-lg); font-weight: 800; line-height: var(--sc-lh-tight); }
+  .oc-mini-gauge { height: 4px; border-radius: var(--sc-radius-pill); background: var(--sc-line-soft); overflow: hidden; margin-top: 1px; }
+  .oc-mini-gauge > span { display: block; height: 100%; border-radius: var(--sc-radius-pill); transition: width var(--sc-duration-normal) var(--sc-ease); }
+  .oc-card-tag { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); font-weight: 600; padding: 1px 5px; border-radius: var(--sc-radius-sm); display: inline-block; width: fit-content; letter-spacing: .3px; }
+  .oc-card-sub { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); color: var(--sc-text-3); letter-spacing: .3px; }
 
-  .oc-liq { margin-top: 6px; }
-  .oc-liq-header { display: flex; justify-content: space-between; align-items: center; font-family: var(--fm); font-size: 9px; font-weight: 700; color: rgba(255,255,255,.7); letter-spacing: .5px; margin-bottom: 3px; }
-  .oc-liq-total { color: rgba(255,255,255,.5); }
-  .oc-liq-bar { display: flex; height: 16px; border-radius: 2px; overflow: hidden; }
-  .oc-liq-long { background: #ef444480; display: flex; align-items: center; justify-content: center; min-width: 20px; transition: width .3s; }
-  .oc-liq-short { background: #22c55e80; display: flex; align-items: center; justify-content: center; min-width: 20px; transition: width .3s; }
-  .oc-liq-long span, .oc-liq-short span { font-family: var(--fm); font-size: 8px; font-weight: 700; color: #fff; letter-spacing: .3px; }
+  /* ── Liquidations ── */
+  .oc-liq { margin-top: var(--sc-sp-1_5); }
+  .oc-liq-header { display: flex; justify-content: space-between; align-items: center; font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); font-weight: 700; color: var(--sc-text-1); letter-spacing: .5px; margin-bottom: 3px; }
+  .oc-liq-total { color: var(--sc-text-3); }
+  .oc-liq-bar { display: flex; height: 16px; border-radius: var(--sc-radius-sm); overflow: hidden; }
+  .oc-liq-long { background: rgba(255, 94, 122, 0.4); display: flex; align-items: center; justify-content: center; min-width: 20px; transition: width var(--sc-duration-normal); }
+  .oc-liq-short { background: rgba(0, 204, 136, 0.4); display: flex; align-items: center; justify-content: center; min-width: 20px; transition: width var(--sc-duration-normal); }
+  .oc-liq-long span, .oc-liq-short span { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); font-weight: 700; color: var(--sc-text-0); letter-spacing: .3px; }
 
-  .oc-alerts { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
-  .oc-alert { font-family: var(--fm); font-size: 9px; padding: 4px 7px; border-radius: 2px; border-left: 2px solid; }
-  .oc-alert-critical { background: rgba(239,68,68,.12); border-color: #ef4444; color: #fca5a5; }
-  .oc-alert-alert { background: rgba(249,115,22,.1); border-color: #f97316; color: #fdba74; }
-  .oc-alert-info { background: rgba(59,130,246,.08); border-color: #3b82f6; color: #93c5fd; }
+  /* ── Alerts ── */
+  .oc-alerts { display: flex; flex-direction: column; gap: 3px; margin-top: var(--sc-sp-1_5); }
+  .oc-alert { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); padding: var(--sc-sp-1) var(--sc-sp-2); border-radius: var(--sc-radius-sm); border-left: 2px solid; }
+  .oc-alert-critical { background: var(--sc-bad-bg); border-color: var(--sc-bad); color: #fca5a5; }
+  .oc-alert-alert { background: var(--sc-warn-bg); border-color: var(--sc-warn); color: #fdba74; }
+  .oc-alert-info { background: rgba(59,130,246,.08); border-color: var(--sc-info); color: #93c5fd; }
   .oc-alert-title { font-weight: 600; letter-spacing: .3px; }
 
-  .flow-list { display: flex; flex-direction: column; gap: 4px; }
-  .flow-empty { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.4); text-align: center; padding: 16px 0; letter-spacing: .5px; }
-  .flow-section-lbl { font-family: var(--fm); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: var(--grn); padding: 4px 0 5px; border-bottom: 1px solid rgba(255,255,255,.1); }
-  .flow-row { display: flex; align-items: center; gap: 6px; padding: 5px 7px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); }
-  .flow-dir { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
-  .flow-dir.sell { color: var(--red); } .flow-dir.buy { color: var(--grn); }
-  .flow-info { flex: 1; min-width: 0; }
-  .flow-lbl { font-family: var(--fm); font-size: 11px; color: rgba(255,255,255,.8); }
-  .flow-addr { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.6); }
-  .flow-src { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.38); letter-spacing: .6px; margin-top: 1px; }
-  .flow-amt { font-family: var(--fm); font-size: 10px; font-weight: 700; flex-shrink: 0; }
-  .flow-amt.sell { color: var(--red); } .flow-amt.buy { color: var(--grn); }
-
-  .comm-post { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
-  .comm-head { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
-  .comm-avatar { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; border: 1px solid rgba(255,255,255,.2); }
-  .comm-name { font-family: var(--fm); font-size: 11px; font-weight: 700; color: #fff; }
-  .comm-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); margin-left: auto; }
-  .comm-txt { font-family: var(--fm); font-size: 11px; line-height: 1.45; color: rgba(255,255,255,.8); }
-  .comm-sig { display: inline-block; font-family: var(--fm); font-size: 9px; font-weight: 700; padding: 2px 7px; border: 1px solid; margin-top: 3px; }
-  .comm-sig.long { color: var(--grn); border-color: rgba(0,255,136,.3); }
-  .comm-sig.short { color: var(--red); border-color: rgba(255,45,85,.3); }
-  .user-post { border-left: 2px solid var(--yel); }
-  .comm-actions { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
-  .comm-react {
-    font-size: 11px; background: rgba(255,255,255,.08);
-    border: 1px solid rgba(255,255,255,.14); border-radius: 4px;
-    padding: 2px 6px; cursor: pointer; transition: all .12s;
+  /* ── Flows ── */
+  .flow-list { display: flex; flex-direction: column; gap: var(--sc-sp-1); }
+  .flow-empty { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); color: var(--sc-text-3); text-align: center; padding: var(--sc-sp-4) 0; letter-spacing: .5px; }
+  .flow-section-lbl { font-family: var(--sc-font-mono); font-size: var(--sc-fs-xs); font-weight: 700; letter-spacing: 1.5px; color: var(--sc-good); padding: var(--sc-sp-1) 0; border-bottom: 1px solid var(--sc-line-soft); }
+  .flow-row {
+    display: flex; align-items: center; gap: var(--sc-sp-1_5);
+    padding: var(--sc-sp-1) var(--sc-sp-2);
+    background: var(--sc-accent-bg-subtle);
+    border: 1px solid var(--sc-line-soft);
+    border-radius: var(--sc-radius-sm);
   }
-  .comm-react:hover { background: rgba(var(--t-accent-rgb),.1); border-color: rgba(var(--t-accent-rgb),.25); }
+  .flow-dir { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: var(--sc-fs-xs); font-weight: 700; flex-shrink: 0; }
+  .flow-dir.sell { color: var(--sc-bad); }
+  .flow-dir.buy { color: var(--sc-good); }
+  .flow-info { flex: 1; min-width: 0; }
+  .flow-lbl { font-family: var(--sc-font-mono); font-size: var(--sc-fs-sm); color: var(--sc-text-1); }
+  .flow-addr { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); color: var(--sc-text-2); }
+  .flow-src { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); color: var(--sc-text-3); letter-spacing: .6px; margin-top: 1px; }
+  .flow-amt { font-family: var(--sc-font-mono); font-size: var(--sc-fs-xs); font-weight: 700; flex-shrink: 0; }
+  .flow-amt.sell { color: var(--sc-bad); }
+  .flow-amt.buy { color: var(--sc-good); }
+
+  /* ── Community Posts (terminal embed) ── */
+  .comm-post {
+    padding: var(--sc-sp-2) 0;
+    border-bottom: 1px solid var(--sc-line-soft);
+  }
+  .comm-head { display: flex; align-items: center; gap: var(--sc-sp-1); margin-bottom: var(--sc-sp-1); }
+  .comm-avatar {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: var(--sc-fs-2xs); font-weight: 700;
+    border: 1px solid var(--sc-line-soft);
+  }
+  .comm-name { font-family: var(--sc-font-mono); font-size: var(--sc-fs-sm); font-weight: 700; color: var(--sc-text-0); }
+  .comm-time { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); color: var(--sc-text-3); margin-left: auto; }
+  .comm-txt { font-family: var(--sc-font-mono); font-size: var(--sc-fs-sm); line-height: var(--sc-lh-normal); color: var(--sc-text-1); }
+  .comm-sig {
+    display: inline-block;
+    font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); font-weight: 700;
+    padding: 2px 7px; border: 1px solid; margin-top: 3px;
+    border-radius: var(--sc-radius-sm);
+  }
+  .comm-sig.long { color: var(--sc-good); border-color: rgba(0, 204, 136, 0.3); background: var(--sc-good-bg); }
+  .comm-sig.short { color: var(--sc-bad); border-color: rgba(255, 94, 122, 0.3); background: var(--sc-bad-bg); }
+  .user-post { border-left: 2px solid var(--sc-accent); }
+
+  .comm-actions { display: flex; align-items: center; gap: var(--sc-sp-1); margin-top: var(--sc-sp-1); }
+  .comm-react {
+    font-size: var(--sc-fs-sm);
+    background: var(--sc-surface);
+    border: 1px solid var(--sc-line-soft);
+    border-radius: var(--sc-radius-sm);
+    padding: 2px var(--sc-sp-1_5);
+    cursor: pointer;
+    transition: all var(--sc-duration-fast) var(--sc-ease);
+    font-family: var(--sc-font-mono);
+    color: var(--sc-text-2);
+  }
+  .comm-react:hover { background: var(--sc-surface-2); border-color: var(--sc-line); }
+  .comm-react.reacted { background: rgba(59,130,246,.12); border-color: rgba(59,130,246,.35); color: #93c5fd; }
+  .comm-meta { font-family: var(--sc-font-mono); font-size: var(--sc-fs-xs); color: var(--sc-text-3); }
+
+  .comm-signal-card {
+    margin: var(--sc-sp-1) 0;
+    padding: var(--sc-sp-1) var(--sc-sp-2);
+    border-radius: var(--sc-radius-md);
+    background: var(--sc-surface);
+    border: 1px solid var(--sc-line-soft);
+  }
+  .comm-sig-top { display: flex; align-items: center; gap: var(--sc-sp-1); flex-wrap: wrap; margin-bottom: 3px; }
+  .comm-sig-pair { font-family: var(--sc-font-display); font-size: var(--sc-fs-sm); font-weight: 900; color: var(--sc-text-0); }
+  .comm-sig-dir {
+    font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); font-weight: 900;
+    letter-spacing: .5px; padding: 1px 5px; border: 1px solid; border-radius: var(--sc-radius-sm);
+  }
+  .comm-sig-dir.long { color: var(--sc-good); border-color: rgba(0, 204, 136, 0.3); background: var(--sc-good-bg); }
+  .comm-sig-dir.short { color: var(--sc-bad); border-color: rgba(255, 94, 122, 0.3); background: var(--sc-bad-bg); }
+  .comm-sig-conf { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); font-weight: 700; color: var(--sc-warn); }
+  .comm-sig-rr { font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); color: var(--sc-text-3); }
+  .comm-sig-tf {
+    font-family: var(--sc-font-mono); font-size: var(--sc-fs-2xs); font-weight: 800;
+    padding: 1px 5px; border-radius: var(--sc-radius-pill);
+    background: var(--sc-accent-bg); color: var(--sc-accent);
+  }
+  .comm-sig-levels { display: flex; gap: var(--sc-sp-2); }
+  .comm-sig-lv { font-family: var(--sc-font-display); font-size: var(--sc-fs-xs); font-weight: 700; color: var(--sc-text-0); }
+  .comm-sig-lv.tp { color: var(--sc-good); }
+  .comm-sig-lv.sl { color: var(--sc-bad); }
 
   @supports (animation-timeline: view()) {
     .ev-card, .comm-post, .flow-row {

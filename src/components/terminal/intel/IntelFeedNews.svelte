@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { HeadlineEx, PolicyCard } from '../intelTypes';
-  import { policyBiasLabel, policyBiasClass, scoreBreakdownText, safeExternalUrl } from '../intelHelpers';
+  import type { HeadlineEx, PolicyCard } from '$lib/terminal/intel/intelTypes';
+  import { policyBiasLabel, policyBiasClass, scoreBreakdownText, safeExternalUrl } from '$lib/terminal/intel/intelHelpers';
 
   interface Props {
     visibleHeadlines?: HeadlineEx[];
@@ -154,11 +154,11 @@
     border-bottom: 1px solid rgba(var(--t-accent-rgb),.1);
   }
   .hl-ticker-badge {
-    font-family: var(--fm); font-size: 8px; font-weight: 900;
+    font-family: var(--fm); font-size: 9px; font-weight: 900;
     letter-spacing: 1.5px; color: var(--yel);
   }
   .hl-sort-btn {
-    font-family: var(--fm); font-size: 7px; font-weight: 800;
+    font-family: var(--fm); font-size: 9px; font-weight: 800;
     letter-spacing: .5px; padding: 2px 6px;
     background: rgba(255,255,255,.05); border: 1px solid rgba(var(--t-accent-rgb),.2);
     border-radius: 3px; color: rgba(var(--t-accent-rgb),.7); cursor: pointer;
@@ -188,18 +188,18 @@
   .hl-meta { display: flex; gap: 6px; align-items: center; margin-top: 2px; flex-wrap: wrap; }
   .hl-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); }
   .hl-net {
-    font-family: var(--fm); font-size: 7px; font-weight: 700; letter-spacing: .5px;
+    font-family: var(--fm); font-size: 9px; font-weight: 700; letter-spacing: .5px;
     color: rgba(139,92,246,.7); background: rgba(139,92,246,.1);
     padding: 0 4px; border-radius: 2px;
   }
-  .hl-engage { font-family: var(--fm); font-size: 7px; font-weight: 700; color: rgba(255,140,59,.8); }
-  .hl-creator { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.3); }
+  .hl-engage { font-family: var(--fm); font-size: 9px; font-weight: 700; color: rgba(255,140,59,.8); }
+  .hl-creator { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); }
   a.hl-linked { text-decoration: none; color: inherit; }
   .hl-linked:hover .hl-txt { text-decoration: underline; }
   .hl-ext { font-size: 10px; opacity: 0; transition: opacity .15s; flex-shrink: 0; color: rgba(var(--t-accent-rgb),.6); padding-top: 1px; }
   .hl-linked:hover .hl-ext { opacity: 1; }
   .hl-loading, .hl-end {
-    font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.3);
+    font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3);
     text-align: center; padding: 10px 0; letter-spacing: 1px;
   }
   .flow-empty { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.4); text-align: center; padding: 16px 0; letter-spacing: .5px; }

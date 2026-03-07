@@ -575,6 +575,7 @@
     background: var(--sp-bg);
     display: flex; flex-direction: column;
     position: relative;
+    padding-bottom: var(--sc-bottom-bar-h);
   }
   .home > * { flex-shrink: 0; }
   .home {
@@ -1312,7 +1313,7 @@
   }
 
   .sq-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 10px;
   }
   .sq-grid-6 {
@@ -1561,7 +1562,7 @@
   }
 
   /* ═══ RESPONSIVE ═══ */
-  @media (min-width: 901px) {
+  @media (min-width: 769px) {
     .home {
       scroll-padding-top: var(--header-h, 48px);
     }
@@ -1704,13 +1705,13 @@
       letter-spacing: clamp(1.4px, 0.3vw, 2.6px);
     }
     .why-grid { grid-template-columns: 1fr; }
-    .flow { padding-top: clamp(48px, 8vw, 60px); padding-bottom: clamp(48px, 8vw, 60px); }
-    .about { padding-top: clamp(72px, 10vw, 100px); padding-bottom: clamp(48px, 6vw, 64px); }
-    .detect { padding-top: clamp(48px, 8vw, 60px); padding-bottom: clamp(48px, 8vw, 60px); }
+    .flow { padding-top: clamp(32px, 5vw, 48px); padding-bottom: clamp(32px, 5vw, 48px); }
+    .about { padding-top: clamp(40px, 6vw, 56px); padding-bottom: clamp(28px, 4vw, 40px); }
+    .detect { padding-top: clamp(32px, 5vw, 48px); padding-bottom: clamp(32px, 5vw, 48px); }
     .dtl-inputs { grid-template-columns: 1fr 1fr; }
     .dtl-inputs-4 { grid-template-columns: repeat(2, 1fr); }
     .detect-example { font-size: 10px; padding: 10px 14px; }
-    .cta { padding-top: clamp(46px, 8vw, 58px); }
+    .cta { padding-top: clamp(32px, 5vw, 44px); }
     .fstep-num { font-size: clamp(22px, 3.2vw, 26px); min-width: 48px; }
     .fstep-imgwrap { width: 60px; height: 60px; }
     .sq-frame { padding: 16px; border-radius: 14px; }
@@ -1719,9 +1720,9 @@
     .dtl-input { padding: 14px; }
     .dtl-label { font-size: 11px; letter-spacing: 0.8px; white-space: nowrap; }
     .dtl-desc { font-size: 11px; line-height: 1.5; }
-    .dtl-badge { width: 26px; height: 26px; font-size: 8px; margin-right: 5px; }
+    .dtl-badge { width: 26px; height: 26px; font-size: 9px; margin-right: 5px; }
     .dtl-icon { font-size: 13px; }
-    .dtl-count { font-size: 8px; padding: 1px 5px; }
+    .dtl-count { font-size: 9px; padding: 1px 5px; }
     .dtl-flow-label { font-size: 10px; letter-spacing: 1.5px; }
 
     /* ── Squad card normalization ── */
@@ -1733,6 +1734,7 @@
   }
 
   @media (max-width: 768px) {
+    .home { padding-bottom: 0; }
     .hero-left { padding: clamp(32px, 8vw, 48px) 20px clamp(24px, 5vw, 36px); }
 
     /* ── Hero title: 1면답게 크게 ── */
@@ -1796,7 +1798,7 @@
     .hs-stars { font-size: 12px; letter-spacing: 1px; }
     .hs-quote { gap: 6px; }
     .hs-quote-txt { font-size: 9px; letter-spacing: 1px; }
-    .hs-quote-src { font-size: 8px; }
+    .hs-quote-src { font-size: 9px; }
 
     /* Mobile feature cards: vertical but image capped */
     .hero-right {
@@ -1834,6 +1836,11 @@
     .fc-brief { font-size: 11px; margin-top: 5px; line-height: 1.45; }
     .fc-all { display: none; }
     .hero-right-head { display: none; }
+    /* Scroll hint: fade right edge to indicate more cards */
+    .hero-right {
+      -webkit-mask-image: linear-gradient(to right, black 82%, transparent 100%);
+      mask-image: linear-gradient(to right, black 82%, transparent 100%);
+    }
 
     .why-grid { gap: 12px; }
     .why-card { padding: 16px; }
@@ -1843,14 +1850,16 @@
     .ab-line { font-size: clamp(16px, 5vw, 22px); }
     .ab-pk { font-size: clamp(18px, 6vw, 26px); }
 
-    /* ── Unified section padding ── */
-    .flow, .detect, .cta {
-      padding: clamp(48px, 12vw, 72px) 16px;
+    /* ── Unified section padding (compact mobile) ── */
+    .flow, .detect {
+      padding: clamp(24px, 6vw, 36px) 16px;
     }
     .about {
-      padding: clamp(56px, 14vw, 80px) 16px clamp(40px, 10vw, 56px);
+      padding: clamp(28px, 7vw, 40px) 16px clamp(20px, 5vw, 28px);
     }
-    .squad { padding: 40px 16px; }
+    .squad { padding: 20px 16px; }
+    /* CTA section: hidden on mobile (Hero has wallet+terminal buttons) */
+    .cta { display: none; }
 
     .sq-grid { grid-template-columns: 1fr; }
     .sq-grid-6 { grid-template-columns: repeat(2, 1fr); }
@@ -1862,24 +1871,24 @@
     .sq-pct { font-size: 10px; }
     .sq-bar { margin-top: 2px; }
     .sq-title { font-size: clamp(20px, 7vw, 28px); }
-    .sq-sub { font-size: 10px; margin-bottom: 20px; }
+    .sq-sub { font-size: 10px; margin-bottom: 12px; }
 
     /* ── Detect mobile ── */
     .dtl-inputs-4 { grid-template-columns: 1fr; gap: 10px; }
     .dtl-input { padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     .dtl-label { font-size: 12px; white-space: nowrap; }
     .dtl-desc { font-size: 11px; line-height: 1.45; width: 100%; margin-top: 6px; }
-    .dtl-badge { width: 24px; height: 24px; font-size: 8px; }
+    .dtl-badge { width: 24px; height: 24px; font-size: 9px; }
     .dtl-icon { font-size: 14px; }
-    .dtl-count { font-size: 8px; }
+    .dtl-count { font-size: 9px; }
     .dtl-flow { margin: 20px 0; }
     .dtl-flow-label { font-size: 9px; letter-spacing: 1px; }
     .dtl-flow-line { width: 40px; }
-    .detect-header { margin-bottom: 20px; }
+    .detect-header { margin-bottom: 14px; }
     .dt-w { font-size: clamp(14px, 4vw, 18px); }
     .dt-pk { font-size: clamp(18px, 6vw, 26px); }
     .detect-sub { font-size: 9px; letter-spacing: 1px; margin-top: 8px; }
-    .detect-cta { margin-top: 24px; gap: 12px; }
+    .detect-cta { margin-top: 16px; gap: 10px; }
     .detect-example { font-size: 10px; padding: 10px 14px; line-height: 1.5; }
 
     /* ── CTA mobile ── */
@@ -1896,7 +1905,7 @@
 
     /* ── Flow mobile ── */
     .flow-tag { font-size: 9px; }
-    .flow-title { margin-bottom: 20px; }
+    .flow-title { margin-bottom: 12px; }
     .fstep { gap: 12px; padding: 16px; border-radius: 10px; }
     .fstep-num { font-size: 18px; min-width: 32px; }
     .fstep-title { font-size: 11px; letter-spacing: 0.8px; }
@@ -1905,13 +1914,13 @@
     .fstep-bar { max-width: 100px; }
 
     /* ── Footer mobile ── */
-    .foot { padding: 20px 16px 16px; gap: 14px; }
+    .foot { padding: 16px 16px 12px; gap: 10px; }
     .foot-top { gap: 12px; }
     .foot-logo { font-size: 10px; }
     .foot-nav { gap: 4px; }
-    .foot-nav a { font-size: 8px; padding: 5px 8px; letter-spacing: 0.8px; }
-    .foot-copy { font-size: 7px; }
-    .foot-tag { font-size: 8px; }
+    .foot-nav a { font-size: 9px; padding: 5px 8px; letter-spacing: 0.8px; min-height: 36px; display: inline-flex; align-items: center; }
+    .foot-copy { font-size: 9px; }
+    .foot-tag { font-size: 9px; }
   }
 
   @media (max-width: 480px) {
@@ -1920,12 +1929,12 @@
     .hero-doge { width: 50px; }
     .flow-sub,
     .detect-sub,
-    .about-tag { letter-spacing: 1.2px; }
+    .about-tag { letter-spacing: 1.2px; margin-top: 16px; padding-top: 12px; }
     .cta-w { font-size: 20px; }
     .cta-pk { font-size: 26px; }
   }
 
-  @media (min-width: 1081px) and (max-height: 900px) {
+  @media (min-width: 1025px) and (max-height: 900px) {
     .hero {
       grid-template-columns: minmax(0, 1fr) clamp(292px, 30vw, 390px);
       gap: 10px;
@@ -1988,7 +1997,7 @@
       background: rgba(240,237,228,0.08);
       border: 1px solid rgba(232,150,125,0.15);
       color: var(--sp-w, #f0ede4);
-      width: 32px; height: 32px; border-radius: 50%;
+      width: 36px; height: 36px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       font-size: 14px; cursor: pointer;
       transition: background 0.15s;

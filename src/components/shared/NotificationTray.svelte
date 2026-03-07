@@ -158,7 +158,7 @@
     background: var(--red);
     color: #fff;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     min-width: 18px;
     height: 18px;
@@ -236,7 +236,7 @@
   }
   .tray-action {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     color: var(--dim);
@@ -341,14 +341,14 @@
   }
   .notif-time {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     color: var(--dim);
     flex-shrink: 0;
     margin-left: auto;
   }
   .notif-body {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: var(--fg-medium);
     line-height: var(--lh-relaxed);
     word-wrap: break-word;

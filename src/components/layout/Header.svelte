@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { gameState } from '$lib/stores/gameState';
@@ -10,24 +10,51 @@
   import { fetchPrice } from '$lib/api/binance';
   import { TOKEN_MAP } from '$lib/data/tokens';
 
-  const state = $derived($gameState);
+  const gState = $derived($gameState);
   const wallet = $derived($walletStore);
   const connected = $derived($isWalletConnected);
   const liveP = $derived($livePrices);
   const activePath = $derived($page.url.pathname);
 
   const NAV_ITEMS = [
-    { path: '/terminal', label: 'TERMINAL', icon: '~', desc: '실시간 차트와 스캔' },
-    { path: '/arena', label: 'ARENA', icon: '>', desc: '드래프트와 배틀' },
-    { path: '/arena-war', label: 'WAR', icon: '!', desc: 'AI와 1:1 분석 대결', accent: true },
-    { path: '/signals', label: 'COMMUNITY', icon: '#', desc: '시그널, 오라클 리더보드, 라이브 피드' },
-    { path: '/passport', label: 'PASSPORT', icon: '@', desc: '내 기록과 포트폴리오' },
+    { path: '/terminal', label: 'TERMINAL', mobileLabel: 'TERM', icon: '~', desc: '실시간 차트와 스캔' },
+    { path: '/arena', label: 'ARENA', mobileLabel: 'ARENA', icon: '>', desc: '드래프트와 배틀' },
+    { path: '/arena-war', label: 'WAR', mobileLabel: 'WAR', icon: '!', desc: 'AI와 1:1 분석 대결', accent: true },
+    { path: '/signals', label: 'COMMUNITY', mobileLabel: 'SIGNAL', icon: '#', desc: '시그널, 오라클 리더보드, 라이브 피드' },
+    { path: '/passport', label: 'PASSPORT', mobileLabel: 'MY', icon: '@', desc: '내 기록과 포트폴리오' },
   ];
+
+  // ── Velo-style: collapse tab strip on scroll down ──
+  let tabStripCollapsed = $state(false);
+  let _lastScrollY = 0;
+  let _scrollCleanup: (() => void) | null = null;
+
+  onMount(() => {
+    // Find the scrollable main-content container
+    const scrollEl = document.getElementById('main-content');
+    if (!scrollEl) return;
+
+    const handleScroll = () => {
+      const y = scrollEl.scrollTop;
+      // Collapse when scrolling down past 40px, expand when scrolling up
+      if (y > _lastScrollY && y > 40) {
+        tabStripCollapsed = true;
+      } else if (y < _lastScrollY) {
+        tabStripCollapsed = false;
+      }
+      _lastScrollY = y;
+    };
+
+    scrollEl.addEventListener('scroll', handleScroll, { passive: true });
+    _scrollCleanup = () => scrollEl.removeEventListener('scroll', handleScroll);
+  });
+
+  onDestroy(() => { _scrollCleanup?.(); });
 
   let _lastFetchedToken = '';
 
   $effect(() => {
-    const token = state.pair.split('/')[0] || 'BTC';
+    const token = gState.pair.split('/')[0] || 'BTC';
     if (token !== _lastFetchedToken && !(token in liveP)) {
       _lastFetchedToken = token;
       const tokDef = TOKEN_MAP.get(token);
@@ -54,7 +81,7 @@
     return activePath.startsWith(path);
   }
 
-  const selectedToken = $derived(state.pair.split('/')[0] || 'BTC');
+  const selectedToken = $derived(gState.pair.split('/')[0] || 'BTC');
   const selectedPrice = $derived(liveP[selectedToken] || 0);
   const selectedPriceText = $derived(
     selectedPrice > 0
@@ -75,7 +102,7 @@
     <div class="nav-sep"></div>
 
     <div class="selected-ticker">
-      <span class="st-pair">{state.pair}</span>
+      <span class="st-pair">{gState.pair}</span>
       <span class="st-price">${selectedPriceText}</span>
     </div>
 
@@ -98,7 +125,7 @@
   <div class="nav-right">
     <div class="score-badge">
       <span class="score-label">SCORE</span>
-      <span class="score-value">{Math.round(state.score)}</span>
+      <span class="score-value">{Math.round(gState.score)}</span>
     </div>
 
     <button
@@ -125,17 +152,26 @@
     {/if}
   </div>
 
-  <div class="nav-tabs-mobile">
+  <div class="mobile-tab-strip" class:collapsed={tabStripCollapsed}>
     {#each NAV_ITEMS as item}
       <button
-        class="nav-tab-m"
+        class="mtab"
         class:active={isActive(item.path)}
+        class:accent={item.accent}
         onclick={() => nav(item.path)}
-        aria-label={item.desc}
       >
-        {item.label}
+        {item.mobileLabel}
       </button>
     {/each}
+    <button
+      class="strip-toggle"
+      onclick={() => tabStripCollapsed = !tabStripCollapsed}
+      aria-label={tabStripCollapsed ? '탭 펼치기' : '탭 접기'}
+    >
+      <svg class="toggle-chevron" class:up={!tabStripCollapsed} width="10" height="6" viewBox="0 0 10 6" fill="none">
+        <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
   </div>
 </nav>
 
@@ -147,7 +183,7 @@
     top: 0; left: 0; right: 0;
     z-index: var(--sc-z-header);
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     height: var(--sc-header-h);
     padding: 0 var(--sc-sp-3);
@@ -192,7 +228,7 @@
     display: flex;
     align-items: center;
     gap: var(--sc-sp-1_5);
-    padding: 0 var(--sc-sp-1);
+    padding: 0 var(--sc-sp-2);
     flex-shrink: 0;
   }
   .st-pair {
@@ -306,6 +342,7 @@
     border: none;
     border-radius: var(--sc-radius-sm);
     padding: var(--sc-sp-1) var(--sc-sp-3);
+    min-height: var(--sc-touch-sm, 36px);
     cursor: pointer;
     letter-spacing: 1px;
     transition: all var(--sc-duration-fast);
@@ -332,92 +369,185 @@
     box-shadow: 0 0 6px var(--sc-good);
   }
 
-  /* Mobile tab bar: hidden on desktop */
-  .nav-tabs-mobile {
+  /* ── Active States (Apple-tier touch feedback) ── */
+  .nav-logo:active { opacity: 0.6; transform: scale(0.95); }
+  .nav-tab-desktop:active { background: var(--sc-accent-bg); }
+  .settings-btn:active {
+    background: var(--sc-accent-bg);
+    transform: scale(0.92);
+  }
+  .wallet-btn:active {
+    transform: scale(0.96);
+    opacity: 0.85;
+  }
+
+  /* ── Mobile Tab Strip (hidden on desktop) ── */
+  .mobile-tab-strip {
     display: none;
   }
 
-  /* ═══ TABLET / MOBILE (< 1024px) ═══ */
-  @media (max-width: 1024px) {
+  /* ═══ COMPACT DESKTOP (769–1024px) ═══
+     한 줄 유지, 티커/스코어 숨김, 탭 패딩 축소 */
+  @media (max-width: 1024px) and (min-width: 769px) {
+    .nav-sep { display: none; }
+    .selected-ticker { display: none; }
+    .score-badge { display: none; }
+    .nav-tab-desktop {
+      padding: 0 var(--sc-sp-2);
+      font-size: var(--sc-fs-2xs);
+      letter-spacing: 0.5px;
+    }
+    .nav-logo {
+      font-size: var(--sc-fs-sm);
+      letter-spacing: 1px;
+    }
+    .nav-right { gap: var(--sc-sp-1); }
+  }
+
+  /* ═══ MOBILE (≤ 768px) — 헤더 1줄 + 텔레그램 스타일 탭 스트립 ═══ */
+  @media (max-width: 768px) {
     #nav {
       height: auto;
-    }
-    .nav-main {
-      height: var(--sc-header-h-mobile);
+      flex-wrap: wrap;
     }
     .nav-sep { display: none; }
     .selected-ticker { display: none; }
     .nav-tab-desktop { display: none; }
     .score-badge { display: none; }
 
+    .nav-main {
+      height: var(--sc-header-h-mobile, 40px);
+    }
     .nav-logo {
       font-size: var(--sc-fs-sm);
       letter-spacing: 1.5px;
     }
     .nav-right {
       margin-left: auto;
-      height: var(--sc-header-h-mobile);
+      height: var(--sc-header-h-mobile, 40px);
+    }
+    .settings-btn {
+      padding: var(--sc-sp-2);
+      min-width: var(--sc-touch-sm, 36px);
+      min-height: var(--sc-touch-sm, 36px);
     }
     .wallet-btn {
       padding: var(--sc-sp-1) var(--sc-sp-3);
       border-radius: var(--sc-radius-md);
     }
 
-    .nav-tabs-mobile {
+    /* ── Telegram-style Tab Strip (scrollable, collapsible) ── */
+    .mobile-tab-strip {
       display: flex;
-      align-items: stretch;
-      width: 100%;
-      border-top: 1px solid var(--sc-accent-bg-subtle);
-      height: 36px;
+      flex: 0 0 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      height: var(--sc-tab-strip-h, 34px);
+      border-top: 1px solid var(--sc-line-soft);
+      background: var(--sc-bg-1);
+      transition: height 200ms var(--sc-ease), opacity 200ms var(--sc-ease);
+      will-change: height, opacity;
     }
-    .nav-tab-m {
-      flex: 1;
+    .mobile-tab-strip::-webkit-scrollbar { display: none; }
+    /* Velo-style: collapse on scroll down — keeps toggle visible */
+
+    .mtab {
+      flex-shrink: 0;
+      padding: 0 var(--sc-sp-3);
+      height: 100%;
+      display: flex;
+      align-items: center;
       font-family: var(--sc-font-pixel);
       font-size: var(--sc-fs-2xs);
-      letter-spacing: 0.5px;
+      letter-spacing: 1px;
       color: var(--sc-text-3);
       background: none;
       border: none;
-      border-right: 1px solid var(--sc-accent-bg-subtle);
       cursor: pointer;
+      position: relative;
+      white-space: nowrap;
+      transition: color var(--sc-duration-fast);
+    }
+    .mtab:hover { color: var(--sc-text-1); }
+    .mtab.active { color: var(--sc-accent); }
+    .mtab.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: var(--sc-sp-2);
+      right: var(--sc-sp-2);
+      height: 2px;
+      background: var(--sc-accent);
+      border-radius: 1px 1px 0 0;
+      box-shadow: 0 0 6px rgba(232, 150, 125, 0.4);
+    }
+    .mtab.accent.active { color: var(--sc-accent); }
+    .mtab:active {
+      opacity: 0.7;
+      transition: opacity 60ms;
+    }
+
+    /* ── Toggle chevron ── */
+    .strip-toggle {
+      flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: color var(--sc-duration-fast), background var(--sc-duration-fast);
-      position: relative;
+      width: 28px;
+      height: 100%;
+      background: none;
+      border: none;
+      border-left: 1px solid var(--sc-line-soft);
+      cursor: pointer;
+      color: var(--sc-text-3);
+      padding: 0;
+      transition: color var(--sc-duration-fast);
     }
-    .nav-tab-m:last-child { border-right: none; }
-    .nav-tab-m:active { background: var(--sc-accent-bg-subtle); }
-    .nav-tab-m.active {
-      color: var(--sc-accent);
-      background: var(--sc-accent-bg-subtle);
-      text-shadow: 0 0 6px rgba(232, 150, 125, 0.3);
+    .strip-toggle:active { color: var(--sc-accent); }
+    .toggle-chevron {
+      transition: transform 200ms var(--sc-ease);
     }
-    .nav-tab-m.active::after {
-      content: '';
-      position: absolute;
-      bottom: 0; left: 20%; right: 20%;
-      height: 2px;
-      background: var(--sc-accent);
-      box-shadow: 0 0 6px rgba(232, 150, 125, 0.4);
-      border-radius: 1px;
+    .toggle-chevron.up {
+      transform: rotate(180deg);
+    }
+
+    /* Collapsed: strip shrinks BUT toggle stays accessible */
+    .mobile-tab-strip.collapsed {
+      height: 20px;
+      overflow: hidden;
+    }
+    .mobile-tab-strip.collapsed .mtab {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .mobile-tab-strip.collapsed .strip-toggle {
+      border-left: none;
+      width: 100%;
+      height: 20px;
     }
   }
 
-  /* ═══ SMALL MOBILE (< 480px) ═══ */
+  /* ═══ SMALL MOBILE (≤ 480px) ═══ */
   @media (max-width: 480px) {
+    .nav-main {
+      height: var(--sc-touch-sm, 36px);
+    }
+    .nav-right {
+      height: var(--sc-touch-sm, 36px);
+    }
     .nav-logo {
       font-size: var(--sc-fs-xs);
       letter-spacing: 1px;
     }
-    .nav-tabs-mobile {
-      height: 34px;
-    }
-    .nav-tab-m {
-      letter-spacing: 0;
-    }
     .wallet-btn {
       padding: var(--sc-sp-1) var(--sc-sp-2);
+      min-height: var(--sc-touch-sm, 36px);
+    }
+    .mtab {
+      padding: 0 var(--sc-sp-2);
+      font-size: 9px;
+      letter-spacing: 0.5px;
     }
   }
 </style>

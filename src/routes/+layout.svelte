@@ -17,6 +17,14 @@
 
   const isTerminal = derived(page, $p => $p.url.pathname.startsWith('/terminal'));
 
+  // Hide global BottomBar on mobile (unneeded chrome on small screens)
+  // - Terminal routes ≤1024px: terminal has its own bottom nav
+  // - All routes ≤768px: status bar adds no value on phones
+  let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const hideBottomBar = $derived(
+    ($isTerminal && windowWidth <= 1024) || windowWidth <= 768
+  );
+
   // Sync currentView store from URL via effect
   $effect(() => {
     const path = $page.url.pathname;
@@ -39,6 +47,11 @@
   let _wsFullFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   onMount(async () => {
+    // Track viewport width for conditional BottomBar
+    const handleResize = () => { windowWidth = window.innerWidth; };
+    window.addEventListener('resize', handleResize);
+    _resizeCleanup = () => window.removeEventListener('resize', handleResize);
+
     // 1) REST bootstrap — 초기 가격 + 24h 통계 세팅
     try {
       const [prices, tickers24] = await Promise.all([
@@ -140,10 +153,13 @@
     }
   });
 
+  let _resizeCleanup: (() => void) | null = null;
+
   onDestroy(() => {
     if (_wsFlushTimer) clearTimeout(_wsFlushTimer);
     if (_wsFullFlushTimer) clearTimeout(_wsFullFlushTimer);
     if (globalWsCleanup) globalWsCleanup();
+    if (_resizeCleanup) _resizeCleanup();
   });
 </script>
 
@@ -153,7 +169,9 @@
   <div id="main-content" class:terminal-route={$isTerminal}>
     {@render children()}
   </div>
-  <BottomBar />
+  {#if !hideBottomBar}
+    <BottomBar />
+  {/if}
 </div>
 
 <!-- Global Wallet Modal -->
@@ -181,11 +199,18 @@
     position: relative;
   }
 
+  /* 769-1024px: compact one-line header (44px) */
   @media (max-width: 1024px) {
     #app {
       height: 100svh;
       min-height: 100svh;
-      padding-top: 76px; /* mobile header (40px) + mobile nav tabs (36px) */
+    }
+  }
+  /* ≤768px: header (40px) + tab strip (34px) = 74px top */
+  @media (max-width: 768px) {
+    #app {
+      padding-top: calc(var(--sc-header-h-mobile, 40px) + var(--sc-tab-strip-h, 34px));
+      padding-bottom: 0;
     }
     #main-content {
       overflow: auto;
@@ -195,6 +220,12 @@
     #main-content.terminal-route {
       overflow: hidden;
       overscroll-behavior: none;
+    }
+  }
+  @media (max-width: 480px) {
+    #app {
+      /* 36px header + tab strip = 70px */
+      padding-top: calc(var(--sc-touch-sm, 36px) + var(--sc-tab-strip-h, 34px));
     }
   }
 </style>

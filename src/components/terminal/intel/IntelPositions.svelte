@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { PositionTradeRow, PositionMarketRow } from '../intelTypes';
+  import type { PositionTradeRow, PositionMarketRow } from '$lib/terminal/intel/intelTypes';
   import { parseOutcomePrices } from '$lib/api/polymarket';
   import { positionsLoading, positionsError, pendingPositions } from '$lib/stores/positionStore';
   import { predictMarkets } from '$lib/stores/predictStore';
-  import { CRYPTO_RX } from '../intelTypes';
+  import { CRYPTO_RX } from '$lib/terminal/intel/intelTypes';
   import PolymarketBetPanel from '../PolymarketBetPanel.svelte';
   import GmxTradePanel from '../GmxTradePanel.svelte';
 
@@ -233,7 +233,7 @@
   .pos-view-tab:hover { color: rgba(255,255,255,.6); background: rgba(255,255,255,.02); }
   .pos-view-tab.active { color: #fff; border-bottom-color: var(--yel, var(--term-accent, #e8967d)); }
   .pos-view-cnt {
-    font-size: 8px; font-weight: 800;
+    font-size: 9px; font-weight: 800;
     background: rgba(var(--t-accent-rgb),.15); color: var(--yel, var(--term-accent, #e8967d));
     padding: 1px 5px; border-radius: 8px; min-width: 16px;
   }
@@ -258,7 +258,7 @@
     letter-spacing: 2px; color: var(--yel);
   }
   .pos-cnt {
-    font-family: var(--fm); font-size: 8px; font-weight: 900;
+    font-family: var(--fm); font-size: 9px; font-weight: 900;
     background: var(--yel); color: #000;
     padding: 1px 6px; border-radius: 8px;
   }
@@ -284,7 +284,7 @@
     letter-spacing: .5px; min-width: 50px; text-align: right;
   }
   .pos-close {
-    font-family: var(--fm); font-size: 8px; font-weight: 900;
+    font-family: var(--fm); font-size: 9px; font-weight: 900;
     letter-spacing: 1px; padding: 4px 8px;
     background: rgba(255,45,85,.1); color: var(--red);
     border: 1px solid rgba(255,45,85,.3); border-radius: 3px;
@@ -392,7 +392,7 @@
 
   .gmx-row { border-left: 2px solid rgba(255,140,0,.25); }
   .gmx-pnl-col { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; min-width: 50px; }
-  .gmx-pnl-usd { font-family: var(--fm); font-size: 8px; font-weight: 700; }
+  .gmx-pnl-usd { font-family: var(--fm); font-size: 9px; font-weight: 700; }
   .gmx-status { background: rgba(255,140,0,.1); color: rgba(255,140,0,.7); }
   .gmx-open-btn {
     width: 100%; padding: 8px 12px; margin-top: 4px;

@@ -252,10 +252,10 @@
     margin-left: auto;
   }
   .hp-label {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1.5px;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
   }
   .hp-bar {
     width: 100px;
@@ -333,7 +333,7 @@
     color: #F0EDE4;
   }
   .agent-name {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1.5px;
     color: rgba(240, 237, 228, 0.6);
@@ -351,9 +351,9 @@
     transition: width 0.4s;
   }
   .agent-conf {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
     font-variant-numeric: tabular-nums;
   }
 
@@ -397,10 +397,10 @@
     z-index: 1;
   }
   .boss-label {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 2px;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
   }
   .boss-price {
     font-size: 14px;
@@ -440,7 +440,7 @@
   }
   .idle-label {
     font-size: 11px;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
     animation: idleBlink 2s ease-in-out infinite;
   }
   .idle-agents {
@@ -458,7 +458,7 @@
     background: rgba(10, 9, 8, 0.8);
     font-size: 14px;
     font-weight: 900;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
   }
 
   @keyframes idleBlink {
@@ -489,7 +489,7 @@
   }
   .spark-empty {
     font-size: 9px;
-    color: rgba(240, 237, 228, 0.2);
+    color: rgba(240, 237, 228, 0.5);
     display: flex;
     align-items: center;
     height: 100%;

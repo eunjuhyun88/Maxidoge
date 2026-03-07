@@ -240,7 +240,7 @@
   }
 
   .agent-level {
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(255,255,255,0.4);
     font-family: 'JetBrains Mono', monospace;
   }
@@ -251,7 +251,7 @@
   }
 
   .type-badge {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 0.5px;
     padding: 1px 5px;
@@ -398,7 +398,7 @@
     transform: translateX(-50%);
     background: rgba(0,0,0,0.85);
     color: white;
-    font-size: 8px;
+    font-size: 9px;
     padding: 3px 6px;
     border-radius: 4px;
     white-space: nowrap;

@@ -145,7 +145,7 @@
 
   .st-section { margin-bottom: 16px; }
   .st-section.danger { border-top: 2px solid rgba(255,45,85,.2); padding-top: 14px; margin-top: 8px; }
-  .st-label { font-size: 8px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
+  .st-label { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
 
   .st-btns { display: flex; gap: 4px; }
   .spd-btn, .tg-btn, .pair-btn, .tf-btn, .thm-btn {
@@ -165,8 +165,8 @@
 
   .api-info { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .api-badge { font-size: 9px; color: #E8967D; font-weight: 700; }
-  .api-status { font-size: 7px; color: #00ff88; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(0,255,136,.1); }
-  .api-ep { font-size: 7px; color: #555; font-family: var(--fm); margin: 2px 0; }
+  .api-status { font-size: 9px; color: #00ff88; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(0,255,136,.1); }
+  .api-ep { font-size: 9px; color: #555; font-family: var(--fm); margin: 2px 0; }
 
   .reset-btn {
     width: 100%; padding: 10px;
@@ -176,5 +176,5 @@
     letter-spacing: 2px; cursor: pointer; transition: all .15s;
   }
   .reset-btn:hover { background: rgba(255,45,85,.2); border-color: #ff2d55; }
-  .reset-warn { font-size: 7px; color: #555; font-family: var(--fm); margin-top: 4px; text-align: center; }
+  .reset-warn { font-size: 9px; color: #555; font-family: var(--fm); margin-top: 4px; text-align: center; }
 </style>

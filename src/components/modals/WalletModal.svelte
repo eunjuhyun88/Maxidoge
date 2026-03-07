@@ -780,7 +780,7 @@
 
   .wh-tag {
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1.4px;
     color: var(--wm-kicker);
   }
@@ -806,7 +806,7 @@
     background: transparent;
     color: var(--wm-muted);
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1.2px;
     padding: 7px 10px;
     cursor: pointer;
@@ -869,7 +869,7 @@
     text-align: center;
     padding: 5px 8px;
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 1px;
     color: rgba(240, 237, 228, 0.44);
   }
@@ -903,7 +903,7 @@
 
   .hero-kicker {
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1.5px;
     color: var(--wm-kicker);
   }
@@ -934,7 +934,7 @@
 
   .flow-item {
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1.3px;
     color: rgba(240, 237, 228, 0.82);
     padding: 7px 8px;
@@ -989,7 +989,7 @@
 
   .wo-chain {
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 0.8px;
     border: 1px solid rgba(232, 150, 125, 0.4);
     border-radius: 999px;
@@ -1042,14 +1042,14 @@
 
   .info-k {
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 1px;
     color: rgba(240, 237, 228, 0.55);
   }
 
   .info-v {
     font-family: var(--fp);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1px;
     color: var(--wm-text);
     text-align: right;
@@ -1064,7 +1064,7 @@
 
   .form-label {
     font-family: var(--fp);
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 1.2px;
     color: rgba(240, 237, 228, 0.56);
   }
@@ -1088,7 +1088,7 @@
   }
 
   .form-input::placeholder {
-    color: rgba(240, 237, 228, 0.34);
+    color: rgba(240, 237, 228, 0.5);
   }
 
   .btn-primary,
@@ -1180,7 +1180,7 @@
     .btn-primary,
     .btn-secondary,
     .btn-ghost {
-      font-size: 8px;
+      font-size: 9px;
       letter-spacing: 1.1px;
       padding: 11px 10px;
     }

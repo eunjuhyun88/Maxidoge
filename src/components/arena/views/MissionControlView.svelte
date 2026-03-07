@@ -294,10 +294,10 @@
     box-shadow: inset 0 0 12px rgba(255, 170, 50, 0.04);
   }
   .panel-header {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 2.5px;
-    color: rgba(240, 237, 228, 0.35);
+    color: rgba(240, 237, 228, 0.5);
     margin-bottom: 6px;
     padding-bottom: 4px;
     border-bottom: 1px solid rgba(240, 237, 228, 0.06);
@@ -314,10 +314,10 @@
     align-items: center;
   }
   .label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1.5px;
-    color: rgba(240, 237, 228, 0.35);
+    color: rgba(240, 237, 228, 0.5);
   }
   .value {
     font-size: 10px;
@@ -366,8 +366,8 @@
     letter-spacing: 4px;
   }
   .chart-note {
-    font-size: 8px;
-    color: rgba(240, 237, 228, 0.4);
+    font-size: 9px;
+    color: rgba(240, 237, 228, 0.55);
   }
 
   /* ── Ticker Feed ── */
@@ -391,8 +391,8 @@
     border-bottom: 1px solid rgba(240, 237, 228, 0.03);
   }
   .feed-time {
-    font-size: 8px;
-    color: rgba(240, 237, 228, 0.3);
+    font-size: 9px;
+    color: rgba(240, 237, 228, 0.5);
     width: 60px;
     font-variant-numeric: tabular-nums;
   }
@@ -405,14 +405,14 @@
     font-variant-numeric: tabular-nums;
   }
   .feed-change {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     width: 55px;
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
   .feed-pct {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     width: 60px;
     text-align: right;
@@ -420,7 +420,7 @@
   }
   .feed-empty {
     font-size: 9px;
-    color: rgba(240, 237, 228, 0.2);
+    color: rgba(240, 237, 228, 0.5);
     padding: 8px 0;
   }
 
@@ -437,10 +437,10 @@
     gap: 6px;
   }
   .dist-label {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1px;
-    color: rgba(240, 237, 228, 0.35);
+    color: rgba(240, 237, 228, 0.5);
     width: 40px;
   }
   .dist-bar {
@@ -458,7 +458,7 @@
   .dist-fill.tp { background: var(--grn, #00ff88); }
   .dist-fill.sl { background: var(--red, #ff2d55); }
   .dist-val {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240, 237, 228, 0.5);
     width: 24px;
@@ -478,23 +478,23 @@
     font-size: 10px;
   }
   .agent-name {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240, 237, 228, 0.6);
     flex: 1;
     letter-spacing: 0.5px;
   }
   .agent-dir {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1px;
   }
   .agent-dir.long { color: var(--grn, #00ff88); }
   .agent-dir.short { color: var(--red, #ff2d55); }
   .agent-conf {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
     font-variant-numeric: tabular-nums;
   }
 
@@ -558,7 +558,7 @@
     font-size: 12px;
     font-weight: 900;
     letter-spacing: 4px;
-    color: rgba(240, 237, 228, 0.2);
+    color: rgba(240, 237, 228, 0.5);
     font-family: var(--fb, 'Space Grotesk', sans-serif);
   }
   .standby-phase {
@@ -569,13 +569,13 @@
   }
   .standby-msg {
     font-size: 9px;
-    color: rgba(240, 237, 228, 0.3);
+    color: rgba(240, 237, 228, 0.5);
     animation: blinkStandby 2.5s ease-in-out infinite;
   }
   .standby-price {
     font-size: 13px;
     font-weight: 700;
-    color: rgba(240, 237, 228, 0.25);
+    color: rgba(240, 237, 228, 0.5);
     font-variant-numeric: tabular-nums;
     margin-top: 4px;
   }

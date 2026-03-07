@@ -168,7 +168,7 @@
           <img src={getAgentImg(agent.agentId)} alt={agent.agentId} class="hand-img" />
           <span class="hand-name">{agent.agentId}</span>
           <div class="hand-energy">
-            <div class="hand-energy-fill" style:width="{(agent.energy / agent.maxEnergy) * 100}%" />
+            <div class="hand-energy-fill" style:width="{(agent.energy / agent.maxEnergy) * 100}%"></div>
           </div>
         </div>
       {/each}
@@ -214,10 +214,10 @@
     gap: 8px;
   }
   .score-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 3px;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
   }
   .score-num {
     font-size: 28px;
@@ -236,11 +236,11 @@
     font-size: 10px;
     font-weight: 900;
     letter-spacing: 4px;
-    color: rgba(240,237,228,0.2);
+    color: rgba(240,237,228,0.5);
   }
   .score-tick {
-    font-size: 8px;
-    color: rgba(240,237,228,0.15);
+    font-size: 9px;
+    color: rgba(240,237,228,0.5);
   }
 
   /* Card table */
@@ -305,7 +305,7 @@
   .card-tick {
     font-size: 9px;
     font-weight: 700;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
   }
   .card-delta {
     font-size: 10px;
@@ -325,7 +325,7 @@
     gap: 2px;
   }
   .card-agent {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240,237,228,0.4);
     letter-spacing: 1px;
@@ -383,7 +383,7 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    font-size: 8px;
+    font-size: 9px;
     transition: all 200ms;
   }
   .mini-card.mini-fav {
@@ -395,8 +395,8 @@
     background: rgba(255,45,85,0.03);
   }
   .mini-tick {
-    font-size: 6px;
-    color: rgba(240,237,228,0.2);
+    font-size: 9px;
+    color: rgba(240,237,228,0.5);
   }
   .mini-icon {
     font-size: 12px;
@@ -404,9 +404,9 @@
   }
   .mini-fav .mini-icon { color: #00ff88; }
   .mini-unfav .mini-icon { color: #ff2d55; }
-  .mini-neutral .mini-icon { color: rgba(240,237,228,0.3); }
+  .mini-neutral .mini-icon { color: rgba(240,237,228,0.5); }
   .mini-vs {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240,237,228,0.4);
   }
@@ -450,7 +450,7 @@
     border: 1px solid rgba(240,237,228,0.1);
   }
   .hand-name {
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     color: rgba(240,237,228,0.4);
@@ -478,9 +478,9 @@
     gap: 6px;
   }
   .chip-label {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
     letter-spacing: 1px;
   }
   .chip-val {

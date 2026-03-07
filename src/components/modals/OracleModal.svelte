@@ -95,7 +95,7 @@
   .otab {
     flex: 1; padding: 8px;
     background: transparent; border: none; border-bottom: 2px solid transparent;
-    color: #555; font-size: 8px; font-weight: 900; font-family: var(--fd);
+    color: #555; font-size: 9px; font-weight: 900; font-family: var(--fd);
     letter-spacing: 2px; cursor: pointer; transition: all .15s;
   }
   .otab:hover { color: #fff; }
@@ -116,10 +116,10 @@
   .lb-icon { font-size: 18px; }
   .lb-info { flex: 1; }
   .lb-name { font-size: 10px; font-weight: 900; font-family: var(--fd); letter-spacing: 1px; }
-  .lb-meta { font-size: 7px; color: #666; font-family: var(--fm); }
+  .lb-meta { font-size: 9px; color: #666; font-family: var(--fm); }
   .lb-wr { text-align: right; }
   .lb-wrv { font-size: 14px; font-weight: 900; font-family: var(--fd); color: #00ff88; }
-  .lb-wrl { font-size: 6px; color: #555; font-family: var(--fd); letter-spacing: 1px; }
+  .lb-wrl { font-size: 9px; color: #555; font-family: var(--fd); letter-spacing: 1px; }
   .lb-str { font-size: 10px; font-weight: 700; width: 36px; text-align: right; }
 
   .history-empty { text-align: center; padding: 40px 20px; }

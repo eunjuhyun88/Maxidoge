@@ -1,8 +1,13 @@
 // ═══════════════════════════════════════════════════════════════
 // Stockclaw — Chart Overlay Renderer (Canvas Orchestration)
 // ═══════════════════════════════════════════════════════════════
-// This layer decides what the overlay canvas should render, while
-// delegating primitive drawing to chartDrawingEngine.ts.
+// This layer decides what the overlay canvas should render.
+// Basic drawing tools (hline, trendline, fib, etc.) are now handled
+// by Series Primitives (see primitives/). This canvas only renders:
+//   - Pattern overlays
+//   - Agent trade overlays
+//   - Trade preview (longentry/shortentry/trade)
+//   - Tradebox drawings (legacy — until tradebox primitive exists)
 
 import type { AgentTradeSetup, DrawingItem, DrawingMode } from '$lib/chart/chartTypes';
 import type { ChartPatternDetection } from '$lib/engine/patternDetector';
@@ -13,11 +18,10 @@ import {
   drawDrawingItems,
   drawPatternOverlays,
   drawTradePreview,
-  type AgentCloseBtn,
   type CoordProvider,
   type TradePreview,
 } from './chartDrawingEngine';
-import type { TradePreviewDraft, TrendlineDraft } from './chartDrawingSession';
+import type { TradePreviewDraft } from './chartDrawingSession';
 
 export function isTradePreviewMode(
   mode: DrawingMode,
@@ -62,11 +66,12 @@ export function renderChartOverlay(options: {
   tradePreview: TradePreviewDraft | null;
   chartTheme: ChartTheme;
   livePrice: number;
+  selectedDrawingId?: string | null;
   coord: Pick<
     CoordProvider,
     'toChartX' | 'toChartY' | 'toChartPrice' | 'toOverlayPoint'
   >;
-}): { agentCloseBtn: AgentCloseBtn | null } {
+}): void {
   const {
     ctx,
     canvasW,
@@ -80,6 +85,7 @@ export function renderChartOverlay(options: {
     tradePreview,
     chartTheme,
     livePrice,
+    selectedDrawingId,
     coord,
   } = options;
 
@@ -91,9 +97,8 @@ export function renderChartOverlay(options: {
     });
   }
 
-  let agentCloseBtn: AgentCloseBtn | null = null;
   if (activeTradeSetup && drawingsVisible) {
-    agentCloseBtn = drawAgentTradeOverlay(
+    drawAgentTradeOverlay(
       ctx,
       activeTradeSetup,
       canvasW,
@@ -114,36 +119,21 @@ export function renderChartOverlay(options: {
 
   if (!drawingsVisible) {
     if (preview) drawTradePreview(ctx, preview, chartTheme, canvasW);
-    return { agentCloseBtn };
+    return;
   }
 
-  drawDrawingItems(
-    ctx,
-    drawings,
-    { toChartX: coord.toChartX, toChartY: coord.toChartY },
-    chartTheme,
-  );
+  // Only render tradebox drawings on canvas overlay.
+  // Basic drawing tools (hline, trendline, fib, etc.) are now Series Primitives.
+  const tradeboxDrawings = drawings.filter((d) => d.type === 'tradebox');
+  if (tradeboxDrawings.length > 0) {
+    drawDrawingItems(
+      ctx,
+      tradeboxDrawings,
+      { toChartX: coord.toChartX, toChartY: coord.toChartY },
+      chartTheme,
+      selectedDrawingId,
+    );
+  }
 
   if (preview) drawTradePreview(ctx, preview, chartTheme, canvasW);
-  return { agentCloseBtn };
-}
-
-export function drawTrendlineGhost(
-  ctx: CanvasRenderingContext2D,
-  draft: TrendlineDraft,
-  cursor: { x: number; y: number },
-  ghostColor: string,
-): void {
-  const startPoint = draft.points[0];
-  if (!startPoint) return;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.strokeStyle = ghostColor;
-  ctx.lineWidth = 1;
-  ctx.setLineDash([4, 4]);
-  ctx.moveTo(startPoint.x, startPoint.y);
-  ctx.lineTo(cursor.x, cursor.y);
-  ctx.stroke();
-  ctx.restore();
 }

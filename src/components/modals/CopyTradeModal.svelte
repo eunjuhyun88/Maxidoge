@@ -334,14 +334,14 @@
     background: rgba(232,150,125,.02);
   }
   .ct-step {
-    font-family: var(--fm); font-size: 7px; font-weight: 900;
-    letter-spacing: 1.5px; color: rgba(255,255,255,.2);
+    font-family: var(--fm); font-size: 9px; font-weight: 900;
+    letter-spacing: 1.5px; color: rgba(255,255,255,.5);
     padding: 2px 8px; border-radius: 4px;
     border: 1px solid rgba(255,255,255,.06);
   }
   .ct-step.active { color: rgba(255,255,255,.5); border-color: rgba(232,150,125,.2); }
   .ct-step.current { color: #000; background: var(--yel); border-color: var(--yel); }
-  .ct-step-arrow { font-size: 8px; color: rgba(255,255,255,.15); }
+  .ct-step-arrow { font-size: 9px; color: rgba(255,255,255,.15); }
 
   /* Body */
   .ct-body {
@@ -357,7 +357,7 @@
     border: 1px solid rgba(232,150,125,.3);
     background: rgba(232,150,125,.08);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: .8px;
     color: var(--yel);
@@ -369,7 +369,7 @@
   }
 
   .ct-section-label {
-    font-family: var(--fm); font-size: 8px; font-weight: 900;
+    font-family: var(--fm); font-size: 9px; font-weight: 900;
     letter-spacing: 2px; color: var(--yel); padding-bottom: 2px;
   }
 
@@ -382,12 +382,12 @@
   }
   .ct-ev-head { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; }
   .ct-ev-icon { font-size: 11px; }
-  .ct-ev-name { font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 1px; }
+  .ct-ev-name { font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px; }
   .ct-ev-conf {
     margin-left: auto;
-    font-family: var(--fm); font-size: 8px; font-weight: 900; color: var(--yel);
+    font-family: var(--fm); font-size: 9px; font-weight: 900; color: var(--yel);
   }
-  .ct-ev-text { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.5); line-height: 1.4; }
+  .ct-ev-text { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.5); line-height: 1.4; }
 
   /* Consensus */
   .ct-consensus {
@@ -395,19 +395,19 @@
     padding: 8px 10px; border-radius: 6px;
     background: rgba(232,150,125,.04); border: 1.5px solid rgba(232,150,125,.15);
   }
-  .ct-cons-label { font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.4); }
+  .ct-cons-label { font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.4); }
   .ct-cons-dir {
     font-family: var(--fd); font-size: 14px; font-weight: 900; letter-spacing: 1px;
   }
   .ct-cons-dir.long { color: var(--grn); }
   .ct-cons-dir.short { color: var(--red); }
   .ct-cons-conf { font-family: var(--fd); font-size: 14px; font-weight: 900; color: var(--yel); }
-  .ct-cons-count { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.3); }
+  .ct-cons-count { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); }
 
   /* Form Fields */
   .ct-field { display: flex; flex-direction: column; gap: 4px; }
   .ct-label {
-    font-family: var(--fm); font-size: 7px; font-weight: 900;
+    font-family: var(--fm); font-size: 9px; font-weight: 900;
     letter-spacing: 2px; color: rgba(255,255,255,.35);
   }
   .ct-input {
@@ -431,7 +431,7 @@
   .ct-toggle-row { display: flex; gap: 4px; }
   .ct-dir-btn, .ct-type-btn {
     flex: 1; padding: 6px 8px;
-    font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 1.5px;
+    font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1.5px;
     border: 2px solid rgba(255,255,255,.1); border-radius: 6px;
     background: rgba(255,255,255,.02); color: rgba(255,255,255,.4);
     cursor: pointer; transition: all .12s; text-align: center;
@@ -442,8 +442,8 @@
 
   /* TP Rows */
   .ct-tp-row { display: flex; align-items: center; gap: 6px; }
-  .ct-tp-label { font-family: var(--fm); font-size: 7px; font-weight: 900; color: rgba(255,255,255,.3); width: 24px; }
-  .ct-pct { font-family: var(--fm); font-size: 8px; font-weight: 700; width: 44px; text-align: right; }
+  .ct-tp-label { font-family: var(--fm); font-size: 9px; font-weight: 900; color: rgba(255,255,255,.3); width: 24px; }
+  .ct-pct { font-family: var(--fm); font-size: 9px; font-weight: 700; width: 44px; text-align: right; }
   .ct-pct.tp { color: var(--grn); }
   .ct-pct.sl { color: var(--red); }
   .ct-remove-tp {
@@ -451,7 +451,7 @@
     cursor: pointer; padding: 2px 4px;
   }
   .ct-add-tp {
-    font-family: var(--fm); font-size: 7px; font-weight: 900; letter-spacing: 1px;
+    font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px;
     color: var(--grn); background: rgba(0,255,136,.06);
     border: 1px solid rgba(0,255,136,.2); border-radius: 4px;
     padding: 4px 8px; cursor: pointer; width: fit-content; transition: background .12s;
@@ -462,7 +462,7 @@
   .ct-lev-row { display: flex; gap: 3px; }
   .ct-lev-btn {
     flex: 1; padding: 5px 4px;
-    font-family: var(--fm); font-size: 8px; font-weight: 900;
+    font-family: var(--fm); font-size: 9px; font-weight: 900;
     border: 1.5px solid rgba(255,255,255,.08); border-radius: 4px;
     background: rgba(255,255,255,.02); color: rgba(255,255,255,.35);
     cursor: pointer; transition: all .12s; text-align: center;
@@ -486,7 +486,7 @@
     padding: 8px; border-radius: 6px;
     background: rgba(232,150,125,.04); border: 1px solid rgba(232,150,125,.15);
   }
-  .ct-rr-label { font-family: var(--fm); font-size: 8px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.4); }
+  .ct-rr-label { font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.4); }
   .ct-rr-val { font-family: var(--fd); font-size: 20px; font-weight: 900; color: var(--yel); }
 
   /* Navigation */
@@ -519,12 +519,12 @@
   .ct-sum-dir.long { color: var(--grn); border-color: rgba(0,255,136,.4); background: rgba(0,255,136,.08); }
   .ct-sum-dir.short { color: var(--red); border-color: rgba(255,45,85,.4); background: rgba(255,45,85,.08); }
   .ct-sum-lev {
-    font-family: var(--fm); font-size: 8px; font-weight: 900;
+    font-family: var(--fm); font-size: 9px; font-weight: 900;
     color: var(--ora); background: rgba(255,140,59,.08);
     padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,140,59,.2);
   }
   .ct-sum-margin {
-    font-family: var(--fm); font-size: 7px; font-weight: 700;
+    font-family: var(--fm); font-size: 9px; font-weight: 700;
     color: rgba(255,255,255,.3); letter-spacing: 1px;
   }
 
@@ -533,7 +533,7 @@
     background: rgba(255,255,255,.02); border-radius: 6px;
   }
   .ct-sum-p { display: flex; flex-direction: column; }
-  .ct-sum-pl { font-family: var(--fm); font-size: 6px; color: rgba(255,255,255,.25); letter-spacing: 1px; }
+  .ct-sum-pl { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.5); letter-spacing: 1px; }
   .ct-sum-pl.tp { color: rgba(0,255,136,.5); }
   .ct-sum-pl.sl { color: rgba(255,45,85,.5); }
   .ct-sum-pv { font-family: var(--fd); font-size: 12px; font-weight: 900; color: #fff; }
@@ -542,7 +542,7 @@
 
   .ct-sum-meta {
     display: flex; gap: 12px;
-    font-family: var(--fm); font-size: 8px; font-weight: 700;
+    font-family: var(--fm); font-size: 9px; font-weight: 700;
     color: rgba(255,255,255,.4); letter-spacing: 1px;
   }
 
@@ -550,11 +550,11 @@
   .ct-evidence-compact { display: flex; flex-direction: column; gap: 3px; }
   .ct-evc-row {
     display: flex; align-items: center; gap: 4px;
-    font-family: var(--fm); font-size: 7px;
+    font-family: var(--fm); font-size: 9px;
     padding: 3px 6px; border-radius: 4px;
     background: rgba(255,255,255,.02);
   }
-  .ct-evc-row span:first-child { font-weight: 900; font-size: 8px; min-width: 80px; }
+  .ct-evc-row span:first-child { font-weight: 900; font-size: 9px; min-width: 80px; }
   .ct-evc-text { color: rgba(255,255,255,.4); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ct-evc-conf { color: var(--yel); font-weight: 700; }
 
@@ -567,5 +567,5 @@
     outline: none; line-height: 1.5;
   }
   .ct-textarea:focus { border-color: var(--yel); }
-  .ct-textarea::placeholder { color: rgba(255,255,255,.2); }
+  .ct-textarea::placeholder { color: rgba(255,255,255,.5); }
 </style>

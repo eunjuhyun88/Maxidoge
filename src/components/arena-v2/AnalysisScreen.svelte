@@ -390,7 +390,7 @@
   }
   .beacon.active { opacity:1; }
   .beacon-icon { font-size:20px; }
-  .beacon-label { font-size:7px; font-weight:700; letter-spacing:1px; color:var(--bc); font-family:var(--fm,'JetBrains Mono',monospace); }
+  .beacon-label { font-size:9px; font-weight:700; letter-spacing:1px; color:var(--bc); font-family:var(--fm,'JetBrains Mono',monospace); }
   .beacon-ring {
     position:absolute; width:50px; height:50px; border-radius:50%; border:1px solid var(--bc); opacity:.2;
     animation:beaconPulse 3s ease-in-out infinite;
@@ -431,7 +431,7 @@
   .feed-header { padding:12px; border-bottom:1px solid rgba(240,237,228,.06); }
   .feed-title { font-size:9px; font-weight:800; letter-spacing:2px; color:rgba(240,237,228,.4); font-family:var(--fm,'JetBrains Mono',monospace); }
   .conf-meter { display:flex; align-items:center; gap:4px; margin-top:8px; }
-  .conf-label { font-size:7px; font-weight:700; color:rgba(240,237,228,.3); font-family:var(--fm,'JetBrains Mono',monospace); }
+  .conf-label { font-size:9px; font-weight:700; color:rgba(240,237,228,.3); font-family:var(--fm,'JetBrains Mono',monospace); }
   .conf-bar { flex:1; height:6px; background:rgba(240,237,228,.06); border-radius:3px; overflow:hidden; position:relative; }
   .conf-fill { height:100%; border-radius:3px; transition:width .5s, background .5s; }
   .conf-needle {
@@ -447,7 +447,7 @@
 
   /* Findings */
   .findings-section { padding:8px 12px; border-top:1px solid rgba(240,237,228,.06); max-height:200px; overflow-y:auto; }
-  .findings-title { font-size:8px; font-weight:700; letter-spacing:1px; color:rgba(240,237,228,.3); margin-bottom:6px; font-family:var(--fm,'JetBrains Mono',monospace); }
+  .findings-title { font-size:9px; font-weight:700; letter-spacing:1px; color:rgba(240,237,228,.3); margin-bottom:6px; font-family:var(--fm,'JetBrains Mono',monospace); }
   .finding-card {
     padding:6px 8px; margin-bottom:4px; border-radius:6px;
     background:rgba(240,237,228,.03); border:1px solid rgba(240,237,228,.06);
@@ -460,9 +460,9 @@
   .fc-dir { font-size:10px; font-weight:900; }
   .fc-dir.long { color:#00ff88; }
   .fc-dir.short { color:#ff2d55; }
-  .fc-conf { font-size:8px; font-weight:700; color:rgba(240,237,228,.4); margin-left:auto; font-family:var(--fm,'JetBrains Mono',monospace); }
+  .fc-conf { font-size:9px; font-weight:700; color:rgba(240,237,228,.4); margin-left:auto; font-family:var(--fm,'JetBrains Mono',monospace); }
   .fc-title { font-size:9px; font-weight:700; color:#F0EDE4; margin-top:3px; font-family:var(--fm,'JetBrains Mono',monospace); }
-  .fc-detail { font-size:8px; color:rgba(240,237,228,.4); margin-top:2px; font-family:var(--fm,'JetBrains Mono',monospace); }
+  .fc-detail { font-size:9px; color:rgba(240,237,228,.4); margin-top:2px; font-family:var(--fm,'JetBrains Mono',monospace); }
 
   @keyframes beaconPulse { 0%,100% { transform:scale(1); opacity:.2; } 50% { transform:scale(1.3); opacity:.5; } }
   @keyframes spriteWalk { 0%,100% { transform:translate(-50%,-50%) translateY(0); } 50% { transform:translate(-50%,-50%) translateY(-3px); } }

@@ -42,8 +42,6 @@
 
   import { gameState } from '$lib/stores/gameState';
   import { livePrice, livePrices } from '$lib/stores/priceStore';
-  import { openTradeCount } from '$lib/stores/quickTradeStore';
-  import { activeSignalCount } from '$lib/stores/trackedSignalStore';
   import { isCopyTradeOpen, copyTradeStore } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { alertEngine } from '$lib/services/alertEngine';
@@ -152,9 +150,6 @@
   // Selected pair display
   const pair = $derived($gameState.pair || 'BTC/USDT');
   const timeframeLabel = $derived(formatTimeframeLabel($gameState.timeframe));
-  const mobileOpenTrades = $derived($openTradeCount);
-  const mobileTrackedSignals = $derived($activeSignalCount);
-
   let warRoomRef: WarRoomHandle | null = $state(null);
   let mobileChartRef: ChartPanelHandle | null = $state(null);
   let tabletChartRef: ChartPanelHandle | null = $state(null);
@@ -315,8 +310,6 @@
       {sharedChartPanelProps}
       {sharedIntelPanelProps}
       mobileTab={$mobileTab}
-      {mobileOpenTrades}
-      {mobileTrackedSignals}
       latestScan={$latestScan}
       terminalScanning={$terminalScanning}
       onSetMobileTab={setMobileTab}
@@ -329,7 +322,6 @@
       onClearTradeSetup={terminalScanRuntime.clearActiveTradeSetup}
       onSendChat={terminalChatRuntime.handleSendChat}
       onGoToTrade={handleIntelGoTrade}
-      onShareToCommunity={terminalCommunityRuntime.openShareModal}
       chatMessages={$chatMessages}
       isTyping={$isTyping}
     />

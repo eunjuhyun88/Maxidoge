@@ -209,7 +209,7 @@
   }
 
   .team-label-top {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1.5px;
     color: rgba(255,255,255,0.4);
@@ -320,7 +320,7 @@
   }
 
   .team-tag {
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 900;
     padding: 1px 4px;
     border-radius: 2px;

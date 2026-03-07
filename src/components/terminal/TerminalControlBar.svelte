@@ -13,6 +13,11 @@
     variant?: 'card' | 'inline';
     showMarket?: boolean;
     showPrimaryHint?: boolean;
+    /** Inline verdict: "6/8" agree count — shown after confidence */
+    verdictAgree?: string;
+    /** Inline verdict: "2m ago" time since scan */
+    verdictTime?: string;
+    connectionStatus?: 'live' | 'offline';
     onPrimaryAction?: () => void;
     onToggleDensity?: () => void;
   }
@@ -30,6 +35,9 @@
     variant = 'card',
     showMarket = true,
     showPrimaryHint = true,
+    verdictAgree = '',
+    verdictTime = '',
+    connectionStatus = 'live',
     onPrimaryAction = () => {},
     onToggleDensity = () => {},
   }: Props = $props();
@@ -51,9 +59,16 @@
     {/if}
 
     <div class="tcb-consensus">
+      <span class="tcb-live-dot" class:err={connectionStatus === 'offline'}></span>
       <span class="tcb-label">CONSENSUS</span>
       <span class="tcb-dir {directionClass}">{directionLabel}</span>
       <span class="tcb-conf">{confidenceLabel}</span>
+      {#if verdictAgree}
+        <span class="tcb-agree">{verdictAgree}</span>
+      {/if}
+      {#if verdictTime}
+        <span class="tcb-time">{verdictTime}</span>
+      {/if}
     </div>
   </div>
 
@@ -85,8 +100,8 @@
     font-family: var(--fm);
   }
   .terminal-control-bar.inline {
-    min-height: 30px;
-    padding: 3px 6px;
+    min-height: 26px;
+    padding: 2px 6px;
     gap: 6px;
     border-radius: 8px;
     border-color: rgba(var(--t-accent-rgb), 0.18);
@@ -98,17 +113,17 @@
     gap: 8px;
   }
   .terminal-control-bar.inline .tcb-label {
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 0.75px;
   }
   .terminal-control-bar.inline .tcb-dir {
     font-size: 9px;
   }
   .terminal-control-bar.inline .tcb-conf {
-    font-size: 8px;
+    font-size: 9px;
   }
   .terminal-control-bar.inline .tcb-density {
-    font-size: 8px;
+    font-size: 9px;
     padding: 4px 8px;
   }
   .terminal-control-bar.inline .tcb-primary {
@@ -119,7 +134,7 @@
     justify-content: center;
   }
   .terminal-control-bar.inline .tcb-primary-label {
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.8px;
   }
 
@@ -160,7 +175,7 @@
   }
 
   .tcb-label {
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.9px;
     color: rgba(255, 255, 255, 0.55);
     white-space: nowrap;
@@ -182,6 +197,34 @@
     font-weight: 800;
     color: rgba(255, 255, 255, 0.84);
     white-space: nowrap;
+  }
+  .tcb-agree {
+    font-size: 9px;
+    font-weight: 700;
+    color: rgba(240, 237, 228, 0.5);
+    white-space: nowrap;
+  }
+  .tcb-time {
+    font-size: 8px;
+    color: rgba(240, 237, 228, 0.35);
+    white-space: nowrap;
+  }
+
+  .tcb-live-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--grn, #87dcbe);
+    flex-shrink: 0;
+    animation: tcb-pulse 0.8s infinite;
+  }
+  .tcb-live-dot.err {
+    background: var(--red, #ff2d55);
+    animation: none;
+  }
+  @keyframes tcb-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
   }
 
   .tcb-primary {
@@ -220,7 +263,7 @@
     max-width: 100%;
   }
   .tcb-primary-hint {
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(255, 255, 255, 0.66);
     letter-spacing: 0.4px;
     line-height: 1.1;
@@ -293,14 +336,14 @@
   }
   .terminal-control-bar.compact .tcb-tf,
   .terminal-control-bar.compact .tcb-conf {
-    font-size: 8px;
+    font-size: 9px;
     padding: 1px 5px;
   }
   .terminal-control-bar.compact .tcb-label,
   .terminal-control-bar.compact .tcb-dir,
   .terminal-control-bar.compact .tcb-primary-label,
   .terminal-control-bar.compact .tcb-density {
-    font-size: 8px;
+    font-size: 9px;
   }
   .terminal-control-bar.compact .tcb-primary {
     padding: 6px 8px;

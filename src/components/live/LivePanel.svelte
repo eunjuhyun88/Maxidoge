@@ -301,7 +301,7 @@
   }
   .lh-sub { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.7); letter-spacing: 2px; margin-top: 2px; }
   .lh-stats { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
-  .lh-stat { font-family: var(--fm); font-size: 8px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 4px; }
+  .lh-stat { font-family: var(--fm); font-size: 9px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 4px; }
   .lh-dot { width: 6px; height: 6px; border-radius: 50%; background: #ff2d55; animation: blink 1s infinite; }
   @keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
 
@@ -319,7 +319,7 @@
   .pt-item:last-child { border-right: none; }
   .pt-symbol { font-family: var(--fd); font-size: 10px; font-weight: 900; color: var(--yel); letter-spacing: 1px; }
   .pt-price { font-family: var(--fm); font-size: 10px; font-weight: 700; color: #fff; }
-  .pt-change { font-family: var(--fm); font-size: 8px; font-weight: 700; }
+  .pt-change { font-family: var(--fm); font-size: 9px; font-weight: 700; }
   .pt-change.up { color: var(--grn); }
   .pt-change.down { color: var(--red); }
   .stream-price-row {
@@ -340,20 +340,20 @@
   }
   .spr-symbol {
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: .8px;
     color: var(--yel);
   }
   .spr-price {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: #fff;
     font-weight: 700;
   }
   .spr-change {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
   }
   .spr-change.up { color: var(--grn); }
@@ -374,7 +374,7 @@
     letter-spacing: 2px; color: rgba(255,255,255,.5);
   }
   .ls-link {
-    font-family: var(--fm); font-size: 7px; font-weight: 700;
+    font-family: var(--fm); font-size: 9px; font-weight: 700;
     color: var(--blu); text-decoration: none; letter-spacing: 1px;
   }
   .ls-link:hover { text-decoration: underline; }
@@ -399,10 +399,10 @@
   .sc-result.win { color: var(--grn); }
   .sc-result:not(.win) { color: var(--red); }
   .sc-match { font-family: var(--fd); font-size: 10px; color: rgba(255,255,255,.4); }
-  .sc-time { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.2); margin-left: auto; }
+  .sc-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.5); margin-left: auto; }
   .sc-lp { font-family: var(--fd); font-size: 16px; font-weight: 900; color: var(--yel); }
   .sc-lp.plus { color: var(--grn); }
-  .sc-hyp { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.35); margin-top: 2px; }
+  .sc-hyp { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.35); margin-top: 2px; }
   .sc-hyp .long { color: var(--grn); font-weight: 900; }
   .sc-hyp .short { color: var(--red); font-weight: 900; }
   .sc-agents { display: flex; gap: 3px; margin-top: 6px; }
@@ -422,9 +422,9 @@
   .af-icon { font-size: 14px; flex-shrink: 0; }
   .af-content { flex: 1; min-width: 0; }
   .af-text { font-family: var(--fm); font-size: 9px; font-weight: 700; }
-  .af-detail { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.3); }
-  .af-time { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.15); flex-shrink: 0; }
-  .live-page.stream .af-time { font-size: 6px; }
+  .af-detail { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); }
+  .af-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.15); flex-shrink: 0; }
+  .live-page.stream .af-time { font-size: 9px; }
 
   /* Empty states handled by EmptyState component */
 

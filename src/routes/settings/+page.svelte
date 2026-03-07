@@ -43,6 +43,8 @@
       language: currentSettings.language
     });
     saving = false;
+    savedFlash = true;
+    setTimeout(() => { savedFlash = false; }, 1200);
   }
 
   let _persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -66,7 +68,17 @@
     queuePersist();
   }
 
+  let resetConfirm = $state(false);
+  let _resetTimer: ReturnType<typeof setTimeout> | null = null;
+  let savedFlash = $state(false);
+
   function resetAllData() {
+    if (!resetConfirm) {
+      resetConfirm = true;
+      _resetTimer = setTimeout(() => { resetConfirm = false; }, 3000);
+      return;
+    }
+    if (_resetTimer) clearTimeout(_resetTimer);
     if (typeof window !== 'undefined') {
       for (const key of RESETTABLE_STORAGE_KEYS) {
         localStorage.removeItem(key);
@@ -105,8 +117,8 @@
   <div class="settings-header">
     <h1 class="settings-title">⚙️ SETTINGS</h1>
     <p class="settings-sub">Configure your Stockclaw experience</p>
-    <p class="settings-sync">
-      {#if saving}Saving to cloud...{:else if loadedRemote}Synced with account settings{:else}Local mode{/if}
+    <p class="settings-sync" class:saved-flash={savedFlash}>
+      {#if saving}Saving to cloud...{:else if savedFlash}✓ Saved{:else if loadedRemote}Synced with account settings{:else}Local mode{/if}
     </p>
   </div>
 
@@ -237,7 +249,9 @@
           <div class="sr-label">Reset All Data</div>
           <div class="sr-desc">Delete all saved progress and start fresh</div>
         </div>
-        <button class="reset-btn" onclick={resetAllData}>🗑 RESET</button>
+        <button class="reset-btn" class:confirm={resetConfirm} onclick={resetAllData}>
+          {resetConfirm ? '⚠️ CONFIRM RESET?' : '🗑 RESET'}
+        </button>
       </div>
     </div>
   </div>
@@ -248,30 +262,31 @@
     height: 100%;
     overflow-y: auto;
     background: #00120a;
+    padding-bottom: var(--sc-bottom-bar-h);
   }
 
   .settings-header {
-    padding: 24px 30px;
+    padding: var(--sc-sp-6) 30px;
     border-bottom: 1px solid rgba(232,150,125,.15);
     background: linear-gradient(135deg, rgba(232,150,125,.15), rgba(232,150,125,.05));
   }
   .settings-title {
     font-family: var(--fc);
-    font-size: 28px;
+    font-size: var(--sc-fs-3xl, 28px);
     color: #E8967D;
     letter-spacing: 3px;
   }
   .settings-sub {
     font-family: var(--fm);
-    font-size: 10px;
+    font-size: var(--sc-fs-xs, 10px);
     color: rgba(240,237,228,.5);
     letter-spacing: 2px;
     margin-top: 4px;
   }
   .settings-sync {
     font-family: var(--fm);
-    font-size: 8px;
-    color: rgba(240,237,228,.35);
+    font-size: var(--sc-fs-2xs, 9px);
+    color: rgba(240,237,228,.5);
     margin-top: 4px;
     letter-spacing: 1px;
   }
@@ -279,10 +294,10 @@
   .settings-body {
     max-width: 600px;
     margin: 0 auto;
-    padding: 20px;
+    padding: var(--sc-sp-5);
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--sc-sp-4);
   }
 
   .settings-section {
@@ -299,7 +314,7 @@
 
   .ss-title {
     font-family: var(--fc);
-    font-size: 14px;
+    font-size: var(--sc-fs-md, 14px);
     letter-spacing: 2px;
     color: #E8967D;
     padding: 10px 14px;
@@ -318,7 +333,7 @@
 
   .sr-info { flex: 1; }
   .sr-label { font-family: var(--fm); font-size: 10px; font-weight: 900; color: #F0EDE4; }
-  .sr-desc { font-family: var(--fm); font-size: 7px; color: rgba(240,237,228,.4); margin-top: 1px; }
+  .sr-desc { font-family: var(--fm); font-size: 9px; color: rgba(240,237,228,.55); margin-top: 1px; }
 
   .sr-select {
     font-family: var(--fm); font-size: 9px; font-weight: 700;
@@ -380,4 +395,57 @@
     cursor: pointer; transition: all .15s;
   }
   .reset-btn:hover { background: rgba(255,45,85,.3); }
+  .reset-btn.confirm {
+    background: rgba(255,45,85,.4);
+    border-color: rgba(255,45,85,.7);
+    color: #fff;
+    animation: resetPulse 0.6s ease;
+  }
+  @keyframes resetPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+
+  .saved-flash {
+    color: var(--grn, #00ff88) !important;
+    transition: color 0.3s ease;
+  }
+
+  /* ── Touch targets (coarse pointer) ── */
+  @media (pointer: coarse) {
+    .sr-select { min-height: var(--sc-touch-sm, 36px); padding: 6px 12px; font-size: 11px; }
+    .speed-btn { min-width: 36px; min-height: var(--sc-touch-sm, 36px); }
+    .toggle-btn { width: 48px; height: 26px; border-radius: 13px; }
+    .toggle-dot { width: 18px; height: 18px; top: 3px; left: 3px; }
+    .toggle-btn.on .toggle-dot { left: 25px; }
+    .reset-btn { min-height: var(--sc-touch-sm, 36px); padding: 8px 16px; }
+    .setting-row { min-height: 48px; }
+  }
+
+  /* ── Tablet ≤768px ── */
+  @media (max-width: 768px) {
+    .settings-header { padding: 18px 20px; }
+    .settings-title { font-size: clamp(20px, 5vw, 28px); letter-spacing: 2px; }
+    .settings-body { padding: 14px 10px; gap: 12px; }
+    .settings-section { border-radius: 10px; }
+    .ss-title { font-size: 12px; padding: 8px 12px; }
+    .setting-row { padding: 10px 12px; }
+    .settings-page { padding-bottom: 0; }
+  }
+
+  /* ── Small Mobile ≤480px ── */
+  @media (max-width: 480px) {
+    .settings-header { padding: 14px 14px; }
+    .settings-title { font-size: clamp(16px, 4.5vw, 22px); letter-spacing: 1.5px; }
+    .settings-sub { font-size: var(--sc-fs-2xs, 9px); letter-spacing: 1px; }
+    .settings-sync { font-size: var(--sc-fs-2xs, 9px); }
+    .settings-body { padding: 10px 6px; gap: 10px; }
+    .settings-section { border-radius: 8px; }
+    .ss-title { font-size: 11px; padding: 7px 10px; letter-spacing: 1.5px; }
+    .setting-row { padding: 8px 10px; gap: 8px; }
+    .sr-label { font-size: var(--sc-fs-2xs, 9px); }
+    .sr-desc { font-size: var(--sc-fs-2xs, 9px); }
+    .sr-select { font-size: var(--sc-fs-2xs, 9px); padding: 4px 8px; }
+    .speed-btn { width: 30px; height: 28px; font-size: var(--sc-fs-2xs, 9px); }
+    .account-stats { padding: 8px 10px; }
+    .as-row { font-size: var(--sc-fs-2xs, 9px); padding: 3px 0; }
+    .reset-btn { font-size: var(--sc-fs-2xs, 9px); padding: 5px 10px; }
+  }
 </style>

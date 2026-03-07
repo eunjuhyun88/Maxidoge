@@ -120,7 +120,7 @@
   .challenge-overlay {
     position: absolute;
     inset: 0;
-    z-index: 100;
+    z-index: 150;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -282,5 +282,24 @@
   .option-label {
     font-size: 0.75rem;
     letter-spacing: 1px;
+  }
+
+  @media (max-width: 768px) {
+    .challenge-prompt { font-size: 0.95rem; margin: 0 0 12px; }
+    .options-grid.three-col { grid-template-columns: 1fr; }
+    .option-btn {
+      padding: 14px 10px;
+      min-height: 44px;
+      font-size: 0.8rem;
+    }
+    .option-btn.tap-btn {
+      padding: 20px;
+      font-size: 1.2rem;
+    }
+  }
+  @media (max-width: 480px) {
+    .challenge-prompt { font-size: 0.85rem; }
+    .option-btn { padding: 10px 8px; font-size: 0.75rem; }
+    .option-label { font-size: 0.65rem; }
   }
 </style>

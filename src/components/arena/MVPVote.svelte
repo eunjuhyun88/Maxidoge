@@ -233,7 +233,7 @@
   }
   .agent-card:hover:not(:disabled) {
     transform: translateY(-2px);
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
     background: rgba(255, 255, 255, 0.07);
   }
   .agent-card.selected {

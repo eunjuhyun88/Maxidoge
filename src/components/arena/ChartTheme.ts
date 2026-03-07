@@ -27,6 +27,18 @@ export type ChartTheme = {
   rsiTop: string;
   rsiBottom: string;
   rsiMid: string;
+  bbUpper: string;
+  bbMiddle: string;
+  bbLower: string;
+  bbFill: string;
+  macdLine: string;
+  macdSignal: string;
+  macdHistUp: string;
+  macdHistDown: string;
+  stochK: string;
+  stochD: string;
+  stochOB: string;
+  stochOS: string;
 };
 
 export const FALLBACK_THEME: ChartTheme = {
@@ -53,6 +65,18 @@ export const FALLBACK_THEME: ChartTheme = {
   rsiTop: 'rgba(255,45,85,.35)',
   rsiBottom: 'rgba(0,255,136,.35)',
   rsiMid: 'rgba(255,255,255,.06)',
+  bbUpper: '#2196f3',
+  bbMiddle: '#64b5f6',
+  bbLower: '#2196f3',
+  bbFill: 'rgba(33,150,243,.06)',
+  macdLine: '#2196f3',
+  macdSignal: '#ff9800',
+  macdHistUp: 'rgba(0,255,136,.55)',
+  macdHistDown: 'rgba(255,45,85,.55)',
+  stochK: '#2196f3',
+  stochD: '#ff9800',
+  stochOB: 'rgba(255,45,85,.35)',
+  stochOS: 'rgba(0,255,136,.35)',
 };
 
 // ─── Color Utility Helpers ────────────────────────────────────
@@ -149,5 +173,17 @@ export function resolveChartTheme(el: HTMLElement | null): ChartTheme {
     rsiTop: withAlpha(down, 0.35),
     rsiBottom: withAlpha(up, 0.35),
     rsiMid: withAlpha(fg, 0.1),
+    bbUpper: '#2196f3',
+    bbMiddle: '#64b5f6',
+    bbLower: '#2196f3',
+    bbFill: 'rgba(33,150,243,.06)',
+    macdLine: '#2196f3',
+    macdSignal: orange,
+    macdHistUp: withAlpha(up, 0.55),
+    macdHistDown: withAlpha(down, 0.55),
+    stochK: '#2196f3',
+    stochD: orange,
+    stochOB: withAlpha(down, 0.35),
+    stochOS: withAlpha(up, 0.35),
   };
 }

@@ -148,7 +148,7 @@
         <span class="chip-icon">{getAgentIcon(agent.agentId)}</span>
         <span class="chip-action">{agent.currentAction}</span>
         <div class="chip-energy">
-          <div class="chip-energy-fill" style:width="{(agent.energy / agent.maxEnergy) * 100}%" />
+          <div class="chip-energy-fill" style:width="{(agent.energy / agent.maxEnergy) * 100}%"></div>
         </div>
       </div>
     {/each}
@@ -187,7 +187,7 @@
     gap: 8px;
   }
   .hud-dir {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
     color: rgba(240,237,228,0.4);
@@ -260,7 +260,7 @@
   }
   .chip-icon { font-size: 12px; }
   .chip-action {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     color: rgba(240,237,228,0.5);
@@ -287,7 +287,7 @@
     border-top: 1px solid rgba(240,237,228,0.04);
   }
   .chart-log-entry {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 600;
     white-space: nowrap;
     opacity: 0.7;

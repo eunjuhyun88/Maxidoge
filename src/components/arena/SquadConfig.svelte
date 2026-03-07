@@ -275,14 +275,14 @@
   .rc-icon { font-size: 14px; }
   .rc-name {
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1px;
     color: #f0ede4;
   }
   .rc-role {
     font-family: var(--fm);
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 700;
     color: var(--agent-color);
     letter-spacing: .5px;
@@ -335,7 +335,7 @@
 
   .param-desc {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(240,237,228,.45);
     margin-top: 6px;
     text-align: center;
@@ -380,8 +380,8 @@
   }
   .pill-sub {
     font-family: var(--fm);
-    font-size: 7px;
-    color: rgba(240,237,228,.4);
+    font-size: 9px;
+    color: rgba(240,237,228,.55);
     letter-spacing: .5px;
   }
   .pill.sel .pill-sub { color: rgba(240,237,228,.7); }
@@ -398,7 +398,7 @@
     font-family: var(--fd);
     font-size: 9px;
     font-weight: 900;
-    color: rgba(240,237,228,.35);
+    color: rgba(240,237,228,.5);
     width: 16px;
     text-align: center;
   }
@@ -473,10 +473,10 @@
   }
   .sum-label {
     font-family: var(--fm);
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
-    color: rgba(240,237,228,.4);
+    color: rgba(240,237,228,.55);
   }
   .sum-val {
     font-family: var(--fd);

@@ -355,7 +355,7 @@
     gap: 4px;
   }
   .mini-type {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     font-family: 'JetBrains Mono', monospace;
   }
@@ -390,7 +390,7 @@
     border: 1px solid rgba(248, 88, 88, 0.1);
   }
   .banned-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     color: #f85858;
     letter-spacing: 1px;
@@ -461,7 +461,7 @@
     position: absolute;
     bottom: -4px;
     right: -6px;
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 900;
     color: #000;
     background: #f8d030;
@@ -471,19 +471,19 @@
   }
   .pattern-count {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 6px;
+    font-size: 9px;
     color: var(--arena-text-2, #5a7d6e);
     letter-spacing: 0.3px;
   }
 
   .card-name {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     color: #e0e0e0;
     font-family: 'JetBrains Mono', monospace;
   }
   .card-type {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     font-family: 'JetBrains Mono', monospace;
   }
@@ -494,7 +494,7 @@
   .card-matchup {
     display: flex;
     gap: 4px;
-    font-size: 6px;
+    font-size: 9px;
     font-family: 'JetBrains Mono', monospace;
   }
   .matchup-strong { color: #48d868; }
@@ -533,7 +533,7 @@
     gap: 4px;
   }
   .stat-row span:first-child {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     color: rgba(255,255,255,0.5);
     width: 30px;
@@ -550,7 +550,7 @@
     border: 1px solid rgba(255, 215, 0, 0.1);
   }
   .sig-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     color: #FFD700;
     font-family: 'JetBrains Mono', monospace;
@@ -562,7 +562,7 @@
     font-family: 'JetBrains Mono', monospace;
   }
   .sig-desc {
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(255,255,255,0.5);
     font-family: 'JetBrains Mono', monospace;
     width: 100%;
@@ -607,6 +607,10 @@
     50% { opacity: 0.6; }
   }
 
+  @media (max-width: 768px) {
+    .teams-preview { grid-template-columns: 1fr; gap: 8px; }
+    .agent-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  }
   @media (max-width: 480px) {
     .agent-grid { grid-template-columns: repeat(3, 1fr); }
   }

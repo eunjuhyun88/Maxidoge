@@ -485,7 +485,7 @@
       <span class="tick-label">TICK</span>
       <span class="tick-val">{tickN}<span class="tick-max">/{maxTicks}</span></span>
       <div class="tick-bar">
-        <div class="tick-fill" style:width="{tickPct}%" />
+        <div class="tick-fill" style:width="{tickPct}%"></div>
       </div>
     </div>
 
@@ -532,8 +532,8 @@
           class:vs-winning={vs >= 60}
           class:vs-losing={vs <= 40}
           class:vs-danger={vs <= 25}
-        />
-        <div class="vs-center-mark" />
+        ></div>
+        <div class="vs-center-mark"></div>
         <span class="vs-value">{vs.toFixed(0)}</span>
       </div>
       <span class="vs-label-right" class:winning={vs < 45}>MKT</span>
@@ -563,7 +563,7 @@
             <img src="/doge/trade-bear.png" alt="MARKET" class="enemy-img" />
             <!-- Hit flash on favorable tick -->
             {#if tickClass === 'FAVORABLE' || tickClass === 'STRONG_FAVORABLE'}
-              <div class="hit-flash" />
+              <div class="hit-flash"></div>
             {/if}
           </div>
         </div>
@@ -601,7 +601,7 @@
                 class:img-windup={activeAgent.animState === 'WINDUP'}
               />
               {#if activeAgent.currentAction === 'SHIELD'}
-                <div class="shield-overlay" />
+                <div class="shield-overlay"></div>
               {/if}
               <!-- Action badge over sprite -->
               <div class="player-action-icon">
@@ -623,11 +623,11 @@
               <div class="tp-sl-mini">
                 <div class="tp-sl-row">
                   <span class="tp-sl-lbl tp">TP</span>
-                  <div class="tp-sl-track"><div class="tp-sl-fill tp" style:width="{tpProgress * 100}%" /></div>
+                  <div class="tp-sl-track"><div class="tp-sl-fill tp" style:width="{tpProgress * 100}%"></div></div>
                 </div>
                 <div class="tp-sl-row">
                   <span class="tp-sl-lbl sl">SL</span>
-                  <div class="tp-sl-track"><div class="tp-sl-fill sl" style:width="{slProgress * 100}%" /></div>
+                  <div class="tp-sl-track"><div class="tp-sl-fill sl" style:width="{slProgress * 100}%"></div></div>
                 </div>
               </div>
             </div>
@@ -729,7 +729,7 @@
     gap: 8px;
   }
   .tick-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 2px;
     color: rgba(240,237,228,0.4);
@@ -741,7 +741,7 @@
   }
   .tick-max {
     font-size: 10px;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
   }
   .tick-bar {
     width: 80px;
@@ -789,13 +789,13 @@
     border: 1px solid rgba(240,237,228,0.1);
     border-radius: 6px;
     background: transparent;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
     cursor: pointer;
     transition: all 150ms;
     font-family: inherit;
   }
   .view-btn:hover {
-    border-color: rgba(240,237,228,0.2);
+    border-color: rgba(240,237,228,0.5);
     color: rgba(240,237,228,0.6);
   }
   .view-btn.active {
@@ -805,7 +805,7 @@
   }
   .view-icon { font-size: 14px; }
   .view-key {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     opacity: 0.5;
@@ -820,10 +820,10 @@
     flex-shrink: 0;
   }
   .vs-label-left, .vs-label-right {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
     width: 32px;
     text-align: center;
     transition: color 300ms;
@@ -869,7 +869,7 @@
     right: 8px;
     top: 50%;
     transform: translateY(-50%);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     color: rgba(240,237,228,0.5);
   }
@@ -1010,7 +1010,7 @@
     text-shadow: 0 0 8px rgba(248,88,88,0.4);
   }
   .tick-class-badge.neutral {
-    color: rgba(240,237,228,0.35);
+    color: rgba(240,237,228,0.5);
     border-color: rgba(240,237,228,0.08);
   }
 
@@ -1141,7 +1141,7 @@
     gap: 4px;
   }
   .tp-sl-lbl {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1px;
     width: 14px;

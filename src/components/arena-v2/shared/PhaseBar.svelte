@@ -120,7 +120,7 @@
     font-size: 12px;
   }
   .pb-dot-label {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     color: rgba(240, 237, 228, 0.8);

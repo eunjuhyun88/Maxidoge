@@ -2,1538 +2,897 @@
   import '$lib/styles/arena-tone.css';
   import { gameState } from '$lib/stores/gameState';
   import { recordAgentMatch } from '$lib/stores/agentData';
-  import { AGDEFS, SOURCES } from '$lib/data/agents';
+  import { AGDEFS } from '$lib/data/agents';
   import { sfx } from '$lib/audio/sfx';
-  import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_GATHER, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, DOGE_VOTE_LONG, DOGE_WORDS, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
-  import { normalizeAgentId } from '$lib/engine/agents';
+  import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, DOGE_WORDS, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, resetPhaseInit, startAnalysisFromDraft } from '$lib/engine/gameLoop';
-  import { calculateLP, determineConsensus, computeFBS, determineActualDirection } from '$lib/engine/scoring';
+  import { determineActualDirection } from '$lib/engine/scoring';
+  import {
+    buildArenaApiSyncStatus,
+    buildArenaBattleHudDisplay,
+    buildArenaBattleLogPreview,
+    buildArenaBattlePhaseDisplay,
+    buildArenaHypothesisBadge,
+    buildArenaMissionText,
+    buildArenaModeDisplay,
+    buildArenaPhaseTrack,
+    buildArenaPreviewDisplay,
+    buildArenaResultOverlayTitle,
+    buildArenaResultStateSeed,
+    buildArenaScoreSummary,
+    buildArenaViewAgentSummaries,
+  } from '$lib/arena/selectors/arenaViewModel';
   import Lobby from '../../components/arena/Lobby.svelte';
   import ChartPanel from '../../components/arena/ChartPanel.svelte';
   import HypothesisPanel from '../../components/arena/HypothesisPanel.svelte';
-  import ArenaEventCard from '../../components/arena/ArenaEventCard.svelte';
   import ArenaRewardModal from '../../components/arena/ArenaRewardModal.svelte';
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
   import MatchHistory from '../../components/arena/MatchHistory.svelte';
   import { pushFeedItem, clearFeed } from '$lib/stores/battleFeedStore';
-  import { addMatchRecord, type MatchRecord } from '$lib/stores/matchHistoryStore';
-  import { matchRecordToReplayData, generateReplaySteps, createReplayState, type ReplayStep } from '$lib/engine/replay';
+  import { addMatchRecord } from '$lib/stores/matchHistoryStore';
   import { addPnLEntry } from '$lib/stores/pnlStore';
-  import type { Phase, Direction } from '$lib/stores/gameState';
+  import type { Direction } from '$lib/stores/gameState';
   import { onMount, onDestroy } from 'svelte';
-  import { isWalletConnected, openWalletModal, recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
-  import { formatTimeframeLabel } from '$lib/utils/timeframe';
-  import { createArenaMatch, submitArenaDraft, runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch, getTournamentBracket } from '$lib/api/arenaApi';
-  import type { AnalyzeResponse, TournamentBracketMatch } from '$lib/api/arenaApi';
-  import type { DraftSelection } from '$lib/engine/types';
-  import { createBattleResolver, type BattleTickState } from '$lib/engine/battleResolver';
-  import { mapAnalysisToC02, buildChartAnnotations, buildAgentMarkers } from '../../components/arena/arenaState';
+  import { recordMatch as recordWalletMatch } from '$lib/stores/walletStore';
+  import { runArenaAnalysis, submitArenaHypothesis, resolveArenaMatch } from '$lib/api/arenaApi';
+  import type { AnalyzeResponse } from '$lib/api/arenaApi';
+  import { mapAnalysisToC02 } from '../../components/arena/arenaState';
+  import {
+    buildArenaChartDecorations,
+    buildArenaChartPositionFromHypothesis,
+    createArenaChartBridgeState,
+  } from '$lib/arena/adapters/arenaChartBridge';
+  import { createArenaLiveEventRuntime } from '$lib/arena/feed/arenaLiveEventRuntime';
   import { btcPrice } from '$lib/stores/priceStore';
   import ViewPicker from '../../components/arena/ViewPicker.svelte';
   import PhaseGuide from '../../components/arena/PhaseGuide.svelte';
   import ResultPanel from '../../components/arena/ResultPanel.svelte';
   import ChartWarView from '../../components/arena/views/ChartWarView.svelte';
-  import AgentArenaView from '../../components/arena/views/AgentArenaView.svelte';
   import MissionControlView from '../../components/arena/views/MissionControlView.svelte';
   import CardDuelView from '../../components/arena/views/CardDuelView.svelte';
-  import type { CharState, ActionType, CharSpriteState, BattleTurn, AgentDef } from '$lib/engine/arenaCharacters';
-  import { ACTION_CATALOG, CHAR_ACTIONS, ATTACK_NAMES, ATTACK_SUPER, ATTACK_WEAK, AGENT_TO_CHAR_STATE, getFormPos, createInitialSprites, scheduleBattleTurns } from '$lib/engine/arenaCharacters';
-  import { juice_shake, juice_flash, juice_flyNumber, juice_confetti, type ArenaLiveEvent, LIVE_EVENT_TTL_MS, LIVE_EVENT_DECK, pickLiveEvent, getEventCadence } from '$lib/engine/arenaGameJuice';
-
-  const walletOk = $derived($isWalletConnected);
+  import type { ArenaResultState } from '$lib/arena/state/arenaTypes';
+  import { createArenaTimerRegistry } from '$lib/arena/state/arenaTimerRegistry';
+  import {
+    createArenaVisualEffectsRuntime,
+    type ArenaFloatingWord,
+    type ArenaParticle,
+  } from '$lib/arena/state/arenaVisualEffectsRuntime';
+  import {
+    createArenaBattlePresentationRuntime,
+    type ArenaBattleChatMessage,
+  } from '$lib/arena/battle/arenaBattlePresentationRuntime';
+  import { createArenaRewardState } from '$lib/arena/reward/arenaRewardRuntime';
+  import {
+    createArenaLobbyTournamentSeed,
+    createArenaShellController,
+  } from '$lib/arena/controllers/arenaShellController';
+  import {
+    createArenaMatchController,
+  } from '$lib/arena/controllers/arenaMatchController';
+  import {
+    createArenaAgentRuntime,
+    type ArenaAgentChatAuthor,
+    type ArenaAgentUiState,
+  } from '$lib/arena/controllers/arenaAgentRuntime';
+  import {
+    createArenaChartController,
+  } from '$lib/arena/controllers/arenaChartController';
+  import {
+    createArenaBattleController,
+  } from '$lib/arena/controllers/arenaBattleController';
+  import {
+    createArenaPhaseController,
+  } from '$lib/arena/controllers/arenaPhaseController';
+  import { createArenaAnalysisPresentationRuntime } from '$lib/arena/controllers/arenaAnalysisPresentationRuntime';
+  import {
+    createArenaResultController,
+  } from '$lib/arena/controllers/arenaResultController';
+  import type { CharSpriteState, BattleTurn } from '$lib/engine/arenaCharacters';
+  import { juice_shake, juice_flash, juice_confetti } from '$lib/engine/arenaGameJuice';
 
   const gs = $derived($gameState);
   const currentBtcPrice = $derived($btcPrice || gs.bases.BTC || 97000);
-  const modeLabel = $derived(gs.arenaMode);
-  const tournamentInfo = $derived(gs.tournament);
-  const resultOverlayTitle = $derived(gs.arenaMode === 'TOURNAMENT'
-    ? (resultData.win ? '🏆 TOURNAMENT WIN 🏆' : '☠ TOURNAMENT LOSS ☠')
-    : gs.arenaMode === 'PVP'
-      ? (resultData.win ? '🏆 YOU WIN! 🏆' : '💀 YOU LOSE 💀')
-      : (resultData.win ? '🏁 PVE CLEAR' : '❌ PVE FAILED'));
+  const arenaModeDisplay = $derived(buildArenaModeDisplay(gs.arenaMode, gs.tournament, gs.pair));
   // Active agents for this match
   const activeAgents = $derived(AGDEFS.filter(a => gs.selectedAgents.includes(a.id)));
-  const railRank = $derived([...activeAgents].sort((a, b) => b.conf - a.conf));
-  const longBalance = $derived(Math.max(0, Math.min(100, Math.round(gs.score))));
+  const arenaViewAgents = $derived(buildArenaViewAgentSummaries(activeAgents));
+  const arenaScoreSummary = $derived(buildArenaScoreSummary(gs.score, activeAgents.length, gs.matchN));
+  const arenaHypothesisBadge = $derived(buildArenaHypothesisBadge(gs.hypothesis));
+  const arenaPhaseTrack = $derived(buildArenaPhaseTrack(gs.phase));
+  const arenaPreviewDisplay = $derived(buildArenaPreviewDisplay(gs.hypothesis, gs.squadConfig));
+  let resultData = $state<ArenaResultState>(buildArenaResultStateSeed());
+  const arenaAltViewProps = $derived({
+    phase: gs.phase,
+    battleTick: gs.battleTick,
+    hypothesis: gs.hypothesis,
+    prices: { BTC: currentBtcPrice },
+    battleResult: gs.battleResult,
+    battlePriceHistory: gs.battlePriceHistory,
+    activeAgents: arenaViewAgents,
+  });
+  const arenaResultPanelProps = $derived({
+    win: resultData.win,
+    battleResult: gs.battleResult || '',
+    entryPrice: gs.hypothesis?.entry || gs.bases.BTC,
+    exitPrice: gs.battleExitPrice || currentBtcPrice,
+    tpPrice: gs.hypothesis?.tp || 0,
+    slPrice: gs.hypothesis?.sl || 0,
+    direction: gs.hypothesis?.dir || 'LONG',
+    priceHistory: gs.battlePriceHistory,
+    duration: gs.battleTick?.elapsed || 0,
+    maxRunup: gs.battleTick?.maxRunup || 0,
+    maxDrawdown: gs.battleTick?.maxDrawdown || 0,
+    rAchieved: gs.battleTick?.rAchieved || 0,
+    fbScore: gs.fbScore,
+    lpChange: resultData.lp,
+    streak: gs.streak,
+    agents: arenaViewAgents,
+    actualDirection: determineActualDirection(currentBtcPrice > (gs.hypothesis?.entry || 0) ? 0.01 : -0.01),
+  });
 
   // UI state
-  let findings: Array<{def: typeof AGDEFS[0]; visible: boolean}> = [];
-  let agentStates: Record<string, {state: string; speech: string; energy: number; voteDir: string; posX?: number; posY?: number}> = {};
-  let verdictVisible = false;
-  let resultVisible = false;
-  let resultData = { win: false, lp: 0, tag: '', motto: '' };
-  let floatingWords: Array<{id: number; text: string; color: string; x: number; dur: number}> = [];
-  let feedMessages: Array<{icon: string; name: string; color: string; text: string; dir?: string; isNew?: boolean}> = [];
-  let councilActive = false;
+  let agentStates = $state<Record<string, ArenaAgentUiState>>({});
+  let resultVisible = $state(false);
+  const resultOverlayTitle = $derived(buildArenaResultOverlayTitle(gs.arenaMode, resultData.win));
+  let floatingWords = $state<ArenaFloatingWord[]>([]);
 
   // ═══════ CHARACTER-CENTERED ARENA STATE ═══════
-  // Types, actions, and constants imported from $lib/engine/arenaCharacters
   // Character sprite state per agent
-  let charSprites: Record<string, CharSpriteState> = {};
+  let charSprites = $state<Record<string, CharSpriteState>>({});
   // Arena combat state
-  let vsMeter = 50;
-  let vsMeterTarget = 50;
-  let battleTurns: BattleTurn[] = [];
-  let currentTurnIdx = -1;
-  let battleNarration = '';
-  let turnTimers: ReturnType<typeof setTimeout>[] = [];
-  let showVsSplash = false;
-  let showMarkers = true;
+  let vsMeter = $state(50);
+  let vsMeterTarget = $state(50);
+  let battleTurns = $state<BattleTurn[]>([]);
+  let currentTurnIdx = $state(-1);
+  let battleNarration = $state('');
+  let showVsSplash = $state(false);
+  let showMarkers = $state(true);
   // Game HUD state
-  let missionText = '';
-  let enemyHP = 100;
-  let enemyMomentum = 50;
-  let comboCount = 0;
-  let lastHitTime = 0;
-  let showCritical = false;
-  let showCombo = false;
-  let criticalText = '';
-  let battleRoundTime = 0; // 0-90 seconds
-  let battlePhaseLabel = 'STANDBY';
+  const missionText = $derived(buildArenaMissionText(gs.hypothesis));
+  let enemyHP = $state(100);
+  let comboCount = $state(0);
+  let showCritical = $state(false);
+  let showCombo = $state(false);
+  let criticalText = $state('');
+  let battlePhaseLabel = $state('STANDBY');
   // Arena chat log (secondary)
-  let chatMessages: Array<{id: number; agentId: string; name: string; icon: string; color: string; text: string; isAction?: boolean}> = [];
+  let chatMessages = $state<Array<ArenaBattleChatMessage & {id: number}>>([]);
   // Particles floating in arena
-  let arenaParticles: Array<{id: number; x: number; y: number; size: number; speed: number; opacity: number}> = [];
+  let arenaParticles = $state<ArenaParticle[]>([]);
 
-  $: missionText = state.hypothesis
-    ? `${state.hypothesis.dir} R:R 1:${state.hypothesis.rr?.toFixed(1) || '?'} · TP $${Math.round(state.hypothesis.tp || 0).toLocaleString()}`
-    : 'STANDBY — 포지션을 설정하세요';
+  const phaseLabel = $derived(PHASE_LABELS[gs.phase] || PHASE_LABELS.DRAFT);
+  const arenaBattlePhaseDisplay = $derived(buildArenaBattlePhaseDisplay(phaseLabel, battlePhaseLabel, gs.timer));
+  const arenaBattleHudDisplay = $derived(buildArenaBattleHudDisplay(currentBtcPrice, enemyHP, battleNarration));
+  const arenaBattleLogPreview = $derived(buildArenaBattleLogPreview(chatMessages));
+  let pvpVisible = $state(false);
+  let matchHistoryOpen = $state(false);
 
-  // Initialize sprite positions in circular formation
-  function initCharSprites() {
-    charSprites = createInitialSprites(activeAgents);
-    // Spawn floating particles
-    arenaParticles = Array.from({length: 12}, (_, i) => ({
-      id: i,
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      size: 2 + Math.random() * 3,
-      speed: 0.5 + Math.random() * 1.5,
-      opacity: 0.1 + Math.random() * 0.2,
-    }));
-  }
-
-  // State machine transition
-  function setCharState(agId: string, newState: CharState, duration = 0) {
-    if (!charSprites[agId]) return;
-    charSprites[agId] = { ...charSprites[agId], charState: newState };
-    charSprites = charSprites; // trigger reactivity
-    if (duration > 0) {
-      const t = setTimeout(() => {
-        if (charSprites[agId]) {
-          charSprites[agId] = { ...charSprites[agId], charState: 'idle' };
-          charSprites = charSprites;
-        }
-      }, duration);
-      turnTimers.push(t);
-    }
-  }
-
-  // Move character to position with animation
-  function moveChar(agId: string, tx: number, ty: number) {
-    if (!charSprites[agId]) return;
-    charSprites[agId] = {
-      ...charSprites[agId],
-      targetX: tx, targetY: ty,
-      x: tx, y: ty,
-      flipX: tx > charSprites[agId].x,
-    };
-    charSprites = charSprites;
-  }
-
-  // Show floating hit text on a character
-  function showCharHit(agId: string, text: string, color: string) {
-    if (!charSprites[agId]) return;
-    charSprites[agId] = { ...charSprites[agId], showHit: true, hitText: text, hitColor: color };
-    charSprites = charSprites;
-    const t = setTimeout(() => {
-      if (charSprites[agId]) {
-        charSprites[agId] = { ...charSprites[agId], showHit: false };
-        charSprites = charSprites;
-      }
-    }, 1200);
-    turnTimers.push(t);
-  }
-
-  // Show action emoji above character
-  function showCharAction(agId: string, emoji: string, label: string) {
-    if (!charSprites[agId]) return;
-    charSprites[agId] = { ...charSprites[agId], actionEmoji: emoji, actionLabel: label };
-    charSprites = charSprites;
-    const t = setTimeout(() => {
-      if (charSprites[agId]) {
-        charSprites[agId] = { ...charSprites[agId], actionEmoji: '', actionLabel: '' };
-        charSprites = charSprites;
-      }
-    }, 1300);
-    turnTimers.push(t);
-  }
-
-  // Combo tracker
-  function trackCombo() {
-    const now = Date.now();
-    if (now - lastHitTime < 3000) {
-      comboCount++;
-      showCombo = true;
-      const t = setTimeout(() => { showCombo = false; }, 1000);
-      turnTimers.push(t);
-    } else {
-      comboCount = 1;
-    }
-    lastHitTime = now;
-  }
-
-  let phaseLabel = PHASE_LABELS.DRAFT;
-  let pvpVisible = false;
-  let matchHistory: Array<{n: number; win: boolean; lp: number; score: number; streak: number}> = [];
-  let historyOpen = false;
-  let matchHistoryOpen = false;
-  let arenaRailTab: 'rank' | 'log' | 'map' = 'rank';
-
-  let liveEvents: ArenaLiveEvent[] = [];
-  let liveEventTimer: ReturnType<typeof setInterval> | null = null;
-  let rewardVisible = false;
-  let rewardXp = 0;
-  let rewardStreak = 0;
-  let rewardBadges: string[] = [];
-
-  $: hudPhaseProgress = ({ DRAFT: 0.1, ANALYSIS: 0.35, HYPOTHESIS: 0.55, BATTLE: 0.78, RESULT: 1 } as const)[state.phase] ?? 0.1;
+  let rewardState = $state(createArenaRewardState());
 
   // ═══════ SERVER SYNC STATE ═══════
-  let serverMatchId: string | null = null;
-  let serverAnalysis: AnalyzeResponse | null = null;
-  let apiError: string | null = null;
+  let serverMatchId = $state<string | null>(null);
+  let serverAnalysis = $state<AnalyzeResponse | null>(null);
+  let apiError = $state<string | null>(null);
+  const arenaSyncStatus = $derived(buildArenaApiSyncStatus(apiError, serverMatchId));
 
   // Squad Config handlers
   async function onSquadDeploy(e: { config: import('$lib/stores/gameState').SquadConfig }) {
-    gameState.update(s => ({ ...s, squadConfig: e.config }));
-    clearFeed();
-    pushFeedItem({
-      agentId: 'system', agentName: 'SYSTEM', agentIcon: '🐕',
-      agentColor: '#E8967D',
-      text: `Squad configured! Risk: ${e.config.riskLevel.toUpperCase()} · TF: ${formatTimeframeLabel(e.config.timeframe)} · Analysis starting...`,
-      phase: 'DRAFT'
-    });
-
-    // ── Server sync: create match + submit draft ──
-    const currentState = $gameState;
-    try {
-      apiError = null;
-      const matchRes = await createArenaMatch(currentState.pair, e.config.timeframe);
-      serverMatchId = matchRes.matchId;
-
-      // Build draft from selected agents (equal weight for now)
-      const agentCount = currentState.selectedAgents.length;
-      if (agentCount <= 0) throw new Error('No agents selected for draft');
-      const weight = Math.round(100 / agentCount);
-      const draft: DraftSelection[] = currentState.selectedAgents.map((agentId, i) => ({
-        agentId: normalizeAgentId(agentId),
-        specId: 'base',
-        weight: i === agentCount - 1 ? 100 - weight * (agentCount - 1) : weight,
-      }));
-      await submitArenaDraft(serverMatchId, draft);
-    } catch (err) {
-      console.warn('[Arena] Server sync failed (match continues locally):', err);
-      apiError = (err as Error).message;
-    }
-
-    startAnalysisFromDraft();
+    await arenaMatchController.deploySquad(e.config);
   }
 
   function onSquadBack() {
-    // Go back to lobby
-    gameState.update(s => ({ ...s, inLobby: true, running: false, phase: 'DRAFT', timer: 0 }));
+    arenaShellController.goLobby();
   }
 
   // ═══════ HYPOTHESIS STATE ═══════
-  let hypothesisVisible = false;
-  let hypothesisTimer = 45;
+  let hypothesisVisible = $state(false);
+  let hypothesisTimer = $state(45);
   let hypothesisInterval: ReturnType<typeof setInterval> | null = null;
-  let _battleInterval: ReturnType<typeof setInterval> | null = null;
-  let _battleResolver: ReturnType<typeof createBattleResolver> | null = null;
-  let _battleResolverUnsub: (() => void) | null = null;
-
-  // ═══════ REPLAY STATE ═══════
-  let replayState = createReplayState();
-  let replaySteps: ReplayStep[] = [];
-  let replayTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function startReplay(record: MatchRecord) {
-    const data = matchRecordToReplayData(record);
-    replaySteps = generateReplaySteps(data);
-    replayState = { active: true, data, currentStep: 0, totalSteps: replaySteps.length, paused: false };
-
-    // Close history panel
-    historyOpen = false;
-
-    addFeed('🎬', 'REPLAY', '#66CCE6', `Replaying Match #${record.matchN}...`);
-    executeReplayStep(0);
-  }
-
-  function executeReplayStep(stepIdx: number) {
-    if (stepIdx >= replaySteps.length || !replayState.active) {
-      // Replay finished
-      replayState = { ...replayState, active: false };
-      addFeed('🎬', 'REPLAY', '#66CCE6', 'Replay complete!');
-      return;
-    }
-
-    replayState = { ...replayState, currentStep: stepIdx };
-    const step = replaySteps[stepIdx];
-    const speed = state.speed || 3;
-
-    switch (step.type) {
-      case 'deploy':
-        addFeed('🐕', 'REPLAY', '#66CCE6', `Agents deployed: ${step.agents.length} agents`);
-        break;
-      case 'hypothesis':
-        if (step.hypothesis) {
-          addFeed('🐕', 'REPLAY', '#66CCE6', `Your call: ${step.hypothesis.dir} · R:R 1:${step.hypothesis.rr.toFixed(1)}`);
-        }
-        break;
-      case 'scout':
-        step.agentVotes.forEach((v, i) => {
-          safeTimeout(() => {
-            addFeed(v.icon, v.name, v.color, `${v.dir} — ${v.conf}% confidence`);
-          }, i * 300 / speed);
-        });
-        break;
-      case 'council':
-        addFeed('🗳', 'REPLAY', '#66CCE6', 'Council deliberation...');
-        break;
-      case 'verdict':
-        addFeed('★', 'REPLAY', '#66CCE6', `Consensus: ${step.consensusType?.toUpperCase() || 'UNKNOWN'}`);
-        break;
-      case 'battle':
-        addFeed('⚔', 'REPLAY', '#66CCE6', `Battle result: ${step.battleResult?.toUpperCase() || 'UNKNOWN'}`);
-        break;
-      case 'result':
-        addFeed(step.win ? '🏆' : '😢', 'REPLAY', step.win ? '#00CC88' : '#FF5E7A',
-          `${step.win ? 'WIN' : 'LOSS'} · ${step.lp > 0 ? '+' : ''}${step.lp} LP`);
-        break;
-    }
-
-    // Auto-advance to next step
-    replayTimer = setTimeout(() => {
-      executeReplayStep(stepIdx + 1);
-    }, 2000 / speed);
-  }
-
-  function exitReplay() {
-    if (replayTimer) { clearTimeout(replayTimer); replayTimer = null; }
-    replayState = createReplayState();
-    replaySteps = [];
-  }
 
   // ═══════ PREVIEW STATE ═══════
-  let previewVisible = false;
+  let previewVisible = $state(false);
   let previewAutoTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ═══════ FLOATING DIR BAR STATE ═══════
-  let floatDir: 'LONG' | 'SHORT' | null = null;
+  let floatDir = $state<'LONG' | 'SHORT' | null>(null);
 
-  // ═══════ COMPARE STATE ═══════
-  let compareVisible = false;
-  let compareData = {
-    userDir: 'LONG' as string,
-    agentDir: 'LONG' as string,
-    userEntry: 0, userTp: 0, userSl: 0,
-    agentScore: 0,
-    consensus: { type: 'partial', lpMult: 1.0, badge: 'PARTIAL x1.0' },
-    agentVotes: [] as Array<{name: string; icon: string; color: string; dir: string; conf: number}>
-  };
+  // Keep chart interaction state in one adapter-shaped object so the page shell
+  // only coordinates phases and server sync.
+  let chartBridge = $state(createArenaChartBridgeState());
+  const arenaChartPanelProps = $derived({
+    showPosition: chartBridge.position.visible,
+    posEntry: chartBridge.position.entry,
+    posTp: chartBridge.position.tp,
+    posSl: chartBridge.position.sl,
+    posDir: chartBridge.position.dir,
+    agentAnnotations: showMarkers ? chartBridge.annotations : [],
+    agentMarkers: showMarkers ? chartBridge.markers : [],
+  });
 
-  // ═══════ CHART POSITION STATE ═══════
-  let showChartPosition = false;
-  let chartPosEntry: number | null = null;
-  let chartPosTp: number | null = null;
-  let chartPosSl: number | null = null;
-  let chartPosDir = 'LONG';
+  let pvpShowTimer: ReturnType<typeof setTimeout> | null = null;
+  let _arenaDestroyed = false; // guard for fire-and-forget timers after unmount
+  const arenaTimerRegistry = createArenaTimerRegistry({
+    isDestroyed: () => _arenaDestroyed,
+  });
+  const safeTimeout = arenaTimerRegistry.scheduleTimeout;
 
-  // ═══════ CHART AGENT MARKERS ═══════
-  let chartAgentMarkers: Array<{
-    time: number;
-    position: 'aboveBar' | 'belowBar';
-    color: string;
-    shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown';
-    text: string;
-  }> = [];
-
-  // ═══════ CHART ANNOTATIONS ═══════
-  let chartAnnotations: Array<{
-    id: string; icon: string; name: string; color: string;
-    label: string; detail: string;
-    yPercent: number; xPercent: number;
-    type: 'ob' | 'funding' | 'whale' | 'signal';
-  }> = [];
-
-  function generateAnnotations() {
-    chartAnnotations = buildChartAnnotations(activeAgents);
+  function addFeed(icon: string, name: string, color: string, text: string, dir?: string) {
+    pushFeedItem({
+      agentId: name.toLowerCase(),
+      agentName: name,
+      agentIcon: icon,
+      agentColor: color,
+      text,
+      dir: dir as Direction | undefined,
+      phase: gs.phase,
+    });
   }
 
-  function generateAgentMarkers() {
-    chartAgentMarkers = buildAgentMarkers(activeAgents);
-  }
+  const arenaVisualEffectsRuntime = createArenaVisualEffectsRuntime({
+    scheduleTimeout: arenaTimerRegistry.scheduleTimeout,
+    getFloatingWords: () => floatingWords,
+    setFloatingWords: (next) => {
+      floatingWords = next;
+    },
+    setArenaParticles: (next) => {
+      arenaParticles = next;
+    },
+  });
 
-  function initAgentStates() {
-    agentStates = {};
-    for (const ag of activeAgents) {
-      agentStates[ag.id] = { state: 'idle', speech: '', energy: 0, voteDir: '' };
-    }
-  }
-
-  // Typing animation state
-  let speechTimers: Record<string, ReturnType<typeof setInterval>> = {};
+  const arenaAgentRuntime = createArenaAgentRuntime({
+    getActiveAgents: () => activeAgents,
+    getAgentStates: () => agentStates,
+    setAgentStates: (next) => {
+      agentStates = next;
+    },
+    getChatMessages: () => chatMessages,
+    setChatMessages: (next) => {
+      chatMessages = next;
+    },
+    safeTimeout,
+  });
 
   function setSpeech(agentId: string, text: string, dur = 1500) {
-    // Clear any existing typing timer for this agent
-    if (speechTimers[agentId]) { clearInterval(speechTimers[agentId]); delete speechTimers[agentId]; }
-
-    // Start typing effect: reveal one char at a time
-    let charIdx = 0;
-    const fullText = text;
-    agentStates[agentId] = { ...agentStates[agentId], speech: '' };
-    agentStates = { ...agentStates };
-
-    speechTimers[agentId] = setInterval(() => {
-      charIdx++;
-      if (charIdx >= fullText.length) {
-        // Typing complete
-        clearInterval(speechTimers[agentId]);
-        delete speechTimers[agentId];
-        agentStates[agentId] = { ...agentStates[agentId], speech: fullText };
-        agentStates = { ...agentStates };
-
-        // Clear after duration
-        if (dur > 0) safeTimeout(() => {
-          if (agentStates[agentId]) {
-            agentStates[agentId] = { ...agentStates[agentId], speech: '' };
-            agentStates = { ...agentStates };
-          }
-        }, dur);
-      } else {
-        agentStates[agentId] = { ...agentStates[agentId], speech: fullText.slice(0, charIdx) + '|' };
-        agentStates = { ...agentStates };
-      }
-    }, 30);
+    arenaAgentRuntime.setSpeech(agentId, text, dur);
   }
 
-  // Bridge: legacy agent state → char sprite state mapping (AGENT_TO_CHAR_STATE imported)
+  // Keep legacy agent state and sprite state aligned through the battle runtime.
   function setAgentState(agentId: string, st: string) {
-    if (agentStates[agentId]) {
-      agentStates[agentId] = { ...agentStates[agentId], state: st };
-      agentStates = { ...agentStates };
-    }
-    // Sync char sprite state
-    const mapped = AGENT_TO_CHAR_STATE[st] || 'idle';
-    if (charSprites[agentId]) {
-      charSprites[agentId] = { ...charSprites[agentId], charState: mapped as CharState };
-      charSprites = charSprites;
-    }
+    arenaAgentRuntime.setAgentState(agentId, st);
+    battlePresentationRuntime.syncAgentState(agentId, st);
   }
 
   function setAgentEnergy(agentId: string, e: number) {
-    if (agentStates[agentId]) {
-      agentStates[agentId] = { ...agentStates[agentId], energy: e };
-      agentStates = { ...agentStates };
-    }
-    // Sync to char sprite
-    if (charSprites[agentId]) {
-      charSprites[agentId] = { ...charSprites[agentId], energy: Math.min(100, e) };
-      charSprites = charSprites;
-    }
+    arenaAgentRuntime.setAgentEnergy(agentId, e);
+    battlePresentationRuntime.syncAgentEnergy(agentId, e);
   }
 
-  let feedCursorTimer: ReturnType<typeof setTimeout> | null = null;
-  let compareAutoTimer: ReturnType<typeof setTimeout> | null = null;
-  let pvpShowTimer: ReturnType<typeof setTimeout> | null = null;
-  let _arenaDestroyed = false; // guard for fire-and-forget timers after unmount
-  const _pendingTimers = new Set<ReturnType<typeof setTimeout>>(); // track unnamed timers for cleanup
-  /** Tracked setTimeout that auto-cleans from the set and respects _arenaDestroyed */
-  function safeTimeout(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
-    const id = setTimeout(() => { _pendingTimers.delete(id); if (!_arenaDestroyed) fn(); }, ms);
-    _pendingTimers.add(id);
-    return id;
+  function addChatMsg(author: ArenaAgentChatAuthor, text: string, isAction = false) {
+    arenaAgentRuntime.addChatMessage(author, text, isAction);
   }
 
-  function addFeed(icon: string, name: string, color: string, text: string, dir?: string) {
-    // Add with 'new' flag for slide-in animation + blinking cursor
-    const msg = { icon, name, color, text, dir, isNew: true };
-    feedMessages = [...feedMessages.map(m => ({ ...m, isNew: false })), msg].slice(-10);
-
-    // Remove cursor after 500ms
-    if (feedCursorTimer) clearTimeout(feedCursorTimer);
-    feedCursorTimer = setTimeout(() => {
-      feedMessages = feedMessages.map(m => ({ ...m, isNew: false }));
-    }, 500);
-  }
-
-  function dogeFloat() {
-    const colors = ['#FF5E7A', '#E8967D', '#66CCE6', '#00CC88', '#DCB970', '#F0EDE4'];
-    const n = 3 + Math.floor(Math.random() * 3);
-    for (let i = 0; i < n; i++) {
-      safeTimeout(() => {
-        const id = Date.now() + i;
-        floatingWords = [...floatingWords, {
-          id,
-          text: DOGE_WORDS[Math.floor(Math.random() * DOGE_WORDS.length)],
-          color: colors[Math.floor(Math.random() * colors.length)],
-          x: 10 + Math.random() * 80,
-          dur: 1.5 + Math.random() * 1
-        }];
-        safeTimeout(() => { floatingWords = floatingWords.filter(w => w.id !== id); }, 2500);
-      }, i * 200);
-    }
-  }
-
-  // ═══════ GAME JUICE UTILITIES ═══════
-  // juice_shake, juice_flash, juice_flyNumber, juice_confetti imported from $lib/engine/arenaGameJuice
-
-  // ═══════ TURN SYSTEM (Character-Centered) ═══════
-  function scheduleBattleTurnsLocal(): BattleTurn[] {
-    return scheduleBattleTurns(activeAgents);
-  }
-
-  // executeTurn with full state machine: windup → cast → impact → recover
-  function executeTurn(turn: BattleTurn, idx: number) {
-    currentTurnIdx = idx;
-    const agId = turn.agent.id;
-    const act = ACTION_CATALOG[turn.action];
-
-    // ── Phase 1: LOCK (0ms) — character focuses
-    setCharState(agId, 'lock');
-    setAgentState(agId, 'alert');
-    battleNarration = `${turn.agent.name} 준비 중...`;
-    battlePhaseLabel = `${turn.agent.name} TURN`;
-
-    // ── Phase 2: WINDUP (400ms) — character charges
-    const t1 = setTimeout(() => {
-      setCharState(agId, 'windup');
-      setAgentState(agId, 'charge');
+  const battlePresentationRuntime = createArenaBattlePresentationRuntime({
+    getActiveAgents: () => activeAgents,
+    getHypothesisDir: () => gs.hypothesis?.dir,
+    getCharSprites: () => charSprites,
+    getVsMeterTarget: () => vsMeterTarget,
+    getEnemyHP: () => enemyHP,
+    getAgentEnergy: (agentId) => agentStates[agentId]?.energy || 0,
+    setCharSprites: (sprites) => {
+      charSprites = sprites;
+    },
+    setAgentState,
+    setAgentEnergy,
+    setBattleTurns: (turns) => {
+      battleTurns = turns;
+    },
+    setCurrentTurnIdx: (idx) => {
+      currentTurnIdx = idx;
+    },
+    clearChatMessages: () => {
+      chatMessages = [];
+    },
+    appendChatMessage: arenaAgentRuntime.appendChatMessage,
+    setBattleNarration: (text) => {
+      battleNarration = text;
+    },
+    setBattlePhaseLabel: (text) => {
+      battlePhaseLabel = text;
+    },
+    setVsMeter: (value) => {
+      vsMeter = value;
+    },
+    setVsMeterTarget: (value) => {
+      vsMeterTarget = value;
+    },
+    setEnemyHP: (value) => {
+      enemyHP = value;
+    },
+    setComboCount: (value) => {
+      comboCount = value;
+    },
+    setShowCombo: (value) => {
+      showCombo = value;
+    },
+    setShowCritical: (value) => {
+      showCritical = value;
+    },
+    setCriticalText: (text) => {
+      criticalText = text;
+    },
+    setShowVsSplash: (value) => {
+      showVsSplash = value;
+    },
+    runChargeEffect: () => {
       sfx.charge();
-      showCharAction(agId, '⚡', '차징...');
-      battleNarration = `${turn.agent.name}: ${act.label}`;
-      addChatMsg(turn.agent, `${turn.attackName} ${act.emoji} ${act.label}`, true);
-      // Move toward center for attack
-      const homePos = getFormPos(activeAgents.indexOf(turn.agent), activeAgents.length);
-      moveChar(agId, 50 + (homePos.x - 50) * 0.3, 50 + (homePos.y - 50) * 0.3);
-    }, 400);
-    turnTimers.push(t1);
-
-    // ── Phase 3: CAST (900ms) — action executes
-    const t2 = setTimeout(() => {
-      setCharState(agId, 'cast');
-      showCharAction(agId, act.emoji, act.label);
-    }, 900);
-    turnTimers.push(t2);
-
-    // ── Phase 4: IMPACT (1300ms) — damage/effect resolves
-    const t3 = setTimeout(() => {
-      setCharState(agId, 'impact');
-      trackCombo();
-
-      if (turn.isCritical) {
-        juice_shake('heavy'); juice_flash('gold'); sfx.verdict();
-        battleNarration = `💥 CRITICAL! ${turn.agent.name} ${ATTACK_SUPER[agId]||'필살!'}`;
-        showCharHit(agId, `CRITICAL! -${Math.round(turn.damage)}`, '#ffcc00');
-        showCritical = true; criticalText = `💥 ${turn.agent.name} CRITICAL!`;
-        addChatMsg(turn.agent, `급소!! ${ATTACK_SUPER[agId]||''} 🔥`);
-        const tc = setTimeout(() => { showCritical = false; }, 1200);
-        turnTimers.push(tc);
-      } else if (turn.effectiveness === 'super') {
-        juice_shake('medium'); juice_flash('white'); sfx.impact();
-        battleNarration = `⚡ ${turn.attackName}! ${ATTACK_SUPER[agId]||'효과 굉장!'}`;
-        showCharHit(agId, `-${Math.round(turn.damage)}`, '#00ff88');
-        addChatMsg(turn.agent, `${ATTACK_SUPER[agId]||'효과 굉장!'} ⚡`);
-      } else if (turn.effectiveness === 'weak') {
+    },
+    runSplashEffect: () => {
+      juice_shake('heavy');
+      sfx.enter();
+      arenaVisualEffectsRuntime.seedArenaParticles();
+    },
+    runImpactEffect: (variant) => {
+      if (variant === 'critical') {
+        juice_shake('heavy');
+        juice_flash('gold');
+        sfx.verdict();
+        return;
+      }
+      if (variant === 'super') {
+        juice_shake('medium');
+        juice_flash('white');
+        sfx.impact();
+        return;
+      }
+      if (variant === 'weak') {
         sfx.step();
-        battleNarration = `${turn.attackName}... ${ATTACK_WEAK[agId]||'효과 약함'}`;
-        showCharHit(agId, 'WEAK', '#ff5e7a');
-        addChatMsg(turn.agent, `${ATTACK_WEAK[agId]||'효과 약함...'} 😐`);
-      } else {
-        juice_shake('light'); sfx.impact();
-        battleNarration = `${turn.attackName}! 나쁘지 않다!`;
-        showCharHit(agId, `-${Math.round(turn.damage)}`, '#fff');
-        addChatMsg(turn.agent, `나쁘지 않다! 💪`);
+        return;
       }
-
-      // Update VS meter
-      vsMeterTarget = Math.max(5, Math.min(95, vsMeterTarget + turn.meterShift));
-      vsMeter = vsMeterTarget;
-      // Update enemy HP
-      enemyHP = Math.max(0, Math.min(100, enemyHP - turn.damage * (turn.dirSign > 0 ? 1 : -1) * 0.5));
-      enemyMomentum = Math.max(0, Math.min(100, enemyMomentum + turn.meterShift * 0.3));
-      // Update character energy
-      const cSprite = charSprites[agId];
-      if (cSprite) {
-        cSprite.energy = Math.min(100, cSprite.energy + 25 + (turn.isCritical ? 20 : 0));
-        charSprites = charSprites;
-      }
-      const en = Math.min(100, (agentStates[agId]?.energy||0) + 30 + (turn.isCritical?20:0));
-      setAgentEnergy(agId, en);
-    }, 1300);
-    turnTimers.push(t3);
-
-    // ── Phase 5: RECOVER (2000ms) — return to position (celebrate on big hits)
-    const bigHit = turn.effectiveness === 'super' || turn.isCritical;
-    const t4 = setTimeout(() => {
-      setCharState(agId, bigHit ? 'celebrate' : 'recover');
-      setAgentState(agId, bigHit ? 'jump' : 'idle');
-      // Move back to home position
-      const homePos = getFormPos(activeAgents.indexOf(turn.agent), activeAgents.length);
-      moveChar(agId, homePos.x, homePos.y);
-      battlePhaseLabel = 'COMBAT';
-    }, 2000);
-    turnTimers.push(t4);
-
-    // ── Phase 6: IDLE (2500ms) — ready for next turn
-    const t5 = setTimeout(() => {
-      setCharState(agId, 'idle');
-    }, 2500);
-    turnTimers.push(t5);
-  }
-
-  function addChatMsg(ag: typeof AGDEFS[0], text: string, isAction = false) {
-    chatMessages = [...chatMessages, { id: Date.now()+Math.random(), agentId: ag.id, name: ag.name, icon: ag.icon, color: ag.color, text, isAction }].slice(-20);
-  }
-
-  function clearTurnTimers() { turnTimers.forEach(t => clearTimeout(t)); turnTimers = []; }
-
-  function startBattleTurnSequence() {
-    battleTurns = scheduleBattleTurnsLocal();
-    vsMeter = 50; vsMeterTarget = 50;
-    currentTurnIdx = -1; chatMessages = []; battleNarration = '';
-    enemyHP = 100; enemyMomentum = 50; comboCount = 0;
-    battlePhaseLabel = 'VS SPLASH';
-    initCharSprites();
-    showVsSplash = true;
-    juice_shake('heavy'); sfx.enter();
-    addChatMsg({ id:'SYS', name:'SYSTEM', icon:'⚔', color:'#ff5e7a' } as any,
-      state.hypothesis?.dir === 'LONG' ? '🔥 LONG SQUAD vs MARKET 🔥' : '🔥 SHORT SQUAD vs MARKET 🔥', true);
-
-    // All characters patrol during splash
-    activeAgents.forEach(ag => setCharState(ag.id, 'patrol', 1500));
-
-    const t0 = setTimeout(() => {
-      showVsSplash = false;
-      battlePhaseLabel = 'COMBAT';
-    }, 1500);
-    turnTimers.push(t0);
-
-    // Execute turns with spacing
-    battleTurns.forEach((turn, i) => {
-      const delay = 1800 + i * 2800;
-      const t = setTimeout(() => executeTurn(turn, i), delay);
-      turnTimers.push(t);
-    });
-
-    // Suspense before result
-    const suspenseDelay = 1800 + battleTurns.length * 2800;
-    const ts = setTimeout(() => {
-      battleNarration = '⏳ 시장이 결정한다...';
-      battlePhaseLabel = 'JUDGMENT';
-      addChatMsg({ id:'SYS', name:'MARKET', icon:'🌑', color:'#ffcc00' } as any, '시장이 결정한다...', true);
       juice_shake('light');
-      // All characters lock during suspense
-      activeAgents.forEach(ag => setCharState(ag.id, 'lock'));
-    }, suspenseDelay);
-    turnTimers.push(ts);
-  }
+      sfx.impact();
+    },
+    isDestroyed: () => _arenaDestroyed,
+  });
 
-  function clearLiveEventTimer() {
-    if (liveEventTimer) {
-      clearInterval(liveEventTimer);
-      liveEventTimer = null;
-    }
-  }
-
-  function trimExpiredEvents() {
-    const now = Date.now();
-    liveEvents = liveEvents.filter((ev) => ev.expiresAt > now);
-  }
-
-  function pushLiveEvent(phase: 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE') {
-    const ev = pickLiveEvent(phase);
-    if (!ev) return;
-    liveEvents = [ev, ...liveEvents].slice(0, 3);
-    addFeed(ev.icon, 'EVENT', ev.tint, `${ev.title} · ${ev.detail}`);
-    safeTimeout(() => {
-      liveEvents = liveEvents.filter((item) => item.id !== ev.id);
-    }, LIVE_EVENT_TTL_MS + 60);
-  }
-
-  function startLiveEventStream(phase: 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE') {
-    clearLiveEventTimer();
-    trimExpiredEvents();
-    pushLiveEvent(phase);
-    const cadence = getEventCadence(phase, state.speed || 1);
-    liveEventTimer = setInterval(() => {
-      if (_arenaDestroyed) return;
-      trimExpiredEvents();
-      pushLiveEvent(phase);
-    }, cadence);
-  }
+  const liveEventRuntime = createArenaLiveEventRuntime({
+    emitFeed: (message) => addFeed(message.icon, message.name, message.color, message.text),
+    getSpeed: () => gs.speed || 1,
+    isDestroyed: () => _arenaDestroyed,
+  });
 
   function clearArenaDynamics() {
-    clearLiveEventTimer();
-    liveEvents = [];
-    rewardVisible = false;
-    rewardXp = 0;
-    rewardStreak = 0;
-    rewardBadges = [];
+    liveEventRuntime.clear();
+    rewardState = createArenaRewardState();
   }
 
-  // ═══════ HYPOTHESIS HANDLERS ═══════
-  function onHypothesisSubmit(h: { dir: Direction; conf: number; tf: string; vmode: 'tpsl' | 'close'; closeN: number; tags: string[]; reason: string; entry: number; tp: number; sl: number; rr: number }) {
-    // Clear timer
-    if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
-    hypothesisVisible = false;
-
-    // Set hypothesis in game state
-    gameState.update(s => ({
-      ...s,
-      hypothesis: {
-        dir: h.dir,
-        conf: h.conf,
-        tags: new Set(),
-        tf: h.tf,
-        vmode: h.vmode,
-        closeN: h.closeN,
-        entry: h.entry,
-        tp: h.tp,
-        sl: h.sl,
-        rr: h.rr
-      },
-      pos: {
-        entry: h.entry,
-        tp: h.tp,
-        sl: h.sl,
-        dir: h.dir,
-        rr: h.rr,
-        size: 0,
-        lev: 0
-      }
-    }));
-
-    // Show position on chart
-    showChartPosition = true;
-    chartPosEntry = h.entry;
-    chartPosTp = h.tp;
-    chartPosSl = h.sl;
-    chartPosDir = h.dir;
-
-    addFeed('🐕', 'YOU', '#E8967D', `${h.dir} · TP $${h.tp.toLocaleString()} · SL $${h.sl.toLocaleString()} · R:R 1:${h.rr}`, h.dir);
-    sfx.vote();
-
-    // ── Server sync: submit hypothesis ──
-    if (serverMatchId) {
-      const dirMap: Record<string, 'LONG' | 'SHORT' | 'NEUTRAL'> = { LONG: 'LONG', SHORT: 'SHORT', NEUTRAL: 'NEUTRAL' };
-      submitArenaHypothesis(serverMatchId, dirMap[h.dir] || 'NEUTRAL', h.conf)
-        .catch(err => console.warn('[Arena] Hypothesis sync failed:', err));
-    }
-
-    // HYPOTHESIS -> PREVIEW -> BATTLE
-    initPreview();
-  }
-
-  // Floating direction bar handler
-  function selectFloatDir(d: 'LONG' | 'SHORT') {
-    floatDir = d;
-  }
-
-  // Chart drag handlers
-  function onDragTP(detail: { price: number }) {
-    chartPosTp = detail.price;
-    // Also update hypothesis panel if visible
-    gameState.update(s => {
-      if (s.hypothesis) {
-        return { ...s, hypothesis: { ...s.hypothesis, tp: detail.price, rr: Math.abs(detail.price - (s.hypothesis.entry || 0)) / Math.max(1, Math.abs((s.hypothesis.entry || 0) - (s.hypothesis.sl || 0))) } };
-      }
-      return s;
-    });
-  }
-
-  function onDragSL(detail: { price: number }) {
-    chartPosSl = detail.price;
-    gameState.update(s => {
-      if (s.hypothesis) {
-        return { ...s, hypothesis: { ...s.hypothesis, sl: detail.price, rr: Math.abs((s.hypothesis.tp || 0) - (s.hypothesis.entry || 0)) / Math.max(1, Math.abs((s.hypothesis.entry || 0) - detail.price)) } };
-      }
-      return s;
-    });
-  }
-
-  function onDragEntry(detail: { price: number }) {
-    chartPosEntry = detail.price;
-    gameState.update(s => {
-      if (s.hypothesis) {
-        return { ...s, hypothesis: { ...s.hypothesis, entry: detail.price } };
-      }
-      return s;
-    });
-  }
-
-  // ═══════ PHASE HANDLERS ═══════
-  function onPhaseInit(phase: Phase) {
-    phaseLabel = PHASE_LABELS[phase] || PHASE_LABELS.DRAFT;
-
-    switch (phase) {
-      case 'DRAFT': initDraft(); break;
-      case 'ANALYSIS': initAnalysis(); break;
-      case 'HYPOTHESIS': initHypothesis(); break;
-      case 'BATTLE': initBattle(); break;
-      case 'RESULT': initResult(); break;
+  function clearHypothesisCountdown() {
+    if (hypothesisInterval) {
+      clearInterval(hypothesisInterval);
+      hypothesisInterval = null;
     }
   }
 
-  function initDraft() {
-    clearArenaDynamics();
-    findings = [];
-    verdictVisible = false;
-    resultVisible = false;
-    pvpVisible = false;
-    councilActive = false;
-    hypothesisVisible = false;
-    gameState.update(s => ({ ...s, arenaView: 'arena' }));
-    compareVisible = false;
-    previewVisible = false;
-    floatDir = null;
-    showChartPosition = false;
-    chartPosEntry = null;
-    chartPosTp = null;
-    chartPosSl = null;
-    chartAnnotations = [];
-    chartAgentMarkers = [];
-    initAgentStates();
-    sfx.enter();
-    dogeFloat();
-    addFeed('🐕', 'ARENA', '#E8967D', 'Draft locked. Preparing analysis...');
-    activeAgents.forEach((ag, i) => {
-      safeTimeout(() => {
-        setAgentState(ag.id, 'alert');
-        setSpeech(ag.id, DOGE_DEPLOYS[i % DOGE_DEPLOYS.length], 800);
-      }, i * 200);
-    });
-  }
-
-  function initAnalysis() {
-    startLiveEventStream('ANALYSIS');
-    initCharSprites(); // Initialize character positions in arena
-    initScout();
-    initGather();
-    initCouncil();
-    addFeed('🔍', 'ANALYSIS', '#66CCE6', '5-agent analysis pipeline running...');
-
-    // ── Server sync: run analysis in background ──
-    if (serverMatchId) {
-      runArenaAnalysis(serverMatchId)
-        .then(res => {
-          serverAnalysis = res;
-          const c02 = mapAnalysisToC02(res);
-          gameState.update(s => ({ ...s, orpoOutput: c02.orpo, ctxBeliefs: c02.ctx, guardianCheck: c02.guardian, commanderVerdict: c02.commander }));
-        })
-        .catch(err => {
-          console.warn('[Arena] Server analysis failed:', err);
-        });
+  function clearPreviewAutoAdvance() {
+    if (previewAutoTimer) {
+      clearTimeout(previewAutoTimer);
+      previewAutoTimer = null;
     }
   }
 
-  function initHypothesis() {
-    startLiveEventStream('HYPOTHESIS');
-    // Show hypothesis panel for user prediction
-    hypothesisVisible = true;
-    floatDir = null; // Reset floating dir bar
-    // ═══ BET Phase Juice ═══
-    juice_shake('light');
-    sfx.charge();
-    battleNarration = '🎯 포지션을 설정하세요!';
-    addChatMsg({ id:'SYS', name:'SYSTEM', icon:'🎯', color:'#ffcc00' } as any, '배팅 타임! LONG or SHORT?', true);
-    const speed = state.speed || 3;
-    hypothesisTimer = Math.round(30 / speed);
-
-    // Countdown timer
-    if (hypothesisInterval) clearInterval(hypothesisInterval);
-    hypothesisInterval = setInterval(() => {
-      hypothesisTimer -= 1;
-      if (hypothesisTimer <= 0) {
-        // Auto-skip if time runs out
-        if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
-        hypothesisVisible = false;
-
-        // Default: NEUTRAL (skip)
-        const price = currentBtcPrice;
-        gameState.update(s => ({
-          ...s,
-          hypothesis: {
-            dir: 'NEUTRAL', conf: 1, tags: new Set(), tf: '1h', vmode: 'tpsl', closeN: 3,
-            entry: price, tp: price * 1.02, sl: price * 0.985, rr: 1.3
-          },
-          pos: {
-            entry: price,
-            tp: price * 1.02,
-            sl: price * 0.985,
-            dir: 'NEUTRAL',
-            rr: 1.3,
-            size: 0,
-            lev: 0
-          }
-        }));
-        showChartPosition = true;
-        chartPosEntry = price;
-        chartPosTp = price * 1.02;
-        chartPosSl = price * 0.985;
-        chartPosDir = 'NEUTRAL';
-        addFeed('⏰', 'TIMEOUT', '#93A699', 'Time expired — auto-skip');
-        advancePhase();
-      }
-    }, 1000);
-
-    addFeed('🐕', 'ARENA', '#66CCE6', 'HYPOTHESIS: pick direction and set TP/SL.');
-
-    // Agents go into think state
-    activeAgents.forEach((ag, i) => {
-      safeTimeout(() => {
-        setAgentState(ag.id, 'think');
-        setSpeech(ag.id, '🤔...', 600);
-      }, i * 300);
-    });
+  function clearPvpShowTimer() {
+    pvpShowTimer = arenaTimerRegistry.clearTimeoutHandle(pvpShowTimer);
   }
 
-  function initPreview() {
-    previewVisible = true;
-    const h = state.hypothesis;
-    addFeed('👁', 'PREVIEW', '#DCB970', `Position: ${h?.dir || 'NEUTRAL'} · Entry $${(h?.entry || 0).toLocaleString()} · R:R 1:${(h?.rr || 1).toFixed(1)}`);
+  let confirmingExit = $state(false);
+  let clearBattleSession = () => {};
 
-    // Agents look at the position
-    activeAgents.forEach((ag, i) => {
-      safeTimeout(() => {
-        setAgentState(ag.id, 'think');
-        setSpeech(ag.id, '📋 reviewing...', 600);
-      }, i * 200);
-    });
-
-    // Auto-advance after 5s if user doesn't confirm
-    const speed = state.speed || 3;
-    previewAutoTimer = setTimeout(() => {
-      confirmPreview();
-    }, 5000 / speed);
-  }
-
-  function confirmPreview() {
-    if (previewAutoTimer) { clearTimeout(previewAutoTimer); previewAutoTimer = null; }
-    previewVisible = false;
-    sfx.charge();
-    addFeed('✅', 'CONFIRMED', '#00CC88', 'Position confirmed — scouting begins!');
-    advancePhase();
-  }
-
-  function initScout() {
-    addFeed('🔍', 'SCOUT', '#66CCE6', 'Agents scouting data sources...');
-    // Generate chart annotations from active agents
-    generateAnnotations();
-    // Generate agent signal markers on chart
-    generateAgentMarkers();
-    const speed = state.speed || 3;
-
-    // Map agents to their nearest data source
-    const sourceMap: Record<string, typeof SOURCES[0]> = {};
-    const agentSourcePairs: Array<{agentId: string; source: typeof SOURCES[0]}> = [
-      { agentId: 'structure', source: SOURCES.find(s => s.id === 'binance')! },
-      { agentId: 'deriv', source: SOURCES.find(s => s.id === 'coinglass')! },
-      { agentId: 'flow', source: SOURCES.find(s => s.id === 'onchain')! },
-      { agentId: 'senti', source: SOURCES.find(s => s.id === 'social')! },
-      { agentId: 'macro', source: SOURCES.find(s => s.id === 'feargreed')! },
-    ];
-
-    activeAgents.forEach((ag, i) => {
-      const pair = agentSourcePairs.find(p => p.agentId === ag.id);
-      const targetSource = pair?.source || SOURCES[i % SOURCES.length];
-
-      safeTimeout(() => {
-        // Phase 1: Walk toward data source — move character sprite
-        setAgentState(ag.id, 'walk');
-        if (targetSource) {
-          moveChar(ag.id, targetSource.x * 100, targetSource.y * 100);
-        }
-        sfx.scan();
-        battleNarration = `🔍 ${ag.name}가 데이터를 스캔 중...`;
-        addChatMsg(ag, `📡 ${targetSource?.label || 'data source'} 스캔 중...`);
-
-        safeTimeout(() => {
-          // Phase 2: Arrive at source + charge up energy
-          setAgentState(ag.id, 'charge');
-          setAgentEnergy(ag.id, 30);
-          setSpeech(ag.id, ag.speech.scout, 800 / speed);
-          showCharAction(ag.id, '🔍', 'SCAN');
-
-          safeTimeout(() => {
-            // Phase 3: Energy full → show finding
-            setAgentEnergy(ag.id, 75);
-            addFeed(ag.icon, ag.name, ag.color, ag.finding.title, ag.dir);
-            battleNarration = `📊 ${ag.name}: ${ag.finding.title}`;
-            addChatMsg(ag, `${ag.finding.title} · ${ag.finding.detail}`);
-            showCharAction(ag.id, ag.icon, ag.finding.title.slice(0, 12));
-
-            safeTimeout(() => {
-              // Phase 4: Full charge + decision — return to formation
-              setAgentEnergy(ag.id, 100);
-              sfx.charge();
-              setAgentState(ag.id, 'alert');
-              const homePos = getFormPos(i, activeAgents.length);
-              moveChar(ag.id, homePos.x, homePos.y);
-
-              findings = [...findings, { def: ag, visible: true }];
-
-              // Phase 5: Return to idle stance
-              safeTimeout(() => {
-                setAgentState(ag.id, 'idle');
-              }, 500 / speed);
-            }, 300 / speed);
-          }, 300 / speed);
-        }, 500 / speed);
-      }, i * 500 / speed);
-    });
-  }
-
-  function initGather() {
-    councilActive = true;
-    addFeed('📊', 'GATHER', '#66CCE6', 'Gathering analysis data...');
-    battleNarration = '📊 에이전트들이 분석 데이터를 수집 중...';
-    activeAgents.forEach((ag, i) => {
-      safeTimeout(() => {
-        setAgentState(ag.id, 'vote');
-        setSpeech(ag.id, DOGE_GATHER[i % DOGE_GATHER.length], 400);
-        addChatMsg(ag, `${ag.finding.detail}`);
-      }, i * 150);
-    });
-  }
-
-  function initCouncil() {
-    addFeed('🗳', 'COUNCIL', '#E8967D', 'Agents voting on direction...');
-    battleNarration = '🗳 에이전트 투표 시작!';
-    activeAgents.forEach((ag, i) => {
-      safeTimeout(() => {
-        const dir = ag.dir;
-        agentStates[ag.id] = { ...agentStates[ag.id], voteDir: dir };
-        agentStates = { ...agentStates };
-        setSpeech(ag.id, ag.speech.vote, 600);
-        sfx.vote();
-        addFeed(ag.icon, ag.name, ag.color, `Vote: ${dir} (${ag.conf}%)`, dir);
-        battleNarration = `🗳 ${ag.name}: ${dir} (${ag.conf}% 확신)`;
-        addChatMsg(ag, `${ag.speech.vote} · ${dir} ${ag.conf}%`);
-      }, i * 400 / (state.speed || 3));
-    });
-  }
-
-  function initVerdict() {
-    const score = Math.round(state.score);
-    const bullish = activeAgents.filter(a => a.dir === 'LONG').length;
-    const agentDir = score >= 60 ? 'LONG' : 'WAIT';
-    verdictVisible = true;
-
-    // Set position from hypothesis
-    const curPrice = currentBtcPrice;
-    gameState.update(s => ({
-      ...s,
-      pos: s.hypothesis ? {
-        entry: s.hypothesis.entry, tp: s.hypothesis.tp, sl: s.hypothesis.sl,
-        dir: s.hypothesis.dir as any, rr: s.hypothesis.rr, size: 0, lev: 0
-      } : {
-        entry: curPrice, tp: curPrice * 1.02, sl: curPrice * 0.985,
-        dir: 'LONG', rr: 1.3, size: 0, lev: 0
-      }
-    }));
-
-    // Update chart position to match
-    const h = state.hypothesis;
-    if (h) {
-      showChartPosition = true;
-      chartPosEntry = h.entry;
-      chartPosTp = h.tp;
-      chartPosSl = h.sl;
-      chartPosDir = h.dir;
-    }
-
-    sfx.verdict();
-    dogeFloat();
-    addFeed('⭐', 'VERDICT', '#E8967D', `Agent verdict: ${agentDir} · Score ${score} · ${bullish}/${activeAgents.length} agree`, agentDir);
-    activeAgents.forEach((ag, i) => {
-      safeTimeout(() => {
-        setAgentState(ag.id, 'jump');
-        setSpeech(ag.id, DOGE_VOTE_LONG[i % DOGE_VOTE_LONG.length], 600);
-      }, i * 100);
-    });
-  }
-
-  function initCompare() {
-    // Compare user hypothesis vs agent consensus
-    const h = state.hypothesis;
-    const userDir = h?.dir || 'NEUTRAL';
-    const agentDirs = activeAgents.map(a => a.dir);
-    const longs = agentDirs.filter(d => d === 'LONG').length;
-    const agentDir = longs > agentDirs.length / 2 ? 'LONG' : 'SHORT';
-    const consensus = determineConsensus(userDir, agentDirs, false);
-
-    compareData = {
-      userDir,
-      agentDir,
-      userEntry: h?.entry || 0,
-      userTp: h?.tp || 0,
-      userSl: h?.sl || 0,
-      agentScore: Math.round(state.score),
-      consensus,
-      agentVotes: activeAgents.map(ag => ({
-        name: ag.name,
-        icon: ag.icon,
-        color: ag.color,
-        dir: ag.dir,
-        conf: ag.conf
-      }))
-    };
-    compareVisible = true;
-
-    // Update consensus in game state
-    gameState.update(s => ({
-      ...s,
-      hypothesis: s.hypothesis ? { ...s.hypothesis, consensusType: consensus.type, lpMult: consensus.lpMult } : s.hypothesis
-    }));
-
-    addFeed('⚔️', 'COMPARE', '#DCB970', `${consensus.badge} — You: ${userDir} vs Agents: ${agentDir}`);
-    sfx.charge();
-
-    // Auto-advance after compare display
-    const speed = state.speed || 3;
-    if (compareAutoTimer) clearTimeout(compareAutoTimer);
-    compareAutoTimer = setTimeout(() => {
-      compareAutoTimer = null;
-      if (_arenaDestroyed) return;
-      compareVisible = false;
-      advancePhase();
-    }, 4000 / speed);
-  }
-
-  function initBattle() {
-    startLiveEventStream('BATTLE');
-    verdictVisible = false;
-    compareVisible = false;
-    addFeed('⚔', 'BATTLE', '#FF5E7A', 'Battle in progress!');
-    activeAgents.forEach((ag, i) => {
-      setAgentState(ag.id, 'alert');
-      setSpeech(ag.id, DOGE_BATTLE[i % DOGE_BATTLE.length], 400);
-    });
-
-    // ═══ Start 4-Mode Battle Turn Sequence ═══
-    startBattleTurnSequence();
-
-    // ═══ Real-time Battle Resolution (via Binance WebSocket) ═══
-    const fallbackPos = state.hypothesis
-      ? {
-        entry: state.hypothesis.entry,
-        tp: state.hypothesis.tp,
-        sl: state.hypothesis.sl,
-        dir: state.hypothesis.dir,
-        rr: state.hypothesis.rr,
-        size: 0,
-        lev: 0
-      }
-      : null;
-    const pos = state.pos || fallbackPos;
-    if (!pos) {
-      gameState.update(s => ({ ...s, battleResult: null, running: false }));
-      safeTimeout(() => advancePhase(), 3000);
-      return;
-    }
-
-    // Clean up any previous resolver
-    if (_battleResolverUnsub) { _battleResolverUnsub(); _battleResolverUnsub = null; }
-    if (_battleResolver) { _battleResolver.destroy(); _battleResolver = null; }
-
-    _battleResolver = createBattleResolver({
-      entryPrice: pos.entry,
-      tpPrice: pos.tp,
-      slPrice: pos.sl,
-      direction: pos.dir === 'LONG' || pos.dir === 'SHORT' ? pos.dir : 'LONG',
-      speed: state.speed || 3,
-    });
-
-    gameState.update(s => ({
-      ...s,
-      battleTick: null,
-      battlePriceHistory: [],
-      battleEntryTime: Date.now(),
-      battleExitTime: 0,
-      battleExitPrice: 0,
-    }));
-
-    _battleResolverUnsub = _battleResolver.subscribe((tick: BattleTickState) => {
-      if (_arenaDestroyed) return;
-
-      // Update gameState with live battle tick
-      gameState.update(s => ({
-        ...s,
-        battleTick: tick,
-        battlePriceHistory: tick.priceHistory,
-      }));
-
-      // Tie agent animations to price movement
-      if (tick.pnlPercent > 0) {
-        // Price moving favorably — agents in positive states
-        const topAgent = activeAgents[Math.floor(Math.random() * activeAgents.length)];
-        if (topAgent && tick.distToTP > 50 && Math.random() < 0.15) {
-          setAgentState(topAgent.id, 'jump');
-          setSpeech(topAgent.id, tick.distToTP > 80 ? 'Almost there!' : 'Looking good!', 300);
-        }
-      } else if (tick.pnlPercent < -0.3) {
-        // Price moving against — agents show concern
-        const worriedAgent = activeAgents[Math.floor(Math.random() * activeAgents.length)];
-        if (worriedAgent && tick.distToSL > 50 && Math.random() < 0.1) {
-          setAgentState(worriedAgent.id, 'sad');
-          setSpeech(worriedAgent.id, tick.distToSL > 80 ? 'Danger zone!' : 'Hold steady...', 300);
-        }
-      }
-
-      // Update VS meter based on real price movement
-      const tpWeight = tick.distToTP;
-      const slWeight = tick.distToSL;
-      const total = tpWeight + slWeight;
-      if (total > 0) {
-        vsMeter = 50 + ((tpWeight - slWeight) / total) * 45;
-        vsMeterTarget = vsMeter;
-      }
-
-      // Update enemy HP inversely to TP progress
-      enemyHP = Math.max(0, 100 - tick.distToTP);
-
-      // Battle resolved!
-      if (tick.status !== 'running' && tick.result) {
-        const result = tick.result === 'timeout_win' ? 'time_win'
-          : tick.result === 'timeout_loss' ? 'time_loss'
-          : tick.result;
-
-        gameState.update(s => ({
-          ...s,
-          battleResult: result,
-          battleExitTime: tick.exitTime || Date.now(),
-          battleExitPrice: tick.exitPrice || tick.currentPrice,
-        }));
-
-        // Clean up resolver
-        if (_battleResolverUnsub) { _battleResolverUnsub(); _battleResolverUnsub = null; }
-        _battleResolver = null;
-
-        addFeed(
-          result === 'tp' ? '🎯' : result === 'sl' ? '🛑' : '⏱',
-          'RESULT',
-          result === 'tp' || result === 'time_win' ? '#00ff88' : '#ff5e7a',
-          result === 'tp' ? `TP HIT at $${Math.round(tick.exitPrice || 0).toLocaleString()}`
-            : result === 'sl' ? `SL HIT at $${Math.round(tick.exitPrice || 0).toLocaleString()}`
-            : `Time expired at $${Math.round(tick.exitPrice || 0).toLocaleString()}`
-        );
-
-        safeTimeout(() => advancePhase(), 1500);
-      }
-    });
-  }
-
-  function initResult() {
-    clearLiveEventTimer();
-    clearTurnTimers();
-    liveEvents = [];
-    const myScore = Math.round(state.score);
-    const oppScore = Math.round(50 + Math.random() * 35);
-    const br = state.battleResult;
-
-    let win = false;
-    let resultTag = '';
-    if (br === 'tp') { win = true; resultTag = 'TP HIT! ✅'; }
-    else if (br === 'sl') { win = false; resultTag = 'SL HIT ❌'; }
-    else if (br === 'close_win' || br === 'time_win') { win = true; resultTag = 'Profit ✅'; }
-    else if (br === 'close_loss' || br === 'time_loss') { win = false; resultTag = 'Loss ❌'; }
-    else { win = myScore > oppScore; resultTag = 'Score'; }
-
-    const consensus = determineConsensus(
-      state.hypothesis?.dir || 'LONG',
-      activeAgents.map(a => a.dir),
-      false
-    );
-    const lpChange = calculateLP(win, state.streak, consensus.lpMult);
-
-    // ── FBS Scoring (C02-aligned) ──
-    const hyp = state.hypothesis;
-    const exitPrice = currentBtcPrice;
-    const entryPrice = hyp?.entry || state.bases.BTC;
-    const priceChange = entryPrice > 0 ? (exitPrice - entryPrice) / entryPrice : 0;
-    const actualDir = determineActualDirection(priceChange);
-    const orpoDir = state.orpoOutput?.direction || 'NEUTRAL';
-
-    const fbsResult = computeFBS({
-      userDir: (hyp?.dir as Direction) || 'NEUTRAL',
-      userConfidence: hyp?.conf || 50,
-      userEntry: entryPrice,
-      userTP: hyp?.tp || entryPrice * 1.02,
-      userSL: hyp?.sl || entryPrice * 0.985,
-      userRR: hyp?.rr || 1.5,
-      orpoDir: orpoDir as Direction,
-      orpoKeyLevels: state.orpoOutput?.keyLevels,
-      guardianViolations: state.guardianCheck?.violations || [],
-      userOverrodeGuardian: false,
-      actualDir,
-      exitPrice,
-      optimalEntry: serverAnalysis?.entryPrice,
-    });
-
-    gameState.update(s => ({
-      ...s,
-      matchN: s.matchN + 1,
-      wins: win ? s.wins + 1 : s.wins,
-      losses: win ? s.losses : s.losses + 1,
-      streak: win ? s.streak + 1 : 0,
-      lp: Math.max(0, s.lp + lpChange),
-      fbScore: fbsResult,
-    }));
-
-    // Update progression (wallet + per-agent)
-    recordWalletMatch(win, lpChange);
-    activeAgents.forEach(ag => {
-      recordAgentMatch(ag.id, {
-        matchN: state.matchN + 1,
-        dir: ag.dir,
-        conf: ag.conf,
-        win,
-        lp: lpChange
+  const arenaMatchController = createArenaMatchController({
+    getCurrentState: () => ({
+      pair: gs.pair,
+      selectedAgents: gs.selectedAgents,
+    }),
+    applySquadConfig: (config) => {
+      gameState.update((state) => ({ ...state, squadConfig: config }));
+    },
+    clearFeed,
+    pushSystemFeed: (text) => {
+      pushFeedItem({
+        agentId: 'system',
+        agentName: 'SYSTEM',
+        agentIcon: '🐕',
+        agentColor: '#E8967D',
+        text,
+        phase: 'DRAFT',
       });
-    });
+    },
+    setServerMatchId: (matchId) => {
+      serverMatchId = matchId;
+    },
+    clearServerAnalysis: () => {
+      serverAnalysis = null;
+    },
+    setApiError: (message) => {
+      apiError = message;
+    },
+    startAnalysis: startAnalysisFromDraft,
+  });
 
-    // History (local + persistent store)
-    matchHistory = [{ n: state.matchN + 1, win, lp: lpChange, score: myScore, streak: win ? state.streak + 1 : 0 }, ...matchHistory].slice(0, 30);
+  const arenaShellController = createArenaShellController({
+    getPhase: () => gs.phase,
+    isInLobby: () => gs.inLobby,
+    isPvpVisible: () => pvpVisible,
+    isResultVisible: () => resultVisible,
+    isConfirmingExit: () => confirmingExit,
+    isMatchHistoryOpen: () => matchHistoryOpen,
+    setConfirmingExit: (value) => {
+      confirmingExit = value;
+    },
+    setMatchHistoryOpen: (value) => {
+      matchHistoryOpen = value;
+    },
+    safeTimeout,
+    clearArenaDynamics,
+    clearBattleSession: () => {
+      clearBattleSession();
+    },
+    getChartBridge: () => chartBridge,
+    setChartBridge: (next) => {
+      chartBridge = next;
+    },
+    setResultVisible: (value) => {
+      resultVisible = value;
+    },
+    setPreviewVisible: (value) => {
+      previewVisible = value;
+    },
+    setPvpVisible: (value) => {
+      pvpVisible = value;
+    },
+    setHypothesisVisible: (value) => {
+      hypothesisVisible = value;
+    },
+    setFloatDir: (value) => {
+      floatDir = value;
+    },
+    clearServerSyncState: arenaMatchController.clearServerSyncState,
+    clearHypothesisInterval: clearHypothesisCountdown,
+    setAgentsIdle: () => {
+      activeAgents.forEach((ag) => {
+        setAgentState(ag.id, 'idle');
+        setAgentEnergy(ag.id, 0);
+      });
+    },
+    stopRunning: () => {
+      gameState.update((state) => ({ ...state, running: false }));
+    },
+    enterLobby: () => {
+      gameState.update((state) => ({
+        ...state,
+        inLobby: true,
+        running: false,
+        phase: 'DRAFT',
+        timer: 0,
+        tournament: createArenaLobbyTournamentSeed(),
+      }));
+    },
+    restartMatch: () => {
+      resetPhaseInit();
+      engineStartMatch();
+    },
+    setArenaView: (view) => {
+      gameState.update((state) => ({ ...state, arenaView: view }));
+    },
+  });
 
-    // Persist to matchHistoryStore
-    addMatchRecord({
-      matchN: state.matchN + 1,
-      win,
-      lp: lpChange,
-      score: myScore,
-      streak: win ? state.streak + 1 : 0,
-      agents: state.selectedAgents,
-      agentVotes: activeAgents.map(ag => ({
-        agentId: ag.id, name: ag.name, icon: ag.icon, color: ag.color, dir: ag.dir, conf: ag.conf
-      })),
-      hypothesis: state.hypothesis ? {
-        dir: state.hypothesis.dir, conf: state.hypothesis.conf,
-        tf: state.hypothesis.tf, entry: state.hypothesis.entry,
-        tp: state.hypothesis.tp, sl: state.hypothesis.sl, rr: state.hypothesis.rr
-      } : null,
-      battleResult: state.battleResult,
-      consensusType: consensus.type,
-      lpMult: consensus.lpMult,
-      signals: activeAgents.map(ag => `${ag.name}: ${ag.dir} ${ag.conf}%`)
-    });
-
-    // Record PnL entry
-    addPnLEntry(
-      'arena',
-      `match-${state.matchN + 1}`,
-      lpChange,
-      `${win ? 'WIN' : 'LOSS'} · M${state.matchN + 1} · ${state.hypothesis?.dir || 'NEUTRAL'} · ${consensus.type}`
-    );
-
-    // ── Server sync: resolve match ──
-    if (serverMatchId) {
-      const exitP = currentBtcPrice;
-      resolveArenaMatch(serverMatchId, exitP)
-        .catch(err => console.warn('[Arena] Resolve sync failed:', err));
-    }
-
-    resultData = {
-      win,
-      lp: lpChange,
-      tag: resultTag,
-      motto: win ? WIN_MOTTOS[Math.floor(Math.random() * WIN_MOTTOS.length)] : LOSE_MOTTOS[Math.floor(Math.random() * LOSE_MOTTOS.length)]
-    };
-
-    const streakNow = win ? state.streak + 1 : 0;
-    const scoreBonus = Math.round(Math.max(0, myScore - 45) * 1.15);
-    const winBonus = win ? 42 : 12;
-    const streakBonus = streakNow >= 2 ? streakNow * 10 : 0;
-    const consensusBonus = Math.round(consensus.lpMult * 16);
-    rewardXp = winBonus + scoreBonus + streakBonus + consensusBonus;
-    rewardStreak = streakNow;
-    rewardBadges = [
-      win ? 'MISSION CLEAR' : 'FIELD REPORT',
-      myScore >= 80 ? 'PRECISION+' : '',
-      consensus.type === 'consensus' ? 'COUNCIL SYNC' : consensus.type === 'partial' ? 'PARTIAL READ' : 'HIGH DIVERGENCE',
-      streakNow >= 3 ? 'STREAK ENGINE' : ''
-    ].filter(Boolean);
-    rewardVisible = true;
-
-    resultVisible = true;
-
-    if (win) {
+  const arenaResultController = createArenaResultController({
+    getSnapshot: () => ({
+      score: Math.round(gs.score),
+      battleResult: gs.battleResult,
+      currentPrice: currentBtcPrice,
+      basePrice: gs.bases.BTC,
+      matchN: gs.matchN,
+      streak: gs.streak,
+      selectedAgents: gs.selectedAgents,
+      activeAgents,
+      hypothesis: gs.hypothesis,
+      orpoOutput: gs.orpoOutput,
+      guardianViolations: gs.guardianCheck?.violations || [],
+      serverAnalysis,
+      serverMatchId,
+    }),
+    getRewardState: () => rewardState,
+    clearLiveEvents: () => {
+      liveEventRuntime.clear();
+    },
+    clearBattleTurnTimers: () => {
+      battlePresentationRuntime.clearTurnTimers();
+    },
+    applyResolvedGameState: (resolvedResult) => {
+      gameState.update((state) => ({
+        ...state,
+        matchN: resolvedResult.nextMatchN,
+        wins: resolvedResult.win ? state.wins + 1 : state.wins,
+        losses: resolvedResult.win ? state.losses : state.losses + 1,
+        streak: resolvedResult.nextStreak,
+        lp: Math.max(0, state.lp + resolvedResult.lpChange),
+        fbScore: resolvedResult.fbsResult,
+        running: false,
+        timer: 0,
+      }));
+    },
+    setResultData: (next) => {
+      resultData = next;
+    },
+    setRewardState: (next) => {
+      rewardState = next;
+    },
+    setResultVisible: (value) => {
+      resultVisible = value;
+    },
+    revealPvpResult: () => {
+      clearPvpShowTimer();
+      pvpShowTimer = arenaTimerRegistry.scheduleTimeout(() => {
+        pvpShowTimer = null;
+        pvpVisible = true;
+      }, 1500);
+    },
+    addFeed,
+    recordWalletMatch,
+    recordAgentMatch,
+    addMatchRecord,
+    addPnLEntry,
+    resolveServerMatch: resolveArenaMatch,
+    onResolveError: (error) => {
+      console.warn('[Arena] Resolve sync failed:', error);
+    },
+    onWinEffects: () => {
       sfx.win();
-      dogeFloat();
+      arenaVisualEffectsRuntime.emitDogeFloatBurst();
       juice_confetti(40);
       juice_flash('green');
       juice_shake('medium');
-      battleNarration = `🏆 승리! +${lpChange} LP!`;
-      addChatMsg({ id:'SYS', name:'SYSTEM', icon:'🏆', color:'#00ff88' } as any, `승리!! +${lpChange} LP! ${resultTag}`, true);
-      activeAgents.forEach(ag => {
-        setAgentState(ag.id, 'jump');
-        setCharState(ag.id, 'celebrate');
-        showCharAction(ag.id, '🎉', 'WIN!');
-        setSpeech(ag.id, DOGE_WIN[Math.floor(Math.random() * DOGE_WIN.length)], 800);
-      });
-    } else {
+    },
+    onLoseEffects: () => {
       sfx.lose();
       juice_shake('light');
       juice_flash('red');
-      // Near-miss detection
-      const nearMiss = br === 'sl' && state.hypothesis ? Math.abs(currentBtcPrice - state.hypothesis.tp) / state.hypothesis.tp < 0.003 : false;
-      battleNarration = nearMiss ? `😱 아깝다! TP까지 ${(Math.abs(currentBtcPrice - (state.hypothesis?.tp||0))).toFixed(0)}$ 남았었다!` : `💀 패배... ${resultTag}`;
-      addChatMsg({ id:'SYS', name:'SYSTEM', icon:'💀', color:'#ff5e7a' } as any, nearMiss ? '아깝다!! 거의 TP 도달이었는데...' : `패배... ${resultTag}`, true);
-      activeAgents.forEach(ag => {
-        setAgentState(ag.id, 'sad');
-        setCharState(ag.id, 'panic');
-        setSpeech(ag.id, DOGE_LOSE[Math.floor(Math.random() * DOGE_LOSE.length)], 800);
+    },
+    setBattleNarration: (text) => {
+      battleNarration = text;
+    },
+    addSystemChat: (icon, color, text) => {
+      addChatMsg({ id: 'SYS', name: 'SYSTEM', icon, color } as any, text, true);
+    },
+    setAgentState,
+    setCharState: battlePresentationRuntime.setCharState,
+    showCharAction: battlePresentationRuntime.showCharAction,
+    setSpeech,
+    pickOpponentScore: () => Math.round(50 + Math.random() * 35),
+    pickWinMotto: () => WIN_MOTTOS[Math.floor(Math.random() * WIN_MOTTOS.length)],
+    pickLoseMotto: () => LOSE_MOTTOS[Math.floor(Math.random() * LOSE_MOTTOS.length)],
+    pickWinSpeech: () => DOGE_WIN[Math.floor(Math.random() * DOGE_WIN.length)],
+    pickLoseSpeech: () => DOGE_LOSE[Math.floor(Math.random() * DOGE_LOSE.length)],
+  });
+
+  const arenaBattleController = createArenaBattleController({
+    getSnapshot: () => ({
+      activeAgents,
+      speed: gs.speed || 3,
+      pos: gs.pos,
+      hypothesis: gs.hypothesis,
+    }),
+    isDestroyed: () => _arenaDestroyed,
+    onBattleEnter: () => {
+      liveEventRuntime.start('BATTLE');
+      addFeed('⚔', 'BATTLE', '#FF5E7A', 'Battle in progress!');
+      activeAgents.forEach((ag, i) => {
+        setAgentState(ag.id, 'alert');
+        setSpeech(ag.id, DOGE_BATTLE[i % DOGE_BATTLE.length], 400);
       });
-    }
+      battlePresentationRuntime.startBattleTurnSequence();
+    },
+    onMissingPosition: () => {
+      gameState.update((state) => ({ ...state, battleResult: null, running: false }));
+      safeTimeout(() => {
+        advancePhase();
+      }, 3000);
+    },
+    applyBattleBootstrapState: () => {
+      gameState.update((state) => ({
+        ...state,
+        battleTick: null,
+        battlePriceHistory: [],
+        battleEntryTime: Date.now(),
+        battleExitTime: 0,
+        battleExitPrice: 0,
+      }));
+    },
+    applyBattleTick: (tick) => {
+      gameState.update((state) => ({
+        ...state,
+        battleTick: tick,
+        battlePriceHistory: tick.priceHistory,
+      }));
+    },
+    applyResolvedBattleState: (result, exitTime, exitPrice) => {
+      gameState.update((state) => ({
+        ...state,
+        battleResult: result,
+        battleExitTime: exitTime,
+        battleExitPrice: exitPrice,
+      }));
+    },
+    setAgentState,
+    setSpeech,
+    setVsMeter: (value) => {
+      vsMeter = value;
+    },
+    setVsMeterTarget: (value) => {
+      vsMeterTarget = value;
+    },
+    setEnemyHP: (value) => {
+      enemyHP = value;
+    },
+    addFeed,
+    advancePhase,
+    safeTimeout,
+  });
 
-    addFeed(win ? '🏆' : '💀', 'RESULT', win ? '#00CC88' : '#FF5E7A',
-      win ? `WIN! +${lpChange} LP [${resultTag}]` : `LOSE [${resultTag}] ${lpChange} LP`);
+  const arenaChartController = createArenaChartController({
+    getHypothesis: () => gs.hypothesis,
+    getChartBridge: () => chartBridge,
+    setChartBridge: (next) => {
+      chartBridge = next;
+    },
+    setHypothesis: (next) => {
+      gameState.update((state) => ({ ...state, hypothesis: next }));
+    },
+    getShowMarkers: () => showMarkers,
+    setShowMarkers: (value) => {
+      showMarkers = value;
+    },
+  });
+  clearBattleSession = () => {
+    arenaBattleController.clearBattleSession();
+    battlePresentationRuntime.clearTurnTimers();
+  };
 
-    if (pvpShowTimer) clearTimeout(pvpShowTimer);
-    pvpShowTimer = setTimeout(() => { pvpShowTimer = null; if (!_arenaDestroyed) pvpVisible = true; }, 1500);
-    gameState.update((s) => ({ ...s, running: false, timer: 0 }));
-  }
+  const arenaPhaseController = createArenaPhaseController({
+    onDraftEnter: () => {
+      clearArenaDynamics();
+      resultVisible = false;
+      pvpVisible = false;
+      hypothesisVisible = false;
+      gameState.update((state) => ({ ...state, arenaView: 'arena' }));
+      previewVisible = false;
+      floatDir = null;
+      chartBridge = createArenaChartBridgeState();
+      arenaAgentRuntime.initAgentStates();
+      sfx.enter();
+      arenaVisualEffectsRuntime.emitDogeFloatBurst();
+      addFeed('🐕', 'ARENA', '#E8967D', 'Draft locked. Preparing analysis...');
+      activeAgents.forEach((ag, i) => {
+        safeTimeout(() => {
+          setAgentState(ag.id, 'alert');
+          setSpeech(ag.id, DOGE_DEPLOYS[i % DOGE_DEPLOYS.length], 800);
+        }, i * 200);
+      });
+    },
+    getSpeed: () => gs.speed || 3,
+    getCurrentPrice: () => currentBtcPrice,
+    getServerMatchId: () => serverMatchId,
+    runAnalysisSync: runArenaAnalysis,
+    setServerAnalysis: (analysis) => {
+      serverAnalysis = analysis;
+    },
+    applyAnalysisProjection: (analysis) => {
+      const c02 = mapAnalysisToC02(analysis);
+      gameState.update((state) => ({
+        ...state,
+        orpoOutput: c02.orpo,
+        ctxBeliefs: c02.ctx,
+        guardianCheck: c02.guardian,
+        commanderVerdict: c02.commander,
+      }));
+    },
+    onAnalysisEnter: () => {
+      liveEventRuntime.start('ANALYSIS');
+      battlePresentationRuntime.initCharSprites();
+      arenaVisualEffectsRuntime.seedArenaParticles();
+      arenaAnalysisPresentationRuntime.runScoutSequence();
+      arenaAnalysisPresentationRuntime.runGatherSequence();
+      arenaAnalysisPresentationRuntime.runCouncilSequence();
+      addFeed('🔍', 'ANALYSIS', '#66CCE6', '5-agent analysis pipeline running...');
+    },
+    onAnalysisError: (error) => {
+      console.warn('[Arena] Server analysis failed:', error);
+    },
+    onHypothesisEnter: () => {
+      liveEventRuntime.start('HYPOTHESIS');
+      juice_shake('light');
+      sfx.charge();
+      battleNarration = '🎯 포지션을 설정하세요!';
+      addChatMsg({ id:'SYS', name:'SYSTEM', icon:'🎯', color:'#ffcc00' } as any, '배팅 타임! LONG or SHORT?', true);
+      addFeed('🐕', 'ARENA', '#66CCE6', 'HYPOTHESIS: pick direction and set TP/SL.');
+      activeAgents.forEach((ag, i) => {
+        safeTimeout(() => {
+          setAgentState(ag.id, 'think');
+          setSpeech(ag.id, '🤔...', 600);
+        }, i * 300);
+      });
+    },
+    setHypothesisVisible: (value) => {
+      hypothesisVisible = value;
+    },
+    setFloatDir: (value) => {
+      floatDir = value;
+    },
+    getHypothesisTimer: () => hypothesisTimer,
+    setHypothesisTimer: (value) => {
+      hypothesisTimer = value;
+    },
+    clearHypothesisInterval: clearHypothesisCountdown,
+    setHypothesisInterval: (interval) => {
+      hypothesisInterval = interval;
+    },
+    applyNeutralTimeoutSelection: (price) => {
+      gameState.update((state) => ({
+        ...state,
+        hypothesis: {
+          dir: 'NEUTRAL', conf: 1, tags: new Set(), tf: '1h', vmode: 'tpsl', closeN: 3,
+          entry: price, tp: price * 1.02, sl: price * 0.985, rr: 1.3,
+        },
+        pos: {
+          entry: price,
+          tp: price * 1.02,
+          sl: price * 0.985,
+          dir: 'NEUTRAL',
+          rr: 1.3,
+          size: 0,
+          lev: 0,
+        },
+      }));
+      chartBridge = {
+        ...chartBridge,
+        position: buildArenaChartPositionFromHypothesis({
+          entry: price,
+          tp: price * 1.02,
+          sl: price * 0.985,
+          dir: 'NEUTRAL',
+        }),
+      };
+      addFeed('⏰', 'TIMEOUT', '#93A699', 'Time expired — auto-skip');
+    },
+    applySubmittedHypothesis: (hypothesis) => {
+      gameState.update((state) => ({
+        ...state,
+        hypothesis: {
+          dir: hypothesis.dir,
+          conf: hypothesis.conf,
+          tags: new Set(),
+          tf: hypothesis.tf,
+          vmode: hypothesis.vmode,
+          closeN: hypothesis.closeN,
+          entry: hypothesis.entry,
+          tp: hypothesis.tp,
+          sl: hypothesis.sl,
+          rr: hypothesis.rr,
+        },
+        pos: {
+          entry: hypothesis.entry,
+          tp: hypothesis.tp,
+          sl: hypothesis.sl,
+          dir: hypothesis.dir,
+          rr: hypothesis.rr,
+          size: 0,
+          lev: 0,
+        },
+      }));
+      chartBridge = {
+        ...chartBridge,
+        position: buildArenaChartPositionFromHypothesis(hypothesis),
+      };
+      addFeed(
+        '🐕',
+        'YOU',
+        '#E8967D',
+        `${hypothesis.dir} · TP $${hypothesis.tp.toLocaleString()} · SL $${hypothesis.sl.toLocaleString()} · R:R 1:${hypothesis.rr}`,
+        hypothesis.dir,
+      );
+      sfx.vote();
+    },
+    submitHypothesisSync: async (dir, conf) => {
+      await submitArenaHypothesis(serverMatchId!, dir, conf);
+    },
+    onHypothesisSyncError: (error) => {
+      console.warn('[Arena] Hypothesis sync failed:', error);
+    },
+    advancePhase,
+    setPreviewVisible: (value) => {
+      previewVisible = value;
+    },
+    onPreviewEnter: () => {
+      const hypothesis = gs.hypothesis;
+      addFeed('👁', 'PREVIEW', '#DCB970', `Position: ${hypothesis?.dir || 'NEUTRAL'} · Entry $${(hypothesis?.entry || 0).toLocaleString()} · R:R 1:${(hypothesis?.rr || 1).toFixed(1)}`);
+      activeAgents.forEach((ag, i) => {
+        safeTimeout(() => {
+          setAgentState(ag.id, 'think');
+          setSpeech(ag.id, '📋 reviewing...', 600);
+        }, i * 200);
+      });
+    },
+    clearPreviewAutoTimer: clearPreviewAutoAdvance,
+    setPreviewAutoTimer: (timer) => {
+      previewAutoTimer = timer;
+    },
+    onPreviewConfirm: () => {
+      sfx.charge();
+      addFeed('✅', 'CONFIRMED', '#00CC88', 'Position confirmed — scouting begins!');
+    },
+    onBattleEnter: () => {
+      arenaBattleController.initBattle();
+    },
+    onResultEnter: () => {
+      arenaResultController.initResult();
+    },
+  });
 
-  function initCooldown() {
-    clearArenaDynamics();
-    verdictVisible = false;
-    resultVisible = false;
-    councilActive = false;
-    compareVisible = false;
-    previewVisible = false;
-    showChartPosition = false;
-    activeAgents.forEach(ag => {
-      setAgentState(ag.id, 'idle');
-      setAgentEnergy(ag.id, 0);
-    });
-    gameState.update(s => ({ ...s, running: false }));
-  }
-
-  function goLobby() {
-    initCooldown();
-    serverMatchId = null;
-    serverAnalysis = null;
-    apiError = null;
-    pvpVisible = false;
-    hypothesisVisible = false;
-    floatDir = null;
-    if (hypothesisInterval) { clearInterval(hypothesisInterval); hypothesisInterval = null; }
-    gameState.update(s => ({
-      ...s,
-      inLobby: true,
-      running: false,
-      phase: 'DRAFT',
-      timer: 0,
-      tournament: {
-        tournamentId: null,
-        round: null,
-        type: null,
-        pair: null,
-        entryFeeLp: null,
-      }
-    }));
-  }
-
-  function playAgain() {
-    initCooldown();
-    serverMatchId = null;
-    serverAnalysis = null;
-    apiError = null;
-    pvpVisible = false;
-    hypothesisVisible = false;
-    floatDir = null;
-    findings = [];
-    resetPhaseInit();
-    engineStartMatch();
-  }
-
-  // ═══════ BRACKET STATE ═══════
-  let bracketMatches: TournamentBracketMatch[] = [];
-  let bracketRound = 1;
-  let bracketLoading = false;
-
-  async function loadBracket() {
-    if (!state.tournament?.tournamentId) return;
-    bracketLoading = true;
-    try {
-      const res = await getTournamentBracket(state.tournament.tournamentId);
-      bracketMatches = res.matches;
-      bracketRound = res.round;
-    } catch (e) {
-      console.warn('[Arena] bracket load failed:', e);
-    } finally {
-      bracketLoading = false;
-    }
-  }
-
-  // Load bracket when switching to MAP tab in tournament mode
-  $: if ((arenaRailTab as string) === 'map' && state.arenaMode === 'TOURNAMENT') {
-    loadBracket();
-  }
-
-  // ═══════ ESC KEY HANDLER ═══════
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && !state.inLobby) {
-      e.preventDefault();
-      if (state.phase === 'RESULT' || pvpVisible || resultVisible) {
-        goLobby();
-      } else if (confirmingExit) {
-        confirmingExit = false;
-      } else {
-        confirmingExit = true;
-        safeTimeout(() => { confirmingExit = false; }, 3000);
-      }
-    }
-  }
-
-  let confirmingExit = false;
-
-  function confirmGoLobby() {
-    if (state.phase === 'RESULT' || pvpVisible || state.phase === 'DRAFT') {
-      goLobby();
-    } else if (confirmingExit) {
-      goLobby();
-    } else {
-      confirmingExit = true;
-      safeTimeout(() => { confirmingExit = false; }, 3000);
-    }
-  }
+  const arenaAnalysisPresentationRuntime = createArenaAnalysisPresentationRuntime({
+    getActiveAgents: () => activeAgents,
+    getSpeed: () => gs.speed || 3,
+    safeTimeout,
+    addFeed,
+    setBattleNarration: (text) => {
+      battleNarration = text;
+    },
+    addChatMessage: addChatMsg,
+    setAgentState,
+    setAgentEnergy,
+    setSpeech,
+    setVoteDir: (agentId, dir) => {
+      agentStates[agentId] = { ...agentStates[agentId], voteDir: dir };
+      agentStates = { ...agentStates };
+    },
+    showCharAction: battlePresentationRuntime.showCharAction,
+    moveChar: battlePresentationRuntime.moveChar,
+    applyScoutDecorations: () => {
+      chartBridge = {
+        ...chartBridge,
+        ...buildArenaChartDecorations(activeAgents),
+      };
+    },
+    playScanSound: () => {
+      sfx.scan();
+    },
+    playChargeSound: () => {
+      sfx.charge();
+    },
+    playVoteSound: () => {
+      sfx.vote();
+    },
+  });
 
   onMount(() => {
-    setPhaseInitCallback(onPhaseInit);
+    setPhaseInitCallback((phase) => {
+      arenaPhaseController.onPhaseInit(phase);
+    });
     if (typeof window !== 'undefined') {
-      window.addEventListener('keydown', handleKeydown);
+      window.addEventListener('keydown', arenaShellController.handleKeydown);
     }
   });
 
   onDestroy(() => {
     if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', handleKeydown);
+      window.removeEventListener('keydown', arenaShellController.handleKeydown);
     }
     _arenaDestroyed = true;
     if (hypothesisInterval) clearInterval(hypothesisInterval);
-    if (_battleInterval) clearInterval(_battleInterval);
-    if (_battleResolverUnsub) { _battleResolverUnsub(); _battleResolverUnsub = null; }
-    if (_battleResolver) { _battleResolver.destroy(); _battleResolver = null; }
     if (previewAutoTimer) clearTimeout(previewAutoTimer);
-    if (replayTimer) clearTimeout(replayTimer);
-    if (feedCursorTimer) clearTimeout(feedCursorTimer);
-    if (compareAutoTimer) clearTimeout(compareAutoTimer);
-    if (pvpShowTimer) clearTimeout(pvpShowTimer);
-    clearLiveEventTimer();
-    // Clean up typing timers
-    Object.values(speechTimers).forEach(t => clearInterval(t));
+    clearPvpShowTimer();
+    liveEventRuntime.destroy();
+    arenaBattleController.destroy();
+    arenaAgentRuntime.destroy();
+    battlePresentationRuntime.destroy();
     // Clean up all fire-and-forget timers
     _pendingTimers.forEach(t => clearTimeout(t));
     _pendingTimers.clear();
@@ -1541,36 +900,19 @@
 </script>
 
 <div class="arena-page arena-space-theme">
-  <!-- Wallet Gate Overlay (temporarily disabled for dev) -->
-  {#if false && !walletOk}
-    <div class="wallet-gate">
-      <div class="wg-card">
-        <div class="wg-icon">🔗</div>
-        <div class="wg-title">CONNECT WALLET</div>
-        <div class="wg-sub">Connect your wallet to access the Arena and start trading battles</div>
-        <button class="wg-btn" on:click={openWalletModal}>
-          <span>⚡</span> CONNECT WALLET
-        </button>
-        <div class="wg-hint">Supported: MetaMask · WalletConnect · Coinbase</div>
-      </div>
-    </div>
-  {/if}
-
   <!-- API Sync Status -->
-  {#if apiError}
-    <div class="api-status error">⚠️ Offline mode</div>
-  {:else if serverMatchId}
-    <div class="api-status synced">🟢 Synced</div>
+  {#if arenaSyncStatus}
+    <div class="api-status {arenaSyncStatus.tone}">{arenaSyncStatus.label}</div>
   {/if}
 
-  {#if state.inLobby}
+  {#if gs.inLobby}
     <Lobby />
-  {:else if state.phase === 'DRAFT'}
-    <SquadConfig selectedAgents={state.selectedAgents} ondeploy={onSquadDeploy} onback={onSquadBack} />
+  {:else if gs.phase === 'DRAFT'}
+    <SquadConfig selectedAgents={gs.selectedAgents} ondeploy={onSquadDeploy} onback={onSquadBack} />
   {:else}
     <!-- ═══════ TOP ARENA NAV BAR ═══════ -->
     <div class="arena-topbar">
-      <button class="atb-back" on:click={confirmGoLobby}>
+      <button class="atb-back" onclick={arenaShellController.confirmGoLobby}>
         {#if confirmingExit}
           <span class="atb-confirm-pulse">EXIT? CLICK AGAIN</span>
         {:else}
@@ -1578,107 +920,56 @@
         {/if}
       </button>
       <div class="atb-phase-track">
-        <div class="atb-phase done">
-          <span class="atp-dot"></span><span class="atp-label">DRAFT</span>
-        </div>
-        <div class="atb-connector"></div>
-        <div class="atb-phase" class:active={state.phase === 'ANALYSIS'} class:done={['HYPOTHESIS','BATTLE','RESULT'].includes(state.phase)}>
-          <span class="atp-dot"></span><span class="atp-label">SCAN</span>
-        </div>
-        <div class="atb-connector"></div>
-        <div class="atb-phase" class:active={state.phase === 'HYPOTHESIS'} class:done={['BATTLE','RESULT'].includes(state.phase)}>
-          <span class="atp-dot"></span><span class="atp-label">HYPO</span>
-        </div>
-        <div class="atb-connector"></div>
-        <div class="atb-phase" class:active={state.phase === 'BATTLE'} class:done={state.phase === 'RESULT'}>
-          <span class="atp-dot"></span><span class="atp-label">BATTLE</span>
-        </div>
-        <div class="atb-connector"></div>
-        <div class="atb-phase" class:active={state.phase === 'RESULT'}>
-          <span class="atp-dot"></span><span class="atp-label">RESULT</span>
-        </div>
+        {#each arenaPhaseTrack as step, idx}
+          <div class="atb-phase" class:active={step.active} class:done={step.done}>
+            <span class="atp-dot"></span><span class="atp-label">{step.label}</span>
+          </div>
+          {#if idx < arenaPhaseTrack.length - 1}
+            <div class="atb-connector"></div>
+          {/if}
+        {/each}
       </div>
       <div class="atb-right">
-        <div class="atb-mode" class:pvp={state.arenaMode === 'PVP'} class:tour={state.arenaMode === 'TOURNAMENT'}>
-          {modeLabel}{#if state.arenaMode === 'TOURNAMENT' && tournamentInfo.round} · R{tournamentInfo.round}{/if}
+        <div class="atb-mode" class:pvp={gs.arenaMode === 'PVP'} class:tour={gs.arenaMode === 'TOURNAMENT'}>
+          {arenaModeDisplay.fullLabel}
         </div>
         <div class="atb-stats">
-          <span class="atb-lp">⚡{state.lp}</span>
-          <span class="atb-wl">{state.wins}W-{state.losses}L</span>
+          <span class="atb-lp">⚡{gs.lp}</span>
+          <span class="atb-wl">{gs.wins}W-{gs.losses}L</span>
         </div>
-        <button class="atb-hist" on:click={() => matchHistoryOpen = !matchHistoryOpen}>📋</button>
+        <button class="atb-hist" onclick={arenaShellController.toggleMatchHistory}>📋</button>
       </div>
     </div>
-    <MatchHistory visible={matchHistoryOpen} onclose={() => matchHistoryOpen = false} />
+    <MatchHistory visible={matchHistoryOpen} onclose={arenaShellController.closeMatchHistory} />
 
     <!-- ═══════ PHASE GUIDE (all views) ═══════ -->
     <div class="phase-guide-wrap">
-      <PhaseGuide phase={state.phase} pair={state.pair} timeframe={state.timeframe} />
+      <PhaseGuide phase={gs.phase} pair={gs.pair} timeframe={gs.timeframe} />
     </div>
 
     <!-- ═══════ VIEW PICKER (always visible) ═══════ -->
     <div class="view-picker-bar">
-      <ViewPicker current={state.arenaView} onselect={(view) => gameState.update(s => ({ ...s, arenaView: view }))} />
+      <ViewPicker current={gs.arenaView} onselect={arenaShellController.selectArenaView} />
     </div>
 
     <!-- ═══════ VIEW SWITCHING ═══════ -->
-    {#if state.arenaView !== 'arena'}
+    {#if gs.arenaView !== 'arena'}
       <div class="view-container">
-        {#if state.arenaView === 'chart'}
-          <ChartWarView
-            phase={state.phase}
-            battleTick={state.battleTick}
-            hypothesis={state.hypothesis}
-            prices={{ BTC: currentBtcPrice }}
-            battleResult={state.battleResult}
-            battlePriceHistory={state.battlePriceHistory}
-            activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
-          />
-        {:else if state.arenaView === 'mission'}
-          <MissionControlView
-            phase={state.phase}
-            battleTick={state.battleTick}
-            hypothesis={state.hypothesis}
-            prices={{ BTC: currentBtcPrice }}
-            battleResult={state.battleResult}
-            battlePriceHistory={state.battlePriceHistory}
-            activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
-          />
-        {:else if state.arenaView === 'card'}
-          <CardDuelView
-            phase={state.phase}
-            battleTick={state.battleTick}
-            hypothesis={state.hypothesis}
-            prices={{ BTC: currentBtcPrice }}
-            battleResult={state.battleResult}
-            battlePriceHistory={state.battlePriceHistory}
-            activeAgents={activeAgents.map(a => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
-          />
+        {#if gs.arenaView === 'chart'}
+          <ChartWarView {...arenaAltViewProps} />
+        {:else if gs.arenaView === 'mission'}
+          <MissionControlView {...arenaAltViewProps} />
+        {:else if gs.arenaView === 'card'}
+          <CardDuelView {...arenaAltViewProps} />
         {/if}
 
         <!-- Result Panel for new views -->
-        {#if state.phase === 'RESULT' && resultVisible}
+        {#if gs.phase === 'RESULT' && resultVisible}
           <div class="result-panel-wrap">
             <ResultPanel
-              win={resultData.win}
-              battleResult={state.battleResult || ''}
-              entryPrice={state.hypothesis?.entry || state.bases.BTC}
-              exitPrice={state.battleExitPrice || currentBtcPrice}
-              tpPrice={state.hypothesis?.tp || 0}
-              slPrice={state.hypothesis?.sl || 0}
-              direction={state.hypothesis?.dir || 'LONG'}
-              priceHistory={state.battlePriceHistory}
-              duration={state.battleTick?.elapsed || 0}
-              maxRunup={state.battleTick?.maxRunup || 0}
-              maxDrawdown={state.battleTick?.maxDrawdown || 0}
-              rAchieved={state.battleTick?.rAchieved || 0}
-              fbScore={state.fbScore}
-              lpChange={resultData.lp}
-              streak={state.streak}
-              agents={activeAgents.map(a => ({ name: a.name, icon: a.icon, color: a.color, dir: a.dir, conf: a.conf }))}
-              actualDirection={determineActualDirection(currentBtcPrice > (state.hypothesis?.entry || 0) ? 0.01 : -0.01)}
-              onPlayAgain={playAgain}
-              onLobby={goLobby}
+              {...arenaResultPanelProps}
+              onPlayAgain={arenaShellController.playAgain}
+              onLobby={arenaShellController.goLobby}
             />
           </div>
         {/if}
@@ -1688,70 +979,64 @@
       <!-- ═══════ LEFT: CHART ═══════ -->
       <div class="chart-side">
         <ChartPanel
-          showPosition={showChartPosition}
-          posEntry={chartPosEntry}
-          posTp={chartPosTp}
-          posSl={chartPosSl}
-          posDir={chartPosDir}
-          agentAnnotations={showMarkers ? chartAnnotations : []}
-          agentMarkers={showMarkers ? chartAgentMarkers : []}
-          onDragTP={onDragTP}
-          onDragSL={onDragSL}
-          onDragEntry={onDragEntry}
+          {...arenaChartPanelProps}
+          onDragTP={arenaChartController.onDragTP}
+          onDragSL={arenaChartController.onDragSL}
+          onDragEntry={arenaChartController.onDragEntry}
         />
 
         <!-- Hypothesis Panel on right side during hypothesis phase -->
         {#if hypothesisVisible}
           <div class="hypo-sidebar">
-            <HypothesisPanel timeLeft={hypothesisTimer} onsubmit={onHypothesisSubmit} />
+            <HypothesisPanel timeLeft={hypothesisTimer} onsubmit={arenaPhaseController.submitHypothesis} />
           </div>
         {/if}
 
         <!-- Floating LONG/SHORT Direction Bar (hypothesis phase) -->
         {#if hypothesisVisible}
           <div class="dir-float-bar">
-            <button class="dfb-btn long" class:sel={floatDir === 'LONG'} on:click={() => selectFloatDir('LONG')}>
+            <button class="dfb-btn long" class:sel={floatDir === 'LONG'} onclick={() => arenaShellController.selectFloatDir('LONG')}>
               ▲ LONG
             </button>
             <div class="dfb-divider"></div>
-            <button class="dfb-btn short" class:sel={floatDir === 'SHORT'} on:click={() => selectFloatDir('SHORT')}>
+            <button class="dfb-btn short" class:sel={floatDir === 'SHORT'} onclick={() => arenaShellController.selectFloatDir('SHORT')}>
               ▼ SHORT
             </button>
           </div>
         {/if}
 
         <!-- Position Preview Overlay -->
-        {#if previewVisible && state.hypothesis}
+        {#if previewVisible && arenaPreviewDisplay}
           <div class="preview-overlay">
             <div class="preview-card">
               <div class="preview-header">
                 <span class="prev-icon">👁</span>
                 <span class="prev-title">POSITION PREVIEW</span>
               </div>
-              <div class="preview-dir {state.hypothesis.dir.toLowerCase()}">
-                {state.hypothesis.dir === 'LONG' ? '▲' : state.hypothesis.dir === 'SHORT' ? '▼' : '●'} {state.hypothesis.dir}
+              <div class="preview-dir {arenaPreviewDisplay.dirClass}">
+                {arenaPreviewDisplay.dirIcon} {arenaPreviewDisplay.dirLabel}
               </div>
               <div class="preview-levels">
                 <div class="prev-row">
                   <span class="prev-lbl">ENTRY</span>
-                  <span class="prev-val">${Math.round(state.hypothesis.entry).toLocaleString()}</span>
+                  <span class="prev-val">{arenaPreviewDisplay.entryLabel}</span>
                 </div>
                 <div class="prev-row tp">
                   <span class="prev-lbl">TP</span>
-                  <span class="prev-val">${Math.round(state.hypothesis.tp).toLocaleString()}</span>
+                  <span class="prev-val">{arenaPreviewDisplay.tpLabel}</span>
                 </div>
                 <div class="prev-row sl">
                   <span class="prev-lbl">SL</span>
-                  <span class="prev-val">${Math.round(state.hypothesis.sl).toLocaleString()}</span>
+                  <span class="prev-val">{arenaPreviewDisplay.slLabel}</span>
                 </div>
               </div>
               <div class="preview-rr">
-                R:R <span class="prev-rr-val">1:{state.hypothesis.rr.toFixed(1)}</span>
+                R:R <span class="prev-rr-val">{arenaPreviewDisplay.rrLabel}</span>
               </div>
               <div class="preview-config">
-                {state.squadConfig.riskLevel.toUpperCase()} · {formatTimeframeLabel(state.squadConfig.timeframe)} · Lev {state.squadConfig.leverageBias}x
+                {arenaPreviewDisplay.configLabel}
               </div>
-              <button class="preview-confirm" on:click={confirmPreview}>
+              <button class="preview-confirm" onclick={arenaPhaseController.confirmPreview}>
                 ✅ CONFIRM & SCOUT
               </button>
             </div>
@@ -1762,37 +1047,34 @@
           <div class="sr">
             <svg viewBox="0 0 44 44">
               <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="3"/>
-              <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00CC88' : '#FF5E7A'} stroke-width="3"
-                stroke-dasharray="{state.score * 1.13} 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
+              <circle cx="22" cy="22" r="18" fill="none" stroke={gs.score >= 60 ? '#00CC88' : '#FF5E7A'} stroke-width="3"
+                stroke-dasharray="{gs.score * 1.13} 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
             </svg>
-            <span class="n">{state.score}</span>
+            <span class="n">{gs.score}</span>
           </div>
           <div>
-            <div class="sdir" style="color:{state.score >= 60 ? '#00CC88' : '#FF5E7A'}">{state.score >= 60 ? 'LONG' : 'SHORT'}</div>
-            <div class="smeta">{activeAgents.length} agents · M{state.matchN}</div>
+            <div class="sdir" style="color:{arenaScoreSummary.directionColor}">{arenaScoreSummary.directionLabel}</div>
+            <div class="smeta">{arenaScoreSummary.meta}</div>
           </div>
           <div class="score-stats">
-            <span class="ss-item">🔥{state.streak}</span>
-            <span class="ss-item">{state.wins}W-{state.losses}L</span>
-            <span class="ss-item lp">⚡{state.lp} LP</span>
+            <span class="ss-item">🔥{gs.streak}</span>
+            <span class="ss-item">{gs.wins}W-{gs.losses}L</span>
+            <span class="ss-item lp">⚡{gs.lp} LP</span>
           </div>
-          <div class="mode-badge" class:tour={state.arenaMode === 'TOURNAMENT'} class:pvp={state.arenaMode === 'PVP'}>
-            {modeLabel}
-            {#if state.arenaMode === 'TOURNAMENT' && tournamentInfo.tournamentId}
-              · R{tournamentInfo.round ?? 1}
-            {/if}
+          <div class="mode-badge" class:tour={gs.arenaMode === 'TOURNAMENT'} class:pvp={gs.arenaMode === 'PVP'}>
+            {arenaModeDisplay.fullLabel}
           </div>
-          {#if state.hypothesis}
-            <div class="hypo-badge {state.hypothesis.dir.toLowerCase()}">
-              {state.hypothesis.dir} · R:R 1:{state.hypothesis.rr.toFixed(1)}
+          {#if arenaHypothesisBadge && gs.hypothesis}
+            <div class="hypo-badge {gs.hypothesis.dir.toLowerCase()}">
+              {arenaHypothesisBadge}
             </div>
           {/if}
           <!-- Chart Toggle Buttons -->
           <div class="chart-toggles">
-            <button class="ct-btn" class:on={showMarkers} on:click={() => showMarkers = !showMarkers} title="에이전트 마커">🏷</button>
-            <button class="ct-btn" class:on={showChartPosition} on:click={() => showChartPosition = !showChartPosition} title="TP/SL 라인">📏</button>
+            <button class="ct-btn" class:on={showMarkers} onclick={arenaChartController.toggleMarkers} title="에이전트 마커">🏷</button>
+            <button class="ct-btn" class:on={chartBridge.position.visible} onclick={arenaChartController.togglePositionVisibility} title="TP/SL 라인">📏</button>
           </div>
-          <button class="mbtn" on:click={goLobby}>↺ LOBBY</button>
+          <button class="mbtn" onclick={arenaShellController.goLobby}>↺ LOBBY</button>
         </div>
       </div>
 
@@ -1802,11 +1084,11 @@
         <div class="mission-bar">
           <div class="mission-top">
             <div class="mission-phase">
-              <span class="mp-dot" style="background:{phaseLabel.color}"></span>
-              <span class="mp-label" style="color:{phaseLabel.color}">{battlePhaseLabel || phaseLabel.name}</span>
-              {#if state.timer > 0}<span class="mp-timer">{Math.ceil(state.timer)}s</span>{/if}
+              <span class="mp-dot" style="background:{arenaBattlePhaseDisplay.color}"></span>
+              <span class="mp-label" style="color:{arenaBattlePhaseDisplay.color}">{arenaBattlePhaseDisplay.label}</span>
+              {#if arenaBattlePhaseDisplay.timerLabel}<span class="mp-timer">{arenaBattlePhaseDisplay.timerLabel}</span>{/if}
             </div>
-            <button class="mission-close" on:click={goLobby} title="LOBBY">✕</button>
+            <button class="mission-close" onclick={arenaShellController.goLobby} title="LOBBY">✕</button>
           </div>
           <div class="mission-text">{missionText}</div>
         </div>
@@ -1826,12 +1108,12 @@
           <div class="hud-enemy">
             <span class="hud-enemy-label">MARKET</span>
             <div class="hud-hp-track">
-              <div class="hud-hp-fill" style="width:{enemyHP}%;background:linear-gradient(90deg,#ff5e7a,{enemyHP > 50 ? '#ffaa00' : '#ff2d55'})"></div>
+              <div class="hud-hp-fill" style="width:{enemyHP}%;background:linear-gradient(90deg,#ff5e7a,{arenaBattleHudDisplay.enemyHpAccent})"></div>
             </div>
-            <span class="hud-hp-num">{Math.round(enemyHP)}</span>
+            <span class="hud-hp-num">{arenaBattleHudDisplay.enemyHpLabel}</span>
           </div>
           <!-- Price -->
-          <div class="hud-price">${Number.isFinite(currentBtcPrice) ? Math.round(currentBtcPrice).toLocaleString() : '--'}</div>
+          <div class="hud-price">{arenaBattleHudDisplay.priceLabel}</div>
         </div>
 
         <!-- ═══ SPATIAL ARENA (THE GAME WORLD) ═══ -->
@@ -1861,7 +1143,7 @@
           <!-- Center battle node -->
           <div class="arena-center-node">
             <div class="acn-icon">⚔</div>
-            <div class="acn-price">${Number.isFinite(currentBtcPrice) ? Math.round(currentBtcPrice).toLocaleString() : '--'}</div>
+            <div class="acn-price">{arenaBattleHudDisplay.priceLabel}</div>
           </div>
 
           <!-- CHARACTER SPRITES -->
@@ -1940,12 +1222,12 @@
         <!-- ── NARRATION BAR ── -->
         <div class="sb-narration">
           <div class="narr-icon">⚡</div>
-          <div class="narr-text">{battleNarration || '에이전트 대기 중...'}</div>
+          <div class="narr-text">{arenaBattleHudDisplay.narration}</div>
         </div>
 
         <!-- ── BATTLE LOG (mini chat) ── -->
         <div class="battle-log">
-          {#each chatMessages.slice(-5) as msg (msg.id)}
+          {#each arenaBattleLogPreview as msg (msg.id)}
             <div class="bl-line" class:action={msg.isAction}>
               <span class="bl-icon" style="color:{msg.color}">{msg.icon}</span>
               <span class="bl-name" style="color:{msg.color}">{msg.name}</span>
@@ -1957,117 +1239,44 @@
           {/if}
         </div>
 
-        <!-- ═══════ COMPARE OVERLAY ═══════ -->
+        <!-- ═══════ REWARD MODAL ═══════ -->
         <ArenaRewardModal
-          visible={rewardVisible}
-          xpGain={rewardXp}
-          streak={rewardStreak}
-          badges={rewardBadges}
-          onclose={() => { rewardVisible = false; }}
+          visible={rewardState.visible}
+          xpGain={rewardState.xpGain}
+          streak={rewardState.streak}
+          badges={rewardState.badges}
+          onclose={arenaResultController.closeReward}
         />
-
-        {#if compareVisible}
-          <div class="compare-overlay">
-            <div class="compare-card">
-              <div class="compare-header">
-                <span class="compare-icon">⚔️</span>
-                <span class="compare-title">COMPARE</span>
-              </div>
-
-              <!-- User vs Agents -->
-              <div class="compare-vs">
-                <div class="compare-side user">
-                  <div class="compare-label">YOUR CALL</div>
-                  <div class="compare-dir {compareData.userDir.toLowerCase()}">{compareData.userDir}</div>
-                  <div class="compare-levels">
-                    <span class="cmp-tp">TP ${Math.round(compareData.userTp).toLocaleString()}</span>
-                    <span class="cmp-entry">Entry ${Math.round(compareData.userEntry).toLocaleString()}</span>
-                    <span class="cmp-sl">SL ${Math.round(compareData.userSl).toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div class="compare-badge-wrap">
-                  <div class="compare-consensus-badge {compareData.consensus.type}">
-                    {compareData.consensus.badge}
-                  </div>
-                  <div class="compare-vs-icon">VS</div>
-                </div>
-
-                <div class="compare-side agents">
-                  <div class="compare-label">AGENT COUNCIL</div>
-                  <div class="compare-dir {compareData.agentDir.toLowerCase()}">{compareData.agentDir}</div>
-                  <div class="compare-score">Score: {compareData.agentScore}</div>
-                  <div class="compare-votes">
-                    {#each compareData.agentVotes as vote}
-                      <div class="compare-vote">
-                        <span style="color:{vote.color}">{vote.icon}</span>
-                        <span class="cv-dir {vote.dir.toLowerCase()}">{vote.dir}</span>
-                        <span class="cv-conf">{vote.conf}%</span>
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              </div>
-
-              <!-- LP Multiplier -->
-              <div class="compare-mult">
-                LP MULTIPLIER: <span class="mult-val" style="color:{compareData.consensus.lpMult >= 1.5 ? '#00CC88' : compareData.consensus.lpMult >= 1 ? '#DCB970' : '#FF5E7A'}">x{compareData.consensus.lpMult}</span>
-              </div>
-            </div>
-          </div>
-        {/if}
-
-        <!-- Verdict Overlay -->
-        {#if verdictVisible}
-          <div class="verdict-overlay">
-            <div class="verdict-card">
-              <div class="verdict-score">
-                <svg viewBox="0 0 44 44">
-                  <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(0,0,0,.1)" stroke-width="3"/>
-                  <circle cx="22" cy="22" r="18" fill="none" stroke={state.score >= 60 ? '#00CC88' : '#FF5E7A'} stroke-width="3"
-                    stroke-dasharray="{state.score * 1.13} 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
-                </svg>
-                <span class="vs-num">{Math.round(state.score)}</span>
-              </div>
-              <div class="verdict-dir" class:long={state.score >= 60} class:short={state.score < 60}>
-                {state.score >= 60 ? 'MUCH LONG' : 'SUCH WAIT'}
-              </div>
-              <div class="verdict-meta">
-                Council: {activeAgents.filter(a => a.dir === 'LONG').length}/{activeAgents.length} · Score: {Math.round(state.score)}
-              </div>
-            </div>
-          </div>
-        {/if}
 
         <!-- Result Overlay -->
         {#if resultVisible}
           <div class="result-overlay" class:win={resultData.win} class:lose={!resultData.win}>
             <div class="result-text">{resultData.win ? 'VERY WIN WOW!' : 'SUCH SAD'}</div>
             <div class="result-lp">{resultData.tag}<br>{resultData.lp >= 0 ? '+' : ''}{resultData.lp} LP</div>
-            {#if state.streak >= 3}
-              <div class="result-streak">🔥×{state.streak} MUCH STREAK</div>
+            {#if gs.streak >= 3}
+              <div class="result-streak">🔥×{gs.streak} MUCH STREAK</div>
             {/if}
-            {#if state.fbScore}
+            {#if gs.fbScore}
               <div class="fbs-card">
                 <div class="fbs-title">FBS SCORECARD</div>
                 <div class="fbs-row">
                   <span class="fbs-label">DS</span>
-                  <div class="fbs-bar"><div class="fbs-fill" style="width:{state.fbScore.ds}%;background:#e8967d"></div></div>
-                  <span class="fbs-val">{state.fbScore.ds}</span>
+                  <div class="fbs-bar"><div class="fbs-fill" style="width:{gs.fbScore.ds}%;background:#e8967d"></div></div>
+                  <span class="fbs-val">{gs.fbScore.ds}</span>
                 </div>
                 <div class="fbs-row">
                   <span class="fbs-label">RE</span>
-                  <div class="fbs-bar"><div class="fbs-fill" style="width:{state.fbScore.re}%;background:#66cce6"></div></div>
-                  <span class="fbs-val">{state.fbScore.re}</span>
+                  <div class="fbs-bar"><div class="fbs-fill" style="width:{gs.fbScore.re}%;background:#66cce6"></div></div>
+                  <span class="fbs-val">{gs.fbScore.re}</span>
                 </div>
                 <div class="fbs-row">
                   <span class="fbs-label">CI</span>
-                  <div class="fbs-bar"><div class="fbs-fill" style="width:{state.fbScore.ci}%;background:#00cc88"></div></div>
-                  <span class="fbs-val">{state.fbScore.ci}</span>
+                  <div class="fbs-bar"><div class="fbs-fill" style="width:{gs.fbScore.ci}%;background:#00cc88"></div></div>
+                  <span class="fbs-val">{gs.fbScore.ci}</span>
                 </div>
                 <div class="fbs-total">
                   <span>FBS</span>
-                  <span class="fbs-total-val">{state.fbScore.fbs}</span>
+                  <span class="fbs-total-val">{gs.fbScore.fbs}</span>
                 </div>
               </div>
             {/if}
@@ -2080,49 +1289,39 @@
           <div class="pvp-overlay">
             <div class="pvp-card">
               <div class="pvp-title">{resultOverlayTitle}</div>
-              {#if state.arenaMode === 'TOURNAMENT' && tournamentInfo.tournamentId}
+              {#if arenaModeDisplay.tournamentMeta}
                 <div class="pvp-label tour-meta">
-                  {tournamentInfo.type ?? 'TOURNAMENT'} · {tournamentInfo.pair ?? state.pair} · ROUND {tournamentInfo.round ?? 1}
+                  {arenaModeDisplay.tournamentMeta}
                 </div>
               {/if}
               <div class="pvp-scores">
                 <div class="pvp-side">
                   <div class="pvp-label">YOUR SCORE</div>
-                  <div class="pvp-score">{Math.round(state.score)}</div>
+                  <div class="pvp-score">{Math.round(gs.score)}</div>
                 </div>
                 <div class="pvp-vs">VS</div>
                 <div class="pvp-side">
                   <div class="pvp-label">OPPONENT</div>
-                  <div class="pvp-score">{Math.round(50 + Math.random() * 35)}</div>
+                  <div class="pvp-score">{resultData.opponentScore}</div>
                 </div>
               </div>
               <div class="pvp-lp" class:pos={resultData.lp >= 0} class:neg={resultData.lp < 0}>
                 {resultData.lp >= 0 ? '+' : ''}{resultData.lp} LP
               </div>
-              {#if state.hypothesis}
+              {#if gs.hypothesis}
                 <div class="pvp-hypo">
-                  Your call: <span class="{state.hypothesis.dir.toLowerCase()}">{state.hypothesis.dir}</span>
-                  · R:R 1:{state.hypothesis.rr.toFixed(1)}
-                  {#if state.hypothesis.consensusType}
-                    · <span class="pvp-consensus">{state.hypothesis.consensusType.toUpperCase()}</span>
+                  Your call: <span class="{gs.hypothesis.dir.toLowerCase()}">{gs.hypothesis.dir}</span>
+                  · R:R 1:{gs.hypothesis.rr.toFixed(1)}
+                  {#if gs.hypothesis.consensusType}
+                    · <span class="pvp-consensus">{gs.hypothesis.consensusType.toUpperCase()}</span>
                   {/if}
                 </div>
               {/if}
               <div class="pvp-btns">
-                <button class="pvp-btn lobby" on:click={goLobby}>↺ LOBBY</button>
-                <button class="pvp-btn again" on:click={playAgain}>🐕 PLAY AGAIN</button>
+                <button class="pvp-btn lobby" onclick={arenaShellController.goLobby}>↺ LOBBY</button>
+                <button class="pvp-btn again" onclick={arenaShellController.playAgain}>🐕 PLAY AGAIN</button>
               </div>
             </div>
-          </div>
-        {/if}
-
-        <!-- Replay Banner -->
-        {#if replayState.active}
-          <div class="replay-banner">
-            <span class="replay-icon">🎬</span>
-            <span class="replay-text">REPLAY — Match #{replayState.data?.matchN}</span>
-            <span class="replay-step">{replayState.currentStep + 1}/{replayState.totalSteps}</span>
-            <button class="replay-exit" on:click={exitReplay}>✕ EXIT REPLAY</button>
           </div>
         {/if}
 
@@ -2395,7 +1594,7 @@
   }
   .mp-dot { width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 8px currentColor; flex-shrink: 0; }
   .mp-label { text-transform: uppercase; }
-  .mp-timer { color: rgba(255,255,255,.4); font-size: 8px; margin-left: 8px; }
+  .mp-timer { color: rgba(255,255,255,.4); font-size: 9px; margin-left: 8px; }
   .mission-close {
     width: 24px; height: 24px; border-radius: 6px;
     border: 1px solid rgba(255,105,180,.35);
@@ -2805,16 +2004,16 @@
   .sr svg { width: 40px; height: 40px; }
   .sr .n { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 900; font-family: var(--fd); color: #fff; }
   .sdir { font-size: 13px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; text-shadow: 0 0 10px currentColor; }
-  .smeta { font-size: 7px; color: #888; font-family: var(--fm); }
+  .smeta { font-size: 9px; color: #888; font-family: var(--fm); }
   .score-stats { display: flex; gap: 8px; margin-left: auto; }
-  .ss-item { font-size: 8px; font-weight: 700; font-family: var(--fm); color: #aaa; }
+  .ss-item { font-size: 9px; font-weight: 700; font-family: var(--fm); color: #aaa; }
   .ss-item.lp { color: #e8967d; }
   .mode-badge {
     padding: 3px 8px;
     border: 1.5px solid rgba(232,150,125,.55);
     background: rgba(232,150,125,.09);
     color: #e8967d;
-    font-size: 8px;
+    font-size: 9px;
     font-family: var(--fd);
     font-weight: 900;
     letter-spacing: 1px;
@@ -2834,7 +2033,7 @@
 
   /* Hypothesis Badge in score bar */
   .hypo-badge {
-    padding: 3px 10px; border-radius: 8px; font-size: 8px; font-weight: 900;
+    padding: 3px 10px; border-radius: 8px; font-size: 9px; font-weight: 900;
     font-family: var(--fd); letter-spacing: 1px; border: 2px solid;
   }
   .hypo-badge.long { background: rgba(0,255,136,.15); border-color: #00ff88; color: #00ff88; }
@@ -2868,106 +2067,8 @@
   }
   .ct-btn:hover { opacity: .8; background: rgba(255,105,180,.1); }
 
-  .mbtn { padding: 6px 16px; border-radius: 16px; background: #E8967D; border: 3px solid #000; color: #000; font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
+  .mbtn { padding: 6px 16px; border-radius: 16px; background: #E8967D; border: 3px solid #000; color: #000; font-family: var(--fd); font-size: 9px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 3px 3px 0 #000; }
   .mbtn:hover { background: #d07a64; }
-
-  /* ═══════ COMPARE OVERLAY ═══════ */
-  .compare-overlay {
-    position: absolute; inset: 0; z-index: 32;
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,.25);
-    animation: fadeIn .3s ease;
-  }
-  .compare-card {
-    background: #fff; border: 4px solid #000; border-radius: 16px;
-    padding: 14px 18px; box-shadow: 8px 8px 0 #000;
-    min-width: 320px; animation: popIn .3s ease;
-  }
-  .compare-header {
-    display: flex; align-items: center; gap: 8px;
-    border-bottom: 3px solid #000; padding-bottom: 8px; margin-bottom: 10px;
-  }
-  .compare-icon { font-size: 18px; }
-  .compare-title { font-size: 16px; font-weight: 900; font-family: var(--fc); letter-spacing: 3px; }
-  .compare-vs {
-    display: flex; align-items: flex-start; gap: 12px; justify-content: center;
-  }
-  .compare-side {
-    flex: 1; text-align: center; padding: 8px;
-    border: 2px solid #eee; border-radius: 10px;
-  }
-  .compare-side.user { background: rgba(232,150,125,.05); }
-  .compare-side.agents { background: rgba(0,200,255,.05); }
-  .compare-label {
-    font-size: 7px; font-weight: 900; font-family: var(--fd);
-    letter-spacing: 2px; color: #888; margin-bottom: 4px;
-  }
-  .compare-dir {
-    font-size: 18px; font-weight: 900; font-family: var(--fc);
-    letter-spacing: 2px;
-  }
-  .compare-dir.long { color: #00cc66; }
-  .compare-dir.short { color: #ff2d55; }
-  .compare-dir.neutral { color: #ffaa00; }
-  .compare-levels {
-    display: flex; flex-direction: column; gap: 1px;
-    font-size: 7px; font-family: var(--fm); font-weight: 700;
-    margin-top: 4px;
-  }
-  .cmp-tp { color: #00cc66; }
-  .cmp-entry { color: #ffaa00; }
-  .cmp-sl { color: #ff2d55; }
-  .compare-score {
-    font-size: 9px; font-weight: 900; font-family: var(--fd);
-    color: #000; margin-top: 4px;
-  }
-  .compare-votes {
-    display: flex; flex-wrap: wrap; gap: 3px; justify-content: center;
-    margin-top: 4px;
-  }
-  .compare-vote {
-    display: flex; align-items: center; gap: 2px;
-    font-size: 7px; font-family: var(--fm);
-    background: #f5f5f5; border-radius: 4px; padding: 2px 4px;
-  }
-  .cv-dir { font-weight: 900; font-size: 6px; padding: 1px 3px; border-radius: 3px; }
-  .cv-dir.long { background: #00ff88; color: #000; }
-  .cv-dir.short { background: #ff2d55; color: #fff; }
-  .cv-conf { color: #888; font-size: 6px; }
-  .compare-badge-wrap {
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-    min-width: 80px;
-  }
-  .compare-consensus-badge {
-    padding: 4px 10px; border-radius: 8px; border: 3px solid #000;
-    font-size: 8px; font-weight: 900; font-family: var(--fd); letter-spacing: 1px;
-    box-shadow: 2px 2px 0 #000; text-align: center;
-  }
-  .compare-consensus-badge.consensus { background: #00ff88; color: #000; }
-  .compare-consensus-badge.partial { background: #E8967D; color: #000; }
-  .compare-consensus-badge.dissent { background: #ff2d55; color: #fff; }
-  .compare-consensus-badge.override { background: #c840ff; color: #fff; }
-  .compare-vs-icon {
-    font-size: 14px; font-weight: 900; font-family: var(--fc); color: #000;
-  }
-  .compare-mult {
-    text-align: center; margin-top: 10px; padding: 6px;
-    background: #000; border-radius: 8px;
-    font-size: 9px; font-weight: 900; font-family: var(--fd);
-    letter-spacing: 2px; color: #888;
-  }
-  .mult-val { font-size: 16px; }
-
-  /* Verdict Overlay */
-  .verdict-overlay { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.2); }
-  .verdict-card { background: #fff; border: 4px solid #000; border-radius: 16px; padding: 16px 24px; text-align: center; box-shadow: 6px 6px 0 #000; animation: popIn .3s ease; }
-  .verdict-score { position: relative; width: 60px; height: 60px; margin: 0 auto 8px; }
-  .verdict-score svg { width: 60px; height: 60px; }
-  .vs-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; font-family: var(--fc); }
-  .verdict-dir { font-size: 20px; font-weight: 900; font-family: var(--fc); letter-spacing: 3px; }
-  .verdict-dir.long { color: #00cc66; }
-  .verdict-dir.short { color: #ff2d55; }
-  .verdict-meta { font-size: 8px; color: #888; font-family: var(--fm); margin-top: 4px; }
 
   /* Result Overlay */
   .result-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 35; text-align: center; animation: popIn .3s ease; padding: 16px 28px; border-radius: 16px; border: 1px solid rgba(232,150,125,.3); box-shadow: 0 8px 32px rgba(0,0,0,.5); backdrop-filter: blur(8px); }
@@ -2976,7 +2077,7 @@
   .result-text { font-size: 22px; font-weight: 900; font-family: var(--fc); color: #f0ede4; letter-spacing: 3px; text-shadow: 0 0 12px rgba(232,150,125,.3); }
   .result-lp { font-size: 14px; font-weight: 900; font-family: var(--fd); color: #f0ede4; margin-top: 4px; }
   .result-streak { font-size: 10px; font-weight: 700; color: #e8967d; margin-top: 4px; }
-  .result-motto { font-size: 8px; font-family: var(--fc); color: rgba(240,237,228,.6); margin-top: 8px; font-style: italic; }
+  .result-motto { font-size: 9px; font-family: var(--fc); color: rgba(240,237,228,.6); margin-top: 8px; font-style: italic; }
 
   /* FBS Scorecard */
   .fbs-card {
@@ -2984,13 +2085,13 @@
     background: rgba(10,26,18,.85); border: 1px solid rgba(232,150,125,.2);
     text-align: left; min-width: 180px;
   }
-  .fbs-title { font-size: 7px; font-weight: 900; letter-spacing: 2px; color: rgba(240,237,228,.5); font-family: var(--fd); margin-bottom: 6px; text-align: center; }
+  .fbs-title { font-size: 9px; font-weight: 900; letter-spacing: 2px; color: rgba(240,237,228,.5); font-family: var(--fd); margin-bottom: 6px; text-align: center; }
   .fbs-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-  .fbs-label { font-size: 8px; font-weight: 900; font-family: var(--fd); letter-spacing: 1px; width: 22px; color: rgba(240,237,228,.6); }
+  .fbs-label { font-size: 9px; font-weight: 900; font-family: var(--fd); letter-spacing: 1px; width: 22px; color: rgba(240,237,228,.6); }
   .fbs-bar { flex: 1; height: 5px; background: rgba(240,237,228,.08); border-radius: 3px; overflow: hidden; }
   .fbs-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
   .fbs-val { font-size: 9px; font-weight: 900; font-family: var(--fd); width: 24px; text-align: right; color: #f0ede4; }
-  .fbs-total { display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px solid rgba(232,150,125,.15); margin-top: 4px; font-size: 8px; font-weight: 900; font-family: var(--fd); color: rgba(240,237,228,.5); letter-spacing: 1px; }
+  .fbs-total { display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px solid rgba(232,150,125,.15); margin-top: 4px; font-size: 9px; font-weight: 900; font-family: var(--fd); color: rgba(240,237,228,.5); letter-spacing: 1px; }
   .fbs-total-val { font-size: 16px; color: #e8967d; text-shadow: 0 0 8px rgba(232,150,125,.3); }
 
   /* PvP Result */
@@ -2999,11 +2100,11 @@
   .pvp-title { font-size: 18px; font-weight: 900; font-family: var(--fc); letter-spacing: 3px; color: #f0ede4; }
   .pvp-scores { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 12px 0; }
   .pvp-side { text-align: center; }
-  .pvp-label { font-size: 7px; color: #888; font-family: var(--fd); letter-spacing: 2px; }
+  .pvp-label { font-size: 9px; color: #888; font-family: var(--fd); letter-spacing: 2px; }
   .pvp-label.tour-meta {
     margin-top: 2px;
     margin-bottom: 8px;
-    font-size: 8px;
+    font-size: 9px;
     color: #8b6c27;
     letter-spacing: 1px;
   }
@@ -3029,51 +2130,6 @@
   /* Doge Float */
   .doge-float { position: absolute; z-index: 25; font-family: var(--fc); font-weight: 900; font-style: italic; font-size: 16px; letter-spacing: 2px; pointer-events: none; animation: dogeUp ease forwards; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000; -webkit-text-stroke: 1px #000; }
   @keyframes dogeUp { 0% { opacity: 1; transform: translateY(0) rotate(-5deg) scale(1); } 100% { opacity: 0; transform: translateY(-100px) rotate(15deg) scale(1.5); } }
-
-  /* ═══════ REPLAY BANNER ═══════ */
-  .replay-banner {
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 30;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #c840ff;
-    border: 3px solid #000;
-    border-radius: 12px;
-    padding: 6px 14px;
-    box-shadow: 3px 3px 0 #000;
-    animation: floatBarIn .3s ease;
-  }
-  .replay-icon { font-size: 14px; }
-  .replay-text {
-    font-family: var(--fd);
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 2px;
-    color: #fff;
-  }
-  .replay-step {
-    font-family: var(--fm);
-    font-size: 8px;
-    font-weight: 700;
-    color: rgba(255,255,255,.6);
-  }
-  .replay-exit {
-    font-family: var(--fm);
-    font-size: 7px;
-    font-weight: 900;
-    letter-spacing: 1px;
-    padding: 3px 8px;
-    border: 2px solid #fff;
-    border-radius: 6px;
-    background: rgba(255,255,255,.15);
-    color: #fff;
-    cursor: pointer;
-  }
-  .replay-exit:hover { background: rgba(255,255,255,.3); }
 
   /* ═══════ FLOATING DIRECTION BAR ═══════ */
   .dir-float-bar {
@@ -3180,7 +2236,7 @@
   .prev-row.sl { background: rgba(255,45,85,.08); }
   .prev-lbl {
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
     color: #888;
@@ -3206,7 +2262,7 @@
   .prev-rr-val { font-size: 14px; color: #E8967D; }
   .preview-config {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: #aaa;
     letter-spacing: 1px;
@@ -3284,7 +2340,7 @@
     .battle-layout { grid-template-columns: 1fr; grid-template-rows: 45% 1fr; }
     .chart-side { border-right: none; border-bottom: 4px solid #000; }
     .atp-label {
-      font-size: 7px;
+      font-size: 9px;
       letter-spacing: 1px;
     }
     .atb-connector {
@@ -3302,6 +2358,69 @@
     .live-event-stack {
       top: 98px;
     }
+
+    /* ═══ HYPOTHESIS BOTTOM SHEET (mobile) ═══ */
+    .hypo-sidebar {
+      position: fixed;
+      top: auto;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      max-height: 55vh;
+      z-index: 60;
+      border-radius: 16px 16px 0 0;
+      background: rgba(7, 19, 13, 0.97);
+      border-top: 2px solid rgba(232, 150, 125, 0.35);
+      box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.6);
+      animation: hypoSlideUp 0.3s ease;
+      filter: none;
+    }
+    .hypo-sidebar::before {
+      content: '';
+      display: block;
+      width: 36px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 2px;
+      margin: 10px auto 4px;
+      flex-shrink: 0;
+    }
+
+    /* Direction float bar: above bottom sheet */
+    .dir-float-bar {
+      position: fixed;
+      bottom: calc(55vh + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 61;
+    }
+
+    /* Score bar compact */
+    .score-bar {
+      padding: 4px 8px;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .score-stats { gap: 5px; }
+    .chart-toggles { gap: 3px; }
+    .ct-btn { width: 28px; height: 28px; font-size: 11px; }
+    .mbtn { font-size: 8px; padding: 4px 8px; }
+
+    /* Preview overlay: full-screen on mobile */
+    .preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 65;
+    }
+    .preview-card {
+      width: calc(100% - 32px);
+      max-width: 340px;
+    }
+  }
+
+  @keyframes hypoSlideUp {
+    from { opacity: 0; transform: translateY(100%); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   /* ── Wallet Gate ── */
@@ -3374,8 +2493,8 @@
   .wg-btn:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
   .wg-hint {
     font-family: var(--fm);
-    font-size: 8px;
-    color: rgba(255,255,255,.25);
+    font-size: 9px;
+    color: rgba(255,255,255,.5);
     margin-top: 14px;
     letter-spacing: .5px;
     position: relative; z-index: 1;

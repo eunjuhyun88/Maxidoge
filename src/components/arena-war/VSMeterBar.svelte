@@ -120,7 +120,7 @@
   .vs-label.ai { color: #f85858; }
 
   .vs-status {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: #f8d030;
     font-family: 'JetBrains Mono', monospace;
@@ -158,7 +158,7 @@
   }
 
   .vs-pct {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     color: rgba(0,0,0,0.7);
     font-family: 'JetBrains Mono', monospace;

@@ -1,31 +1,29 @@
 <script lang="ts">
   import type { AgentSignal } from '$lib/data/warroom';
+  import { createTerminalMobileSplitRuntime } from '$lib/terminal/terminalMobileSplitRuntime';
   import type {
     MobileTab,
     ScanIntelDetail,
     ChartCommunitySignal,
     ChartPanelHandle,
+    ChatMsg,
     SharedChartPanelProps,
     SharedIntelPanelProps,
-    TerminalControlBarProps,
+    TerminalChartRequestDetail,
+    TerminalDensityMode,
     WarRoomHandle,
-  } from '../../routes/terminal/terminalTypes';
+  } from '$lib/terminal/terminalTypes';
   import WarRoom from './WarRoom.svelte';
-  import ChartPanel from '../arena/ChartPanel.svelte';
-  import VerdictBanner from './VerdictBanner.svelte';
+  import TerminalChartViewport from './TerminalChartViewport.svelte';
   import IntelPanel from './IntelPanel.svelte';
-  import TerminalControlBar from './TerminalControlBar.svelte';
-
-  type ChartRequestDetail = { source?: string; pair?: string; timeframe?: string };
+  import MobileActionBar from './MobileActionBar.svelte';
+  import MobileChatSheet from './MobileChatSheet.svelte';
 
   interface Props {
-    densityMode?: 'essential' | 'pro';
-    terminalControlBarProps: TerminalControlBarProps;
+    densityMode?: TerminalDensityMode;
     sharedChartPanelProps: SharedChartPanelProps;
     sharedIntelPanelProps: SharedIntelPanelProps;
     mobileTab?: MobileTab;
-    mobileOpenTrades?: number;
-    mobileTrackedSignals?: number;
     latestScan?: ScanIntelDetail | null;
     terminalScanning?: boolean;
     warRoomRef?: WarRoomHandle | null;
@@ -34,21 +32,20 @@
     onScanStart?: () => void;
     onScanComplete?: (detail: ScanIntelDetail) => void;
     onShowOnChart?: (detail: { signal: AgentSignal }) => void;
-    onChartScanRequest?: (detail: ChartRequestDetail) => void;
-    onChartChatRequest?: (detail: ChartRequestDetail) => void;
+    onChartScanRequest?: (detail: TerminalChartRequestDetail) => void;
+    onChartChatRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartCommunitySignal?: (detail: ChartCommunitySignal) => void;
     onClearTradeSetup?: () => void;
     onSendChat?: (detail: { text: string }) => void | Promise<void>;
     onGoToTrade?: () => void | Promise<void>;
+    chatMessages?: ChatMsg[];
+    isTyping?: boolean;
   }
   let {
     densityMode = 'essential',
-    terminalControlBarProps,
     sharedChartPanelProps,
     sharedIntelPanelProps,
     mobileTab = 'chart',
-    mobileOpenTrades = 0,
-    mobileTrackedSignals = 0,
     latestScan = null,
     terminalScanning = false,
     warRoomRef = $bindable(null),
@@ -63,21 +60,81 @@
     onClearTradeSetup = () => {},
     onSendChat = () => {},
     onGoToTrade = () => {},
+    chatMessages = [],
+    isTyping = false,
   }: Props = $props();
+
+  let splitContainerEl = $state<HTMLDivElement | null>(null);
+  const {
+    chatPercent,
+    resizing,
+    ...terminalMobileSplitRuntime
+  } = createTerminalMobileSplitRuntime();
+
+  $effect(() => {
+    terminalMobileSplitRuntime.setContainer(splitContainerEl);
+  });
 </script>
 
 <div class="terminal-mobile">
-  <div class="mob-inline-rail">
-    <TerminalControlBar
-      {...terminalControlBarProps}
-      variant="inline"
-      showMarket={false}
-      showPrimaryHint={false}
-    />
-  </div>
+  {#if mobileTab === 'chart'}
+    <!-- ══ Split view: chart (top) + divider + chat (bottom) ══ -->
+    <div
+      class="mob-split"
+      class:mob-split-resizing={$resizing}
+      bind:this={splitContainerEl}
+    >
+      <div class="mob-chart-pane" style="flex: {100 - $chatPercent}">
+        <TerminalChartViewport
+          bind:chartRef
+          shellClass="mob-chart-section"
+          areaClass="mob-chart-area"
+          {sharedChartPanelProps}
+          showVerdictOverlay
+          {latestScan}
+          {terminalScanning}
+          onVerdictTap={() => onSetMobileTab('warroom')}
+          onChartScanRequest={onChartScanRequest}
+          onChartChatRequest={onChartChatRequest}
+          onChartCommunitySignal={onChartCommunitySignal}
+          onClearTradeSetup={onClearTradeSetup}
+        />
+      </div>
 
-  <div class="mob-content" class:chart-only={mobileTab === 'chart'}>
-    {#if mobileTab === 'warroom'}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <div
+        class="mob-divider"
+        class:mob-divider-active={$resizing}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-valuenow={$chatPercent}
+        aria-valuemin={15}
+        aria-valuemax={80}
+        tabindex="0"
+        onpointerdown={terminalMobileSplitRuntime.startResize}
+        onpointermove={terminalMobileSplitRuntime.moveResize}
+        onpointerup={terminalMobileSplitRuntime.endResize}
+        onpointercancel={terminalMobileSplitRuntime.endResize}
+      >
+        <span class="mob-divider-bar"></span>
+      </div>
+
+      <div class="mob-chat-pane" style="flex: {$chatPercent}">
+        <MobileChatSheet
+          splitMode
+          sheetState={'half'}
+          {chatMessages}
+          {isTyping}
+          onSendChat={onSendChat}
+          onGoToTrade={onGoToTrade}
+          onSheetStateChange={() => {}}
+          onGoToFullChat={() => onSetMobileTab('intel')}
+        />
+      </div>
+    </div>
+
+  {:else if mobileTab === 'warroom'}
+    <div class="mob-content">
       <div class="mob-panel-wrap">
         <WarRoom
           bind:this={warRoomRef}
@@ -85,25 +142,12 @@
           onScanStart={onScanStart}
           onScanComplete={onScanComplete}
           onShowOnChart={onShowOnChart}
+          onShareToCommunity={onChartCommunitySignal}
         />
       </div>
-    {:else if mobileTab === 'chart'}
-      <div class="mob-chart-stack">
-        <div class="mob-chart-section">
-          <VerdictBanner verdict={latestScan} scanning={terminalScanning} />
-          <div class="mob-chart-area">
-            <ChartPanel
-              bind:this={chartRef}
-              {...sharedChartPanelProps}
-              onScanRequest={(detail) => onChartScanRequest(detail)}
-              onChatRequest={(detail) => onChartChatRequest(detail)}
-              onCommunitySignal={(detail) => onChartCommunitySignal(detail)}
-              onClearTradeSetup={() => onClearTradeSetup()}
-            />
-          </div>
-        </div>
-      </div>
-    {:else if mobileTab === 'intel'}
+    </div>
+  {:else if mobileTab === 'intel'}
+    <div class="mob-content">
       <div class="mob-panel-wrap">
         <IntelPanel
           {...sharedIntelPanelProps}
@@ -112,24 +156,24 @@
           onGoToTrade={onGoToTrade}
         />
       </div>
-    {/if}
-  </div>
+    </div>
+  {/if}
 
-  <div class="mob-bottom-nav">
-    <button class="mob-nav-btn" class:active={mobileTab === 'warroom'} onclick={() => onSetMobileTab('warroom')}>
-      <span class="mob-nav-label">WAR ROOM</span>
-      {#if mobileOpenTrades > 0}
-        <span class="mob-nav-badge">{mobileOpenTrades > 9 ? '9+' : mobileOpenTrades}</span>
-      {/if}
-    </button>
-    <button class="mob-nav-btn" class:active={mobileTab === 'chart'} onclick={() => onSetMobileTab('chart')}>
-      <span class="mob-nav-label">CHART</span>
-    </button>
-    <button class="mob-nav-btn" class:active={mobileTab === 'intel'} onclick={() => onSetMobileTab('intel')}>
-      <span class="mob-nav-label">CHAT</span>
-      {#if mobileTrackedSignals > 0}
-        <span class="mob-nav-badge">{mobileTrackedSignals > 9 ? '9+' : mobileTrackedSignals}</span>
-      {/if}
-    </button>
+  <!-- ══ Scan/trade action bar — only on chart tab ══ -->
+  {#if mobileTab === 'chart'}
+    <MobileActionBar
+      scan={latestScan}
+      scanning={terminalScanning}
+      onScanStart={onScanStart}
+      onGoToTrade={onGoToTrade}
+      onShowWarRoom={() => onSetMobileTab('warroom')}
+    />
+  {/if}
+
+  <!-- ══ Tab nav — always visible at bottom ══ -->
+  <div class="mob-tab-strip">
+    <button class="mob-tab-btn" class:active={mobileTab === 'chart'} onclick={() => onSetMobileTab('chart')}>CHART</button>
+    <button class="mob-tab-btn" class:active={mobileTab === 'warroom'} onclick={() => onSetMobileTab('warroom')}>WAR</button>
+    <button class="mob-tab-btn" class:active={mobileTab === 'intel'} onclick={() => onSetMobileTab('intel')}>INTEL</button>
   </div>
 </div>

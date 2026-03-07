@@ -213,7 +213,7 @@
     gap: 4px;
   }
   .tick-label {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     color: rgba(255,255,255,0.3);
     letter-spacing: 1px;
@@ -304,7 +304,7 @@
   .pnl-badge.negative { color: #f85858; background: rgba(248, 88, 88, 0.1); }
 
   .dir-badge {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     color: rgba(255,255,255,0.4);
     font-family: 'JetBrains Mono', monospace;

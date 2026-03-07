@@ -314,7 +314,7 @@
     left: 50%;
     transform: translate(-50%, -50%);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 900;
     color: white;
   }
@@ -602,5 +602,16 @@
 
   .log-msg {
     opacity: 0.8;
+  }
+
+  @media (max-width: 768px) {
+    .canvas-area {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .team-hp-summary { gap: 6px; }
+    .hp-label { width: 40px; font-size: 0.45rem; }
+    .log-entry { font-size: 0.5rem; }
   }
 </style>

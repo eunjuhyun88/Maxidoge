@@ -48,8 +48,8 @@
   let isMobileSheet = $state(false);
   let panelStyle = $state('');
 
-  let triggerEl: HTMLButtonElement | null = null;
-  let searchEl: HTMLInputElement | null = null;
+  let triggerEl = $state<HTMLButtonElement | null>(null);
+  let searchEl = $state<HTMLInputElement | null>(null);
 
   let statsLoading = $state(false);
   let statsError = $state('');
@@ -436,7 +436,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: rgba(200, 211, 227, 0.72);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: .32px;
   }
   .tdd-pair {
@@ -509,7 +509,7 @@
     background: rgba(255, 255, 255, 0.06);
     color: rgba(224, 232, 244, 0.88);
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .58px;
     cursor: pointer;
@@ -536,7 +536,7 @@
     margin-top: 2px;
     color: rgba(173, 186, 204, 0.68);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: .42px;
   }
   .tdd-close {
@@ -604,7 +604,7 @@
     flex: 0 0 auto;
     color: rgba(168, 180, 197, 0.72);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: .42px;
     text-transform: uppercase;
@@ -636,14 +636,14 @@
     background: rgba(255, 255, 255, 0.04);
     color: rgba(222, 231, 244, 0.9);
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .58px;
     cursor: pointer;
     white-space: nowrap;
   }
   .tdd-quick-chip:hover {
-    border-color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
   }
@@ -668,7 +668,7 @@
     background: rgba(255, 255, 255, 0.04);
     color: rgba(207, 217, 232, 0.85);
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .68px;
     cursor: pointer;
@@ -688,7 +688,7 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     color: rgba(168, 180, 197, 0.7);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: .42px;
   }
@@ -718,7 +718,7 @@
     background: rgba(44, 55, 72, 0.28);
     color: rgba(177, 192, 212, 0.82);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: .35px;
   }
   .tdd-hint.warn {
@@ -779,14 +779,14 @@
   }
   .tdd-item-pair {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(173, 185, 201, 0.74);
     white-space: nowrap;
   }
   .tdd-item-name {
     margin-left: 3px;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(163, 176, 196, 0.72);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -815,7 +815,7 @@
   }
   .tdd-vol {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(189, 199, 215, 0.84);
   }
 
@@ -850,7 +850,7 @@
     }
     .tdd-search-toggle {
       padding: 0 7px;
-      font-size: 8px;
+      font-size: 9px;
     }
     .tdd-head-row,
     .tdd-row {
@@ -866,7 +866,7 @@
     }
     .tdd-tab {
       height: 22px;
-      font-size: 8px;
+      font-size: 9px;
       padding: 0 7px;
     }
   }

@@ -28,6 +28,7 @@
   let showFactorDetail: boolean = $state(false);
   let activeReasonCategory: ReasonTagCategory | null = $state(null);
   let reasonTextInput: string = $state('');
+  let mobileTab = $state<'ai' | 'human'>('human');
   const reasonTagCategories = Object.entries(REASON_TAGS) as [ReasonTagCategory, readonly string[]][];
 
   // Agent outputs grouped by role
@@ -110,9 +111,19 @@
     <span class="timer-text">{timer}s</span>
   </div>
 
+  <!-- Mobile Tab Bar (visible ≤768px only via CSS) -->
+  <div class="mobile-tab-bar">
+    <button class="mtab" class:active={mobileTab === 'ai'} onclick={() => mobileTab = 'ai'}>
+      🤖 AI 분석
+    </button>
+    <button class="mtab" class:active={mobileTab === 'human'} onclick={() => mobileTab = 'human'}>
+      👤 내 판단
+    </button>
+  </div>
+
   <div class="main-layout">
     <!-- LEFT: AI Analysis (전체 공개) -->
-    <div class="ai-panel">
+    <div class="ai-panel" class:mobile-hidden={mobileTab !== 'ai'}>
       <div class="panel-header">
         <span class="panel-icon">🤖</span>
         <span class="panel-title">AI 분석 — 전체 공개</span>
@@ -239,7 +250,7 @@
     </div>
 
     <!-- RIGHT: Human Decision -->
-    <div class="human-panel">
+    <div class="human-panel" class:mobile-hidden={mobileTab !== 'human'}>
       <div class="panel-header">
         <span class="panel-icon">👤</span>
         <span class="panel-title">당신의 판단</span>
@@ -935,5 +946,139 @@
     opacity: 0.4;
     cursor: not-allowed;
     box-shadow: none;
+  }
+
+  /* ═══ MOBILE TAB BAR ═══ */
+  .mobile-tab-bar {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .mobile-tab-bar {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--arena-line, #1a3d2e);
+      background: var(--arena-bg-1, #0d2118);
+      flex-shrink: 0;
+    }
+    .mtab {
+      flex: 1;
+      padding: 10px 8px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--arena-text-2, #5a7d6e);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      min-height: 40px;
+    }
+    .mtab.active {
+      color: var(--arena-accent, #e8967d);
+      border-bottom-color: var(--arena-accent, #e8967d);
+      background: rgba(232, 150, 125, 0.06);
+    }
+
+    /* Stack layout to single column */
+    .main-layout {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+
+    /* Hide inactive panel on mobile */
+    .mobile-hidden {
+      display: none !important;
+    }
+
+    /* Panels take full space */
+    .ai-panel, .human-panel {
+      max-height: none;
+      padding: 0.5rem;
+    }
+
+    /* TP/SL row: stack vertically on small screens */
+    .tp-sl-row {
+      flex-direction: column !important;
+      gap: 0.4rem !important;
+      align-items: stretch;
+    }
+    .tp-input, .sl-input { flex: none; }
+    .rr-display {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
+      justify-content: center;
+      padding: 0.3rem;
+      background: var(--arena-bg-1, #0d2118);
+      border-radius: 4px;
+    }
+
+    /* Direction buttons: bigger touch targets */
+    .dir-btn {
+      padding: 0.7rem;
+      font-size: 0.75rem;
+      min-height: 44px;
+    }
+
+    /* Lock button: compact */
+    .lock-btn {
+      font-size: 1.1rem;
+      letter-spacing: 1.5px;
+      padding: 0.7rem;
+      box-shadow: 2px 2px 0 #000;
+    }
+
+    /* Category headers: bigger touch */
+    .cat-header {
+      padding: 0.45rem 0.5rem;
+      min-height: 36px;
+    }
+
+    /* Reason tags: bigger touch */
+    .reason-tag {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.55rem;
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    /* Timer: sticky on mobile */
+    .timer-bar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .timer-text {
+      font-size: 0.85rem;
+      font-weight: 900;
+    }
+
+    /* Factor chips: wrap better */
+    .factor-chip {
+      font-size: 0.5rem;
+      padding: 2px 4px;
+    }
+    .ctx-headline { white-space: normal; }
+  }
+
+  @media (max-width: 480px) {
+    .panel-title {
+      font-size: 0.65rem;
+      letter-spacing: 0.5px;
+    }
+    .dir-btn {
+      font-size: 0.65rem;
+      padding: 0.6rem 0.3rem;
+    }
+    .lock-btn {
+      font-size: 1rem;
+      letter-spacing: 1px;
+    }
+    .agent-id { width: 55px; font-size: 0.6rem; }
+    .agent-dir { width: 45px; font-size: 0.6rem; }
   }
 </style>

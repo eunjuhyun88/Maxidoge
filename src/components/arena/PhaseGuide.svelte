@@ -20,13 +20,23 @@
   const g = $derived(GUIDE[phase] || GUIDE.DRAFT);
 
   let visible = $state(false);
-  let prevPhase = $state<Phase>(phase);
+  let prevPhase = $state<Phase>('DRAFT');
+  let initialized = $state(false);
 
   $effect(() => {
-    if (phase !== prevPhase) {
-      prevPhase = phase;
+    const currentPhase = phase;
+
+    if (!initialized) {
+      prevPhase = currentPhase;
+      initialized = true;
+      return;
+    }
+
+    if (currentPhase !== prevPhase) {
+      prevPhase = currentPhase;
       visible = true;
-      setTimeout(() => { visible = false; }, 2800);
+      const timer = setTimeout(() => { visible = false; }, 2800);
+      return () => clearTimeout(timer);
     }
   });
 </script>
@@ -65,7 +75,7 @@
   .pg-content { flex: 1; min-width: 0; }
   .pg-title { font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #F0EDE4; }
   .pg-desc { font-size: 9px; color: rgba(240,237,228,.5); margin-top: 2px; }
-  .pg-action { font-size: 8px; color: #E8967D; margin-top: 3px; letter-spacing: 1px; text-transform: uppercase; }
+  .pg-action { font-size: 9px; color: #E8967D; margin-top: 3px; letter-spacing: 1px; text-transform: uppercase; }
 
   @keyframes pgSlide {
     from { opacity: 0; transform: translateY(-10px); }

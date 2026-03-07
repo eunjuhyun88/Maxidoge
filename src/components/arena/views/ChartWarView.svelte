@@ -192,7 +192,7 @@
     color: #E8967D;
   }
   .sep {
-    color: rgba(240, 237, 228, 0.15);
+    color: rgba(240, 237, 228, 0.5);
     font-size: 10px;
   }
   .btc-price {
@@ -213,7 +213,7 @@
     gap: 6px;
   }
   .dist-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1px;
     width: 16px;
@@ -235,7 +235,7 @@
   .tp-fill { background: var(--grn, #00ff88); }
   .sl-fill { background: var(--red, #ff2d55); }
   .dist-val {
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(240, 237, 228, 0.5);
     width: 28px;
     text-align: right;
@@ -274,7 +274,7 @@
   }
   .chart-note {
     font-size: 9px;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
   }
 
   /* ── Bottom Bar ── */
@@ -356,7 +356,7 @@
     border-radius: 6px;
   }
   .rr-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240, 237, 228, 0.5);
     letter-spacing: 1px;
@@ -419,7 +419,7 @@
   }
   .result-actions button:hover {
     background: rgba(240, 237, 228, 0.1);
-    border-color: rgba(240, 237, 228, 0.4);
+    border-color: rgba(240, 237, 228, 0.55);
   }
   .btn-again {
     border-color: rgba(232, 150, 125, 0.4) !important;
@@ -447,13 +447,13 @@
   }
   .waiting-msg {
     font-size: 12px;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
     animation: blink 2s ease-in-out infinite;
   }
   .waiting-price {
     font-size: 16px;
     font-weight: 700;
-    color: rgba(240, 237, 228, 0.3);
+    color: rgba(240, 237, 228, 0.5);
     font-variant-numeric: tabular-nums;
   }
 

@@ -195,7 +195,7 @@
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 6px;
-    color: rgba(240, 237, 228, 0.3);
+    color: rgba(240, 237, 228, 0.5);
     margin-top: -8px;
   }
   .lobby-price {
@@ -208,7 +208,7 @@
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 2px;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
   }
   .price-value {
     font-size: 24px;
@@ -218,7 +218,7 @@
   }
   .price-loading {
     font-size: 10px;
-    color: rgba(240, 237, 228, 0.3);
+    color: rgba(240, 237, 228, 0.5);
     animation: blink 2s ease-in-out infinite;
   }
 

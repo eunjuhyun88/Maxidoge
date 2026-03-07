@@ -46,8 +46,8 @@
   </div>
 
   <div class="sb-section sb-right">
-    <span class="sb-stat">M:{state.matchN}</span>
-    <span class="sb-stat">W:{state.wins}</span>
+    <span class="sb-stat"><span class="sb-lbl">M:</span>{state.matchN}</span>
+    <span class="sb-stat"><span class="sb-lbl">W:</span>{state.wins}</span>
     {#if state.streak > 0}
       <span class="sb-stat sb-streak">{state.streak}</span>
     {/if}
@@ -105,7 +105,8 @@
     display: flex;
     align-items: center;
     gap: var(--sc-sp-1);
-    padding: 2px var(--sc-sp-1_5);
+    padding: var(--sc-sp-1) var(--sc-sp-2);
+    min-height: 24px;
     border-radius: var(--sc-radius-sm);
     border: 1px solid var(--sc-line-soft);
     background: transparent;
@@ -120,6 +121,10 @@
     background: var(--sc-accent-bg-subtle);
     border-color: var(--sc-line);
   }
+  .sb-badge:active {
+    background: var(--sc-accent-bg);
+    transform: scale(0.96);
+  }
 
   .sb-dot {
     width: 4px;
@@ -130,8 +135,12 @@
   .dot-warn { background: var(--sc-warn); box-shadow: 0 0 4px var(--sc-warn); }
 
   .sb-stat {
-    color: var(--sc-text-2);
+    color: var(--sc-text-1);
     font-weight: 600;
+  }
+  .sb-lbl {
+    color: var(--sc-text-3);
+    font-weight: 400;
   }
   .sb-streak {
     color: var(--sc-accent);

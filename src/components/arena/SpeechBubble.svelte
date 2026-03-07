@@ -95,13 +95,13 @@
   .sb-icon { font-size: 12px; }
   .sb-name {
     font-family: var(--fd);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1.5px;
   }
   .sb-dir {
     font-family: var(--fd);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1px;
     padding: 1px 5px;
@@ -113,7 +113,7 @@
 
   .sb-conf {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     color: #888;
   }

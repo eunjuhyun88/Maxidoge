@@ -169,7 +169,7 @@
     line-height: 1.5;
   }
   .compact .empty-sub {
-    font-size: 8px;
+    font-size: 9px;
   }
 
   /* CTA */
@@ -189,7 +189,7 @@
     margin-top: 4px;
   }
   .compact .empty-cta {
-    font-size: 7px;
+    font-size: 9px;
     padding: 5px 14px;
     box-shadow: 2px 2px 0 #000;
   }

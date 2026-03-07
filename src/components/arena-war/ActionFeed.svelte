@@ -80,7 +80,7 @@
   }
 
   .feed-title {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1.5px;
     color: rgba(255,255,255,0.4);
@@ -88,7 +88,7 @@
   }
 
   .feed-count {
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(255,255,255,0.25);
     font-family: 'JetBrains Mono', monospace;
   }
@@ -129,7 +129,7 @@
   }
 
   .entry-tick {
-    font-size: 7px;
+    font-size: 9px;
     color: rgba(255,255,255,0.2);
     font-family: 'JetBrains Mono', monospace;
     flex-shrink: 0;

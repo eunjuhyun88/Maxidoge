@@ -158,6 +158,13 @@
     skipEnabled = true;
   }
 
+  function handleSkipSurfaceKeydown(event: KeyboardEvent) {
+    if (!skipEnabled || stage >= 5) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    skipToEnd();
+  }
+
   function animateLP() {
     displayedLP = 0;
     let step = 0;
@@ -221,13 +228,19 @@
   });
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="result-screen" onclick={() => { if (skipEnabled && stage < 5) skipToEnd(); }}>
+<div
+  class="result-screen"
+  role="button"
+  tabindex={skipEnabled && stage < 5 ? 0 : -1}
+  aria-disabled={!(skipEnabled && stage < 5)}
+  aria-label="Skip staged result reveal"
+  onclick={() => { if (skipEnabled && stage < 5) skipToEnd(); }}
+  onkeydown={handleSkipSurfaceKeydown}
+>
 
   {#if stage === 0}
     <!-- Pre-reveal black -->
-    <div class="pre-reveal" />
+    <div class="pre-reveal"></div>
   {/if}
 
   <!-- Stage 1: OUTCOME -->
@@ -278,7 +291,7 @@
         <div class="fbs-row">
           <span class="fbs-cat">DS</span>
           <div class="fbs-track">
-            <div class="fbs-fill ds" style:width="{dsWidth}%" />
+            <div class="fbs-fill ds" style:width="{dsWidth}%"></div>
           </div>
           <span class="fbs-val">{computedFBS.ds}</span>
           <span class="fbs-desc">{computedFBS.ds >= 70 ? 'Direction correct' : 'Direction missed'}</span>
@@ -286,7 +299,7 @@
         <div class="fbs-row">
           <span class="fbs-cat">RE</span>
           <div class="fbs-track">
-            <div class="fbs-fill re" style:width="{reWidth}%" />
+            <div class="fbs-fill re" style:width="{reWidth}%"></div>
           </div>
           <span class="fbs-val">{computedFBS.re}</span>
           <span class="fbs-desc">{computedFBS.re >= 70 ? 'Clean execution' : 'Execution needs work'}</span>
@@ -294,7 +307,7 @@
         <div class="fbs-row">
           <span class="fbs-cat">CI</span>
           <div class="fbs-track">
-            <div class="fbs-fill ci" style:width="{ciWidth}%" />
+            <div class="fbs-fill ci" style:width="{ciWidth}%"></div>
           </div>
           <span class="fbs-val">{computedFBS.ci}</span>
           <span class="fbs-desc">{computedFBS.ci >= 70 ? 'Confidence matched' : 'Over/under confident'}</span>
@@ -469,10 +482,10 @@
 
   /* ── Stage 2: LP Delta ── */
   .lp-header {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 4px;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
   }
   .lp-counter {
     font-size: 40px;
@@ -513,10 +526,10 @@
     margin-bottom: 4px;
   }
   .fbs-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 3px;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
   }
   .fbs-total {
     font-size: 24px;
@@ -525,7 +538,7 @@
   }
   .fbs-max {
     font-size: 12px;
-    color: rgba(240,237,228,0.2);
+    color: rgba(240,237,228,0.5);
   }
   .fbs-bars {
     display: flex;
@@ -569,17 +582,17 @@
     font-variant-numeric: tabular-nums;
   }
   .fbs-desc {
-    font-size: 8px;
-    color: rgba(240,237,228,0.25);
+    font-size: 9px;
+    color: rgba(240,237,228,0.5);
     width: 120px;
   }
 
   /* ── Stage 4: Agent Reports ── */
   .agents-header {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 4px;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
     margin-bottom: 4px;
   }
   .agent-reports {
@@ -625,7 +638,7 @@
     position: absolute;
     top: -4px;
     right: -4px;
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     color: #0A0908;
     background: #FFD700;
@@ -637,7 +650,7 @@
     position: absolute;
     bottom: -2px;
     right: -2px;
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     width: 14px;
     height: 14px;
@@ -671,12 +684,12 @@
   .report-stats {
     display: flex;
     gap: 10px;
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(240,237,228,0.4);
   }
   .report-speech {
-    font-size: 8px;
-    color: rgba(240,237,228,0.3);
+    font-size: 9px;
+    color: rgba(240,237,228,0.5);
     font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -713,10 +726,10 @@
     font-variant-numeric: tabular-nums;
   }
   .fstat-label {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 2px;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
   }
 
   .result-actions {
@@ -757,10 +770,10 @@
     position: absolute;
     bottom: 16px;
     right: 20px;
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 600;
     letter-spacing: 2px;
-    color: rgba(240,237,228,0.15);
+    color: rgba(240,237,228,0.5);
     animation: hintBlink 2s ease infinite;
   }
   @keyframes hintBlink {

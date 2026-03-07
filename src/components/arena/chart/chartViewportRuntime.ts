@@ -23,8 +23,21 @@ export interface CreateChartViewportRuntimeOptions {
     ma120Series: ISeriesApi<'Line'> | null;
     rsiSeries: ISeriesApi<'Line'> | null;
     volumeSeries: ISeriesApi<'Histogram'> | null;
+    bbUpperSeries: ISeriesApi<'Line'> | null;
+    bbMiddleSeries: ISeriesApi<'Line'> | null;
+    bbLowerSeries: ISeriesApi<'Line'> | null;
+    macdLineSeries: ISeriesApi<'Line'> | null;
+    macdSignalSeries: ISeriesApi<'Line'> | null;
+    macdHistSeries: ISeriesApi<'Histogram'> | null;
+    stochKSeries: ISeriesApi<'Line'> | null;
+    stochDSeries: ISeriesApi<'Line'> | null;
   };
-  getPaneIndexes: () => { volumePaneIndex: number | null; rsiPaneIndex: number | null };
+  getPaneIndexes: () => {
+    volumePaneIndex: number | null;
+    rsiPaneIndex: number | null;
+    macdPaneIndex: number | null;
+    stochPaneIndex: number | null;
+  };
   getIndicatorEnabled: () => Record<IndicatorKey, boolean>;
   getBarSpacing: () => number;
   setBarSpacing: (next: number) => void;
@@ -43,28 +56,34 @@ export function createChartViewportRuntime(
 
     try {
       const panes = chart.panes();
-      const { volumePaneIndex, rsiPaneIndex } = options.getPaneIndexes();
+      const { volumePaneIndex, rsiPaneIndex, macdPaneIndex, stochPaneIndex } = options.getPaneIndexes();
       const mainPane = panes?.[0];
       const volPane = volumePaneIndex !== null ? panes?.[volumePaneIndex] : null;
       const rsiPane = rsiPaneIndex !== null ? panes?.[rsiPaneIndex] : null;
-      if (!mainPane || !volPane || !rsiPane) return;
+      const macdPane = macdPaneIndex !== null ? panes?.[macdPaneIndex] : null;
+      const stochPane = stochPaneIndex !== null ? panes?.[stochPaneIndex] : null;
+      if (!mainPane) return;
 
       const indicatorEnabled = options.getIndicatorEnabled();
       const volOn = indicatorEnabled.vol;
       const rsiOn = indicatorEnabled.rsi;
+      const macdOn = indicatorEnabled.macd;
+      const stochOn = indicatorEnabled.stoch;
 
-      if (volOn && rsiOn) {
-        mainPane.setStretchFactor(0.82);
-        volPane.setStretchFactor(0.09);
-        rsiPane.setStretchFactor(0.09);
-      } else if (volOn || rsiOn) {
-        mainPane.setStretchFactor(0.9);
-        volPane.setStretchFactor(volOn ? 0.1 : 0.02);
-        rsiPane.setStretchFactor(rsiOn ? 0.1 : 0.02);
-      } else {
-        mainPane.setStretchFactor(0.96);
-        volPane.setStretchFactor(0.02);
-        rsiPane.setStretchFactor(0.02);
+      // Count active sub-panes (each gets ~9% share)
+      const subPanes: Array<{ pane: typeof volPane; on: boolean }> = [
+        { pane: volPane, on: volOn },
+        { pane: rsiPane, on: rsiOn },
+        { pane: macdPane, on: macdOn },
+        { pane: stochPane, on: stochOn },
+      ];
+      const activeCount = subPanes.filter((s) => s.on).length;
+      const subPaneShare = activeCount > 0 ? Math.min(0.10, 0.36 / activeCount) : 0;
+      const mainShare = Math.max(0.5, 1 - activeCount * subPaneShare);
+
+      mainPane.setStretchFactor(mainShare);
+      for (const { pane, on } of subPanes) {
+        if (pane) pane.setStretchFactor(on ? subPaneShare : 0.02);
       }
     } catch {}
 
@@ -82,6 +101,14 @@ export function createChartViewportRuntime(
       ma120Series,
       rsiSeries,
       volumeSeries,
+      bbUpperSeries,
+      bbMiddleSeries,
+      bbLowerSeries,
+      macdLineSeries,
+      macdSignalSeries,
+      macdHistSeries,
+      stochKSeries,
+      stochDSeries,
     } = options.getSeriesRefs();
 
     if (ma7Series) ma7Series.applyOptions({ visible: indicatorEnabled.ma7 });
@@ -92,6 +119,14 @@ export function createChartViewportRuntime(
     if (ma120Series) ma120Series.applyOptions({ visible: indicatorEnabled.ma120 });
     if (rsiSeries) rsiSeries.applyOptions({ visible: indicatorEnabled.rsi });
     if (volumeSeries) volumeSeries.applyOptions({ visible: indicatorEnabled.vol });
+    if (bbUpperSeries) bbUpperSeries.applyOptions({ visible: indicatorEnabled.bb });
+    if (bbMiddleSeries) bbMiddleSeries.applyOptions({ visible: indicatorEnabled.bb });
+    if (bbLowerSeries) bbLowerSeries.applyOptions({ visible: indicatorEnabled.bb });
+    if (macdLineSeries) macdLineSeries.applyOptions({ visible: indicatorEnabled.macd });
+    if (macdSignalSeries) macdSignalSeries.applyOptions({ visible: indicatorEnabled.macd });
+    if (macdHistSeries) macdHistSeries.applyOptions({ visible: indicatorEnabled.macd });
+    if (stochKSeries) stochKSeries.applyOptions({ visible: indicatorEnabled.stoch });
+    if (stochDSeries) stochDSeries.applyOptions({ visible: indicatorEnabled.stoch });
 
     applyPaneLayout();
   }

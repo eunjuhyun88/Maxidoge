@@ -14,8 +14,26 @@
     positionsError,
     positionsLastSyncedAt,
   } from '$lib/stores/positionStore';
+  import {
+    executeIntelShadowTradeApi,
+    fetchIntelEventsApi,
+    fetchIntelFlowApi,
+    fetchIntelNewsPageApi,
+    fetchIntelOnchainApi,
+    fetchIntelOpportunityScanApi,
+    fetchIntelPolicyApi,
+    fetchIntelShadowPolicyApi,
+    fetchIntelTrendingApi,
+  } from '$lib/api/intelApi';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import { onMount, onDestroy } from 'svelte';
+  import { createIntelPositionSyncRuntime } from '$lib/terminal/intel/intelPositionRuntime';
+  import {
+    mapIntelFlowPayloadToRows,
+    mapIntelNewsRecordsToHeadlines,
+  } from '$lib/terminal/intel/intelFeedMappers';
+  import { normalizeIntelPolicyPayload } from '$lib/terminal/intel/intelPolicyMappers';
+  import { createUiStateSaveQueue, loadInitialIntelPanelState } from '$lib/terminal/intel/intelUiState';
   import {
     deriveIntelFeedOptions,
     deriveIntelHeadlineState,
@@ -24,15 +42,18 @@
     derivePolicyCardsForTab,
     normalizeFeedFilterForDensity,
     normalizeTrendTabForDensity,
-  } from './intelViewModel';
-  import {
-    formatRelativeTime,
-    apiErrorMessage,
-    shadowSourceLabel,
-    shadowExecuteLabel,
-  } from './intelHelpers';
+  } from '$lib/terminal/intel/intelViewModel';
+  import type {
+    TerminalChatConnectionStatus,
+    TerminalDensityMode,
+  } from '$lib/terminal/terminalTypes';
   import type {
     FeedFilter,
+    HeadlineSort,
+    IntelPanelTab,
+    LiveEventItem,
+    LiveFlowItem,
+    PolicySummary,
     PositionTradeRow,
     PositionMarketRow,
     HeadlineEx,
@@ -48,12 +69,9 @@
     PolicyDecision,
     ShadowDecision,
     ShadowRuntime,
-  } from './intelTypes';
+  } from '$lib/terminal/intel/intelTypes';
   import { getPairPrice } from '$lib/utils/price';
   import {
-    POSITIONS_MIN_REFRESH_MS,
-    POSITIONS_PENDING_POLL_MS,
-    POSITIONS_FULL_REFRESH_MS,
     DEMO_QUICK_TRADES,
     DEMO_GMX_POSITIONS,
     DEMO_POLYMARKET_POSITIONS,
@@ -63,7 +81,7 @@
     TREND_TAB_OPTIONS_ESSENTIAL,
     TREND_BASIS,
     TREND_BASIS_COMPACT,
-  } from './intelTypes';
+  } from '$lib/terminal/intel/intelTypes';
 
   // Sub-components
   import IntelChatSection from './intel/IntelChatSection.svelte';
@@ -79,8 +97,8 @@
     prioritizeChat?: boolean;
     chatFocusKey?: number;
     chatTradeReady?: boolean;
-    chatConnectionStatus?: 'connected' | 'degraded' | 'disconnected';
-    densityMode?: 'essential' | 'pro';
+    chatConnectionStatus?: TerminalChatConnectionStatus;
+    densityMode?: TerminalDensityMode;
     onSendChat?: (detail: { text: string }) => void;
     onGoToTrade?: () => void;
     onCollapse?: () => void;
@@ -99,27 +117,20 @@
   }: Props = $props();
 
   // ═══ Tab state ═══
-  let activeTab: 'chat' | 'feed' | 'positions' = $state('chat');
+  let activeTab: IntelPanelTab = $state('chat');
   let feedFilter: FeedFilter = $state('trending');
   let tabCollapsed = $state(false);
-  let _uiStateSaveTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // ═══ Position sync ═══
-  let _positionsPollTimer: ReturnType<typeof setInterval> | null = null;
-  let _positionsRefreshTimer: ReturnType<typeof setInterval> | null = null;
-  let _positionsLastRefreshAt = 0;
-  let _positionVisibilityListener: (() => void) | null = null;
 
   // ═══ Headlines ═══
   let liveHeadlines = $state<HeadlineEx[]>([]);
   let headlineOffset = $state(0);
   let headlineHasMore = $state(true);
   let headlineLoading = $state(false);
-  let headlineSortBy = $state<'importance' | 'time'>('importance');
+  let headlineSortBy = $state<HeadlineSort>('importance');
 
   // ═══ Events & Flows ═══
-  let liveEvents = $state<Array<{ id: string; tag: string; level: string; text: string; source: string; createdAt: number }>>([]);
-  let liveFlows = $state<Array<{ id: string; label: string; addr: string; amt: string; isBuy: boolean; source?: string }>>([]);
+  let liveEvents = $state<LiveEventItem[]>([]);
+  let liveFlows = $state<LiveFlowItem[]>([]);
   let dataLoaded = $state({ headlines: false, events: false, flow: false, trending: false });
 
   // ═══ Onchain ═══
@@ -153,7 +164,7 @@
   let policyLoading = $state(false);
   let policyLoaded = $state(false);
   let policyUpdatedAt = $state(0);
-  let policySummary = $state<{ pair: string; timeframe: string; domainsUsed: string[]; avgHelpfulness: number } | null>(null);
+  let policySummary = $state<PolicySummary | null>(null);
   let shadowDecision = $state<ShadowDecision | null>(null);
   let shadowRuntime = $state<ShadowRuntime | null>(null);
   let shadowExecutionEnabled = $state(false);
@@ -196,6 +207,12 @@
   let displayHeadlines = $state<HeadlineEx[]>([]);
   let visibleHeadlines = $state<HeadlineEx[]>([]);
   let policyCardsForTab = $state<PolicyCard[]>([]);
+  const uiStateSaveQueue = createUiStateSaveQueue((partial) => updateUiStateApi(partial));
+  const positionSyncRuntime = createIntelPositionSyncRuntime({
+    getActiveTab: () => activeTab,
+    hydratePositions,
+    pollPendingPositions,
+  });
 
   // ═══ Derived state ═══
   $effect(() => {
@@ -299,7 +316,7 @@
   });
 
   // Auto-sync positions on tab switch
-  let _prevActiveTab = $state<'chat' | 'feed' | 'positions'>('chat');
+  let _prevActiveTab = $state<IntelPanelTab>('chat');
   $effect(() => {
     if (activeTab === 'positions' && _prevActiveTab !== 'positions') {
       void syncPositions(true);
@@ -308,7 +325,7 @@
   });
 
   // ═══ Tab keyboard navigation (roving tabindex) ═══
-  const TAB_ORDER: Array<'chat' | 'feed' | 'positions'> = ['chat', 'feed', 'positions'];
+  const TAB_ORDER: IntelPanelTab[] = ['chat', 'feed', 'positions'];
   function handleTabKeydown(e: KeyboardEvent) {
     const idx = TAB_ORDER.indexOf(activeTab);
     let next = idx;
@@ -325,7 +342,7 @@
   }
 
   // ═══ Tab actions ═══
-  function setTab(tab: 'chat' | 'feed' | 'positions') {
+  function setTab(tab: IntelPanelTab) {
     if (activeTab === tab) {
       tabCollapsed = !tabCollapsed;
     } else {
@@ -347,32 +364,16 @@
   }
 
   function queueUiStateSave(partial: Record<string, unknown>) {
-    if (_uiStateSaveTimer) clearTimeout(_uiStateSaveTimer);
-    _uiStateSaveTimer = setTimeout(() => void updateUiStateApi(partial), 260);
+    uiStateSaveQueue.queue(partial);
   }
 
   // ═══ Position sync ═══
   async function syncPositions(force = false) {
-    const now = Date.now();
-    if (!force && now - _positionsLastRefreshAt < POSITIONS_MIN_REFRESH_MS) return;
-    _positionsLastRefreshAt = now;
-    await hydratePositions();
-    await pollPendingPositions();
+    await positionSyncRuntime.syncPositions(force);
   }
 
   function startPositionSyncLoop() {
-    if (_positionsPollTimer) clearInterval(_positionsPollTimer);
-    if (_positionsRefreshTimer) clearInterval(_positionsRefreshTimer);
-    _positionsPollTimer = setInterval(() => {
-      if (activeTab !== 'positions') return;
-      if (typeof document !== 'undefined' && document.hidden) return;
-      void pollPendingPositions();
-    }, POSITIONS_PENDING_POLL_MS);
-    _positionsRefreshTimer = setInterval(() => {
-      if (activeTab !== 'positions') return;
-      if (typeof document !== 'undefined' && document.hidden) return;
-      void syncPositions(true);
-    }, POSITIONS_FULL_REFRESH_MS);
+    positionSyncRuntime.start();
   }
 
   function handleClosePos(id: string) {
@@ -386,10 +387,8 @@
   async function fetchOnchainData() {
     try {
       onchainLoading = !onchainData;
-      const res = await fetch('/api/market/alerts/onchain', { signal: AbortSignal.timeout(12000) });
-      if (!res.ok) return;
-      const json = await res.json();
-      if (json?.ok && json?.data) onchainData = json.data;
+      const nextOnchainData = await fetchIntelOnchainApi();
+      if (nextOnchainData) onchainData = nextOnchainData;
     } catch { /* silent */ }
     onchainLoading = false;
   }
@@ -400,26 +399,14 @@
     try {
       const token = ($gameState.pair || 'BTC/USDT').split('/')[0];
       const offset = append ? headlineOffset : 0;
-      const res = await fetch(`/api/market/news?limit=20&offset=${offset}&token=${encodeURIComponent(token)}&sort=${headlineSortBy}&interval=1m`);
-      const json = await res.json();
-      if (json.ok && json.data?.records?.length > 0) {
-        const newItems: HeadlineEx[] = json.data.records.map((r: any) => ({
-          icon: r.sentiment === 'bullish' ? '📈' : r.sentiment === 'bearish' ? '📉' : '📊',
-          time: formatRelativeTime(r.publishedAt),
-          text: r.title || r.summary,
-          bull: r.sentiment === 'bullish',
-          link: r.link || '',
-          interactions: r.interactions || 0,
-          importance: r.importance || 0,
-          network: r.network || 'rss',
-          creator: r.creator || r.source || '',
-        }));
-        liveHeadlines = append ? [...liveHeadlines, ...newItems] : newItems;
-        headlineOffset = (json.data.offset ?? 0) + newItems.length;
-        headlineHasMore = json.data.hasMore ?? false;
-        dataLoaded.headlines = true;
-        dataLoaded = dataLoaded;
-      }
+      const page = await fetchIntelNewsPageApi({ token, offset, sort: headlineSortBy });
+      if (!page) return;
+      const newItems = mapIntelNewsRecordsToHeadlines(page.records);
+      liveHeadlines = append ? [...liveHeadlines, ...newItems] : newItems;
+      headlineOffset = (page.offset ?? 0) + newItems.length;
+      headlineHasMore = page.hasMore ?? false;
+      dataLoaded.headlines = true;
+      dataLoaded = dataLoaded;
     } catch { console.warn('[IntelPanel] Headlines API unavailable'); }
     finally { headlineLoading = false; }
   }
@@ -436,18 +423,12 @@
   }
 
   function applyPolicyPayload(raw: any) {
-    const panels = raw?.panels ?? {};
-    policyPanels = {
-      headlines: Array.isArray(panels.headlines) ? panels.headlines : [],
-      events: Array.isArray(panels.events) ? panels.events : [],
-      flow: Array.isArray(panels.flow) ? panels.flow : [],
-      trending: Array.isArray(panels.trending) ? panels.trending : [],
-      picks: Array.isArray(panels.picks) ? panels.picks : [],
-    };
-    policyDecision = raw?.decision ?? null;
-    policySummary = raw?.summary ?? null;
-    policyUpdatedAt = Number(raw?.generatedAt ?? Date.now());
-    policyLoaded = true;
+    const normalized = normalizeIntelPolicyPayload(raw);
+    policyPanels = normalized.policyPanels;
+    policyDecision = normalized.policyDecision;
+    policySummary = normalized.policySummary;
+    policyUpdatedAt = normalized.policyUpdatedAt;
+    policyLoaded = normalized.policyLoaded;
   }
 
   async function fetchIntelPolicy() {
@@ -457,23 +438,19 @@
     try {
       const pair = $gameState.pair || 'BTC/USDT';
       const timeframe = $gameState.timeframe || '4h';
-      const qs = `pair=${encodeURIComponent(pair)}&timeframe=${encodeURIComponent(timeframe)}`;
-      const shadowRes = await fetch(`/api/terminal/intel-agent-shadow?${qs}`, { signal: AbortSignal.timeout(12000) });
-      if (shadowRes.ok) {
-        const shadowJson = await shadowRes.json();
-        if (shadowJson?.ok && shadowJson?.data?.policy) {
-          applyPolicyPayload(shadowJson.data.policy);
-          shadowDecision = shadowJson.data.shadow ?? null;
-          shadowRuntime = shadowJson.data.llm ?? null;
-          shadowExecutionEnabled = Boolean(shadowJson.data.execution?.enabled);
-          shadowLoading = false;
-          return;
-        }
+      const shadowPayload = await fetchIntelShadowPolicyApi(pair, timeframe);
+      if (shadowPayload?.policy) {
+        applyPolicyPayload(shadowPayload.policy);
+        shadowDecision = shadowPayload.shadow ?? null;
+        shadowRuntime = shadowPayload.llm ?? null;
+        shadowExecutionEnabled = shadowPayload.executionEnabled;
+        shadowLoading = false;
+        return;
       }
-      const res = await fetch(`/api/terminal/intel-policy?${qs}`, { signal: AbortSignal.timeout(12000) });
-      const json = await res.json();
-      if (json?.ok && json?.data) {
-        applyPolicyPayload(json.data);
+
+      const policyPayload = await fetchIntelPolicyApi(pair, timeframe);
+      if (policyPayload) {
+        applyPolicyPayload(policyPayload);
         shadowDecision = null;
         shadowRuntime = null;
         shadowExecutionEnabled = false;
@@ -499,23 +476,20 @@
       if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
         throw new Error('현재가를 확인할 수 없습니다. 차트 로딩 후 다시 시도하세요.');
       }
-      const response = await fetch('/api/terminal/intel-agent-shadow/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pair, timeframe, currentPrice, entry: currentPrice, refresh: true }),
-        signal: AbortSignal.timeout(15000),
+      const payload = await executeIntelShadowTradeApi({
+        pair,
+        timeframe,
+        currentPrice,
+        entry: currentPrice,
+        refresh: true,
       });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload?.ok) {
-        throw new Error(apiErrorMessage(payload, `실행 실패 (${response.status})`));
-      }
       await hydrateQuickTrades(true);
       const dir = String(payload?.data?.dir ?? '').toUpperCase();
       shadowExecMessage = `${dir || 'TRADE'} 실행 완료 · ${pair} @ ${currentPrice.toLocaleString()}`;
       shadowExecError = '';
       await fetchIntelPolicy();
-    } catch (error: any) {
-      shadowExecError = typeof error?.message === 'string' ? error.message : 'Shadow 실행 중 오류가 발생했습니다.';
+    } catch (error: unknown) {
+      shadowExecError = error instanceof Error ? error.message : 'Shadow 실행 중 오류가 발생했습니다.';
       shadowExecMessage = '';
     } finally { shadowExecLoading = false; }
   }
@@ -523,10 +497,9 @@
   async function fetchLiveEvents() {
     try {
       const pair = $gameState.pair || 'BTC/USDT';
-      const res = await fetch(`/api/market/events?pair=${encodeURIComponent(pair)}`);
-      const json = await res.json();
-      if (json.ok && json.data?.records?.length > 0) {
-        liveEvents = json.data.records;
+      const events = await fetchIntelEventsApi(pair);
+      if (events && events.length > 0) {
+        liveEvents = events;
         dataLoaded.events = true;
         dataLoaded = dataLoaded;
       }
@@ -536,41 +509,13 @@
   async function fetchLiveFlow() {
     try {
       const pair = $gameState.pair || 'BTC/USDT';
-      const res = await fetch(`/api/market/flow?pair=${encodeURIComponent(pair)}`);
-      const json = await res.json();
-      if (json.ok && json.data) {
-        const snap = json.data.snapshot || {};
-        const flows: typeof liveFlows = [];
-        if (snap.funding != null) {
-          flows.push({ id: 'funding', label: `Funding Rate ${snap.funding > 0 ? '↑' : '↓'}`, addr: json.data.pair, amt: `${(snap.funding * 100).toFixed(4)}%`, isBuy: snap.funding < 0, source: 'COINALYZE' });
-        }
-        if (snap.lsRatio != null) {
-          flows.push({ id: 'ls-ratio', label: 'Long / Short Ratio', addr: json.data.pair, amt: `${Number(snap.lsRatio).toFixed(2)}`, isBuy: Number(snap.lsRatio) < 1, source: 'COINALYZE' });
-        }
-        if (snap.liqLong24h || snap.liqShort24h) {
-          flows.push({ id: 'liq-long', label: '↙ Liquidations LONG 24h', addr: json.data.pair, amt: `$${Math.round(snap.liqLong24h || 0).toLocaleString()}`, isBuy: false, source: 'COINALYZE' });
-          flows.push({ id: 'liq-short', label: '↗ Liquidations SHORT 24h', addr: json.data.pair, amt: `$${Math.round(snap.liqShort24h || 0).toLocaleString()}`, isBuy: true, source: 'COINALYZE' });
-        }
-        if (snap.quoteVolume24h) {
-          flows.push({ id: 'volume', label: '↔ 24h Quote Volume', addr: json.data.pair, amt: `$${(snap.quoteVolume24h / 1e9).toFixed(2)}B`, isBuy: (snap.priceChangePct || 0) >= 0, source: 'BINANCE' });
-        }
-        if (snap.cmcMarketCap) {
-          flows.push({ id: 'cmc-mcap', label: 'Global Market Cap', addr: json.data.pair, amt: `$${(Number(snap.cmcMarketCap) / 1e9).toFixed(1)}B`, isBuy: (snap.cmcChange24hPct || 0) >= 0, source: 'CMC' });
-        }
-        if (snap.cmcChange24hPct != null) {
-          const chg = Number(snap.cmcChange24hPct);
-          flows.push({ id: 'cmc-change', label: 'CMC 24h Change', addr: json.data.pair, amt: `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`, isBuy: chg >= 0, source: 'CMC' });
-        }
-        if (flows.length === 0 && Array.isArray(json.data.records) && json.data.records.length > 0) {
-          for (const rec of json.data.records.slice(0, 3)) {
-            flows.push({ id: `record-${rec.id}`, label: rec.agent || 'FLOW', addr: rec.pair || json.data.pair, amt: rec.text || '', isBuy: rec.vote === 'LONG', source: rec.source || 'UNKNOWN' });
-          }
-        }
-        if (flows.length > 0) {
-          liveFlows = flows;
-          dataLoaded.flow = true;
-          dataLoaded = dataLoaded;
-        }
+      const flowPayload = await fetchIntelFlowApi(pair);
+      if (!flowPayload) return;
+      const flows = mapIntelFlowPayloadToRows(flowPayload);
+      if (flows.length > 0) {
+        liveFlows = flows;
+        dataLoaded.flow = true;
+        dataLoaded = dataLoaded;
       }
     } catch { console.warn('[IntelPanel] Flow API unavailable'); }
   }
@@ -579,14 +524,13 @@
     if (dataLoaded.trending || trendLoading) return;
     trendLoading = true;
     try {
-      const res = await fetch('/api/market/trending?section=all&limit=15', { signal: AbortSignal.timeout(10000) });
-      const json = await res.json();
-      if (json.ok && json.data) {
-        trendingCoins = json.data.trending ?? [];
-        trendGainers = json.data.gainers ?? [];
-        trendLosers = json.data.losers ?? [];
-        trendDexHot = json.data.dexHot ?? [];
-        trendUpdatedAt = Number(json.data.updatedAt ?? Date.now());
+      const trendingPayload = await fetchIntelTrendingApi(15);
+      if (trendingPayload) {
+        trendingCoins = trendingPayload.trending ?? [];
+        trendGainers = trendingPayload.gainers ?? [];
+        trendLosers = trendingPayload.losers ?? [];
+        trendDexHot = trendingPayload.dexHot ?? [];
+        trendUpdatedAt = Number(trendingPayload.updatedAt ?? Date.now());
         dataLoaded.trending = true;
         dataLoaded = dataLoaded;
       }
@@ -598,13 +542,12 @@
     if (picksLoaded || picksLoading) return;
     picksLoading = true;
     try {
-      const res = await fetch('/api/terminal/opportunity-scan?limit=15', { signal: AbortSignal.timeout(15000) });
-      const json = await res.json();
-      if (json.ok && json.data) {
-        topPicks = json.data.coins ?? [];
-        opAlerts = json.data.alerts ?? [];
-        macroRegime = json.data.macroBackdrop?.regime ?? '';
-        picksScanTime = json.data.scanDurationMs ?? 0;
+      const opportunityPayload = await fetchIntelOpportunityScanApi(15);
+      if (opportunityPayload) {
+        topPicks = opportunityPayload.coins ?? [];
+        opAlerts = opportunityPayload.alerts ?? [];
+        macroRegime = opportunityPayload.macroBackdrop?.regime ?? '';
+        picksScanTime = opportunityPayload.scanDurationMs ?? 0;
         picksLoaded = true;
       }
     } catch { console.warn('[IntelPanel] Opportunity scan unavailable'); }
@@ -639,27 +582,12 @@
     void syncPositions(true);
     startPositionSyncLoop();
 
-    const handleVisibility = () => {
-      if (typeof document !== 'undefined' && !document.hidden && activeTab === 'positions') {
-        void syncPositions(true);
-      }
-    };
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibility);
-      _positionVisibilityListener = handleVisibility;
-    }
-
     void (async () => {
-      const ui = await fetchUiStateApi();
-      if (prioritizeChat) {
-        activeTab = 'chat';
-        tabCollapsed = false;
-      } else {
-        if (ui?.terminalActiveTab && ['chat', 'feed', 'positions'].includes(ui.terminalActiveTab)) {
-          activeTab = ui.terminalActiveTab as typeof activeTab;
-        }
-        if ((activeTab as string) === 'intel') activeTab = 'chat';
-      }
+      activeTab = await loadInitialIntelPanelState({
+        prioritizeChat,
+        fetchUiState: fetchUiStateApi,
+      });
+      tabCollapsed = false;
     })();
 
     void Promise.allSettled([
@@ -678,13 +606,9 @@
 
   onDestroy(() => {
     if (_pairRefetchTimer) clearTimeout(_pairRefetchTimer);
-    if (_uiStateSaveTimer) clearTimeout(_uiStateSaveTimer);
-    if (_positionsPollTimer) clearInterval(_positionsPollTimer);
-    if (_positionsRefreshTimer) clearInterval(_positionsRefreshTimer);
     if (_onchainTimer) clearInterval(_onchainTimer);
-    if (_positionVisibilityListener && typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', _positionVisibilityListener);
-    }
+    uiStateSaveQueue.dispose();
+    positionSyncRuntime.stop();
   });
 </script>
 

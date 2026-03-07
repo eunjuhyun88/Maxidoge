@@ -208,10 +208,14 @@
   }
 
   // Kill feed stagger
+  let killFeedTimers: ReturnType<typeof setTimeout>[] = [];
   function staggerKillFeed() {
+    killFeedTimers.forEach(t => clearTimeout(t));
+    killFeedTimers = [];
     killFeedVisible = recent.map(() => false);
     recent.forEach((_, i) => {
-      setTimeout(() => { killFeedVisible[i] = true; killFeedVisible = [...killFeedVisible]; }, 300 + i * 180);
+      const t = setTimeout(() => { killFeedVisible[i] = true; killFeedVisible = [...killFeedVisible]; }, 300 + i * 180);
+      killFeedTimers.push(t);
     });
   }
 
@@ -230,7 +234,7 @@
     animateScanner();
     setTimeout(triggerGlitch, 600);
     const glitchIv = setInterval(triggerGlitch, 8000);
-    return () => { clearInterval(glitchIv); cancelAnimationFrame(scannerRaf); };
+    return () => { clearInterval(glitchIv); cancelAnimationFrame(scannerRaf); killFeedTimers.forEach(t => clearTimeout(t)); };
   });
 </script>
 

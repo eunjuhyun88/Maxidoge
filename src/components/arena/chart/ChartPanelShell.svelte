@@ -1,123 +1,7 @@
 <script lang="ts">
   import ChartAgentSurface from './ChartAgentSurface.svelte';
   import ChartHeaderBar from './ChartHeaderBar.svelte';
-  import type {
-    AgentTradeSetup,
-    DrawingMode,
-    IndicatorKey,
-    TradePlanDraft,
-  } from '$lib/chart/chartTypes';
-  import type { ChartTheme } from '../ChartTheme';
-
-  type AgentAnnotation = {
-    id: string;
-    icon: string;
-    name: string;
-    color: string;
-    label: string;
-    detail: string;
-    yPercent: number;
-    xPercent: number;
-    type: 'ob' | 'funding' | 'whale' | 'signal';
-  };
-
-  interface Props {
-    chartMode: 'agent' | 'trading';
-    pair: string;
-    timeframe: string;
-    pairBaseLabel: string;
-    pairQuoteLabel: string;
-    livePrice: number;
-    priceChange24h: number;
-    low24h: number;
-    high24h: number;
-    quoteVolume24h: number;
-    symbol: string;
-    error?: string;
-    isLoading?: boolean;
-    autoScaleY?: boolean;
-    isTvLikePreset?: boolean;
-    advancedMode?: boolean;
-    enableTradeLineEntry?: boolean;
-    chatFirstMode?: boolean;
-    chatTradeReady?: boolean;
-    chatTradeDir?: 'LONG' | 'SHORT';
-    indicatorStripState?: 'expanded' | 'collapsed' | 'hidden';
-    chartVisualMode: 'focus' | 'full';
-    drawingMode: DrawingMode;
-    drawingsVisible?: boolean;
-    drawingCount?: number;
-    hasActiveTradeSetup?: boolean;
-    klineCount?: number;
-    showIndicatorLegend?: boolean;
-    indicatorEnabled: Record<IndicatorKey, boolean>;
-    chartTheme: ChartTheme;
-    ma7Val: number;
-    ma20Val: number;
-    ma25Val: number;
-    ma60Val: number;
-    ma99Val: number;
-    ma120Val: number;
-    rsiVal: number;
-    latestVolume: number;
-    activeTradeSetup?: AgentTradeSetup | null;
-    hasScanned?: boolean;
-    chartNotice?: string;
-    showPosition?: boolean;
-    posEntry?: number | null;
-    posTp?: number | null;
-    posSl?: number | null;
-    posDir?: string;
-    hoverLine?: 'tp' | 'sl' | 'entry' | null;
-    isDragging?: 'tp' | 'sl' | 'entry' | null;
-    pendingTradePlan: TradePlanDraft | null;
-    agentAnnotations?: AgentAnnotation[];
-    tvLoading?: boolean;
-    tvFallbackTried?: boolean;
-    tvError?: string;
-    tvSafeMode?: boolean;
-    onChangePair?: (pair: string) => void;
-    onChangeTimeframe?: (timeframe: string) => void;
-    onSetChartMode?: (mode: 'agent' | 'trading') => void;
-    onSetDrawingMode?: (mode: DrawingMode) => void;
-    onToggleDrawingsVisible?: () => void;
-    onClearAllDrawings?: () => void;
-    onRequestChatAssist?: () => void;
-    onRequestAgentScan?: () => void;
-    onForcePatternScan?: () => void;
-    onPublishHeaderCommunitySignal?: (dir: 'LONG' | 'SHORT') => void;
-    onRestoreIndicatorStrip?: () => void;
-    onSetChartVisualMode?: (mode: 'focus' | 'full') => void;
-    onToggleIndicator?: (key: IndicatorKey) => void;
-    onToggleIndicatorLegend?: () => void;
-    onSetIndicatorStripState?: (state: 'expanded' | 'collapsed' | 'hidden') => void;
-    onAgentSurfaceContainerReady?: (container: HTMLDivElement | null) => void;
-    onChartMouseDown?: (event: MouseEvent) => void;
-    onChartMouseMove?: (event: MouseEvent) => void;
-    onChartMouseUp?: (event: MouseEvent) => void;
-    onChartWheel?: (event: WheelEvent) => void;
-    onZoomOut?: () => void;
-    onZoomIn?: () => void;
-    onFitRange?: () => void;
-    onToggleAutoScaleY?: () => void;
-    onResetScale?: () => void;
-    onCloseActiveTradeSetup?: () => void;
-    onExecuteActiveTrade?: () => void;
-    onPublishTradeSignal?: () => void;
-    onCancelDrawing?: () => void;
-    onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
-    onDrawingMouseDown?: (event: MouseEvent) => void;
-    onDrawingMouseMove?: (event: MouseEvent) => void;
-    onDrawingMouseUp?: (event: MouseEvent) => void;
-    onCancelTradePlan?: () => void;
-    onOpenTradeFromPlan?: () => void;
-    onSetTradePlanRatio?: (nextLongRatio: number) => void;
-    onRatioPointerDown?: (event: PointerEvent) => void;
-    onRatioTrackReady?: (element: HTMLButtonElement | null) => void;
-    onRetryTradingView?: () => void;
-    onSwitchAgentMode?: () => void;
-    onTradingViewContainerReady?: (container: HTMLDivElement | null) => void;
-  }
+  import type { ChartPanelShellProps } from '$lib/chart/chartPanelViewModel';
 
   let {
     chartMode,
@@ -212,10 +96,12 @@
     onSetTradePlanRatio = () => {},
     onRatioPointerDown = () => {},
     onRatioTrackReady = () => {},
+    onCancelCurrentAction = () => {},
+    onDeleteSelectedDrawing = () => {},
     onRetryTradingView = () => {},
     onSwitchAgentMode = () => {},
     onTradingViewContainerReady = () => {},
-  }: Props = $props();
+  }: ChartPanelShellProps = $props();
 
   let chartIndicatorStripModule = $state<Promise<typeof import('./ChartIndicatorStrip.svelte')> | null>(null);
   let chartTradingViewPaneModule = $state<Promise<typeof import('./ChartTradingViewPane.svelte')> | null>(null);
@@ -246,14 +132,11 @@
     {error}
     {isTvLikePreset}
     {advancedMode}
-    {enableTradeLineEntry}
     {chatFirstMode}
     {chatTradeReady}
     {chatTradeDir}
     {indicatorStripState}
     {drawingMode}
-    {drawingsVisible}
-    {drawingCount}
     {hasActiveTradeSetup}
     {klineCount}
     {ma7Val}
@@ -266,8 +149,6 @@
     onChangeTimeframe={onChangeTimeframe}
     onSetChartMode={onSetChartMode}
     onSetDrawingMode={onSetDrawingMode}
-    onToggleDrawingsVisible={onToggleDrawingsVisible}
-    onClearAllDrawings={onClearAllDrawings}
     onRequestChatAssist={onRequestChatAssist}
     onRequestAgentScan={onRequestAgentScan}
     onForcePatternScan={onForcePatternScan}
@@ -321,6 +202,8 @@
     {latestVolume}
     {activeTradeSetup}
     {drawingsVisible}
+    {drawingCount}
+    {enableTradeLineEntry}
     {hasScanned}
     {drawingMode}
     {chartNotice}
@@ -358,6 +241,11 @@
     onSetTradePlanRatio={onSetTradePlanRatio}
     onRatioPointerDown={onRatioPointerDown}
     onRatioTrackReady={onRatioTrackReady}
+    onCancelCurrentAction={onCancelCurrentAction}
+    onDeleteSelectedDrawing={onDeleteSelectedDrawing}
+    onSetDrawingMode={onSetDrawingMode}
+    onToggleDrawingsVisible={onToggleDrawingsVisible}
+    onClearAllDrawings={onClearAllDrawings}
   />
 
   {#if chartMode === 'trading' && chartTradingViewPaneModule}

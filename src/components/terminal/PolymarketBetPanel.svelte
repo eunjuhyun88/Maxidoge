@@ -157,8 +157,8 @@
       });
 
       step = 'done';
-    } catch (err: any) {
-      errorMsg = err?.message ?? '알 수 없는 오류';
+    } catch (err: unknown) {
+      errorMsg = err instanceof Error ? err.message : '알 수 없는 오류';
       step = 'error';
     }
   }
@@ -361,7 +361,7 @@
     padding: 10px 12px; color: #fff; font: 400 14px/1 var(--fm); outline: none;
   }
   .bet-field input:focus { border-color: var(--yel); }
-  .bet-field input::placeholder { color: rgba(255,255,255,.25); }
+  .bet-field input::placeholder { color: rgba(255,255,255,.5); }
 
   .quick-amounts { display: flex; gap: 4px; margin-top: 4px; }
   .qa-btn {

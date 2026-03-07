@@ -1,7 +1,7 @@
 <script lang="ts">
   import VerdictCard from '../VerdictCard.svelte';
-  import type { PolicyDecision, ShadowDecision, ShadowRuntime } from '../intelTypes';
-  import { shadowSourceLabel } from '../intelHelpers';
+  import type { PolicyDecision, ShadowDecision, ShadowRuntime } from '$lib/terminal/intel/intelTypes';
+  import { shadowSourceLabel } from '$lib/terminal/intel/intelHelpers';
   import { gameState } from '$lib/stores/gameState';
 
   interface ChatMessage {
@@ -49,6 +49,7 @@
   let chatInput = $state('');
   let chatEl: HTMLDivElement;
   let _isComposing = $state(false);
+  let chatCollapsed = $state(false);
 
   function sendChat() {
     if (!chatInput.trim()) return;
@@ -100,8 +101,15 @@
       >
         TRADE ON CHART
       </button>
+      <button
+        class="ac-collapse-btn"
+        onclick={() => chatCollapsed = !chatCollapsed}
+        title={chatCollapsed ? 'Expand chat' : 'Collapse chat'}
+      >
+        {chatCollapsed ? '▼' : '▲'}
+      </button>
     </div>
-    <div class="ac-msgs" bind:this={chatEl}>
+    <div class="ac-msgs" class:ac-msgs-collapsed={chatCollapsed} bind:this={chatEl}>
       {#each chatMessages as msg}
         {#if msg.isSystem}
           <div class="ac-sys">{msg.icon} {msg.text}</div>
@@ -165,7 +173,7 @@
     background: rgba(255, 255, 255, 0.06);
     color: rgba(255, 255, 255, 0.58);
     border-radius: 999px; padding: 3px 8px;
-    font-family: var(--fm); font-size: 8px; font-weight: 800;
+    font-family: var(--fm); font-size: 9px; font-weight: 800;
     letter-spacing: .65px; white-space: nowrap;
     cursor: not-allowed; transition: all .12s ease;
   }
@@ -181,6 +189,19 @@
   }
   .ac-trade-btn:disabled { opacity: 0.66; }
 
+  .ac-collapse-btn {
+    background: none; border: 1px solid rgba(255,255,255,.12);
+    border-radius: 4px; color: rgba(255,255,255,.4);
+    font-family: var(--fm); font-size: 9px; cursor: pointer;
+    padding: 2px 6px; transition: all .12s ease;
+    flex-shrink: 0; line-height: 1;
+  }
+  .ac-collapse-btn:hover {
+    border-color: rgba(255,255,255,.3);
+    color: rgba(255,255,255,.7);
+    background: rgba(255,255,255,.04);
+  }
+
   .ac-msgs {
     flex: 1; overflow-y: auto; display: flex; flex-direction: column;
     gap: 8px; padding: 8px; min-height: 0;
@@ -189,6 +210,15 @@
   }
   .ac-msgs::-webkit-scrollbar { width: 2px; }
   .ac-msgs::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  .ac-msgs-collapsed {
+    flex: 0 0 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    opacity: 0;
+    transition: all 150ms ease;
+  }
 
   .ac-sys {
     font-family: var(--fm); font-size: 10px; color: rgba(255,255,255,.58);

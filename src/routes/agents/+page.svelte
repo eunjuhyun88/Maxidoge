@@ -11,9 +11,21 @@
 
   let stats = $derived($agentStats);
   let selectedAgent = $state<AgentId | null>(null);
+  let sortBy = $state<'default' | 'lv' | 'win' | 'exp'>('default');
 
-  // Get all agents in display order
-  const agentOrder: AgentId[] = AGENT_IDS as unknown as AgentId[];
+  // Get all agents in display order, with optional sorting
+  const agentOrder: AgentId[] = $derived.by(() => {
+    const base = AGENT_IDS as unknown as AgentId[];
+    if (sortBy === 'default') return base;
+    return [...base].sort((a, b) => {
+      const sa = stats[a];
+      const sb = stats[b];
+      if (sortBy === 'lv') return (sb?.level ?? 1) - (sa?.level ?? 1);
+      if (sortBy === 'win') return (sb ? getWinRate(sb) : 0) - (sa ? getWinRate(sa) : 0);
+      if (sortBy === 'exp') return (sb?.learning?.totalRAGEntries ?? 0) - (sa?.learning?.totalRAGEntries ?? 0);
+      return 0;
+    });
+  });
 
   // Helper to safely get learning data
   function getLearning(agentId: string): AgentLearning {
@@ -37,6 +49,12 @@
   <div class="page-header">
     <h1>AGENT COLLECTION</h1>
     <p class="subtitle">AI 에이전트 학습 현황 & 성장 기록</p>
+    <div class="sort-strip">
+      <span class="sort-label">SORT</span>
+      {#each [{ id: 'default', label: 'DEFAULT' }, { id: 'lv', label: 'LV' }, { id: 'win', label: 'WIN' }, { id: 'exp', label: 'EXP' }] as opt}
+        <button class="sort-btn" class:active={sortBy === opt.id} onclick={() => sortBy = opt.id as typeof sortBy}>{opt.label}</button>
+      {/each}
+    </div>
   </div>
 
   <!-- Agent Grid -->
@@ -117,6 +135,7 @@
     {@const typeBadge = getTypeBadge(char.type)}
 
     <div class="detail-panel">
+      <button class="detail-close" onclick={() => selectedAgent = null} aria-label="Close">✕</button>
       <PokemonFrame variant="accent" padding="16px">
         <div class="detail-header">
           <div class="detail-avatar" style:background={char.gradientCSS}>
@@ -284,18 +303,19 @@
 <style>
   .agents-page {
     width: 100%;
-    min-height: 100vh;
+    height: 100%;
+    overflow-y: auto;
     background: var(--arena-bg-0, #07130d);
     color: var(--arena-text-0, #e0f0e8);
     font-family: 'Space Grotesk', 'Pretendard', sans-serif;
-    padding: 24px 16px;
+    padding: var(--sc-sp-6) var(--sc-sp-4) calc(var(--sc-sp-4) + var(--sc-bottom-bar-h));
     max-width: 900px;
     margin: 0 auto;
   }
 
   .page-header {
     text-align: center;
-    margin-bottom: 24px;
+    margin-bottom: var(--sc-sp-6);
   }
 
   .page-header h1 {
@@ -318,8 +338,8 @@
   .agent-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 10px;
-    margin-bottom: 20px;
+    gap: var(--sc-sp-3);
+    margin-bottom: var(--sc-sp-5);
   }
 
   .agent-card {
@@ -343,8 +363,8 @@
   .card-top {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
+    gap: var(--sc-sp-3);
+    margin-bottom: var(--sc-sp-2);
   }
 
   .avatar {
@@ -370,7 +390,7 @@
     position: absolute;
     bottom: -4px;
     right: -4px;
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     color: #111;
     padding: 1px 3px;
@@ -456,7 +476,30 @@
 
   /* ── Detail Panel ── */
   .detail-panel {
+    position: relative;
     margin-top: 12px;
+  }
+  .detail-close {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 2;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 6px;
+    background: rgba(0,0,0,.4);
+    color: var(--sc-text-2);
+    font-size: var(--sc-fs-sm, 12px);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .detail-close:hover {
+    background: var(--sc-accent-bg, rgba(232,150,125,.15));
+    color: var(--sc-accent, #E8967D);
   }
 
   .detail-header {
@@ -742,5 +785,93 @@
     color: #48d868;
     font-weight: 900;
     letter-spacing: 0.5px;
+  }
+
+  /* ── Sort Strip ── */
+  .sort-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 10px;
+  }
+
+  .sort-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.5rem;
+    font-weight: 900;
+    color: var(--arena-text-2, #5a7d6e);
+    letter-spacing: 1px;
+    margin-right: 4px;
+  }
+
+  .sort-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    font-weight: 800;
+    color: var(--arena-text-2, #5a7d6e);
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    letter-spacing: 0.5px;
+  }
+
+  .sort-btn:hover {
+    border-color: rgba(255,255,255,0.2);
+    color: var(--arena-text-0, #e0f0e8);
+  }
+
+  .sort-btn.active {
+    background: rgba(232,150,125,0.15);
+    border-color: rgba(232,150,125,0.4);
+    color: var(--arena-accent, #e8967d);
+  }
+
+  /* ── Touch targets ── */
+  @media (pointer: coarse) {
+    .agent-card { min-height: 44px; }
+    .sort-btn { min-height: var(--sc-touch-sm, 36px); padding: 6px 12px; }
+  }
+
+  /* ── Tablet ≤768px ── */
+  @media (max-width: 768px) {
+    .agents-page { padding: 18px 12px; }
+    .page-header { margin-bottom: 16px; }
+    .page-header h1 { font-size: 1.5rem; letter-spacing: 3px; }
+    .agent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .detail-header { gap: 12px; margin-bottom: 12px; }
+    .detail-avatar { width: 52px; height: 52px; }
+    .detail-initial { font-size: 24px; }
+    .detail-section { margin-top: 12px; padding-top: 10px; }
+    .learning-stats { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  }
+
+  /* ── Small Mobile ≤480px ── */
+  @media (max-width: 480px) {
+    .agents-page { padding: 12px 8px; }
+    .page-header h1 { font-size: clamp(1.1rem, 5vw, 1.5rem); letter-spacing: 2px; }
+    .subtitle { font-size: 0.65rem; letter-spacing: 0.5px; }
+    .agent-grid { grid-template-columns: 1fr; gap: 6px; }
+    .avatar { width: 48px; height: 48px; }
+    .avatar-initial { font-size: 20px; }
+    .card-name { font-size: 0.85rem; }
+    .card-title { font-size: 0.6rem; }
+    .stats-row { gap: 3px; }
+    .stat-chip { padding: 4px; }
+    .stat-value { font-size: 0.75rem; }
+    .sort-strip { gap: 3px; }
+    .sort-btn { padding: 4px 8px; font-size: 0.5rem; }
+    .detail-header { gap: 10px; }
+    .detail-avatar { width: 44px; height: 44px; }
+    .detail-initial { font-size: 20px; }
+    .detail-info h2 { font-size: 0.95rem; }
+    .learning-stats { grid-template-columns: 1fr 1fr; gap: 5px; }
+    .bar-label { width: 55px; font-size: 0.5rem; }
+    .bar-value { font-size: 0.55rem; }
+    .signature-card { padding: 8px; }
+    .sig-name { font-size: 0.75rem; }
   }
 </style>

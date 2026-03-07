@@ -6,21 +6,20 @@
     ScanIntelDetail,
     SharedChartPanelProps,
     SharedIntelPanelProps,
-    TabletSplitResizeAxis,
+    TerminalChartRequestDetail,
     TerminalControlBarProps,
+    TerminalDensityMode,
     WarRoomHandle,
-  } from '../../routes/terminal/terminalTypes';
-  import WarRoom from './WarRoom.svelte';
-  import ChartPanel from '../arena/ChartPanel.svelte';
-  import VerdictBanner from './VerdictBanner.svelte';
+  } from '$lib/terminal/terminalTypes';
+  import { buildTerminalVerdictMeta } from '$lib/terminal/terminalViewModel';
+  import TerminalChartViewport from './TerminalChartViewport.svelte';
   import IntelPanel from './IntelPanel.svelte';
   import TerminalControlBar from './TerminalControlBar.svelte';
   import TerminalTicker from './TerminalTicker.svelte';
-
-  type ChartRequestDetail = { source?: string; pair?: string; timeframe?: string };
+  import TabletWarRoomDrawer from './TabletWarRoomDrawer.svelte';
 
   interface Props {
-    densityMode?: 'essential' | 'pro';
+    densityMode?: TerminalDensityMode;
     tabletLayoutStyle?: string;
     terminalControlBarProps: TerminalControlBarProps;
     sharedChartPanelProps: SharedChartPanelProps;
@@ -34,15 +33,16 @@
     onScanStart?: () => void;
     onScanComplete?: (detail: ScanIntelDetail) => void;
     onShowOnChart?: (detail: { signal: AgentSignal }) => void;
-    onChartScanRequest?: (detail: ChartRequestDetail) => void;
-    onChartChatRequest?: (detail: ChartRequestDetail) => void;
+    onChartScanRequest?: (detail: TerminalChartRequestDetail) => void;
+    onChartChatRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartCommunitySignal?: (detail: ChartCommunitySignal) => void;
     onClearTradeSetup?: () => void;
     onSendChat?: (detail: { text: string }) => void | Promise<void>;
     onGoToTrade?: () => void | Promise<void>;
-    onResizeSplitByWheel?: (axis: TabletSplitResizeAxis, event: WheelEvent) => void;
-    onStartSplitDrag?: (axis: TabletSplitResizeAxis, event: PointerEvent) => void;
-    onResetSplit?: (axis: TabletSplitResizeAxis) => void;
+    onResizeIntelByWheel?: (event: WheelEvent) => void;
+    onStartIntelDrag?: (event: PointerEvent) => void;
+    onResetIntelWidth?: () => void;
+    onShareToCommunity?: () => void;
   }
   let {
     densityMode = 'essential',
@@ -65,75 +65,64 @@
     onClearTradeSetup = () => {},
     onSendChat = () => {},
     onGoToTrade = () => {},
-    onResizeSplitByWheel = () => {},
-    onStartSplitDrag = () => {},
-    onResetSplit = () => {},
+    onResizeIntelByWheel = () => {},
+    onStartIntelDrag = () => {},
+    onResetIntelWidth = () => {},
+    onShareToCommunity = () => {},
   }: Props = $props();
+
+  // WarRoom drawer state (local to tablet layout)
+  let warRoomDrawerOpen = $state(false);
+
+  const verdictMeta = $derived(buildTerminalVerdictMeta(latestScan));
 </script>
 
 <div class="terminal-tablet" style={tabletLayoutStyle}>
-  <div class="tab-top">
-    <div class="tab-left">
-      <div class="tab-panel-resizable">
-        <div class="tab-panel-body">
-          <WarRoom
-            bind:this={warRoomRef}
-            {densityMode}
-            onScanStart={onScanStart}
-            onScanComplete={onScanComplete}
-            onShowOnChart={onShowOnChart}
-          />
-        </div>
-      </div>
-    </div>
+  <!-- ── Control bar row ── -->
+  <div class="tab-chart-rail">
+    <TerminalControlBar
+      {...terminalControlBarProps}
+      variant="inline"
+      showMarket={false}
+      showPrimaryHint={false}
+      verdictAgree={verdictMeta.agree}
+      verdictTime={verdictMeta.time}
+    />
+    <button class="share-to-community-btn" onclick={onShareToCommunity} title="커뮤니티에 공유">
+      📡 공유
+    </button>
+  </div>
+
+  <!-- ── Main: Chart | resizer | Intel ── -->
+  <div class="tab-main">
+    <TerminalChartViewport
+      bind:chartRef
+      shellClass="tab-chart-wrap"
+      areaClass="tab-panel-body tab-chart-area"
+      {sharedChartPanelProps}
+      showVerdictOverlay
+      {latestScan}
+      {terminalScanning}
+      onVerdictTap={() => { warRoomDrawerOpen = true; }}
+      onChartScanRequest={onChartScanRequest}
+      onChartChatRequest={onChartChatRequest}
+      onChartCommunitySignal={onChartCommunitySignal}
+      onClearTradeSetup={onClearTradeSetup}
+    />
+
     <button
       type="button"
       class="tab-layout-split tab-layout-split-v"
-      title="WAR ROOM / CHART 분할 조절: 스크롤/드래그/더블클릭 리셋"
-      aria-label="Resize tablet left and chart split"
-      onwheel={(event) => onResizeSplitByWheel('x', event)}
-      onpointerdown={(event) => onStartSplitDrag('x', event)}
-      ondblclick={() => onResetSplit('x')}
+      title="CHART / INTEL 너비 조절: 스크롤/드래그/더블클릭 리셋"
+      aria-label="Resize chart and intel split"
+      onwheel={(event) => onResizeIntelByWheel(event)}
+      onpointerdown={(event) => onStartIntelDrag(event)}
+      ondblclick={() => onResetIntelWidth()}
     >
       <span></span>
     </button>
-    <div class="tab-center">
-      <div class="tab-panel-resizable">
-        <div class="tab-chart-rail">
-          <TerminalControlBar
-            {...terminalControlBarProps}
-            variant="inline"
-            showMarket={false}
-            showPrimaryHint={false}
-          />
-        </div>
-        <VerdictBanner verdict={latestScan} scanning={terminalScanning} />
-        <div class="tab-panel-body tab-chart-area">
-          <ChartPanel
-            bind:this={chartRef}
-            {...sharedChartPanelProps}
-            onScanRequest={(detail) => onChartScanRequest(detail)}
-            onChatRequest={(detail) => onChartChatRequest(detail)}
-            onCommunitySignal={(detail) => onChartCommunitySignal(detail)}
-            onClearTradeSetup={() => onClearTradeSetup()}
-          />
-        </div>
-      </div>
-    </div>
-  </div>
-  <button
-    type="button"
-    class="tab-layout-split tab-layout-split-h"
-    title="CHART / INTEL 높이 조절: 스크롤/드래그/더블클릭 리셋"
-    aria-label="Resize tablet chart and intel split"
-    onwheel={(event) => onResizeSplitByWheel('y', event)}
-    onpointerdown={(event) => onStartSplitDrag('y', event)}
-    ondblclick={() => onResetSplit('y')}
-  >
-    <span></span>
-  </button>
-  <div class="tab-bottom">
-    <div class="tab-panel-resizable">
+
+    <div class="tab-intel-wrap">
       <div class="tab-panel-body">
         <IntelPanel
           {...sharedIntelPanelProps}
@@ -144,7 +133,20 @@
     </div>
   </div>
 
+  <!-- ── Ticker ── -->
   <div class="ticker-slot">
     <TerminalTicker segments={tickerSegments} idPrefix="tab" segmentClass={tickerSegmentClass} />
   </div>
+
+  <!-- ── WarRoom overlay drawer ── -->
+  <TabletWarRoomDrawer
+    open={warRoomDrawerOpen}
+    {densityMode}
+    bind:warRoomRef
+    onToggle={() => { warRoomDrawerOpen = !warRoomDrawerOpen; }}
+    onScanStart={onScanStart}
+    onScanComplete={onScanComplete}
+    onShowOnChart={onShowOnChart}
+    onShareToCommunity={onChartCommunitySignal}
+  />
 </div>

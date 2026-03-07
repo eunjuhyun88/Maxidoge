@@ -7,20 +7,21 @@
     ScanIntelDetail,
     SharedChartPanelProps,
     SharedIntelPanelProps,
+    TerminalChartRequestDetail,
     TerminalControlBarProps,
+    TerminalDensityMode,
+    TerminalPanelResizeTarget,
     WarRoomHandle,
-  } from '../../routes/terminal/terminalTypes';
+  } from '$lib/terminal/terminalTypes';
   import WarRoom from './WarRoom.svelte';
-  import ChartPanel from '../arena/ChartPanel.svelte';
-  import VerdictBanner from './VerdictBanner.svelte';
+  import { buildTerminalVerdictMeta } from '$lib/terminal/terminalViewModel';
+  import TerminalChartViewport from './TerminalChartViewport.svelte';
   import IntelPanel from './IntelPanel.svelte';
   import TerminalControlBar from './TerminalControlBar.svelte';
   import TerminalTicker from './TerminalTicker.svelte';
 
-  type ChartRequestDetail = { source?: string; pair?: string; timeframe?: string };
-
   interface Props {
-    densityMode?: 'essential' | 'pro';
+    densityMode?: TerminalDensityMode;
     leftCollapsed?: boolean;
     rightCollapsed?: boolean;
     leftW?: number;
@@ -40,14 +41,15 @@
     onScanStart?: () => void;
     onScanComplete?: (detail: ScanIntelDetail) => void;
     onShowOnChart?: (detail: { signal: AgentSignal }) => void;
-    onChartScanRequest?: (detail: ChartRequestDetail) => void;
-    onChartChatRequest?: (detail: ChartRequestDetail) => void;
+    onChartScanRequest?: (detail: TerminalChartRequestDetail) => void;
+    onChartChatRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartCommunitySignal?: (detail: ChartCommunitySignal) => void;
     onClearTradeSetup?: () => void;
     onSendChat?: (detail: { text: string }) => void | Promise<void>;
     onGoToTrade?: () => void | Promise<void>;
     onStartDrag?: (target: DragTarget, event: MouseEvent) => void;
-    onResizePanelByWheel?: (target: 'left' | 'right' | 'center', event: WheelEvent, options?: { force?: boolean }) => void;
+    onResizePanelByWheel?: (target: TerminalPanelResizeTarget, event: WheelEvent, options?: { force?: boolean }) => void;
+    onShareToCommunity?: () => void;
   }
   let {
     densityMode = 'essential',
@@ -78,7 +80,11 @@
     onGoToTrade = () => {},
     onStartDrag = () => {},
     onResizePanelByWheel = () => {},
+    onShareToCommunity = () => {},
   }: Props = $props();
+
+  let chartConnectionStatus = $state<'live' | 'offline'>('live');
+  const verdictMeta = $derived(buildTerminalVerdictMeta(latestScan));
 </script>
 
 <div
@@ -96,6 +102,7 @@
             onScanStart={onScanStart}
             onScanComplete={onScanComplete}
             onShowOnChart={onShowOnChart}
+            onShareToCommunity={onChartCommunitySignal}
           />
         </div>
       </div>
@@ -132,19 +139,24 @@
             variant="inline"
             showMarket={false}
             showPrimaryHint={false}
+            verdictAgree={verdictMeta.agree}
+            verdictTime={verdictMeta.time}
+            connectionStatus={chartConnectionStatus}
           />
+          <button class="share-to-community-btn" onclick={onShareToCommunity} title="커뮤니티에 공유">
+            📡 공유
+          </button>
         </div>
-        <VerdictBanner verdict={latestScan} scanning={terminalScanning} />
-        <div class="chart-area chart-area-full">
-          <ChartPanel
-            bind:this={chartRef}
-            {...sharedChartPanelProps}
-            onScanRequest={(detail) => onChartScanRequest(detail)}
-            onChatRequest={(detail) => onChartChatRequest(detail)}
-            onCommunitySignal={(detail) => onChartCommunitySignal(detail)}
-            onClearTradeSetup={() => onClearTradeSetup()}
-          />
-        </div>
+        <TerminalChartViewport
+          bind:chartRef
+          shellClass="chart-area chart-area-full"
+          {sharedChartPanelProps}
+          onChartScanRequest={onChartScanRequest}
+          onChartChatRequest={onChartChatRequest}
+          onChartCommunitySignal={onChartCommunitySignal}
+          onClearTradeSetup={onClearTradeSetup}
+          onConnectionStatusChange={(s) => { chartConnectionStatus = s; }}
+        />
       </div>
     </div>
   </div>

@@ -9,6 +9,9 @@ import {
 import {
   computeRSI,
   computeSMA,
+  computeBB,
+  computeMACD,
+  computeStochastic,
   MAX_KLINE_CACHE,
   updateRSIIncremental,
 } from '$lib/chart/chartIndicators';
@@ -33,6 +36,14 @@ interface ChartDataSeriesContext {
   series: ISeriesApi<'Candlestick'> | null;
   volumeSeries: ISeriesApi<'Histogram'> | null;
   rsiSeries: ISeriesApi<'Line'> | null;
+  bbUpperSeries: ISeriesApi<'Line'> | null;
+  bbMiddleSeries: ISeriesApi<'Line'> | null;
+  bbLowerSeries: ISeriesApi<'Line'> | null;
+  macdLineSeries: ISeriesApi<'Line'> | null;
+  macdSignalSeries: ISeriesApi<'Line'> | null;
+  macdHistSeries: ISeriesApi<'Histogram'> | null;
+  stochKSeries: ISeriesApi<'Line'> | null;
+  stochDSeries: ISeriesApi<'Line'> | null;
   maPeriods: MaPeriodBinding[];
   chartTheme: ChartTheme;
 }
@@ -167,6 +178,34 @@ export function createChartDataRuntime(
     }
     options.setRsiValue(lastRsi);
     options.setLatestVolume(klines[klines.length - 1]?.volume || 0);
+
+    // ── Bollinger Bands ──────────────────────────────────────
+    if (refs.bbUpperSeries && refs.bbMiddleSeries && refs.bbLowerSeries) {
+      const bbData = computeBB(closes, 20, 2);
+      refs.bbUpperSeries.setData(bbData.map((p) => ({ time: p.time as never, value: p.upper })));
+      refs.bbMiddleSeries.setData(bbData.map((p) => ({ time: p.time as never, value: p.middle })));
+      refs.bbLowerSeries.setData(bbData.map((p) => ({ time: p.time as never, value: p.lower })));
+    }
+
+    // ── MACD ─────────────────────────────────────────────────
+    if (refs.macdLineSeries && refs.macdSignalSeries && refs.macdHistSeries) {
+      const macdData = computeMACD(closes, 12, 26, 9);
+      refs.macdLineSeries.setData(macdData.map((p) => ({ time: p.time as never, value: p.macd })));
+      refs.macdSignalSeries.setData(macdData.map((p) => ({ time: p.time as never, value: p.signal })));
+      refs.macdHistSeries.setData(macdData.map((p) => ({
+        time: p.time as never,
+        value: p.histogram,
+        color: p.histogram >= 0 ? refs.chartTheme.macdHistUp : refs.chartTheme.macdHistDown,
+      })));
+    }
+
+    // ── Stochastic ───────────────────────────────────────────
+    if (refs.stochKSeries && refs.stochDSeries) {
+      const ohlc = klines.map((k) => ({ time: k.time, high: k.high, low: k.low, close: k.close }));
+      const stochData = computeStochastic(ohlc, 14, 3, 3);
+      refs.stochKSeries.setData(stochData.map((p) => ({ time: p.time as never, value: p.k })));
+      refs.stochDSeries.setData(stochData.map((p) => ({ time: p.time as never, value: p.d })));
+    }
 
     return { maRunSum: nextMaRunSum, rsiAvgGain, rsiAvgLoss };
   }

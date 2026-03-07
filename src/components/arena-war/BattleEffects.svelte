@@ -291,7 +291,7 @@
     position: absolute;
     bottom: 8px;
     right: 8px;
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     color: rgba(255,255,255,0.3);
     font-family: 'JetBrains Mono', monospace;

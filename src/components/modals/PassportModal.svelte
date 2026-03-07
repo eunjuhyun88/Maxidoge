@@ -148,31 +148,31 @@
   .pass-body { padding: 14px; overflow-y: auto; max-height: calc(85vh - 140px); }
 
   .xp-section { margin-bottom: 14px; }
-  .xp-label { font-size: 7px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 4px; }
+  .xp-label { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 4px; }
   .xp-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.1); }
   .xp-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #E8967D, #ffaa00); transition: width .5s; }
-  .xp-text { font-size: 7px; color: #666; font-family: var(--fm); text-align: right; margin-top: 2px; }
+  .xp-text { font-size: 9px; color: #666; font-family: var(--fm); text-align: right; margin-top: 2px; }
 
   .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
   .sg-item { text-align: center; padding: 8px; border-radius: 8px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); }
   .sg-val { font-size: 16px; font-weight: 900; font-family: var(--fd); color: #fff; }
-  .sg-label { font-size: 6px; color: #666; font-family: var(--fd); letter-spacing: 1px; margin-top: 2px; }
+  .sg-label { font-size: 9px; color: #666; font-family: var(--fd); letter-spacing: 1px; margin-top: 2px; }
 
   .abilities { margin-bottom: 14px; }
-  .ab-title { font-size: 7px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
-  .ab-item { font-size: 8px; color: #ccc; font-family: var(--fm); padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+  .ab-title { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
+  .ab-item { font-size: 9px; color: #ccc; font-family: var(--fm); padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
 
   .stamps { margin-bottom: 14px; }
-  .st-title { font-size: 7px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
+  .st-title { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
   .st-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .stamp { font-size: 9px; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,.05); color: #ccc; font-family: var(--fm); }
 
-  .rc-title { font-size: 7px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
-  .rc-empty { font-size: 8px; color: #555; font-family: var(--fm); }
+  .rc-title { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
+  .rc-empty { font-size: 9px; color: #555; font-family: var(--fm); }
   .rc-row {
     display: flex; align-items: center; gap: 6px;
     padding: 4px 6px; border-radius: 4px; margin-bottom: 2px;
-    font-size: 8px; font-family: var(--fm);
+    font-size: 9px; font-family: var(--fm);
   }
   .rc-row.win { background: rgba(0,255,136,.05); }
   .rc-row.lose { background: rgba(255,45,85,.05); }

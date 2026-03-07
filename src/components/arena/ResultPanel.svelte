@@ -229,7 +229,7 @@
   .rp-mv.pos { color: var(--grn, #00ff88); }
   .rp-mv.neg { color: var(--red, #ff2d55); }
 
-  .rp-section-title { font-size: 8px; letter-spacing: 2px; color: rgba(240,237,228,.35); text-transform: uppercase; margin-bottom: 4px; }
+  .rp-section-title { font-size: 9px; letter-spacing: 2px; color: rgba(240,237,228,.5); text-transform: uppercase; margin-bottom: 4px; }
 
   .rp-agents { display: flex; flex-direction: column; gap: 3px; }
   .rp-agent {
