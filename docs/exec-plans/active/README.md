@@ -4,6 +4,7 @@ Purpose:
 - Keep actively steering plans in one discoverable place.
 
 Current active plan set:
+- `phase-1-contract-catalog-2026-03-07.md`
 - `web-api-worker-phased-migration-map-2026-03-07.md`
 - `full-stack-redesign-validation-2026-03-07.md`
 - `arena-uiux-layout-design-2026-03-07.md`
