@@ -5,6 +5,7 @@ Purpose:
 
 ## Active
 
+- `docs/exec-plans/active/phase-1-terminal-market-contract-extraction-2026-03-07.md`
 - `docs/exec-plans/active/phase-1-positions-portfolio-contract-extraction-2026-03-07.md`
 - `docs/exec-plans/active/phase-1-trading-community-contract-extraction-2026-03-07.md`
 - `docs/exec-plans/active/phase-1-foundation-contract-extraction-2026-03-07.md`
