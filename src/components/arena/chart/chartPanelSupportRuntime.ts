@@ -53,7 +53,7 @@ export interface ChartPanelSupportRuntimeController {
   publishCommunitySignal(
     dir: 'LONG' | 'SHORT',
     options?: { openCopyTrade?: boolean; sourceContext?: string },
-  ): void;
+  ): Promise<void>;
   requestChatAssist(): Promise<void>;
   activateTradeDrawing(dir?: 'LONG' | 'SHORT'): Promise<void>;
   flushPriceUpdate(price: number, pairBase: string): void;
@@ -90,6 +90,8 @@ export function createChartPanelSupportRuntime(
   const actionRuntime = createChartActionRuntime(options.action);
   const priceRuntime = createChartPriceRuntime(options.price);
 
+  void drawingRuntime.preload();
+
   function dispose() {
     tradePlanRuntime.dispose();
     priceRuntime.dispose();
@@ -125,12 +127,16 @@ export function createChartPanelSupportRuntime(
     changePair: (pair) => {
       actionRuntime.changePair(pair);
       // Sync drawing persistence after pair store updates
-      setTimeout(() => drawingRuntime.syncPairTimeframe(), 0);
+      setTimeout(() => {
+        void drawingRuntime.syncPairTimeframe();
+      }, 0);
     },
     changeTimeframe: (timeframe) => {
       actionRuntime.changeTimeframe(timeframe);
       // Sync drawing persistence after timeframe store updates
-      setTimeout(() => drawingRuntime.syncPairTimeframe(), 0);
+      setTimeout(() => {
+        void drawingRuntime.syncPairTimeframe();
+      }, 0);
     },
     requestAgentScan: () => actionRuntime.requestAgentScan(),
     publishCommunitySignal: (dir, runtimeOptions) =>
@@ -142,7 +148,9 @@ export function createChartPanelSupportRuntime(
     update24hStats: (next) => priceRuntime.update24hStats(next),
     resetTransientState: () => priceRuntime.resetTransientState(),
     getFallbackLivePrice: () => priceRuntime.getFallbackLivePrice(),
-    syncDrawingPersistence: () => drawingRuntime.syncPairTimeframe(),
+    syncDrawingPersistence: () => {
+      void drawingRuntime.syncPairTimeframe();
+    },
     dispose,
   };
 }

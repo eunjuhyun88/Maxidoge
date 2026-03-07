@@ -5129,6 +5129,41 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `chartPanelSupportRuntime` remains extremely heavy, so arena cleanup and chart chunk work are still coupled
 - Status: DONE
 
+## [2026-03-08 03:28:56 +0900] FINISH arena-topbar-boundary-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep tightening the arena shell by moving another presentation-only block out of the route while preserving layout and validation baselines
+- What changed:
+  - Added `src/components/arena/ArenaTopbar.svelte`
+    - arena top shell now owns the lobby/exit-confirm CTA, phase track, mode badge, LP/W-L stat strip, and match-history button markup
+    - moved topbar-only responsive CSS and `pulseWarn` animation out of the route
+  - Updated `src/routes/arena/+page.svelte`
+    - replaced the inline topbar DOM with `ArenaTopbar`
+    - kept `MatchHistory`, `PhaseGuide`, and downstream battle/view wiring unchanged
+  - Updated `src/components/arena/chart/PositionSizerPanel.svelte`
+    - added explicit `for`/`id` label associations to preserve the zero-warning baseline
+  - Updated `src/components/arena/chart/chartDrawingRuntime.ts`
+    - repaired the primitive drawing mode helper name drift so the chart drawing runtime matches its own runtime contract again
+  - Updated `CLAUDE.md`
+    - documented `ArenaTopbar.svelte` as the canonical arena top shell boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `1088`
+  - `src/components/arena/ArenaTopbar.svelte`: `279` lines
+  - `src/components/arena/chart/PositionSizerPanel.svelte`: `328` lines
+  - `src/components/arena/chart/chartDrawingRuntime.ts`: `674` lines
+  - server entry `src/routes/arena/+page.svelte`: `208.64 kB`
+  - server chunk `src/components/arena/ChartPanel.svelte`: `118.70 kB`
+  - server chunk `src/lib/chart/primitives/drawingManager.ts`: `100.39 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.24 kB`
+- Residual risks:
+  - route maintainability improved sharply, but SSR weight regressed hard; the next slice should target bundle/chunk reduction, not another large synchronous presentation extraction
+  - `ArenaBattleLayout.svelte`, `ArenaChartRail.svelte`, and `ArenaBattleSidebar.svelte` are now the main arena presentation hotspots
+  - `chartDrawingRuntime.ts` is back to green, but the drawing stack is still a large synchronous chunk footprint
+- Status: DONE
+
 ## [2026-03-08 03:15:50 +0900] FINISH arena-battle-layout-derivatives-cleanup-slice-20260308 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
@@ -5160,4 +5195,71 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `ArenaBattleLayout.svelte` is now the main battle presentation hotspot and still deserves smaller child boundaries later
   - `ChartPanel.svelte` remains heavy at `1269` lines even after moving derivative pane ownership out
   - arena SSR weight is still dominated by chart-related chunks, so the next slice should reduce `ChartPanel`/support-runtime weight rather than only moving route helpers
+- Status: DONE
+
+## [2026-03-08 03:28:12 +0900] FINISH chart-support-lazy-split-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning the arena chart stack, reduce `ChartPanel` support-runtime SSR pressure, and keep the slice commit-ready without touching unrelated arena WIP files
+- What changed:
+  - Updated `src/components/arena/chart/chartActionRuntime.ts`
+    - community signal draft/evidence assembly now lazy-loads `src/lib/chart/chartTradePlanner.ts` and `src/lib/terminal/signalEvidence.ts`
+    - `publishCommunitySignal(...)` now resolves those modules only when the user actually publishes
+  - Updated `src/components/arena/chart/chartDrawingRuntime.ts`
+    - primitive drawing manager/persistence stack now lazy-loads `drawingManager` and `drawingPersistence`
+    - added runtime `preload()`/async `syncPairTimeframe()` so primitive mode and saved drawing hydration can warm the stack without static SSR imports
+  - Updated `src/components/arena/chart/chartPanelSupportRuntime.ts`
+    - support-runtime now prewarms the drawing stack on client create and awaits the new async drawing/action surfaces without holding heavy static imports
+  - Updated `CLAUDE.md`
+    - locked the chart signal-assembly lazy boundary and chart drawing-stack lazy boundary as canonical rules
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/chart/chartActionRuntime.ts`: `235` lines
+  - `src/components/arena/chart/chartDrawingRuntime.ts`: `674` lines
+  - `src/components/arena/chart/chartPanelSupportRuntime.ts`: `156` lines
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.24 kB`
+  - split server chunk `src/lib/chart/primitives/drawingManager.ts`: `100.39 kB`
+  - split server chunk `src/lib/terminal/signalEvidence.ts`: `4.68 kB`
+  - split server chunk `src/lib/chart/primitives/drawingPersistence.ts`: `1.41 kB`
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` itself still stays large, so total arena SSR pressure is not solved by this slice alone
+  - unrelated arena presentation WIP files remain dirty in the worktree and were intentionally excluded from this slice
+  - the next chart slice should target `ChartPanel.svelte` or `ChartPanelShell.svelte` composition weight instead of re-expanding support-runtime imports
+- Status: DONE
+
+## [2026-03-08 03:46:55 +0900] FINISH arena-battle-host-child-split-cleanup-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning arena, resolve layout/CSS conflicts, and continue deleting dead presentation code without moving layout positions
+- What changed:
+  - Updated `src/routes/arena/+page.svelte`
+    - removed leftover `live-event-stack` and retired `wallet-gate` CSS from the route shell
+    - route now keeps only arena shell/topbar/view-switch/global-juice styling
+  - Added `src/components/arena/arenaBattleLayoutTypes.ts`
+    - extracted canonical `ArenaChartPanelProps` contract for battle presentation children
+  - Added `src/components/arena/ArenaChartRail.svelte`
+    - moved chart-side rail, hypothesis sheet, direction bar, preview overlay, and score bar out of `ArenaBattleLayout`
+  - Added `src/components/arena/ArenaBattleSidebar.svelte`
+    - moved mission/combat HUD, arena stage, battle log, reward modal, result overlay, PvP overlay, and floating words out of `ArenaBattleLayout`
+  - Replaced `src/components/arena/ArenaBattleLayout.svelte`
+    - battle host is now a thin coordinator that only composes left/right child boundaries
+  - Deleted `src/components/arena/BattleStage.svelte` and `src/components/arena/ArenaHUD.svelte`
+    - both were unreferenced legacy presentation components
+  - Updated `src/lib/styles/arena-tone.css`
+    - removed legacy `BattleStage` and retired `wallet-gate` styling
+  - Updated `CLAUDE.md`
+    - locked `ArenaBattleLayout -> ArenaChartRail/ArenaBattleSidebar` as the arena battle presentation boundary rule
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `1088` lines
+  - `src/components/arena/ArenaBattleLayout.svelte`: `218` lines
+  - `src/components/arena/ArenaChartRail.svelte`: `483` lines
+  - `src/components/arena/ArenaBattleSidebar.svelte`: `878` lines
+  - no remaining `BattleStage`, `ArenaHUD`, `live-event-stack`, or route-local `wallet-gate` references in `src`
+- Residual risks:
+  - `src/components/arena/ArenaBattleSidebar.svelte` is now the largest battle presentation hotspot and still deserves smaller result/PvP/stage child boundaries
+  - `src/components/arena/ChartPanel.svelte` and chart support/runtime chunks still dominate arena SSR weight
+  - `src/routes/arena/+page.svelte` is much smaller, but phase/controller ownership is not fully finished yet
 - Status: DONE

@@ -1,9 +1,8 @@
 import { pairToSymbol } from '$lib/api/binance';
-import { buildCommunitySignalDraft } from '$lib/chart/chartTradePlanner';
 import type { AgentTradeSetup, DrawingMode } from '$lib/chart/chartTypes';
 import type { CanonicalTimeframe } from '$lib/utils/timeframe';
 import { normalizeTimeframe, toBinanceInterval } from '$lib/utils/timeframe';
-import { buildChartObservationEvidence, type IndicatorSnapshot, type PatternDetection } from '$lib/terminal/signalEvidence';
+import type { IndicatorSnapshot, PatternDetection } from '$lib/terminal/signalEvidence';
 
 export interface ChartActionRuntimeController {
   changePair(pair: string): void;
@@ -12,7 +11,7 @@ export interface ChartActionRuntimeController {
   publishCommunitySignal(
     dir: 'LONG' | 'SHORT',
     options?: { openCopyTrade?: boolean; sourceContext?: string },
-  ): void;
+  ): Promise<void>;
   requestChatAssist(): Promise<void>;
   activateTradeDrawing(dir?: 'LONG' | 'SHORT'): Promise<void>;
   dispose(): void;
@@ -57,6 +56,25 @@ export interface CreateChartActionRuntimeOptions {
 export function createChartActionRuntime(
   options: CreateChartActionRuntimeOptions,
 ): ChartActionRuntimeController {
+  let signalAssemblyModulePromise:
+    | Promise<
+        [
+          typeof import('$lib/chart/chartTradePlanner'),
+          typeof import('$lib/terminal/signalEvidence'),
+        ]
+      >
+    | null = null;
+
+  function loadSignalAssemblyModules() {
+    if (!signalAssemblyModulePromise) {
+      signalAssemblyModulePromise = Promise.all([
+        import('$lib/chart/chartTradePlanner'),
+        import('$lib/terminal/signalEvidence'),
+      ]);
+    }
+    return signalAssemblyModulePromise;
+  }
+
   async function activateTradeDrawing(dir?: 'LONG' | 'SHORT') {
     if (!options.getEnableTradeLineEntry()) return;
 
@@ -118,10 +136,12 @@ export function createChartActionRuntime(
     });
   }
 
-  function publishCommunitySignal(
+  async function publishCommunitySignal(
     dir: 'LONG' | 'SHORT',
     runtimeOptions?: { openCopyTrade?: boolean; sourceContext?: string },
   ) {
+    const [{ buildCommunitySignalDraft }, { buildChartObservationEvidence }] =
+      await loadSignalAssemblyModules();
     const draft = buildCommunitySignalDraft({
       pair: options.getPair() || 'BTC/USDT',
       dir,
