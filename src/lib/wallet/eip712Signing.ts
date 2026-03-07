@@ -49,15 +49,26 @@ export async function signTypedData(
     }
 
     return signature;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errorMessage =
+      typeof err === 'object' && err !== null && 'message' in err
+        ? String((err as { message?: unknown }).message ?? '')
+        : '';
+    const errorCode =
+      typeof err === 'object' && err !== null && 'code' in err
+        ? Number((err as { code?: unknown }).code)
+        : Number.NaN;
+
     // User rejected the signing request
-    if (err?.code === 4001 || err?.message?.includes('rejected')) {
+    if (errorCode === 4001 || errorMessage.includes('rejected')) {
       throw new Error('Signing cancelled by user');
     }
+
     // Method not supported (very old wallet)
-    if (err?.code === -32601 || err?.message?.includes('not supported')) {
+    if (errorCode === -32601 || errorMessage.includes('not supported')) {
       throw new Error('Your wallet does not support EIP-712 signing. Please use MetaMask or a compatible wallet.');
     }
+
     throw err;
   }
 }

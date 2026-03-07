@@ -185,7 +185,25 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
 
     const stats = statsResult.rows[0];
 
-    const records = result.rows.map((r: any) => ({
+
+    interface ArenaWarRow {
+      id: string;
+      pair: string;
+      timeframe: string;
+      regime: string;
+      human_direction: string;
+      ai_direction: string;
+      winner: string;
+      human_fbs: number;
+      ai_fbs: number;
+      fbs_margin: number;
+      consensus_type: string;
+      pair_quality: string;
+      human_reason_tags: string | null;
+      game_record: string | null;
+      created_at: string;
+    }
+    const records = result.rows.map((r: ArenaWarRow) => ({
       id: r.id,
       pair: r.pair,
       timeframe: r.timeframe,

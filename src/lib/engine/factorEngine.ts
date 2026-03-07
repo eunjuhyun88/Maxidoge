@@ -896,7 +896,7 @@ export function computeFactor(factorId: string, ctx: MarketContext): FactorResul
   if (!fn) return neutralFactor(factorId, `Unknown factor: ${factorId}`);
   try {
     return fn(ctx);
-  } catch (err: any) {
+  } catch (err: unknown) {
     return neutralFactor(factorId, `Error: ${(err instanceof Error ? err.message : 'unknown')}`);
   }
 }

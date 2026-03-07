@@ -22,9 +22,27 @@ export const GET: RequestHandler = async ({ cookies }) => {
       [user.id]
     );
 
+
+    interface AgentStatsRow {
+      id: string;
+      user_id: string;
+      agent_id: string;
+      level: number | null;
+      xp: number | null;
+      xp_max: number | null;
+      wins: number | null;
+      losses: number | null;
+      best_streak: number | null;
+      cur_streak: number | null;
+      avg_conf: number | null;
+      best_conf: number | null;
+      stamps: Record<string, unknown> | null;
+      updated_at: string;
+    }
+
     return json({
       success: true,
-      records: rows.rows.map((r: any) => ({
+      records: rows.rows.map((r: AgentStatsRow) => ({
         id: r.id,
         userId: r.user_id,
         agentId: r.agent_id,

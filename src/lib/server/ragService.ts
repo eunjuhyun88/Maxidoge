@@ -62,6 +62,10 @@ export interface SimilarGame {
   lesson: string;
   created_at: Date;
   similarity: number;
+  outcome_type?: string;
+  outcome_value?: number;
+  agent_signals?: Record<string, { vote: string; confidence: number }>;
+  source?: string;
 }
 
 /** RAG 검색 옵션 */
@@ -540,9 +544,9 @@ export function computeRAGRecallV2(
   let successWeight = 0;
 
   for (const g of similarGames) {
-    const outcomeType = (g as any).outcome_type ?? 'pending';
+    const outcomeType = g.outcome_type ?? 'pending';
     const outcomeBonus = outcomeType !== 'pending' ? 2.0 : 1.0;
-    const agentSignals = (g as any).agent_signals as Record<string, { vote: string; confidence: number }> | undefined;
+    const agentSignals = g.agent_signals;
 
     // 기본 weight
     let weight = outcomeBonus * g.similarity;
@@ -564,7 +568,7 @@ export function computeRAGRecallV2(
 
     // 승리 방향 집계
     const isSuccess = g.winner === 'ai' ||
-      ((g as any).outcome_type === 'pnl' && Number((g as any).outcome_value ?? 0) > 0);
+      (g.outcome_type === 'pnl' && Number(g.outcome_value ?? 0) > 0);
     const winDir = isSuccess ? g.ai_direction : g.human_direction;
     directionScores[winDir] = (directionScores[winDir] ?? 0) + weight;
 

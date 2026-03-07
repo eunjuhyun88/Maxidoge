@@ -13,6 +13,7 @@ import {
 } from '$lib/server/llmService';
 import { getMultiTimeframeIndicatorContext } from '$lib/server/multiTimeframeContext';
 import { errorContains, getErrorMessage } from '$lib/utils/errorUtils';
+import type { PriceLikeMap } from '$lib/utils/price';
 import { guestChatLimiter } from '$lib/server/rateLimit';
 import { fireAndForget } from '$lib/server/taskUtils';
 
@@ -437,7 +438,7 @@ async function buildAgentReply(
 
   // 실시간 가격 (meta에서 전달받음)
   const livePrices = (meta.livePrices && typeof meta.livePrices === 'object')
-    ? meta.livePrices as Record<string, number>
+    ? meta.livePrices as PriceLikeMap
     : {};
 
   // Scan context → LLM signal data 변환

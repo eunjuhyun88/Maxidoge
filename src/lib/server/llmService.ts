@@ -16,6 +16,7 @@ import {
   type LLMProvider,
 } from './llmConfig';
 import type { MultiTimeframeIndicatorContext } from './multiTimeframeContext';
+import { toNumericPriceMap, type PriceLikeMap } from '$lib/utils/price';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -283,7 +284,7 @@ export interface AgentChatContext {
     slPrice?: number;
   }>;
   /** 실시간 가격 (클라이언트에서 전달) */
-  livePrices?: Record<string, number>;
+  livePrices?: PriceLikeMap;
   /** 다중 시간봉 기술지표 컨텍스트 (서버 계산) */
   multiTimeframe?: MultiTimeframeIndicatorContext | null;
 }
@@ -293,6 +294,7 @@ export interface AgentChatContext {
  * 스캔 컨텍스트가 있으면 포함, 없으면 일반 분석으로 fallback.
  */
 export function buildAgentSystemPrompt(ctx: AgentChatContext): string {
+  const livePriceSnapshot = ctx.livePrices ? toNumericPriceMap(ctx.livePrices) : {};
   const lines: string[] = [
     `You are ${ctx.agentId}, a specialized crypto trading analysis agent in the Stockclaw terminal.`,
     `Specialty: ${ctx.agentDescription}`,
@@ -310,9 +312,9 @@ export function buildAgentSystemPrompt(ctx: AgentChatContext): string {
   ];
 
   // 실시간 가격 정보 추가
-  if (ctx.livePrices && Object.keys(ctx.livePrices).length > 0) {
+  if (Object.keys(livePriceSnapshot).length > 0) {
     lines.push('', '── Current Live Prices (REAL-TIME) ──');
-    for (const [sym, price] of Object.entries(ctx.livePrices)) {
+    for (const [sym, price] of Object.entries(livePriceSnapshot)) {
       if (typeof price === 'number' && price > 0) {
         lines.push(`  ${sym}: $${price.toLocaleString()}`);
       }
@@ -360,6 +362,7 @@ export function buildAgentSystemPrompt(ctx: AgentChatContext): string {
  * 오케스트레이터 시스템 프롬프트 (멘션 없이 질문할 때)
  */
 export function buildOrchestratorSystemPrompt(ctx: Omit<AgentChatContext, 'agentId' | 'agentDescription'>): string {
+  const livePriceSnapshot = ctx.livePrices ? toNumericPriceMap(ctx.livePrices) : {};
   const lines: string[] = [
     'You are the ORCHESTRATOR, the lead AI commander of the Stockclaw 8-agent crypto intelligence system.',
     '',
@@ -379,9 +382,9 @@ export function buildOrchestratorSystemPrompt(ctx: Omit<AgentChatContext, 'agent
   ];
 
   // 실시간 가격 정보 추가
-  if (ctx.livePrices && Object.keys(ctx.livePrices).length > 0) {
+  if (Object.keys(livePriceSnapshot).length > 0) {
     lines.push('', '── Current Live Prices (REAL-TIME) ──');
-    for (const [sym, price] of Object.entries(ctx.livePrices)) {
+    for (const [sym, price] of Object.entries(livePriceSnapshot)) {
       if (typeof price === 'number' && price > 0) {
         lines.push(`  ${sym}: $${price.toLocaleString()}`);
       }
