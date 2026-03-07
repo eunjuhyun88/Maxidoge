@@ -3,7 +3,7 @@
 ## Scope
 - Arena page: 11-phase 분기 제거, 5-phase(`DRAFT → ANALYSIS → HYPOTHESIS → BATTLE → RESULT`) 기준으로 전환
 - WarRoom: 컴포넌트 내부 스캔 로직 분리 + 구형 에이전트 참조 교체
-- Oracle: `AGDEFS` 의존 제거 + 통계 산식 교체
+- Oracle leaderboard: `AGDEFS` 의존 제거 + 통계 산식 교체
 - `gameState`: Phase 타입 자체 교체
 - `walletStore + agentData`: 진행 로직 공통 규칙으로 통합
 
@@ -42,7 +42,10 @@
   - preset 신호의 `guardian` 참조를 `macro`로 교체
 
 ### 4) Oracle Rewrite
-- `src/routes/oracle/+page.svelte`
+- Historical rewrite target was `src/routes/oracle/+page.svelte`
+- Current shipped owner is `src/components/community/OracleLeaderboard.svelte` embedded on `/signals?view=ai`
+- `/oracle` route itself is now a legacy redirect shim into `/signals?view=ai`
+- leaderboard logic:
   - `AGDEFS` import 제거 (`AGENT_POOL` 기반 계산)
   - 지표를 `raw accuracy` 중심에서 `Wilson score + calibration + CI` 중심으로 변경
   - 정렬 옵션 재구성 (`WILSON/ACCURACY/SAMPLE/CALIBRATION`)

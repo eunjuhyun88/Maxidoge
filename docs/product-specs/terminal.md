@@ -7,6 +7,13 @@ Purpose:
 
 Let the user understand market context quickly and decide whether to act.
 
+## Current Route Shape
+
+- `/terminal` currently ships as three route shells: mobile, tablet, and desktop.
+- The route runtime is already split into layout, action, chat, and community-share concerns.
+- Live ticker loading, density mode, background alert scanning, copy-trade bootstrap, and share modal all live inside the route now.
+- Use `docs/page-specs/terminal-page.md` for the actual route contract; keep this file focused on surface intent.
+
 ## Core Flows
 
 1. Fetch scan/intel context.
@@ -20,6 +27,7 @@ Let the user understand market context quickly and decide whether to act.
 - Layout logic, orchestration, and presentation should not collapse into one god-shell.
 - Users should understand what is live, cached, or simulated.
 - Data and action flows should remain inspectable by future agents.
+- The current route already includes trade/share conversion affordances inside the shell, not as separate follow-up surfaces.
 
 ## Supporting Docs
 

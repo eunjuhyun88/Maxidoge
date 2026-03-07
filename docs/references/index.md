@@ -6,6 +6,7 @@ Purpose:
 ## Internal References
 
 - `docs/API_CONTRACT.md`
+- `docs/CONTEXT_ENGINEERING.md`
 - `docs/INTERACTION_CALL_MAP.md`
 - `docs/FE_STATE_MAP.md`
 - `docs/AGENT_CONTEXT_COMPACTION_PROTOCOL.md`

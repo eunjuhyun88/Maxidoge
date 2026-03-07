@@ -10,19 +10,22 @@ Purpose:
 1. `README.md`
 2. `AGENTS.md`
 3. `docs/README.md`
-4. `docs/SYSTEM_INTENT.md`
-5. `ARCHITECTURE.md`
-6. Relevant docs from `docs/DESIGN.md`, `docs/FRONTEND.md`, `docs/PLANS.md`
+4. `docs/CONTEXT_ENGINEERING.md`
+5. `docs/SYSTEM_INTENT.md`
+6. `ARCHITECTURE.md`
+7. Relevant docs from `docs/DESIGN.md`, `docs/FRONTEND.md`, `docs/PLANS.md`
 
 ## System Map
 
 `Product intent -> route surfaces -> client state -> API contracts -> server modules -> DB/migrations`
 
 ### Route surfaces
+- `Home`: positioning, onboarding, first action routing
 - `Terminal`: situational awareness, scan, intel, action entry
 - `Arena`: structured human-vs-agent decision loop
 - `Signals`: discover, track, react, convert into action
 - `Passport`: identity, progression, learning, history
+- `Agents`: roster and learning-memory collection view
 
 ### Client authority
 - Live market truth: `priceStore`
@@ -44,6 +47,8 @@ Purpose:
 ## Canonical Doc Entry Points
 
 - Design and architecture: `docs/DESIGN.md`
+- Context loading and resume policy: `docs/CONTEXT_ENGINEERING.md`
+- Route/page behavior: `docs/page-specs/index.md`
 - Frontend route/state ownership: `docs/FRONTEND.md`
 - Product rules and user-value constraints: `docs/PRODUCT_SENSE.md`
 - Current plans and execution flow: `docs/PLANS.md`
@@ -54,8 +59,14 @@ Purpose:
 ## When To Go Deeper
 
 - Need system intent first: open `docs/SYSTEM_INTENT.md`
+- Need context loading or resume order: open `docs/CONTEXT_ENGINEERING.md`, then `docs/AGENT_CONTEXT_COMPACTION_PROTOCOL.md`
+- Need route/page behavior first: open `docs/page-specs/index.md`, then the relevant page spec
 - Need route/store ownership: open `docs/FRONTEND.md`
 - Need current structural refactor baseline: open `docs/FRONTEND_REFACTOR_EXECUTION_DESIGN_2026-03-06.md`
+- Need frontend/backend separation target and cutover order: open `docs/exec-plans/active/frontend-backend-separation-plan-2026-03-07.md`
 - Need Arena/War product semantics: open `docs/product-specs/arena.md`, `docs/design-docs/arena-domain-model.md`, then `docs/design-docs/learning-loop.md`
+- Need Home/first-run semantics: open `docs/product-specs/home.md`, then `docs/page-specs/home-onboarding.md`
 - Need Terminal scan/intel behavior: open `docs/product-specs/terminal.md`
+- Need Agent roster semantics: open `docs/product-specs/agents.md`, then `docs/page-specs/agents-page.md`
+- Need secondary route behavior: open `docs/page-specs/settings-page.md`, `docs/page-specs/arena-war-page.md`, `docs/page-specs/arena-v2-page.md`, or `docs/page-specs/oracle-page.md`
 - Need plan status: open `docs/PLANS.md` and `docs/exec-plans/index.md`

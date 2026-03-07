@@ -456,21 +456,18 @@ DoD:
 - No warning count increase.
 
 ## 8. Immediate Execution Order
-1. State authority repair:
-   - `priceStore` stays canonical
-   - `gameState` live price mirror removed
-2. QuickTrade integrity repair:
-   - optimistic/server reconciliation fixed
-3. Profile integrity repair:
-   - badge writes validated or server-derived
-4. Terminal shell split
-5. Intel split
-6. Chart split
-7. CSP and security hardening
-8. Legacy tree cleanup
+1. Residual chart cleanup:
+   - review fallback loader / dead branches
+   - trim CSS/chunk noise now that data runtime split is stable
+2. Legacy tree cleanup:
+   - review sibling clone drift and archive/read-only boundaries
+   - keep new work single-homed in `frontend`
+3. Post-zero-warning hardening:
+   - preserve `0 warnings` as the steady baseline
+   - gate future warning regressions immediately
 
 ## 9. Definition of Done
-- `npm run check` passes with no warning increase.
+- `npm run check` passes with zero warnings or with an explicitly accepted temporary exception.
 - `npm run build` passes.
 - Live price updates do not propagate through unrelated large stores.
 - QuickTrade hydration/open/refresh path is duplication-safe.
@@ -478,9 +475,126 @@ DoD:
 - Terminal shell, Intel, and Chart each have clear ownership boundaries.
 - Canonical frontend ownership is documented and preserved.
 
-## 10. What Starts First
-- First implementation work should begin with Phase 1 and Phase 2.
+## 10. What Starts Next
+- The next implementation work should return to residual `ChartPanel` cleanup.
 - Reason:
-  - They remove hidden correctness and performance debt.
-  - They reduce the risk of later UI refactors.
-  - They give the terminal/chart split a stable foundation.
+  - the `ChartPanel` data runtime boundary is now extracted and validated
+  - the warning backlog is fully cleared, so warning work is no longer the best next lever
+  - the remaining structural debt is in `ChartPanel.svelte` fallback/dead-branch cleanup and legacy tree duplication boundaries
+
+## 11. Completed Slice — Chart Data Runtime
+
+### 11.1 Current State
+- Already extracted from `ChartPanel.svelte`:
+  - `src/lib/chart/tradingviewEmbed.ts`
+  - `src/lib/chart/chartTradePlanner.ts`
+  - `src/components/arena/chart/chartPatternEngine.ts`
+  - `src/components/arena/chart/chartDrawingEngine.ts`
+  - `src/components/arena/chart/chartDrawingSession.ts`
+  - `src/components/arena/chart/chartOverlayRenderer.ts`
+  - `src/components/arena/chart/chartPositionInteraction.ts`
+  - `src/components/arena/chart/chartRuntimeBindings.ts`
+  - `src/components/arena/chart/chartDataRuntime.ts`
+  - `src/components/arena/chart/chartTradingViewRuntime.ts`
+  - `src/components/arena/chart/chartBootstrap.ts`
+- Warning cleanup after the runtime split is complete:
+  - shared warning fixes are done
+  - `arena-v2` legacy warning cluster is cleared
+  - current frontend baseline is `0 errors / 0 warnings`
+- TradingView lifecycle extraction after the warning cleanup is complete:
+  - safe-mode fallback/retry/timeout/re-init debounce moved out of `ChartPanel.svelte`
+  - dead demo fallback candles were removed from `ChartPanel.svelte`
+- Chart bootstrap extraction after the TradingView split is complete:
+  - lightweight-charts instance/pane/series creation moved out of `ChartPanel.svelte`
+  - `ChartPanel.svelte` mount is now focused on wiring extracted runtimes together
+
+### 11.2 Outcome
+- `ChartPanel.svelte` no longer owns Binance REST/bootstrap/history/websocket logic directly.
+- The market-data path now lives in one runtime module and is disposed through a single runtime handle.
+- Pair/timeframe reloads still work while `ChartPanel.svelte` is reduced to orchestration and UI-local state.
+
+### 11.3 Resulting Boundary
+
+#### A. New canonical boundary
+- `src/components/arena/chart/chartDataRuntime.ts` is now the canonical runtime module.
+- This module is the only place that knows:
+  - how to bootstrap klines + 24h stats
+  - how to fetch older history
+  - how to subscribe/unsubscribe Binance klines + miniTicker
+  - how to reconcile bootstrap, pagination, and realtime deltas into a single chart-data snapshot
+
+#### B. Responsibility split
+- `ChartPanel.svelte`
+  - owns Svelte state, DOM refs, GTM, notices, and external event dispatch
+  - passes current chart series refs and setter callbacks into the runtime
+  - keeps `runPatternDetection`, `emitPriceUpdate`, and `flushPriceUpdate` as injected side effects
+- `chartDataRuntime.ts`
+  - owns remote I/O lifecycle and single dispose handle
+  - owns history pagination guards
+  - owns websocket subscription lifecycle
+  - returns normalized data patches instead of mutating unrelated UI state directly
+- If runtime file starts growing too large:
+  - split imperative series writes into `chartDataSeriesApplier.ts`
+  - keep that split internal to the chart runtime batch, not as a separate future design
+
+#### C. Data contract to preserve
+- Input:
+  - symbol
+  - interval
+  - pair base symbol
+  - chart series refs
+  - current indicator runtime state
+  - callbacks for pattern refresh, price-store flush, and UI error/loading updates
+- Output:
+  - updated kline cache
+  - updated MA values / RSI state
+  - updated `latestVolume`, `livePrice`, `priceChange24h`, `high24h`, `low24h`, `quoteVolume24h`
+  - single runtime dispose handle
+
+### 11.4 Validation Result
+1. `npm run check`: PASS
+2. `npm run build`: PASS
+3. `npm run check:budget`: PASS
+4. `/terminal` server output is still green but must be watched (`136.69 kB` -> `136.98 kB` -> `138.99 kB` across the latest chart slices)
+5. warning baseline is now `0`
+
+### 11.5 Completed Acceptance Criteria
+- `ChartPanel.svelte` no longer imports `fetchKlines`, `fetch24hr`, `subscribeKlines`, or `subscribeMiniTicker` directly.
+- `loadKlines()` and `loadMoreHistory()` no longer exist in `ChartPanel.svelte`.
+- Pair/timeframe change still refreshes candles, indicators, and live price correctly.
+- `runChartCleanup()` disposes the runtime once without duplicate websocket teardown.
+- `npm run check`, `npm run build`, and `npm run check:budget` remain green.
+- `/terminal` server output must not regress materially from the current baseline (`136.69 kB`) without a justified reason.
+
+### 11.6 Warning Follow-Through
+- Completed:
+  - `src/components/shared/TokenDropdown.svelte`
+  - `src/components/arena/PhaseGuide.svelte`
+  - `src/components/shared/PokemonFrame.svelte`
+  - `src/components/shared/{HPBar,TypewriterBox,PhaseTransition}.svelte`
+  - `src/components/arena-v2/{BattleScreen,BattleMissionView,BattleChartView,BattleCardView,ResultScreen,HypothesisScreen,DraftScreen}.svelte`
+- Result:
+  - `npm run check` is now `0 errors / 0 warnings`
+  - `npm run check:budget` passes at `0/49`
+  - warning cleanup is no longer blocking the next structural refactor slice
+
+### 11.7 TradingView Lifecycle Follow-Through
+- Completed:
+  - `src/components/arena/chart/chartTradingViewRuntime.ts`
+  - `src/components/arena/ChartPanel.svelte` TradingView lifecycle delegation
+  - dead `loadFallbackData()` removal in `src/components/arena/ChartPanel.svelte`
+- Result:
+  - `ChartPanel.svelte` no longer owns TradingView widget instance/timers/re-init key bookkeeping directly
+  - TradingView safe-mode fallback and retry behavior are preserved behind a single runtime controller
+  - `npm run check`, `npm run build`, and `npm run check:budget` stay green after the split
+
+### 11.8 Chart Bootstrap Follow-Through
+- Completed:
+  - `src/components/arena/chart/chartBootstrap.ts`
+  - `src/components/arena/ChartPanel.svelte` bootstrap delegation
+- Result:
+  - `ChartPanel.svelte` no longer owns the large pane/series creation block inline
+  - chart instance creation and indicator pane wiring now live behind one bootstrap factory
+  - `npm run check`, `npm run build`, and `npm run check:budget` remain green after the split
+- Watch item:
+  - `/terminal` server entry increased to `138.99 kB`; future slices should offset this growth before adding more structure

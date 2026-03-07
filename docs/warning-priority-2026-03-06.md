@@ -9,26 +9,30 @@ npm run check
 Current baseline in `frontend`:
 
 - `0 errors`
-- `49 warnings`
-- `17 files`
+- `0 warnings`
+- `0 files`
 
-## Priority Table
+## Status
 
-| Priority | Warning Type | Count | Why | First Target Files |
-|---|---|---:|---|---|
-| P1 | `a11y_label_has_associated_control` | 11 | Accessibility and form usability impact | `src/components/arena-war/HumanCallPhase.svelte`, `src/components/arena-war/SetupPhase.svelte` |
-| P1 | `slot_element_deprecated` | 1 | Svelte 5 forward-compat risk | `src/components/shared/PokemonFrame.svelte` |
-| P2 | `element_invalid_self_closing_tag` | 23 | HTML parsing ambiguity, hydration mismatch risk | `src/components/arena-v2/BattleScreen.svelte`, `src/components/arena-v2/ResultScreen.svelte`, `src/components/shared/TypewriterBox.svelte` |
-| P3 | `export_let_unused` | 10 | Noise + unclear component API surface | `src/components/arena-v2/*.svelte`, `src/components/arena/views/ChartWarView.svelte` |
-| P3 | CSS compatibility (`appearance`) | 3 | Cross-browser polish issue | `src/components/arena-v2/DraftScreen.svelte`, `src/components/arena-v2/HypothesisScreen.svelte` |
-| P4 | Empty CSS ruleset | 1 | Low risk cleanup | `src/components/arena/ChartPanel.svelte` |
+- Warning backlog is closed.
+- `npm run check`, `npm run build`, and `npm run check:budget` all pass with a zero-warning baseline.
+- Any new warning is now treated as a regression, not as part of an accepted cleanup backlog.
 
-## Cleanup Order
+## What Was Cleared
 
-1. P1 accessibility + deprecated slot.
-2. P2 self-closing tag normalization.
-3. P3 unused exports and CSS compatibility.
-4. P4 cosmetic cleanup.
+- `TokenDropdown.svelte`, `PhaseGuide.svelte`: runes capture/reactivity warnings
+- `PokemonFrame.svelte`: deprecated slot rendering
+- `HPBar.svelte`, `TypewriterBox.svelte`, `PhaseTransition.svelte`: shared self-closing tag warnings
+- `arena-v2/{BattleScreen,BattleMissionView,BattleChartView,BattleCardView,ResultScreen}.svelte`: self-closing tag and accessibility/legacy ignore warnings
+- `arena-v2/HypothesisScreen.svelte`: runes reactivity + slider compatibility warnings
+- `arena-v2/DraftScreen.svelte`: slider compatibility warning
+
+## Maintenance Order If Warnings Reappear
+
+1. Fix runes correctness warnings first (`non_reactive_update`, `state_referenced_locally`).
+2. Fix deprecated slot/render usage next.
+3. Fix markup/a11y warnings before adding more cleanup work.
+4. Keep CSS compatibility warnings from accumulating; they are small individually but noisy in aggregate.
 
 ## Guardrails Added
 
@@ -37,3 +41,5 @@ Current baseline in `frontend`:
 - `npm run check:budget`:
   - Fails if warnings exceed budget (`WARNING_BUDGET`, default `49`).
 - CI check job now runs `guard:workspace` and `check:budget`.
+- Operational baseline:
+  - keep `0 warnings` as the expected steady state

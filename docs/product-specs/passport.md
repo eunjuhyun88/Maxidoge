@@ -7,6 +7,13 @@ Purpose:
 
 Show the user who they are in the system: stats, progression, achievements, and learning traces.
 
+## Current Route Shape
+
+- `/passport` currently operates as a four-tab route: `wallet`, `positions`, `profile`, and `arena`.
+- The route already treats holdings sync, open/closed positions, avatar/name edits, and learning actions as first-class features.
+- Live holdings can fall back to demo holdings when sync is unavailable.
+- Use `docs/page-specs/passport-page.md` for the actual route contract; keep this file focused on Passport's surface intent.
+
 ## Core Flows
 
 1. Load profile and progression.
@@ -21,6 +28,7 @@ Show the user who they are in the system: stats, progression, achievements, and 
 - Passport should unify identity and history rather than becoming another ad hoc dashboard.
 - Badge and mission surfaces should be compatible with the system's data-coverage goals.
 - Contribution, calibration, and weak-spot feedback should remain explainable from durable records.
+- Current route-level wallet and positions affordances should stay consistent with those durable records even when holdings fall back to demo data.
 
 ## Supporting Docs
 

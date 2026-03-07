@@ -4,7 +4,7 @@
   import { recordAgentMatch } from '$lib/stores/agentData';
   import { AGDEFS } from '$lib/data/agents';
   import { sfx } from '$lib/audio/sfx';
-  import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, DOGE_WORDS, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
+  import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, resetPhaseInit, startAnalysisFromDraft } from '$lib/engine/gameLoop';
   import { determineActualDirection } from '$lib/engine/scoring';
   import {
@@ -893,9 +893,7 @@
     arenaBattleController.destroy();
     arenaAgentRuntime.destroy();
     battlePresentationRuntime.destroy();
-    // Clean up all fire-and-forget timers
-    _pendingTimers.forEach(t => clearTimeout(t));
-    _pendingTimers.clear();
+    arenaTimerRegistry.destroy();
   });
 </script>
 

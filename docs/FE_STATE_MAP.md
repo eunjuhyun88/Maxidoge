@@ -132,9 +132,9 @@ phase별 UI:
 ## 3.3 `/oracle`
 
 규칙:
-1. `AGENT_POOL` 기준 8-agent 렌더링
-2. 정렬 기준: `wilson`, `accuracy`, `sample`, `calibration`
-3. 구형 AGDEFS 의존 금지
+1. 독립 leaderboard 상태를 소유하지 않고 mount 시 `/signals?view=ai`로 redirect한다.
+2. 실제 leaderboard 정렬/기간/상세 오버레이 상태 owner는 `/signals?view=ai`의 `OracleLeaderboard`다.
+3. 호환 persistence가 필요하면 `user_ui_state.oracle_period`, `user_ui_state.oracle_sort`를 사용하되 `/oracle` route-local state로 되돌리지 않는다.
 
 ## 3.4 `/passport`
 

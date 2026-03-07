@@ -12,8 +12,8 @@ Date: 2026-02-21
 
 - P0: 4 files
 - P1: 13 files
-- P2: 18 files
-- P3: 50 files
+- P2: 17 files
+- P3: 51 files
 
 ## Key Findings
 
@@ -69,7 +69,7 @@ Date: 2026-02-21
 | `src/components/terminal/WarRoom.svelte` | 560 | P2 | Live data updates/intervals affect global state |
 | `src/lib/engine/chartPatterns.ts` | 156 | P2 | Randomized simulation utility; deterministic tests needed |
 | `src/routes/live/+page.svelte` | 399 | P2 | Medium complexity; regression surface exists |
-| `src/routes/oracle/+page.svelte` | 405 | P2 | Medium complexity; regression surface exists |
+| `src/routes/oracle/+page.svelte` | 37 | P3 | Redirect-only shim into `/signals?view=ai`; low standalone complexity |
 | `src/routes/passport/+page.svelte` | 662 | P2 | Medium complexity; regression surface exists |
 | `src/routes/signals/+page.svelte` | 431 | P2 | Medium complexity; regression surface exists |
 | `src/routes/terminal/+page.svelte` | 631 | P2 | Live data updates/intervals affect global state |

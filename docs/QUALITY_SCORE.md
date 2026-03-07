@@ -12,8 +12,8 @@ Scale:
 
 | Area | Grade | Why | Next upgrade |
 | --- | --- | --- | --- |
-| Context routing | A- | Canonical entry docs and local context protocol now form a small-map resume path. | Localize remaining external design authority. |
-| Context handoff quality | B | Checkpoint + brief + handoff flow now exists, but adoption still depends on agent discipline. | Keep `ctx:check -- --strict` enforced and reduce degraded fallback usage. |
+| Context routing | A | Canonical entry docs plus `docs/CONTEXT_ENGINEERING.md` now form a clearer small-map resume path. | Remove the remaining parent-folder design lookups from ordinary workflows. |
+| Context handoff quality | B+ | Checkpoint + brief + handoff flow exists, and `ctx:auto` is no longer coupled to an executable bit on `context-compact.sh`. | Keep `ctx:check -- --strict` enforced and reduce degraded fallback usage. |
 | Docs structure | B+ | New hierarchy exists and canonical entry docs are stronger, but older dated docs still dominate some workflows. | Promote more stable rules into canonical docs. |
 | Terminal architecture | C+ | Refactor direction exists, but god-shell and large intel surface remain. | Continue route/view-model/presentation split. |
 | Arena product clarity | B- | Deep semantics are rich, but split across upstream design and local docs. | Consolidate Arena authority into repo-local specs. |

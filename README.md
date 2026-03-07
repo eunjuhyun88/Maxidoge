@@ -108,12 +108,15 @@ npm run preview
 - `npm run gate`: `docs:check + check + build` 통합 게이트
 - `npm run safe:status`: 현재 브랜치/워크트리/변경 파일 점검
 - `npm run safe:worktree -- <task-name> [base-branch]`: `codex/<task-name>` 브랜치 + 분리 워킹트리 생성
+- `npm run safe:split -- <slice> --describe`: mixed WIP slice manifest, validation gate, mixed-file 목록 출력
+- `npm run safe:split -- <slice> --create-worktree --stage`: target slice worktree 생성 후 whole-file carry 적용
 - `npm run safe:hooks`: 로컬 pre-push/post-merge 훅 설치 (`.githooks/*`)
 - `npm run safe:sync`: 브랜치 동기화 (`main`은 `pull --ff-only`, 작업 브랜치는 `origin/main` rebase + check)
 - `npm run safe:sync:gate`: 동기화 후 `check + build`까지 실행
 - `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`: machine snapshot 저장
 - `npm run ctx:checkpoint -- --work-id "<W-ID>" --surface "<surface>" --objective "<objective>"`: semantic working-memory checkpoint 저장
 - `npm run ctx:compact`: snapshot + checkpoint를 branch brief/handoff로 압축
+- `npm run ctx:compact -- --docs-check pass --check pass --build pass --gate pass`: 검증 결과까지 포함해 brief/handoff 갱신
 - `npm run ctx:check -- --strict`: local brief/handoff 품질 검사
 - `npm run ctx:pin -- --add "<durable fact>"`: 리셋 시 유실되면 안 되는 고정 사실 저장
 - `npm run ctx:restore -- --mode brief|handoff|files`: 복구(brief/handoff/파일 복구 의도 분리)
@@ -197,6 +200,10 @@ npm run preview
    npm run ctx:save -- --title "pre-handoff" --work-id "W-..." --agent "codex"
    npm run ctx:compact
    ```
+   검증 결과를 이미 알고 있으면:
+   ```bash
+   npm run ctx:compact -- --docs-check pass --check pass --build pass --gate pass
+   ```
 5. 리셋 후 복구:
    ```bash
    npm run ctx:restore -- --mode brief
@@ -233,6 +240,11 @@ npm run preview
    ```
    - 각 스레드는 서로 다른 worktree 경로를 사용합니다.
    - 같은 worktree에서 브랜치만 바꿔 병렬 작업하지 않습니다.
+   - 이미 섞인 WIP 브랜치를 slice별로 분해할 때는:
+     ```bash
+     npm run safe:split -- context-validation-rollup --describe
+     npm run safe:split -- context-validation-rollup --create-worktree --stage
+     ```
 
 3. 작업 시작 전 오너십(파일 범위) 고정
    - `docs/AGENT_WATCH_LOG.md` 시작 기록에 담당 파일/디렉터리를 명시합니다.

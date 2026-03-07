@@ -7,6 +7,15 @@ Purpose:
 
 Help the user discover, follow, and act on structured signal objects.
 
+## Current Route Shape
+
+- `/signals` is currently a hybrid route with `feed`, `trending`, `following`, `ai`, and `signals` tabs.
+- Community-post views are server-backed, while the `signals` tab still synthesizes cards from client stores and agent metadata.
+- The oracle leaderboard currently lives on `/signals?view=ai`, not on `/agents`.
+- The legacy `/oracle` route is now only a redirect shim into `/signals?view=ai`.
+- Copy-trade handoff currently jumps back into `/terminal` through query params.
+- Use `docs/page-specs/signals-page.md` for the actual route contract; keep this file focused on surface intent.
+
 ## Core Flows
 
 1. Browse or filter signals.
@@ -16,7 +25,7 @@ Help the user discover, follow, and act on structured signal objects.
 
 ## Product Constraints
 
-- Signal objects should have clear server authority.
+- Durable tracking and trade effects should have clear server authority even though the current route still mixes server-backed and client-derived signal views.
 - The user must be able to distinguish discovery, tracking, and execution.
 - Community reactions should not redefine durable state authority.
 
