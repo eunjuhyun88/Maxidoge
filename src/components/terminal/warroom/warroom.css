@@ -127,7 +127,7 @@
     cursor: pointer;
     transition: all .15s;
   }
-  .scan-tab:hover { color: rgba(255,255,255,.85); border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.04); }
+  .scan-tab:hover { color: rgba(255,255,255,.85); border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.04); }
   .scan-tab.active {
     color: var(--term-accent, #e8967d);
     border-color: rgba(var(--t-accent-rgb),.5);
@@ -221,14 +221,14 @@
   }
   .wr-agent-pulse-title {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1.1px;
     color: rgba(255,255,255,.46);
   }
   .wr-agent-pulse-count {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .8px;
     color: rgba(var(--t-accent-rgb),.72);
@@ -276,7 +276,7 @@
   }
   .wr-agent-chip-name {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .45px;
     color: rgba(255,255,255,.78);
@@ -394,7 +394,7 @@
   .wr-msg-arrow-price { color: rgba(255,255,255,.3); font-size: 9px; }
   .wr-msg-tp { color: var(--grn); }
   .wr-msg-sl { color: var(--red); }
-  .wr-msg-src { font-family: var(--fm); font-size: 8px; color: rgba(var(--t-accent-rgb),.4); margin-left: auto; opacity: 0; transition: opacity .15s; }
+  .wr-msg-src { font-family: var(--fm); font-size: 9px; color: rgba(var(--t-accent-rgb),.4); margin-left: auto; opacity: 0; transition: opacity .15s; }
   .wr-msg:hover .wr-msg-src { opacity: 1; }
   .wr-msg-text.expanded { -webkit-line-clamp: unset; cursor: pointer; }
   .wr-msg-text { cursor: pointer; }
@@ -416,6 +416,8 @@
   .wr-act-btn.track:hover { background: rgba(0,204,255,.15); }
   .wr-act-btn.chart { color: var(--term-accent, #e8967d); border-color: rgba(var(--t-accent-rgb),.25); background: rgba(var(--t-accent-rgb),.05); }
   .wr-act-btn.chart:hover { background: rgba(var(--t-accent-rgb),.15); border-color: rgba(var(--t-accent-rgb),.5); }
+  .wr-act-btn.share { color: #ffaa00; border-color: rgba(255,170,0,.25); background: rgba(255,170,0,.05); }
+  .wr-act-btn.share:hover { background: rgba(255,170,0,.18); border-color: rgba(255,170,0,.45); }
 
   /* ═══ Empty State ═══ */
   .wr-empty {
@@ -507,7 +509,7 @@
   }
   .csc-hint {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(var(--t-text-rgb),.56);
     overflow: hidden;
     text-overflow: ellipsis;

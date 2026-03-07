@@ -4,15 +4,15 @@ import {
   buildPatternScanUnavailableMessage,
 } from './terminalEventMappers';
 import { formatPatternChatReply } from './terminalHelpers';
-import type { ChatMsg, ChartPanelHandle, ChatTradeDirection, MobileTab } from './terminalTypes';
+import type {
+  ChatMsg,
+  ChartPanelHandle,
+  ChatTradeDirection,
+  MobileTab,
+  TerminalChartRequestDetail,
+} from './terminalTypes';
 
 type TerminalViewport = 'mobile' | 'tablet' | 'desktop';
-
-type ChartRequestDetail = {
-  source?: string;
-  pair?: string;
-  timeframe?: string;
-};
 
 export function createTerminalActionRuntime(params: {
   emitGtm: (event: string, payload?: Record<string, unknown>) => void;
@@ -80,11 +80,11 @@ export function createTerminalActionRuntime(params: {
     params.focusChatInput();
   }
 
-  function handleChartScanRequest(detail: ChartRequestDetail) {
+  function handleChartScanRequest(detail: TerminalChartRequestDetail) {
     requestTerminalScan(detail.source || 'chart-panel', detail.pair, detail.timeframe);
   }
 
-  function handleChartChatRequest(detail: ChartRequestDetail) {
+  function handleChartChatRequest(detail: TerminalChartRequestDetail) {
     params.emitGtm('terminal_chat_request_shell', {
       source: detail.source || 'chart-panel',
       pair: detail.pair || currentPair(),

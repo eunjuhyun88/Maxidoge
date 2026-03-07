@@ -5,6 +5,8 @@
 
 import type { ScanHighlight } from '$lib/terminal/intel/intelTypes';
 import type { SignalAttachment } from '$lib/stores/communityStore';
+import type { SignalEvidence } from './signalEvidence';
+import type { ChartPanelPublicHandle } from '$lib/chart/chartPanelContracts';
 import type { ChatTradeDirection, PatternScanScope, PatternScanReport } from './terminalHelpers';
 
 export type { ScanHighlight, ChatTradeDirection };
@@ -17,14 +19,17 @@ export type MobileChatSheetState = 'closed' | 'peek' | 'half' | 'full';
 export type DragTarget = 'left' | 'right' | null;
 export type TerminalPanelResizeTarget = 'left' | 'right' | 'center';
 
+export interface TerminalChartRequestDetail {
+  source?: string;
+  pair?: string;
+  timeframe?: string;
+}
+
 export interface WarRoomHandle {
   triggerScanFromChart?: () => void;
 }
 
-export interface ChartPanelHandle {
-  activateTradeDrawing?: (dir?: 'LONG' | 'SHORT') => Promise<void> | void;
-  runPatternScanFromIntel?: (options?: { scope?: PatternScanScope; focus?: boolean }) => Promise<PatternScanReport>;
-}
+export type ChartPanelHandle = ChartPanelPublicHandle;
 
 export type TerminalChatConnectionStatus = 'connected' | 'degraded' | 'disconnected';
 
@@ -83,6 +88,8 @@ export interface ChartCommunitySignal {
   source: string;
   reason: string;
   openCopyTrade: boolean;
+  /** 구조화된 근거 — Flow A(AI) / Flow B(차트) 에서 자동 조립 */
+  evidence?: SignalEvidence;
 }
 
 export interface TerminalSharePrefill {
@@ -93,6 +100,8 @@ export interface TerminalSharePrefill {
   contextPair?: string;
   contextPrice?: number;
   contextTimeframe?: string;
+  /** 구조화된 근거 — evidence-first 폼 Step 1에 표시 */
+  evidence?: SignalEvidence;
 }
 
 export interface TerminalControlBarProps {
@@ -107,6 +116,7 @@ export interface TerminalControlBarProps {
   tradeReady: boolean;
   verdictAgree?: string;
   verdictTime?: string;
+  connectionStatus?: 'live' | 'offline';
   onPrimaryAction: () => void;
   onToggleDensity: () => void;
 }

@@ -6,8 +6,25 @@ import { toBoundedInt } from '$lib/server/apiValidation';
 import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
 import { errorContains } from '$lib/utils/errorUtils';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRow(row: Record<string, any>) {
+interface PostRow {
+  id: string;
+  user_id: string | null;
+  author: string;
+  avatar: string;
+  avatar_color: string;
+  body: string;
+  signal: 'long' | 'short' | null;
+  likes: number;
+  created_at: string;
+  signal_attachment: Record<string, unknown> | null;
+  comment_count: number;
+  copy_count: number;
+  allow_copy_trade: boolean;
+  user_reacted: boolean;
+}
+
+function mapRow(row: PostRow) {
+  const att = row.signal_attachment;
   return {
     id: row.id,
     userId: row.user_id,
@@ -18,33 +35,76 @@ function mapRow(row: Record<string, any>) {
     signal: row.signal,
     likes: Number(row.likes ?? 0),
     createdAt: new Date(row.created_at).getTime(),
+    signalAttachment: att ? {
+      pair: String(att.pair ?? ''),
+      dir: String(att.dir ?? 'LONG') as 'LONG' | 'SHORT',
+      entry: Number(att.entry ?? 0),
+      tp: Number(att.tp ?? 0),
+      sl: Number(att.sl ?? 0),
+      conf: Number(att.conf ?? 50),
+      timeframe: att.timeframe ? String(att.timeframe) : undefined,
+      reason: att.reason ? String(att.reason) : undefined,
+    } : null,
+    userReacted: Boolean(row.user_reacted),
+    commentCount: Number(row.comment_count ?? 0),
+    copyCount: Number(row.copy_count ?? 0),
+    allowCopyTrade: Boolean(row.allow_copy_trade),
   };
 }
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, cookies }) => {
   try {
     const limit = toBoundedInt(url.searchParams.get('limit'), 50, 1, 100);
     const offset = toBoundedInt(url.searchParams.get('offset'), 0, 0, 1000);
     const signal = (url.searchParams.get('signal') || '').trim().toLowerCase();
 
-    const where = signal === 'long' || signal === 'short' ? 'WHERE signal = $1' : '';
-    const params = signal === 'long' || signal === 'short' ? [signal, limit, offset] : [limit, offset];
+    // Get current user for userReacted flag (nullable)
+    const user = await getAuthUserFromCookies(cookies).catch(() => null);
+    const userId = user?.id ?? null;
 
-    const countQuery = signal === 'long' || signal === 'short'
+    const hasSignalFilter = signal === 'long' || signal === 'short';
+
+    // Count query
+    const countSql = hasSignalFilter
       ? `SELECT count(*)::text AS total FROM community_posts WHERE signal = $1`
       : `SELECT count(*)::text AS total FROM community_posts`;
-    const countParams = signal === 'long' || signal === 'short' ? [signal] : [];
+    const countParams = hasSignalFilter ? [signal] : [];
+    const total = await query<{ total: string }>(countSql, countParams);
 
-    const total = await query<{ total: string }>(countQuery, countParams);
+    // Main query with LEFT JOIN for userReacted
+    let paramIdx = 1;
+    const params: unknown[] = [];
 
-    const rows = await query(
+    // $1 = userId (for LEFT JOIN)
+    params.push(userId);
+    paramIdx++;
+
+    let whereClauses = '';
+    if (hasSignalFilter) {
+      whereClauses = `WHERE p.signal = $${paramIdx}`;
+      params.push(signal);
+      paramIdx++;
+    }
+
+    params.push(limit);
+    const limitIdx = paramIdx++;
+    params.push(offset);
+    const offsetIdx = paramIdx;
+
+    const rows = await query<PostRow>(
       `
-        SELECT id, user_id, author, avatar, avatar_color, body, signal, likes, created_at
-        FROM community_posts
-        ${where}
-        ORDER BY created_at DESC
-        LIMIT $${signal === 'long' || signal === 'short' ? 2 : 1}
-        OFFSET $${signal === 'long' || signal === 'short' ? 3 : 2}
+        SELECT
+          p.id, p.user_id, p.author, p.avatar, p.avatar_color, p.body,
+          p.signal, p.likes, p.created_at,
+          p.signal_attachment, p.comment_count, p.copy_count, p.allow_copy_trade,
+          CASE WHEN r.id IS NOT NULL THEN true ELSE false END AS user_reacted
+        FROM community_posts p
+        LEFT JOIN community_post_reactions r
+          ON r.post_id = p.id AND r.user_id = $1 AND r.emoji = '👍'
+        ${whereClauses}
+        ORDER BY p.created_at DESC
+        LIMIT $${limitIdx}
+        OFFSET $${offsetIdx}
       `,
       params
     );
@@ -64,6 +124,45 @@ export const GET: RequestHandler = async ({ url }) => {
   }
 };
 
+interface SignalAttachmentInput {
+  pair?: string;
+  dir?: string;
+  entry?: number;
+  tp?: number;
+  sl?: number;
+  conf?: number;
+  timeframe?: string;
+  reason?: string;
+}
+
+function validateSignalAttachment(input: unknown): SignalAttachmentInput | null {
+  if (!input || typeof input !== 'object') return null;
+  const att = input as Record<string, unknown>;
+
+  const pair = typeof att.pair === 'string' ? att.pair.trim() : '';
+  const dir = typeof att.dir === 'string' ? att.dir.trim().toUpperCase() : '';
+  const entry = Number(att.entry);
+  const tp = Number(att.tp);
+  const sl = Number(att.sl);
+  const conf = Number(att.conf);
+
+  if (!pair || pair.length > 32) return null;
+  if (dir !== 'LONG' && dir !== 'SHORT') return null;
+  if (!isFinite(entry) || entry <= 0) return null;
+  if (!isFinite(tp) || tp <= 0) return null;
+  if (!isFinite(sl) || sl <= 0) return null;
+  if (!isFinite(conf) || conf < 1 || conf > 100) return null;
+
+  const result: SignalAttachmentInput = { pair, dir, entry, tp, sl, conf };
+  if (typeof att.timeframe === 'string' && att.timeframe.trim()) {
+    result.timeframe = att.timeframe.trim().slice(0, 8);
+  }
+  if (typeof att.reason === 'string' && att.reason.trim()) {
+    result.reason = att.reason.trim().slice(0, 500);
+  }
+  return result;
+}
+
 export const POST: RequestHandler = async ({ cookies, request }) => {
   try {
     const user = await getAuthUserFromCookies(cookies);
@@ -76,6 +175,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const avatarColor = typeof body?.avatarColor === 'string' ? body.avatarColor.trim() : '#E8967D';
     const content = typeof body?.body === 'string' ? body.body.trim() : '';
     const signal = typeof body?.signal === 'string' ? body.signal.trim().toLowerCase() : null;
+    const signalAttachment = validateSignalAttachment(body?.signalAttachment);
+    const allowCopyTrade = Boolean(body?.allowCopyTrade);
 
     if (!content || content.length < 2) {
       return json({ error: 'body must be at least 2 chars' }, { status: 400 });
@@ -93,15 +194,22 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       return json({ error: 'signal must be long|short or null' }, { status: 400 });
     }
 
-    const insert = await query(
+    const insert = await query<PostRow>(
       `
         INSERT INTO community_posts (
-          user_id, author, avatar, avatar_color, body, signal, likes, created_at
+          user_id, author, avatar, avatar_color, body, signal,
+          likes, signal_attachment, allow_copy_trade, created_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, 0, now())
-        RETURNING id, user_id, author, avatar, avatar_color, body, signal, likes, created_at
+        VALUES ($1, $2, $3, $4, $5, $6, 0, $7::jsonb, $8, now())
+        RETURNING id, user_id, author, avatar, avatar_color, body, signal,
+          likes, created_at, signal_attachment, comment_count, copy_count, allow_copy_trade,
+          false AS user_reacted
       `,
-      [user.id, author, avatar, avatarColor, content, signal]
+      [
+        user.id, author, avatar, avatarColor, content, signal,
+        signalAttachment ? JSON.stringify(signalAttachment) : null,
+        allowCopyTrade,
+      ]
     );
 
     await query(
@@ -109,7 +217,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
         INSERT INTO activity_events (user_id, event_type, source_page, source_id, severity, payload)
         VALUES ($1, 'community_posted', 'terminal', $2, 'info', $3::jsonb)
       `,
-      [user.id, insert.rows[0].id, JSON.stringify({ signal })]
+      [user.id, insert.rows[0].id, JSON.stringify({ signal, hasAttachment: !!signalAttachment })]
     ).catch(() => undefined);
 
     return json({ success: true, post: mapRow(insert.rows[0]) });

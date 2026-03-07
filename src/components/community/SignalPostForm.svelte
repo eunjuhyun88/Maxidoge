@@ -1,7 +1,11 @@
 <script lang="ts">
   import { addCommunityPost, type SignalAttachment } from '$lib/stores/communityStore';
   import type { TerminalSharePrefill } from '$lib/terminal/terminalTypes';
+  import type { SignalEvidence } from '$lib/terminal/signalEvidence';
+  import { inferDirectionFromEvidence } from '$lib/terminal/signalEvidence';
   import { getPairPrice, type PriceLikeMap } from '$lib/utils/price';
+  import EvidenceReviewStep from './EvidenceReviewStep.svelte';
+  import EvidenceChip from './EvidenceChip.svelte';
 
   interface Props {
     /** Pre-fill from terminal share */
@@ -17,9 +21,12 @@
   // ─── Form mode: collapsed (inline) or expanded (stepped wizard) ───
   let expanded: boolean = $state(false);
 
-  // ─── Step state (1: direction+pair, 2: levels, 3: text+preview) ───
+  // ─── Step state (1: evidence, 2: direction+levels, 3: text+preview) ───
   type FormStep = 1 | 2 | 3;
   let step: FormStep = $state(1);
+
+  // ─── Evidence state ───
+  let evidence: SignalEvidence | null = $state(null);
 
   // ─── Form fields ───
   let dir: 'LONG' | 'SHORT' = $state('LONG');
@@ -39,8 +46,12 @@
   // ─── Prefill handling ───
   $effect(() => {
     if (!prefill) return;
+    // evidence from prefill
+    if (prefill.evidence) {
+      evidence = prefill.evidence;
+    }
     if (prefill.attachment) {
-      // Full prefill from terminal chart signal → jump to step 3
+      // Full prefill from terminal chart/AI signal
       dir = prefill.attachment.dir;
       pair = prefill.attachment.pair;
       entry = String(prefill.attachment.entry);
@@ -50,9 +61,10 @@
       timeframe = prefill.attachment.timeframe ?? '4H';
       body = prefill.text ?? '';
       expanded = true;
-      step = 3;
+      // Evidence present → show evidence first, otherwise jump to step 2
+      step = evidence ? 1 : 2;
     } else {
-      // Context hints only → start at step 1 with pair/price pre-set
+      // Context hints only → start at step 1 (evidence review / empty)
       if (prefill.contextPair) pair = prefill.contextPair;
       if (prefill.contextTimeframe) timeframe = prefill.contextTimeframe;
       if (prefill.contextPrice && prefill.contextPrice > 0) {
@@ -107,14 +119,21 @@
   });
 
   // ─── Step navigation ───
+  function handleEvidenceNext() {
+    // Infer direction from evidence
+    const inferredDir = inferDirectionFromEvidence(evidence);
+    if (inferredDir) dir = inferredDir;
+    // If evidence has pair/timeframe context, use it
+    if (evidence?.pair) pair = evidence.pair;
+    if (evidence?.timeframe) timeframe = evidence.timeframe.toUpperCase();
+    step = 2;
+  }
+
   function nextStep() {
-    if (step === 1) {
-      // Auto-fill entry from live price if empty
+    if (step === 2) {
       if (!entry && currentLivePrice) {
         entry = String(Math.round(currentLivePrice));
       }
-      step = 2;
-    } else if (step === 2) {
       autoFillLevels();
       step = 3;
     }
@@ -125,10 +144,8 @@
     else if (step === 3) step = 2;
   }
 
-  function canAdvance(): boolean {
-    if (step === 1) return true; // direction + pair always valid
-    if (step === 2) return Number(entry) > 0;
-    return body.trim().length >= 2;
+  function canAdvanceStep2(): boolean {
+    return Number(entry) > 0;
   }
 
   // ─── Submit ───
@@ -144,6 +161,7 @@
       sl: Number(sl),
       conf,
       timeframe,
+      evidence: evidence ?? undefined,
     };
 
     const signal: 'long' | 'short' = dir === 'LONG' ? 'long' : 'short';
@@ -155,6 +173,7 @@
     tp = '';
     sl = '';
     conf = 70;
+    evidence = null;
     step = 1;
     expanded = false;
     isSubmitting = false;
@@ -168,6 +187,7 @@
     entry = '';
     tp = '';
     sl = '';
+    evidence = null;
   }
 </script>
 
@@ -190,10 +210,26 @@
         <div class="step-dot" class:active={step >= 3}>3</div>
       </div>
 
-      <!-- ═══ STEP 1: Direction + Pair ═══ -->
+      <!-- Step labels -->
+      <div class="step-labels">
+        <span class="s-label" class:active={step === 1}>근거</span>
+        <span class="s-label" class:active={step === 2}>설정</span>
+        <span class="s-label" class:active={step === 3}>공유</span>
+      </div>
+
+      <!-- ═══ STEP 1: Evidence Review ═══ -->
       {#if step === 1}
-        <div class="step-content" role="group" aria-label="방향 및 페어 선택">
-          <div class="step-label">방향 선택</div>
+        <EvidenceReviewStep
+          {evidence}
+          onUpdate={(ev) => evidence = ev}
+          onNext={handleEvidenceNext}
+          onCancel={resetAndClose}
+        />
+
+      <!-- ═══ STEP 2: Direction + Levels (merged) ═══ -->
+      {:else if step === 2}
+        <div class="step-content" role="group" aria-label="방향 및 가격 레벨">
+          <div class="step-label">시그널 설정</div>
 
           <div class="dir-row">
             <button class="dir-btn" class:active={dir === 'LONG'} class:long={dir === 'LONG'} onclick={() => dir = 'LONG'}>
@@ -215,29 +251,6 @@
                 <button class="tf-btn" class:active={timeframe === tf} onclick={() => timeframe = tf}>{tf}</button>
               {/each}
             </div>
-          </div>
-
-          {#if currentLivePrice}
-            <div class="live-hint">
-              현재가 <span class="live-price">${currentLivePrice.toLocaleString()}</span>
-            </div>
-          {/if}
-
-          <div class="step-actions">
-            <button class="btn-cancel" onclick={resetAndClose}>취소</button>
-            <button class="btn-next" onclick={nextStep}>다음 →</button>
-          </div>
-        </div>
-
-      <!-- ═══ STEP 2: Price Levels ═══ -->
-      {:else if step === 2}
-        <div class="step-content" role="group" aria-label="가격 레벨 설정">
-          <div class="step-context">
-            <span class="ctx-pair">{pair}</span>
-            <span class="ctx-dir" class:long={dir === 'LONG'} class:short={dir === 'SHORT'}>
-              {dir === 'LONG' ? '▲' : '▼'} {dir}
-            </span>
-            <span class="ctx-tf">{timeframe}</span>
           </div>
 
           <div class="levels">
@@ -292,8 +305,8 @@
           </label>
 
           <div class="step-actions">
-            <button class="btn-prev" onclick={prevStep}>← 이전</button>
-            <button class="btn-next" disabled={!canAdvance()} onclick={nextStep}>다음 →</button>
+            <button class="btn-prev" onclick={prevStep}>← 근거</button>
+            <button class="btn-next" disabled={!canAdvanceStep2()} onclick={nextStep}>다음 →</button>
           </div>
         </div>
 
@@ -324,6 +337,23 @@
               <span class="preview-conf">{conf}%</span>
               <span class="preview-tf">{timeframe}</span>
             </div>
+
+            <!-- Evidence summary in preview -->
+            {#if evidence?.items?.length}
+              <div class="preview-evidence">
+                <span class="pe-label">
+                  {evidence.source === 'ai-scan' ? '🤖' : '📊'} 근거 {evidence.items.length}개
+                </span>
+                <div class="pe-chips">
+                  {#each evidence.items.slice(0, 3) as item}
+                    <EvidenceChip {item} compact />
+                  {/each}
+                  {#if evidence.items.length > 3}
+                    <span class="pe-more">+{evidence.items.length - 3}</span>
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
 
           <textarea
@@ -334,7 +364,7 @@
           ></textarea>
 
           <div class="step-actions">
-            <button class="btn-prev" onclick={prevStep}>← 이전</button>
+            <button class="btn-prev" onclick={prevStep}>← 설정</button>
             <button
               class="btn-submit"
               disabled={isSubmitting || body.trim().length < 2}
@@ -412,7 +442,6 @@
     align-items: center;
     justify-content: center;
     gap: 0;
-    padding-bottom: var(--sc-sp-2);
   }
   .step-dot {
     width: 24px; height: 24px;
@@ -445,6 +474,21 @@
     background: var(--sc-accent);
   }
 
+  .step-labels {
+    display: flex;
+    justify-content: space-around;
+    padding-bottom: var(--sc-sp-1);
+  }
+  .s-label {
+    font-family: var(--sc-font-mono);
+    font-size: var(--sc-fs-2xs);
+    font-weight: 700;
+    color: var(--sc-text-3);
+    letter-spacing: 0.5px;
+    transition: color var(--sc-duration-fast);
+  }
+  .s-label.active { color: var(--sc-accent); }
+
   /* ═══ STEP CONTENT ═══ */
   .step-content {
     display: flex;
@@ -461,14 +505,14 @@
     text-transform: uppercase;
   }
 
-  /* ═══ STEP 1: Direction ═══ */
+  /* ═══ STEP 2: Direction + Levels ═══ */
   .dir-row { display: flex; gap: var(--sc-sp-2); }
   .dir-btn {
     flex: 1;
-    padding: var(--sc-sp-3);
+    padding: var(--sc-sp-2);
     border-radius: var(--sc-radius-lg);
     font-family: var(--sc-font-display);
-    font-size: var(--sc-fs-md);
+    font-size: var(--sc-fs-sm);
     font-weight: 900;
     letter-spacing: 1px;
     cursor: pointer;
@@ -491,7 +535,7 @@
     background: var(--sc-bad-bg);
     box-shadow: 0 0 12px var(--sc-bad-bg);
   }
-  .dir-arrow { font-size: var(--sc-fs-lg); }
+  .dir-arrow { font-size: var(--sc-fs-md); }
 
   .pair-tf-row {
     display: flex;
@@ -529,38 +573,7 @@
     border-color: var(--sc-line);
   }
 
-  .live-hint {
-    font-family: var(--sc-font-mono);
-    font-size: var(--sc-fs-xs);
-    color: var(--sc-text-3);
-    text-align: center;
-  }
-  .live-price {
-    color: var(--sc-text-0);
-    font-weight: 800;
-  }
-
-  /* ═══ STEP 2: Levels ═══ */
-  .step-context {
-    display: flex;
-    align-items: center;
-    gap: var(--sc-sp-2);
-    font-family: var(--sc-font-mono);
-    font-size: var(--sc-fs-sm);
-    font-weight: 800;
-  }
-  .ctx-pair { color: var(--sc-text-0); }
-  .ctx-dir { letter-spacing: 0.5px; }
-  .ctx-dir.long { color: var(--sc-good); }
-  .ctx-dir.short { color: var(--sc-bad); }
-  .ctx-tf {
-    font-size: var(--sc-fs-2xs);
-    color: var(--sc-text-3);
-    background: var(--sc-surface);
-    padding: var(--sc-sp-0_5) var(--sc-sp-1_5);
-    border-radius: var(--sc-radius-sm);
-  }
-
+  /* ═══ Levels ═══ */
   .levels { display: flex; gap: var(--sc-sp-2); }
   .level-field {
     flex: 1;
@@ -739,6 +752,36 @@
     border-radius: var(--sc-radius-sm);
   }
 
+  /* Evidence in preview */
+  .preview-evidence {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sc-sp-1);
+    padding-top: var(--sc-sp-1);
+    border-top: 1px solid var(--sc-line-soft);
+  }
+  .pe-label {
+    font-family: var(--sc-font-mono);
+    font-size: var(--sc-fs-2xs);
+    font-weight: 700;
+    color: var(--sc-text-3);
+  }
+  .pe-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    align-items: center;
+  }
+  .pe-more {
+    font-family: var(--sc-font-mono);
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--sc-text-3);
+    padding: 1px var(--sc-sp-1);
+    background: var(--sc-surface);
+    border-radius: var(--sc-radius-pill);
+  }
+
   .textarea {
     width: 100%;
     resize: vertical;
@@ -763,7 +806,7 @@
     justify-content: flex-end;
     gap: var(--sc-sp-2);
   }
-  .btn-cancel, .btn-prev {
+  .btn-prev {
     padding: var(--sc-sp-2) var(--sc-sp-4);
     border-radius: var(--sc-radius-md);
     font-family: var(--sc-font-mono);
@@ -775,7 +818,7 @@
     cursor: pointer;
     transition: all var(--sc-duration-fast) var(--sc-ease);
   }
-  .btn-cancel:hover, .btn-prev:hover { background: var(--sc-surface-2); color: var(--sc-text-1); }
+  .btn-prev:hover { background: var(--sc-surface-2); color: var(--sc-text-1); }
 
   .btn-next {
     padding: var(--sc-sp-2) var(--sc-sp-5);

@@ -24,6 +24,11 @@ export interface TerminalDecisionState {
   tradeReady: boolean;
 }
 
+export interface TerminalVerdictMeta {
+  agree: string;
+  time: string;
+}
+
 export interface BuildOfflineAgentReplyParams {
   userText: string;
   statusLabel: string;
@@ -117,6 +122,38 @@ export function buildTerminalControlBarProps(params: {
     tradeReady: decisionState.tradeReady,
     onPrimaryAction,
     onToggleDensity,
+  };
+}
+
+export function buildTerminalVerdictMeta(latestScan: ScanIntelDetail | null): TerminalVerdictMeta {
+  if (!latestScan) {
+    return {
+      agree: '',
+      time: '',
+    };
+  }
+
+  const agree = latestScan.highlights
+    ? `${latestScan.highlights.filter((highlight) => highlight.vote === latestScan.consensus).length}/${latestScan.highlights.length}`
+    : '';
+
+  if (!latestScan.createdAt) {
+    return {
+      agree,
+      time: '',
+    };
+  }
+
+  const sec = Math.floor((Date.now() - latestScan.createdAt) / 1000);
+  const time = sec < 60
+    ? 'just now'
+    : sec < 3600
+      ? `${Math.floor(sec / 60)}m ago`
+      : `${Math.floor(sec / 3600)}h ago`;
+
+  return {
+    agree,
+    time,
   };
 }
 

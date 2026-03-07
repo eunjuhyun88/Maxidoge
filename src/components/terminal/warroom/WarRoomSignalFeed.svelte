@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { AgentSignal } from '$lib/data/warroom';
-  import type { ScanTab, SignalDiff } from './types';
+  import type { TerminalDensityMode } from '$lib/terminal/terminalTypes';
+  import type { ScanTab, SignalDiff } from '$lib/terminal/warroom/warRoomTypes';
   import DirectionBadge from '../DirectionBadge.svelte';
 
   interface Props {
     filteredSignals?: AgentSignal[];
     summarySignals?: AgentSignal[];
-    densityMode?: 'essential' | 'pro';
+    densityMode?: TerminalDensityMode;
     scanTabs?: ScanTab[];
     selectedIds?: Set<string>;
     selectedCount?: number;
@@ -19,6 +20,7 @@
     onTrack?: (sig: AgentSignal) => void;
     onRunScan?: () => void;
     onShowOnChart?: (sig: AgentSignal) => void;
+    onShareToCommunity?: (sig: AgentSignal) => void;
   }
 
   let {
@@ -37,6 +39,7 @@
     onTrack = () => {},
     onRunScan = () => {},
     onShowOnChart = () => {},
+    onShareToCommunity = () => {},
   }: Props = $props();
 
   let expandedId = $state<string | null>(null);
@@ -134,6 +137,9 @@
               </button>
             {/if}
             <button class="wr-act-btn track" onclick={(e: MouseEvent) => { e.stopPropagation(); onTrack(sig); }}>TRACK</button>
+            {#if sig.vote !== 'neutral'}
+              <button class="wr-act-btn share" onclick={(e: MouseEvent) => { e.stopPropagation(); onShareToCommunity(sig); }} title="커뮤니티에 시그널 공유">SHARE</button>
+            {/if}
           </div>
         {:else}
           <!-- Primary actions -->
@@ -145,6 +151,9 @@
           <div class="wr-msg-actions-secondary">
             <button class="wr-act-btn chart" onclick={(e: MouseEvent) => { e.stopPropagation(); onShowOnChart(sig); }} title="Show entry/TP/SL on chart">CHART</button>
             <button class="wr-act-btn track" onclick={(e: MouseEvent) => { e.stopPropagation(); onTrack(sig); }}>TRACK</button>
+            {#if sig.vote !== 'neutral'}
+              <button class="wr-act-btn share" onclick={(e: MouseEvent) => { e.stopPropagation(); onShareToCommunity(sig); }} title="커뮤니티에 시그널 공유">SHARE</button>
+            {/if}
             <span class="wr-msg-src">{sig.src}</span>
           </div>
         {/if}

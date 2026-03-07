@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CommunityPost, SignalAttachment } from '$lib/stores/communityStore';
+  import EvidenceChip from './EvidenceChip.svelte';
 
   interface Props {
     post: CommunityPost;
@@ -119,6 +120,25 @@
             <span class="lv-label">SL</span>
             <span class="lv-val sl">${att.sl.toLocaleString()}</span>
           </div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- ── Evidence ── -->
+    {#if att?.evidence?.items?.length}
+      <div class="evidence-section">
+        <div class="ev-header">
+          <span class="ev-icon">{att.evidence.source === 'ai-scan' ? '🤖' : '📊'}</span>
+          <span class="ev-label">{att.evidence.source === 'ai-scan' ? 'AI 분석 근거' : '차트 관찰 근거'}</span>
+          <span class="ev-cnt">{att.evidence.items.length}개</span>
+        </div>
+        <div class="ev-chips">
+          {#each att.evidence.items.slice(0, 4) as item}
+            <EvidenceChip {item} compact />
+          {/each}
+          {#if att.evidence.items.length > 4}
+            <span class="ev-more">+{att.evidence.items.length - 4}</span>
+          {/if}
         </div>
       </div>
     {/if}
@@ -455,6 +475,49 @@
   }
   .btn-copy:active { transform: translateY(0); box-shadow: none; }
 
+  /* ═══ EVIDENCE SECTION ═══ */
+  .evidence-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sc-sp-1);
+    padding: var(--sc-sp-2) var(--sc-sp-2);
+    background: var(--sc-surface);
+    border: 1px solid var(--sc-line-soft);
+    border-radius: var(--sc-radius-md);
+  }
+  .ev-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sc-sp-1);
+    font-family: var(--sc-font-mono);
+    font-size: var(--sc-fs-2xs);
+  }
+  .ev-icon { font-size: var(--sc-fs-sm); }
+  .ev-label { font-weight: 700; color: var(--sc-text-2); letter-spacing: 0.3px; }
+  .ev-cnt {
+    font-weight: 800;
+    color: var(--sc-text-3);
+    background: var(--sc-bg-0);
+    padding: 0 var(--sc-sp-1);
+    border-radius: var(--sc-radius-pill);
+    font-size: 9px;
+  }
+  .ev-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    align-items: center;
+  }
+  .ev-more {
+    font-family: var(--sc-font-mono);
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--sc-text-3);
+    padding: 1px var(--sc-sp-1);
+    background: var(--sc-bg-0);
+    border-radius: var(--sc-radius-pill);
+  }
+
   /* ═══ COMPACT MODE ═══ */
   .compact { border-radius: var(--sc-radius-lg); }
   .compact .body { padding: var(--sc-sp-2) var(--sc-sp-2); gap: var(--sc-sp-1); }
@@ -472,5 +535,39 @@
     .actions-r { margin-left: 0; width: 100%; margin-top: var(--sc-sp-1); }
     .btn-track, .btn-copy { flex: 1; text-align: center; }
     .actions { flex-wrap: wrap; }
+  }
+
+  /* ═══ SMALL MOBILE (≤ 480px) ═══ */
+  @media (max-width: 480px) {
+    .body {
+      padding: var(--sc-sp-2) var(--sc-sp-2);
+      gap: var(--sc-sp-1_5);
+    }
+    .avatar { width: 24px; height: 24px; font-size: var(--sc-fs-2xs); }
+    .author { font-size: var(--sc-fs-sm); }
+    .text { font-size: var(--sc-fs-sm); }
+
+    .signal {
+      padding: var(--sc-sp-1_5) var(--sc-sp-2);
+    }
+    .sig-pair { font-size: var(--sc-fs-base); }
+    .sig-dir { font-size: 9px; padding: 1px 6px; }
+    .sig-conf { font-size: 9px; }
+    .sig-rr { font-size: 9px; }
+    .sig-tf { font-size: 8px; padding: 1px 5px; }
+    .sig-levels { gap: var(--sc-sp-1_5); }
+    .lv-val { font-size: var(--sc-fs-sm); }
+    .lv-label { font-size: 8px; }
+
+    .btn-track, .btn-copy {
+      font-size: var(--sc-fs-2xs);
+      padding: var(--sc-sp-1_5) var(--sc-sp-2);
+      min-height: var(--sc-touch-sm, 36px);
+    }
+    .react-btn {
+      padding: var(--sc-sp-1) var(--sc-sp-1_5);
+      font-size: var(--sc-fs-xs);
+    }
+    .meta-pill { font-size: var(--sc-fs-xs); }
   }
 </style>

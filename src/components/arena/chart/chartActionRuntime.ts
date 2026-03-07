@@ -3,6 +3,7 @@ import { buildCommunitySignalDraft } from '$lib/chart/chartTradePlanner';
 import type { AgentTradeSetup, DrawingMode } from '$lib/chart/chartTypes';
 import type { CanonicalTimeframe } from '$lib/utils/timeframe';
 import { normalizeTimeframe, toBinanceInterval } from '$lib/utils/timeframe';
+import { buildChartObservationEvidence, type IndicatorSnapshot, type PatternDetection } from '$lib/terminal/signalEvidence';
 
 export interface ChartActionRuntimeController {
   changePair(pair: string): void;
@@ -43,7 +44,12 @@ export interface CreateChartActionRuntimeOptions {
     source: string;
     reason: string;
     openCopyTrade: boolean;
+    evidence?: import('$lib/terminal/signalEvidence').SignalEvidence;
   }) => void;
+  /** 차트 인디케이터 스냅샷 (evidence 조립용) */
+  getIndicatorSnapshot?: () => IndicatorSnapshot;
+  /** 차트 패턴 감지 결과 (evidence 조립용) */
+  getOverlayPatterns?: () => PatternDetection[];
   emitGtm: (event: string, payload?: Record<string, unknown>) => void;
   pushChartNotice: (message: string) => void;
 }
@@ -131,6 +137,20 @@ export function createChartActionRuntime(
     }
 
     const openCopyTrade = runtimeOptions?.openCopyTrade !== false;
+
+    // Chart evidence 조립
+    const setup = options.getActiveTradeSetup();
+    const evidence = buildChartObservationEvidence({
+      pair: draft.pair,
+      timeframe: options.getTimeframe(),
+      livePrice: options.getLivePrice(),
+      indicators: options.getIndicatorSnapshot?.(),
+      patterns: options.getOverlayPatterns?.(),
+      agentSetupName: setup?.agentName ?? (setup?.source === 'consensus' ? 'CONSENSUS' : undefined),
+      agentSetupConf: setup?.conf,
+      agentSetupDir: setup?.dir,
+    });
+
     options.emitCommunitySignal({
       pair: draft.pair,
       dir: draft.dir,
@@ -141,6 +161,7 @@ export function createChartActionRuntime(
       source: draft.source,
       reason: draft.reason,
       openCopyTrade,
+      evidence,
     });
 
     options.emitGtm('terminal_chart_community_signal', {

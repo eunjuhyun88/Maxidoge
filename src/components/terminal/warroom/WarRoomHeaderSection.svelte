@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TokenFilter, ScanTab } from './types';
+  import type { TokenFilter, ScanTab } from '$lib/terminal/warroom/warRoomTypes';
 
   interface Props {
     currentPair?: string;
