@@ -10,6 +10,7 @@
   import ChartAgentOverlayChrome from './ChartAgentOverlayChrome.svelte';
   import ChartAnnotationLayer from './ChartAnnotationLayer.svelte';
   import ChartDrawingCanvas from './ChartDrawingCanvas.svelte';
+  import ChartToolbar from './ChartToolbar.svelte';
   import ChartTradePlanOverlay from './ChartTradePlanOverlay.svelte';
 
   type AgentAnnotation = {
@@ -44,6 +45,8 @@
     latestVolume: number;
     activeTradeSetup?: AgentTradeSetup | null;
     drawingsVisible?: boolean;
+    drawingCount?: number;
+    enableTradeLineEntry?: boolean;
     hasScanned?: boolean;
     drawingMode: DrawingMode;
     chartNotice?: string;
@@ -80,6 +83,11 @@
     onSetTradePlanRatio?: (nextLongRatio: number) => void;
     onRatioPointerDown?: (event: PointerEvent) => void;
     onRatioTrackReady?: (element: HTMLButtonElement | null) => void;
+    onCancelCurrentAction?: () => void;
+    onDeleteSelectedDrawing?: () => void;
+    onSetDrawingMode?: (mode: DrawingMode) => void;
+    onToggleDrawingsVisible?: () => void;
+    onClearAllDrawings?: () => void;
   }
 
   let {
@@ -102,6 +110,8 @@
     latestVolume,
     activeTradeSetup = null,
     drawingsVisible = true,
+    drawingCount = 0,
+    enableTradeLineEntry = false,
     hasScanned = false,
     drawingMode,
     chartNotice = '',
@@ -138,6 +148,11 @@
     onSetTradePlanRatio = () => {},
     onRatioPointerDown = () => {},
     onRatioTrackReady = () => {},
+    onCancelCurrentAction = () => {},
+    onDeleteSelectedDrawing = () => {},
+    onSetDrawingMode = () => {},
+    onToggleDrawingsVisible = () => {},
+    onClearAllDrawings = () => {},
   }: Props = $props();
 
   let containerEl: HTMLDivElement | null = $state(null);
@@ -149,22 +164,48 @@
   onDestroy(() => {
     onContainerReady(null);
   });
+
+  function handleKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      onCancelCurrentAction();
+      event.preventDefault();
+    } else if (event.key === 'Delete' || event.key === 'Backspace') {
+      // Only handle delete if not inside an input/textarea
+      const tag = (event.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      onDeleteSelectedDrawing();
+      event.preventDefault();
+    }
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   class="chart-container"
   bind:this={containerEl}
   role="application"
   aria-label="Trading chart"
+  tabindex="0"
   class:hidden-chart={chartMode !== 'agent'}
   onmousedown={onChartMouseDown}
   onmousemove={onChartMouseMove}
   onmouseup={onChartMouseUp}
   onmouseleave={onChartMouseUp}
   onwheel={onChartWheel}
+  onkeydown={handleKeyDown}
 >
   {#if chartMode === 'agent'}
+    <ChartToolbar
+      {drawingMode}
+      {drawingsVisible}
+      {drawingCount}
+      {enableTradeLineEntry}
+      onSetDrawingMode={onSetDrawingMode}
+      onToggleDrawingsVisible={onToggleDrawingsVisible}
+      onClearAllDrawings={onClearAllDrawings}
+    />
+
     <ChartAgentOverlayChrome
       {symbol}
       {isLoading}

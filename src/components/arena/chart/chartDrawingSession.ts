@@ -9,11 +9,12 @@ import {
   buildTradePlanDraftFromPreview,
 } from '$lib/chart/chartTradePlanner';
 import { clampRoundPrice } from '$lib/chart/chartCoordinates';
-import type {
-  DrawingAnchorPoint,
-  DrawingItem,
-  DrawingMode,
-  TradePlanDraft,
+import {
+  generateDrawingId,
+  type DrawingAnchorPoint,
+  type DrawingItem,
+  type DrawingMode,
+  type TradePlanDraft,
 } from '$lib/chart/chartTypes';
 import type { TradePreview } from './chartDrawingEngine';
 
@@ -61,6 +62,7 @@ export function buildHorizontalLineDrawing(options: {
   color: string;
 }): DrawingItem {
   return {
+    id: generateDrawingId(),
     type: 'hline',
     points: [{ x: 0, y: options.y }, { x: options.width, y: options.y }],
     price: options.linePrice == null ? undefined : clampRoundPrice(options.linePrice),
@@ -80,6 +82,7 @@ export function completeTrendlineDraft(options: {
   color: string;
 }): DrawingItem {
   return {
+    id: generateDrawingId(),
     type: 'trendline',
     points: [...options.draft.points, options.endPoint],
     anchors: options.startAnchor && options.endAnchor

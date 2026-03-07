@@ -40,9 +40,17 @@ export interface IndicatorSeries {
   ma120: ISeriesApi<'Line'> | null;
   rsi: ISeriesApi<'Line'> | null;
   volume: ISeriesApi<'Histogram'> | null;
+  bbUpper: ISeriesApi<'Line'> | null;
+  bbMiddle: ISeriesApi<'Line'> | null;
+  bbLower: ISeriesApi<'Line'> | null;
+  macdLine: ISeriesApi<'Line'> | null;
+  macdSignal: ISeriesApi<'Line'> | null;
+  macdHist: ISeriesApi<'Histogram'> | null;
+  stochK: ISeriesApi<'Line'> | null;
+  stochD: ISeriesApi<'Line'> | null;
 }
 
-export type IndicatorKey = 'ma7' | 'ma20' | 'ma25' | 'ma60' | 'ma99' | 'ma120' | 'rsi' | 'vol';
+export type IndicatorKey = 'ma7' | 'ma20' | 'ma25' | 'ma60' | 'ma99' | 'ma120' | 'rsi' | 'vol' | 'bb' | 'macd' | 'stoch';
 
 // ── Position / Price Lines ───────────────────────────────────
 
@@ -54,24 +62,84 @@ export interface PositionLines {
 
 // ── Drawing Tools ────────────────────────────────────────────
 
-export type DrawingMode = 'none' | 'hline' | 'trendline' | 'longentry' | 'shortentry' | 'trade';
+export type DrawingMode =
+  | 'none'
+  // Lines
+  | 'hline' | 'vline' | 'trendline' | 'ray' | 'channel' | 'extended_line'
+  // Fibonacci
+  | 'fib_retracement'
+  // Position
+  | 'longentry' | 'shortentry' | 'trade'
+  // Shape
+  | 'rect'
+  // Measure
+  | 'price_range' | 'date_range'
+  // Text
+  | 'text'
+  // Eraser
+  | 'eraser';
 
 export type DrawingAnchorPoint = { time: number; price: number };
 
+export type DrawingItemType =
+  | 'hline' | 'vline' | 'trendline' | 'ray' | 'channel'
+  | 'fib_retracement' | 'rect' | 'tradebox'
+  | 'price_range' | 'date_range' | 'text';
+
 export type DrawingItem =
   | {
+      id: string;
       type: 'hline';
       points: Array<{ x: number; y: number }>;
       price?: number;
       color: string;
     }
   | {
+      id: string;
+      type: 'vline';
+      points: Array<{ x: number; y: number }>;
+      anchor?: DrawingAnchorPoint;
+      color: string;
+    }
+  | {
+      id: string;
       type: 'trendline';
       points: Array<{ x: number; y: number }>;
       anchors?: [DrawingAnchorPoint, DrawingAnchorPoint];
       color: string;
     }
   | {
+      id: string;
+      type: 'ray';
+      points: Array<{ x: number; y: number }>;
+      anchors?: [DrawingAnchorPoint, DrawingAnchorPoint];
+      color: string;
+    }
+  | {
+      id: string;
+      type: 'fib_retracement';
+      points: Array<{ x: number; y: number }>;
+      anchors?: [DrawingAnchorPoint, DrawingAnchorPoint];
+      levels: number[];
+      color: string;
+    }
+  | {
+      id: string;
+      type: 'rect';
+      points: Array<{ x: number; y: number }>;
+      anchors?: [DrawingAnchorPoint, DrawingAnchorPoint];
+      color: string;
+      fillColor?: string;
+    }
+  | {
+      id: string;
+      type: 'price_range';
+      points: Array<{ x: number; y: number }>;
+      anchors?: [DrawingAnchorPoint, DrawingAnchorPoint];
+      color: string;
+    }
+  | {
+      id: string;
       type: 'tradebox';
       points: Array<{ x: number; y: number }>;
       fromTime?: number;
@@ -84,6 +152,13 @@ export type DrawingItem =
       rr: number;
       riskPct: number;
     };
+
+// ── Drawing ID Generator ────────────────────────────────────
+
+let _drawingIdCounter = 0;
+export function generateDrawingId(): string {
+  return `d_${Date.now()}_${++_drawingIdCounter}`;
+}
 
 // ── Agent Trade Setup Overlay ────────────────────────────────
 

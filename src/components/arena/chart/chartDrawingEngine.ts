@@ -9,7 +9,7 @@ import { withAlpha } from '../ChartTheme';
 import { formatPrice, clampRoundPrice } from '$lib/chart/chartCoordinates';
 import { clampToCanvas } from '$lib/chart/chartHelpers';
 import { LINE_ENTRY_DEFAULT_RR, LINE_ENTRY_MIN_PIXEL_RISK } from '$lib/chart/chartIndicators';
-import type { AgentTradeSetup, DrawingItem } from '$lib/chart/chartTypes';
+import { generateDrawingId, type AgentTradeSetup, type DrawingItem } from '$lib/chart/chartTypes';
 import type { ChartPatternDetection } from '$lib/engine/patternDetector';
 
 // ── Coordinate Converter Interface ──────────────────────────
@@ -199,11 +199,17 @@ export function drawDrawingItems(
   drawings: DrawingItem[],
   coord: Pick<CoordProvider, 'toChartX' | 'toChartY'>,
   theme: ChartTheme,
+  selectedDrawingId?: string | null,
 ): void {
+  const canvasW = ctx.canvas.width;
+  const canvasH = ctx.canvas.height;
+
   for (const drawing of drawings) {
+    const isSelected = selectedDrawingId === drawing.id;
+
     ctx.beginPath();
     ctx.strokeStyle = drawing.color;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = isSelected ? 2 : 1.5;
 
     if (drawing.type === 'hline') {
       const mappedY = Number.isFinite(drawing.price) ? coord.toChartY(drawing.price as number) : null;
@@ -211,8 +217,24 @@ export function drawDrawingItems(
       if (!Number.isFinite(y)) continue;
       ctx.setLineDash([6, 3]);
       ctx.moveTo(0, y);
-      ctx.lineTo(ctx.canvas.width, y);
-    } else if (drawing.type === 'trendline' && drawing.points.length === 2) {
+      ctx.lineTo(canvasW, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (isSelected) drawSelectionDots(ctx, [{ x: 0, y }, { x: canvasW, y }]);
+
+    } else if (drawing.type === 'vline') {
+      const anchor = drawing.anchor;
+      const mappedX = anchor ? coord.toChartX(anchor.time) : null;
+      const vx = mappedX ?? drawing.points[0]?.x;
+      if (vx == null || !Number.isFinite(vx)) continue;
+      ctx.setLineDash([6, 3]);
+      ctx.moveTo(vx, 0);
+      ctx.lineTo(vx, canvasH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (isSelected) drawSelectionDots(ctx, [{ x: vx, y: canvasH * 0.25 }, { x: vx, y: canvasH * 0.75 }]);
+
+    } else if ((drawing.type === 'trendline' || drawing.type === 'ray') && drawing.points.length === 2) {
       const mappedFrom = drawing.anchors?.[0]
         ? { x: coord.toChartX(drawing.anchors[0].time), y: coord.toChartY(drawing.anchors[0].price) }
         : null;
@@ -227,8 +249,130 @@ export function drawDrawingItems(
         : drawing.points[1];
       if (!from || !to) continue;
       ctx.setLineDash([]);
-      ctx.moveTo(from.x, from.y);
-      ctx.lineTo(to.x, to.y);
+
+      if (drawing.type === 'ray') {
+        // Extend line from `from` through `to` to canvas edge
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const len = Math.hypot(dx, dy);
+        if (len < 1) continue;
+        const scale = Math.max(canvasW, canvasH) * 2 / len;
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(from.x + dx * scale, from.y + dy * scale);
+      } else {
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+      }
+      ctx.stroke();
+      if (isSelected) drawSelectionDots(ctx, [from, to]);
+
+    } else if (drawing.type === 'fib_retracement') {
+      if (!drawing.anchors || drawing.anchors.length < 2) continue;
+      const p1y = coord.toChartY(drawing.anchors[0].price);
+      const p2y = coord.toChartY(drawing.anchors[1].price);
+      if (p1y == null || p2y == null) continue;
+      const highPrice = Math.max(drawing.anchors[0].price, drawing.anchors[1].price);
+      const lowPrice = Math.min(drawing.anchors[0].price, drawing.anchors[1].price);
+      const range = highPrice - lowPrice;
+      if (range <= 0) continue;
+
+      ctx.save();
+      ctx.font = "9px 'JetBrains Mono', monospace";
+      ctx.textBaseline = 'middle';
+      const fibColors = ['#787b86', '#f7525f', '#ff9800', '#ffeb3b', '#4caf50', '#2196f3', '#787b86'];
+
+      for (let li = 0; li < drawing.levels.length; li++) {
+        const level = drawing.levels[li];
+        const price = highPrice - range * level;
+        const ly = coord.toChartY(price);
+        if (ly == null) continue;
+        const color = fibColors[li % fibColors.length];
+        ctx.strokeStyle = withAlpha(color, 0.7);
+        ctx.lineWidth = level === 0 || level === 1 ? 1 : 0.8;
+        ctx.setLineDash(level === 0.5 ? [4, 3] : []);
+        ctx.beginPath();
+        ctx.moveTo(0, ly);
+        ctx.lineTo(canvasW, ly);
+        ctx.stroke();
+        // Level label
+        ctx.fillStyle = withAlpha(color, 0.85);
+        const label = `${(level * 100).toFixed(1)}% (${formatPrice(price)})`;
+        ctx.fillText(label, 6, ly - 6);
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+      if (isSelected) {
+        const sy1 = coord.toChartY(drawing.anchors[0].price);
+        const sy2 = coord.toChartY(drawing.anchors[1].price);
+        if (sy1 != null && sy2 != null) {
+          drawSelectionDots(ctx, [{ x: 40, y: sy1 }, { x: 40, y: sy2 }]);
+        }
+      }
+
+    } else if (drawing.type === 'rect') {
+      if (!drawing.anchors || drawing.anchors.length < 2) continue;
+      const rx1 = coord.toChartX(drawing.anchors[0].time);
+      const ry1 = coord.toChartY(drawing.anchors[0].price);
+      const rx2 = coord.toChartX(drawing.anchors[1].time);
+      const ry2 = coord.toChartY(drawing.anchors[1].price);
+      if (rx1 == null || ry1 == null || rx2 == null || ry2 == null) continue;
+      const left = Math.min(rx1, rx2);
+      const top = Math.min(ry1, ry2);
+      const w = Math.abs(rx2 - rx1);
+      const h = Math.abs(ry2 - ry1);
+      ctx.setLineDash([]);
+      if (drawing.fillColor) {
+        ctx.fillStyle = withAlpha(drawing.fillColor, 0.1);
+        ctx.fillRect(left, top, w, h);
+      }
+      ctx.strokeRect(left, top, w, h);
+      if (isSelected) {
+        drawSelectionDots(ctx, [
+          { x: left, y: top }, { x: left + w, y: top },
+          { x: left, y: top + h }, { x: left + w, y: top + h },
+        ]);
+      }
+
+    } else if (drawing.type === 'price_range') {
+      if (!drawing.anchors || drawing.anchors.length < 2) continue;
+      const prY1 = coord.toChartY(drawing.anchors[0].price);
+      const prY2 = coord.toChartY(drawing.anchors[1].price);
+      const prX1 = coord.toChartX(drawing.anchors[0].time);
+      const prX2 = coord.toChartX(drawing.anchors[1].time);
+      if (prY1 == null || prY2 == null || prX1 == null || prX2 == null) continue;
+      const midX = (prX1 + prX2) / 2;
+      const p1 = drawing.anchors[0].price;
+      const p2 = drawing.anchors[1].price;
+      const diff = p2 - p1;
+      const pctDiff = p1 !== 0 ? (diff / p1) * 100 : 0;
+
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = withAlpha('#787b86', 0.7);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(midX - 20, prY1); ctx.lineTo(midX + 20, prY1);
+      ctx.moveTo(midX, prY1); ctx.lineTo(midX, prY2);
+      ctx.moveTo(midX - 20, prY2); ctx.lineTo(midX + 20, prY2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Label
+      const sign = diff >= 0 ? '+' : '';
+      const label = `${sign}${formatPrice(diff)} (${sign}${pctDiff.toFixed(2)}%)`;
+      ctx.font = "bold 10px 'JetBrains Mono', monospace";
+      const tw = ctx.measureText(label).width;
+      const lx = midX - tw / 2 - 4;
+      const ly = (prY1 + prY2) / 2 - 8;
+      ctx.fillStyle = 'rgba(19,23,34,0.85)';
+      roundRect(ctx, lx, ly, tw + 8, 16, 3); ctx.fill();
+      ctx.fillStyle = diff >= 0 ? '#26a69a' : '#ef5350';
+      ctx.fillText(label, lx + 4, ly + 12);
+      ctx.restore();
+      if (isSelected) {
+        drawSelectionDots(ctx, [{ x: midX, y: prY1 }, { x: midX, y: prY2 }]);
+      }
+
     } else if (drawing.type === 'tradebox' && drawing.points.length >= 4) {
       const mappedLeftX = Number.isFinite(drawing.fromTime) ? coord.toChartX(drawing.fromTime as number) : null;
       const mappedRightX = Number.isFinite(drawing.toTime) ? coord.toChartX(drawing.toTime as number) : null;
@@ -270,29 +414,41 @@ export function drawDrawingItems(
             rr: drawing.rr,
             riskPct: drawing.riskPct,
           };
-      drawTradePreview(ctx, preview, theme, ctx.canvas.width);
+      drawTradePreview(ctx, preview, theme, canvasW);
+      if (isSelected) {
+        drawSelectionDots(ctx, [
+          { x: preview.left, y: preview.entryY },
+          { x: preview.right, y: preview.tpY },
+          { x: preview.right, y: preview.slY },
+        ]);
+      }
       continue;
     } else {
       continue;
     }
-
-    ctx.stroke();
-    ctx.setLineDash([]);
   }
+}
+
+/** Draw small selection squares on anchor points of a selected drawing */
+function drawSelectionDots(
+  ctx: CanvasRenderingContext2D,
+  points: Array<{ x: number; y: number }>,
+): void {
+  ctx.save();
+  const HANDLE_SIZE = 4;
+  ctx.fillStyle = '#2962ff';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  for (const p of points) {
+    ctx.fillRect(p.x - HANDLE_SIZE, p.y - HANDLE_SIZE, HANDLE_SIZE * 2, HANDLE_SIZE * 2);
+    ctx.strokeRect(p.x - HANDLE_SIZE, p.y - HANDLE_SIZE, HANDLE_SIZE * 2, HANDLE_SIZE * 2);
+  }
+  ctx.restore();
 }
 
 // ── Agent Trade Overlay ─────────────────────────────────────
 
-export interface AgentCloseBtn {
-  x: number;
-  y: number;
-  r: number;
-}
-
-/**
- * Draw TradingView-style TP/SL zones for agent trade setup.
- * Returns the close button hit area position.
- */
+/** Draw TradingView-style TP/SL zones for agent trade setup. */
 export function drawAgentTradeOverlay(
   ctx: CanvasRenderingContext2D,
   setup: AgentTradeSetup,
@@ -300,11 +456,11 @@ export function drawAgentTradeOverlay(
   coord: Pick<CoordProvider, 'toChartY'>,
   theme: ChartTheme,
   livePrice: number,
-): AgentCloseBtn | null {
+): void {
   const rawEntryY = coord.toChartY(setup.entry);
   const rawTpY = coord.toChartY(setup.tp);
   const rawSlY = coord.toChartY(setup.sl);
-  if (rawEntryY === null || rawTpY === null || rawSlY === null) return null;
+  if (rawEntryY === null || rawTpY === null || rawSlY === null) return;
 
   const rightPad = 72;
   const R = canvasW - rightPad;
@@ -452,8 +608,6 @@ export function drawAgentTradeOverlay(
   }
 
   ctx.restore();
-
-  return { x: R - 14, y: tpTop + 14, r: 14 };
 }
 
 // ── Pattern Tag ─────────────────────────────────────────────
@@ -562,6 +716,7 @@ export function makeTradeBoxDrawing(
   const fromTime = leftTime !== null && rightTime !== null ? Math.min(leftTime, rightTime) : undefined;
   const toTime = leftTime !== null && rightTime !== null ? Math.max(leftTime, rightTime) : undefined;
   return {
+    id: generateDrawingId(),
     type: 'tradebox',
     points: [
       { x: preview.left, y: preview.entryY },

@@ -78,8 +78,17 @@
         MA99
       </button>
     {/if}
+    <button class="ind-chip" class:on={indicatorEnabled.bb} onclick={() => onToggleIndicator('bb')} style="--ind-color:{chartTheme.bbUpper}">
+      BB
+    </button>
     <button class="ind-chip" class:on={indicatorEnabled.rsi} onclick={() => onToggleIndicator('rsi')} style="--ind-color:{chartTheme.rsi}">
       RSI14 <span>{Number.isFinite(rsiVal) && rsiVal > 0 ? rsiVal.toFixed(2) : '—'}</span>
+    </button>
+    <button class="ind-chip" class:on={indicatorEnabled.macd} onclick={() => onToggleIndicator('macd')} style="--ind-color:{chartTheme.macdLine}">
+      MACD
+    </button>
+    <button class="ind-chip" class:on={indicatorEnabled.stoch} onclick={() => onToggleIndicator('stoch')} style="--ind-color:{chartTheme.stochK}">
+      STOCH
     </button>
     <button class="ind-chip" class:on={indicatorEnabled.vol} onclick={() => onToggleIndicator('vol')} style="--ind-color:{chartTheme.candleUp}">
       VOL <span>{formatCompact(latestVolume)}</span>

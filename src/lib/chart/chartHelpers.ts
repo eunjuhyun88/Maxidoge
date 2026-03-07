@@ -38,10 +38,13 @@ export function generateCandles(count: number, basePrice: number) {
   return candles;
 }
 
+interface GTMWindow extends Window {
+  dataLayer?: Array<Record<string, unknown>>;
+}
+
 export function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
   if (typeof window === 'undefined') return;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const w = window as any;
+  const w = window as GTMWindow;
   if (!Array.isArray(w.dataLayer)) return;
   w.dataLayer.push({
     event,

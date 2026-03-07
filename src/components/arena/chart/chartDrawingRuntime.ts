@@ -1,27 +1,31 @@
+import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { ChartTheme } from '../ChartTheme';
 import type { DrawingItem, DrawingMode, TradePlanDraft } from '$lib/chart/chartTypes';
 import { formatPrice } from '$lib/chart/chartCoordinates';
 import { MAX_DRAWINGS } from '$lib/chart/chartIndicators';
 import {
   makeTradeBoxDrawing as buildTradeBoxDrawing,
-  type TradePreview,
+  type CoordProvider,
 } from './chartDrawingEngine';
 import {
-  drawTrendlineGhost,
   isTradePreviewMode,
   resolveTradePreview,
 } from './chartOverlayRenderer';
 import {
   appendDrawingWithLimit,
-  buildHorizontalLineDrawing,
-  completeTrendlineDraft,
   finalizeTradePreview,
   startTradePreviewDraft,
-  startTrendlineDraft,
   updateTradePreviewDraft,
   type TradePreviewDraft,
   type TrendlineDraft,
 } from './chartDrawingSession';
+import {
+  DrawingManager,
+  isPrimitiveDrawingMode,
+  type DrawingManagerCallbacks,
+} from '$lib/chart/primitives/drawingManager';
+
+// ── Controller interface ─────────────────────────────────────
 
 export interface ChartDrawingRuntimeController {
   setDrawingMode(mode: DrawingMode): void;
@@ -30,6 +34,14 @@ export interface ChartDrawingRuntimeController {
   handleMouseDown(event: MouseEvent): void;
   handleMouseMove(event: MouseEvent): void;
   handleMouseUp(event: MouseEvent): void;
+  /** Cancel current drawing operation or deselect */
+  cancelCurrentAction(): void;
+  /** Delete the currently selected drawing */
+  deleteSelectedDrawing(): void;
+  /** Toggle magnet snap to candle OHLC */
+  toggleMagnet(): void;
+  /** Get magnet enabled state */
+  getMagnetEnabled(): boolean;
   dispose(): void;
 }
 
@@ -50,11 +62,14 @@ export interface CreateChartDrawingRuntimeOptions {
   setIsDrawing: (drawing: boolean) => void;
   getDrawingsVisible: () => boolean;
   setDrawingsVisible: (visible: boolean) => void;
+  getSelectedDrawingId: () => string | null;
+  setSelectedDrawingId: (id: string | null) => void;
   getLivePrice: () => number;
   getPair: () => string;
   getRequireTradeConfirm: () => boolean;
   getToChartPrice: () => (y: number) => number | null;
   getToChartY: () => (price: number) => number | null;
+  getToChartX: () => (time: number) => number | null;
   getToChartTime: () => (x: number) => number | null;
   getToDrawingAnchor: () => (x: number, y: number) => { time: number; price: number } | null;
   renderDrawings: () => void;
@@ -69,6 +84,12 @@ export interface CreateChartDrawingRuntimeOptions {
   }) => void;
   emitGtm: (event: string, payload?: Record<string, unknown>) => void;
   pushChartNotice: (message: string) => void;
+  // ── NEW: chart/series for DrawingManager ──
+  getChart: () => IChartApi | null;
+  getSeries: () => ISeriesApi<'Candlestick'> | null;
+  getPrimitiveDrawingCount: () => number;
+  setPrimitiveDrawingCount: (count: number) => void;
+  getKlines: () => Array<{ time: unknown; open: number; high: number; low: number; close: number }>;
 }
 
 export function createChartDrawingRuntime(
@@ -76,6 +97,33 @@ export function createChartDrawingRuntime(
 ): ChartDrawingRuntimeController {
   let globalDrawingMouseUpBound = false;
   let drawRaf: number | null = null;
+
+  // ── DrawingManager (lazy-initialized) ──
+  let drawingManager: DrawingManager | null = null;
+
+  function ensureDrawingManager(): DrawingManager | null {
+    if (drawingManager) return drawingManager;
+    const chart = options.getChart();
+    const series = options.getSeries();
+    if (!chart || !series) return null;
+
+    const callbacks: DrawingManagerCallbacks = {
+      onDrawingModeChanged: (mode) => {
+        options.setDrawingModeState(mode);
+      },
+      onDrawingsChanged: (count) => {
+        options.setPrimitiveDrawingCount(count);
+      },
+      onSelectedChanged: (id) => {
+        options.setSelectedDrawingId(id);
+      },
+      getDrawingColor: () => options.getChartTheme().draw,
+      getKlines: () => options.getKlines(),
+    };
+
+    drawingManager = new DrawingManager(chart, series, callbacks);
+    return drawingManager;
+  }
 
   function getCanvasRect() {
     const drawingCanvas = options.getDrawingCanvas();
@@ -102,86 +150,146 @@ export function createChartDrawingRuntime(
   }
 
   function setDrawingMode(mode: DrawingMode) {
+    const dm = ensureDrawingManager();
+
+    // Primitive modes → delegate to DrawingManager
+    if (dm && isPrimitiveDrawingMode(mode)) {
+      dm.setDrawingMode(mode);
+      resetTransientDrawingState();
+      unbindGlobalDrawingMouseUp();
+      if (mode !== 'none') {
+        options.setPendingTradePlan(null);
+      }
+      options.renderDrawings();
+      return;
+    }
+
+    // Trade modes → old system
     options.setDrawingModeState(mode);
+    if (dm) dm.setDrawingMode('none'); // deactivate DM for trade modes
     resetTransientDrawingState();
-    if (mode !== 'none') options.setPendingTradePlan(null);
+    if (mode !== 'none') {
+      options.setPendingTradePlan(null);
+      options.setSelectedDrawingId(null);
+    }
     unbindGlobalDrawingMouseUp();
     options.renderDrawings();
   }
 
   function toggleDrawingsVisible() {
+    const dm = ensureDrawingManager();
+    if (dm) {
+      dm.toggleDrawingsVisible();
+    }
     options.setDrawingsVisible(!options.getDrawingsVisible());
     options.renderDrawings();
   }
 
   function clearAllDrawings() {
+    const dm = ensureDrawingManager();
+    if (dm) {
+      dm.clearAllDrawings();
+    }
+    // Also clear tradebox drawings from old system
     options.setDrawings([]);
     options.setPendingTradePlan(null);
     options.setDrawingModeState('none');
+    options.setSelectedDrawingId(null);
     resetTransientDrawingState();
     unbindGlobalDrawingMouseUp();
     options.renderDrawings();
   }
 
+  function deleteSelectedDrawing() {
+    const dm = ensureDrawingManager();
+    if (dm && dm.selectedId) {
+      dm.deleteSelectedDrawing();
+      return;
+    }
+    // Fallback: check old drawings (tradebox)
+    const selectedId = options.getSelectedDrawingId();
+    if (!selectedId) return;
+    options.setDrawings(options.getDrawings().filter((d) => d.id !== selectedId));
+    options.setSelectedDrawingId(null);
+    options.renderDrawings();
+  }
+
+  function cancelCurrentAction() {
+    const dm = ensureDrawingManager();
+    const drawingMode = options.getDrawingMode();
+
+    // If DM is in drawing state, cancel that
+    if (dm && dm.isDrawing) {
+      dm.cancelCurrentAction();
+      unbindGlobalDrawingMouseUp();
+      return;
+    }
+
+    // If DM owns the mode, delegate
+    if (dm && isPrimitiveDrawingMode(drawingMode) && drawingMode !== 'none') {
+      dm.cancelCurrentAction();
+      unbindGlobalDrawingMouseUp();
+      options.renderDrawings();
+      return;
+    }
+
+    // Trade preview in progress
+    if (options.getIsDrawing()) {
+      resetTransientDrawingState();
+      unbindGlobalDrawingMouseUp();
+      options.renderDrawings();
+      return;
+    }
+
+    // Trade mode active
+    if (drawingMode !== 'none') {
+      options.setDrawingModeState('none');
+      if (dm) dm.setDrawingMode('none');
+      resetTransientDrawingState();
+      unbindGlobalDrawingMouseUp();
+      options.renderDrawings();
+      return;
+    }
+
+    // Deselect
+    if (dm && dm.selectedId) {
+      dm.cancelCurrentAction();
+      return;
+    }
+    if (options.getSelectedDrawingId()) {
+      options.setSelectedDrawingId(null);
+      options.renderDrawings();
+    }
+  }
+
+  // ── Mouse handlers ─────────────────────────────────────────
+
   function handleMouseDown(event: MouseEvent) {
     const rect = getCanvasRect();
     if (!rect) return;
     const drawingMode = options.getDrawingMode();
-    if (drawingMode === 'none') return;
 
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const chartTheme = options.getChartTheme();
 
-    if (drawingMode === 'hline') {
-      const linePrice = options.getToChartPrice()(y);
-      options.setDrawings(
-        appendDrawingWithLimit(
-          options.getDrawings(),
-          buildHorizontalLineDrawing({
-            y,
-            width: rect.width,
-            linePrice,
-            color: chartTheme.draw,
-          }),
-          MAX_DRAWINGS,
-        ),
-      );
-      options.renderDrawings();
-      options.setDrawingModeState('none');
-      return;
-    }
+    const dm = ensureDrawingManager();
 
-    if (drawingMode === 'trendline') {
-      const currentDrawing = options.getCurrentDrawing();
-      if (!options.getIsDrawing()) {
-        options.setCurrentDrawing(startTrendlineDraft(x, y));
-        options.setIsDrawing(true);
-      } else if (currentDrawing) {
-        const startPoint = currentDrawing.points[0];
-        const endPoint = { x, y };
-        const toDrawingAnchor = options.getToDrawingAnchor();
-        options.setDrawings(
-          appendDrawingWithLimit(
-            options.getDrawings(),
-            completeTrendlineDraft({
-              draft: currentDrawing,
-              endPoint,
-              startAnchor: toDrawingAnchor(startPoint.x, startPoint.y),
-              endAnchor: toDrawingAnchor(endPoint.x, endPoint.y),
-              color: chartTheme.draw,
-            }),
-            MAX_DRAWINGS,
-          ),
-        );
-        options.setCurrentDrawing(null);
-        options.setIsDrawing(false);
-        options.setDrawingModeState('none');
-        options.renderDrawings();
+    // ── Primitive modes → DrawingManager ──
+    if (dm && isPrimitiveDrawingMode(drawingMode) && drawingMode !== 'none') {
+      dm.handleMouseDown(x, y);
+      // Bind global mouseup for drag modes
+      if (dm.isDrawing) {
+        bindGlobalDrawingMouseUp();
       }
       return;
     }
 
+    // ── mode=none → selection handled by subscribeClick (canvas has no pointer-events) ──
+    if (drawingMode === 'none') {
+      return;
+    }
+
+    // ── trade modes → old system ──
     if (isTradePreviewMode(drawingMode)) {
       options.setTradePreview(startTradePreviewDraft(drawingMode, x, y));
       options.setCurrentDrawing(null);
@@ -193,16 +301,32 @@ export function createChartDrawingRuntime(
 
   function handleMouseUp(event: MouseEvent) {
     const drawingCanvas = options.getDrawingCanvas();
-    if (!drawingCanvas || !options.getIsDrawing()) return;
-    const tradePreview = options.getTradePreview();
-    const drawingMode = options.getDrawingMode();
-    if (!tradePreview || !isTradePreviewMode(drawingMode)) return;
+    if (!drawingCanvas) return;
 
     const rect = drawingCanvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const drawingMode = options.getDrawingMode();
+
+    const dm = ensureDrawingManager();
+
+    // ── Primitive drag modes → DrawingManager ──
+    if (dm && dm.isDrawing) {
+      dm.handleMouseUp(x, y);
+      unbindGlobalDrawingMouseUp();
+      return;
+    }
+
+    // ── trade preview modes → old system ──
+    if (!options.getIsDrawing()) return;
+
+    const tradePreview = options.getTradePreview();
+    if (!tradePreview || !isTradePreviewMode(drawingMode)) return;
+
     const preview = resolveTradePreview({
       tradePreview,
       drawingMode,
-      cursor: { x: event.clientX - rect.left, y: event.clientY - rect.top },
+      cursor: { x, y },
       canvasW: rect.width,
       canvasH: rect.height,
       coord: { toChartPrice: options.getToChartPrice(), toChartY: options.getToChartY() },
@@ -210,7 +334,7 @@ export function createChartDrawingRuntime(
     });
 
     if (!preview) {
-      options.pushChartNotice('라인 진입 계산 실패');
+      options.pushChartNotice('\ub77c\uc778 \uc9c4\uc785 \uacc4\uc0b0 \uc2e4\ud328');
     } else {
       const nextDrawing = buildTradeBoxDrawing(preview, options.getToChartTime(), options.getChartTheme());
       const finalized = finalizeTradePreview({
@@ -225,7 +349,7 @@ export function createChartDrawingRuntime(
 
       if (finalized.pendingTradePlan) {
         options.setPendingTradePlan(finalized.pendingTradePlan);
-        options.pushChartNotice('Drag complete — adjust ratio and confirm');
+        options.pushChartNotice('Drag complete \u2014 adjust ratio and confirm');
       } else if (finalized.lineTrade) {
         options.openQuickTrade({
           pair: finalized.lineTrade.pair,
@@ -245,14 +369,16 @@ export function createChartDrawingRuntime(
           rr: finalized.lineTrade.rr,
         });
         options.pushChartNotice(
-          `${finalized.lineTrade.dir} 진입 생성 · ENTRY ${formatPrice(finalized.lineTrade.entry)} · TP ${formatPrice(finalized.lineTrade.tp)} · SL ${formatPrice(finalized.lineTrade.sl)} · RR 1:${finalized.lineTrade.rr.toFixed(1)}`,
+          `${finalized.lineTrade.dir} \uc9c4\uc785 \uc0dd\uc131 \u00b7 ENTRY ${formatPrice(finalized.lineTrade.entry)} \u00b7 TP ${formatPrice(finalized.lineTrade.tp)} \u00b7 SL ${formatPrice(finalized.lineTrade.sl)} \u00b7 RR 1:${finalized.lineTrade.rr.toFixed(1)}`,
         );
       } else {
-        options.pushChartNotice('라인 기준 가격 계산 실패');
+        options.pushChartNotice('\ub77c\uc778 \uae30\uc900 \uac00\uaca9 \uacc4\uc0b0 \uc2e4\ud328');
       }
     }
 
+    // Trade modes are NOT sticky — reset to 'none'
     options.setDrawingModeState('none');
+    if (dm) dm.setDrawingMode('none');
     resetTransientDrawingState();
     unbindGlobalDrawingMouseUp();
     options.renderDrawings();
@@ -260,7 +386,25 @@ export function createChartDrawingRuntime(
 
   function handleMouseMove(event: MouseEvent) {
     const drawingCanvas = options.getDrawingCanvas();
-    if (!drawingCanvas || !options.getIsDrawing()) return;
+    if (!drawingCanvas) return;
+
+    const dm = ensureDrawingManager();
+
+    // ── Primitive drag in progress → DrawingManager ──
+    if (dm && dm.isDrawing) {
+      if (drawRaf) return;
+      drawRaf = requestAnimationFrame(() => {
+        drawRaf = null;
+        const canvas = options.getDrawingCanvas();
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        dm.handleMouseMove(event.clientX - rect.left, event.clientY - rect.top);
+      });
+      return;
+    }
+
+    // ── Trade preview drag → old system ──
+    if (!options.getIsDrawing()) return;
     if (drawRaf) return;
 
     drawRaf = requestAnimationFrame(() => {
@@ -269,28 +413,14 @@ export function createChartDrawingRuntime(
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
       const tradePreview = options.getTradePreview();
-      const drawingMode = options.getDrawingMode();
+      const currentDrawingMode = options.getDrawingMode();
 
-      if (tradePreview && isTradePreviewMode(drawingMode)) {
+      if (tradePreview && isTradePreviewMode(currentDrawingMode)) {
         options.setTradePreview(
           updateTradePreviewDraft(tradePreview, event.clientX - rect.left, event.clientY - rect.top),
         );
         options.renderDrawings();
-        return;
       }
-
-      const currentDrawing = options.getCurrentDrawing();
-      if (!currentDrawing) return;
-
-      options.renderDrawings();
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      drawTrendlineGhost(
-        ctx,
-        currentDrawing,
-        { x: event.clientX - rect.left, y: event.clientY - rect.top },
-        options.getChartTheme().drawGhost,
-      );
     });
   }
 
@@ -300,6 +430,21 @@ export function createChartDrawingRuntime(
       drawRaf = null;
     }
     unbindGlobalDrawingMouseUp();
+    if (drawingManager) {
+      drawingManager.dispose();
+      drawingManager = null;
+    }
+  }
+
+  function toggleMagnet() {
+    const dm = ensureDrawingManager();
+    if (dm) {
+      dm.setMagnetEnabled(!dm.magnetEnabled);
+    }
+  }
+
+  function getMagnetEnabled(): boolean {
+    return drawingManager?.magnetEnabled ?? true;
   }
 
   return {
@@ -309,6 +454,10 @@ export function createChartDrawingRuntime(
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
+    cancelCurrentAction,
+    deleteSelectedDrawing,
+    toggleMagnet,
+    getMagnetEnabled,
     dispose,
   };
 }
