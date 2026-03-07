@@ -1,15 +1,12 @@
 import type { MobileTab } from './terminalHelpers';
 import type { TerminalDensityMode } from './terminalTypes';
+import { get, readonly, writable } from 'svelte/store';
 
 export interface CreateTerminalEngagementRuntimeOptions {
   emitGtm: (event: string, payload?: Record<string, unknown>) => void;
   getPair: () => string;
   getTimeframe: () => string;
   getIsMobile: () => boolean;
-  getMobileTab: () => MobileTab;
-  setMobileTab: (tab: MobileTab) => void;
-  getDensityMode: () => TerminalDensityMode;
-  setDensityMode: (mode: TerminalDensityMode) => void;
   densityStorageKey: string;
 }
 
@@ -22,6 +19,8 @@ export function readTerminalDensityMode(storageKey: string): TerminalDensityMode
 }
 
 export function createTerminalEngagementRuntime(options: CreateTerminalEngagementRuntimeOptions) {
+  const mobileTabStore = writable<MobileTab>('chart');
+  const densityModeStore = writable<TerminalDensityMode>(readTerminalDensityMode(options.densityStorageKey));
   let mobileViewTracked = false;
   let mobileNavTracked = false;
 
@@ -34,9 +33,9 @@ export function createTerminalEngagementRuntime(options: CreateTerminalEngagemen
   }
 
   function setMobileTab(tab: MobileTab) {
-    const fromTab = options.getMobileTab();
+    const fromTab = get(mobileTabStore);
     if (fromTab === tab) return;
-    options.setMobileTab(tab);
+    mobileTabStore.set(tab);
     options.emitGtm('terminal_mobile_tab_change', buildContext({
       tab,
       from_tab: fromTab,
@@ -45,8 +44,8 @@ export function createTerminalEngagementRuntime(options: CreateTerminalEngagemen
   }
 
   function toggleDensityMode() {
-    const nextMode = options.getDensityMode() === 'essential' ? 'pro' : 'essential';
-    options.setDensityMode(nextMode);
+    const nextMode = get(densityModeStore) === 'essential' ? 'pro' : 'essential';
+    densityModeStore.set(nextMode);
     try {
       localStorage.setItem(options.densityStorageKey, nextMode);
     } catch {}
@@ -61,7 +60,7 @@ export function createTerminalEngagementRuntime(options: CreateTerminalEngagemen
     if (isMobile && !mobileViewTracked) {
       mobileViewTracked = true;
       options.emitGtm('terminal_mobile_view', buildContext({
-        tab: options.getMobileTab(),
+        tab: get(mobileTabStore),
       }));
     } else if (!isMobile && mobileViewTracked) {
       mobileViewTracked = false;
@@ -70,7 +69,7 @@ export function createTerminalEngagementRuntime(options: CreateTerminalEngagemen
     if (isMobile && !mobileNavTracked) {
       mobileNavTracked = true;
       options.emitGtm('terminal_mobile_nav_impression', buildContext({
-        tab: options.getMobileTab(),
+        tab: get(mobileTabStore),
       }));
     } else if (!isMobile && mobileNavTracked) {
       mobileNavTracked = false;
@@ -78,6 +77,8 @@ export function createTerminalEngagementRuntime(options: CreateTerminalEngagemen
   }
 
   return {
+    densityMode: readonly(densityModeStore),
+    mobileTab: readonly(mobileTabStore),
     setMobileTab,
     toggleDensityMode,
     syncMobileViewportTracking,

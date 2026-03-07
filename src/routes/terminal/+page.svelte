@@ -12,7 +12,6 @@
   import { createTerminalCommunityRuntime } from '$lib/terminal/terminalCommunityRuntime';
   import {
     createTerminalEngagementRuntime,
-    readTerminalDensityMode,
   } from '$lib/terminal/terminalEngagementRuntime';
   import { createTerminalLayoutRuntime } from '$lib/terminal/terminalLayoutRuntime';
   import {
@@ -41,7 +40,6 @@
     AgentTradeSetup,
     ChatTradeDirection,
     TerminalChatConnectionStatus,
-    TerminalDensityMode,
     TerminalPanelResizeTarget,
     WarRoomHandle,
     ChartPanelHandle,
@@ -64,10 +62,8 @@
   const BP_TABLET = TERMINAL_BREAKPOINTS.tablet;
 
   // Mobile tab control
-  let mobileTab: MobileTab = $state('chart');
   const MAX_CHAT_MESSAGES = 200;
   const DENSITY_STORAGE_KEY = 'stockclaw:terminal:densityMode';
-  let densityMode: TerminalDensityMode = $state(readTerminalDensityMode(DENSITY_STORAGE_KEY));
   const {
     viewportWidth,
     leftPanelWidth,
@@ -111,19 +107,15 @@
   const tickerText = $derived($tickerLoaded && $liveTicker ? $liveTicker : 'Loading market data...');
   const tickerSegments = $derived(tickerText.split(' | ').filter(Boolean));
 
-  const terminalEngagementRuntime = createTerminalEngagementRuntime({
+  const {
+    mobileTab,
+    densityMode,
+    ...terminalEngagementRuntime
+  } = createTerminalEngagementRuntime({
     emitGtm: gtmEvent,
     getPair: () => $gameState.pair,
     getTimeframe: () => $gameState.timeframe,
     getIsMobile: () => isMobile,
-    getMobileTab: () => mobileTab,
-    setMobileTab: (tab) => {
-      mobileTab = tab;
-    },
-    getDensityMode: () => densityMode,
-    setDensityMode: (mode) => {
-      densityMode = mode;
-    },
     densityStorageKey: DENSITY_STORAGE_KEY,
   });
 
@@ -139,13 +131,13 @@
   const resizeTabletIntelByWheel = (event: WheelEvent) => terminalLayoutRuntime.resizeTabletIntelByWheel(event);
   const resetTabletIntelWidth = () => terminalLayoutRuntime.resetTabletIntelWidth();
 
-  const densityLabel = $derived(densityMode === 'essential' ? 'ESSENTIAL' : 'PRO');
+  const densityLabel = $derived($densityMode === 'essential' ? 'ESSENTIAL' : 'PRO');
   const toggleDensityMode = () => terminalEngagementRuntime.toggleDensityMode();
   const setMobileTab = (tab: MobileTab) => terminalEngagementRuntime.setMobileTab(tab);
 
   $effect(() => {
     isMobile;
-    mobileTab;
+    $mobileTab;
     $gameState.pair;
     $gameState.timeframe;
     terminalEngagementRuntime.syncMobileViewportTracking();
@@ -273,7 +265,7 @@
   }));
 
   const sharedIntelPanelProps = $derived(buildSharedIntelPanelProps({
-    densityMode,
+    densityMode: $densityMode,
     chatMessages,
     isTyping: terminalSessionRuntime.getIsTyping(),
     chatTradeReady: terminalSessionRuntime.getChatTradeReady(),
@@ -286,7 +278,7 @@
     getPair: () => $gameState.pair || 'BTC/USDT',
     getTimeframe: () => $gameState.timeframe || '4h',
     getViewport: () => isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop',
-    getMobileTab: () => mobileTab,
+    getMobileTab: () => $mobileTab,
     setMobileTab,
     isLeftCollapsed: () => $leftPanelCollapsed,
     toggleLeft,
@@ -355,10 +347,10 @@
     <TerminalMobileLayout
       bind:warRoomRef
       bind:chartRef={mobileChartRef}
-      {densityMode}
+      densityMode={$densityMode}
       {sharedChartPanelProps}
       {sharedIntelPanelProps}
-      {mobileTab}
+      mobileTab={$mobileTab}
       {mobileOpenTrades}
       {mobileTrackedSignals}
       {latestScan}
@@ -381,7 +373,7 @@
     <TerminalTabletLayout
       bind:warRoomRef
       bind:chartRef={tabletChartRef}
-      {densityMode}
+      densityMode={$densityMode}
       {tabletLayoutStyle}
       {terminalControlBarProps}
       {sharedChartPanelProps}
@@ -408,7 +400,7 @@
     <TerminalDesktopLayout
       bind:warRoomRef
       bind:chartRef={desktopChartRef}
-      {densityMode}
+      densityMode={$densityMode}
       leftCollapsed={$leftPanelCollapsed}
       rightCollapsed={$rightPanelCollapsed}
       leftW={$leftPanelWidth}

@@ -4004,6 +4004,40 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - the branch remains broadly dirty from unrelated in-flight refactor work
 - Status: DONE
 
+## [2026-03-07 13:07:18 +0900] START terminal-engagement-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving mobile tab and density state out of `terminal/+page.svelte`
+- Planned work:
+  - move `mobileTab` ownership into `terminalEngagementRuntime`
+  - move `densityMode` ownership and persistence into `terminalEngagementRuntime`
+  - rewire route/layout props through runtime-owned stores
+- Status: IN PROGRESS
+
+## [2026-03-07 13:07:18 +0900] FINISH terminal-engagement-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving mobile tab and density state out of `terminal/+page.svelte`
+- What changed:
+  - Updated `src/lib/terminal/terminalEngagementRuntime.ts`
+    - runtime now owns `mobileTab` and `densityMode` stores directly
+    - density persistence and mobile tab GTM now mutate canonical runtime-owned state
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local `mobileTab` and `densityMode` state
+    - rewired action/runtime/layout props through engagement runtime stores
+    - line count reduced from 453 to 445
+  - Updated `CLAUDE.md`
+    - documented the expanded engagement runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns session state and panel ref allocation
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
 ## [2026-03-07 11:46:42 +0900] START terminal-message-runtime-extraction-slice-20260307 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

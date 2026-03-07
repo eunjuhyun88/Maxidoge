@@ -299,7 +299,7 @@ const records = result.rows.map((r: any) => ({ ... }));
 - `src/lib/terminal/terminalActionRuntime.ts`: terminal route의 scan request/chat focus/trade-plan/pattern-scan orchestration 계층
 - `src/lib/terminal/terminalChatRuntime.ts`: terminal route의 intel-chat transport/orchestration/offline fallback 계층
 - `src/lib/terminal/terminalCommunityRuntime.ts`: terminal route의 community signal publish/share modal state + prefill orchestration 계층
-- `src/lib/terminal/terminalEngagementRuntime.ts`: terminal route의 density persistence + mobile tab/viewport analytics orchestration 계층
+- `src/lib/terminal/terminalEngagementRuntime.ts`: terminal route의 density/mobile-tab state + persistence + viewport analytics orchestration 계층
 - `src/lib/terminal/terminalPanelRuntime.ts`: terminal route의 warroom/chart ref registry + active chart lookup + pending scan flush 계층
 - `src/lib/terminal/terminalShellRuntime.ts`: terminal shell의 GTM emitter/live ticker state/bootstrap query parsing + shell mount lifecycle 계층
 - `src/lib/terminal/terminalScanRuntime.ts`: terminal route의 scan start/complete/chart-show state transition 계층
@@ -675,7 +675,7 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **terminal chat runtime 경계**: intel chat의 user-message append, `/api/chat/messages` transport, offline fallback, suggested direction 업데이트는 `src/lib/terminal/terminalChatRuntime.ts`가 canonical이다. `terminal/+page.svelte`나 `IntelPanel.svelte`에 동일한 fetch/error/reply 조립 로직을 다시 인라인하지 말 것.
 - **terminal scan runtime 경계**: scan start/complete, latest scan 적용, consensus trade setup 반영, chart-origin signal display 반영은 `src/lib/terminal/terminalScanRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 scan payload 해석과 chat message append/state transition 분기를 다시 인라인하지 말 것.
 - **terminal community runtime 경계**: chart-origin signal tracking, community post 생성, copy-trade modal open, share modal open/prefill/close state 흐름은 `src/lib/terminal/terminalCommunityRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 share modal state mutation이나 게시글/attachment 조립 로직을 다시 풀어쓰지 말 것.
-- **terminal engagement runtime 경계**: density mode persistence, mobile tab change GTM, mobile viewport/nav impression 플래그는 `src/lib/terminal/terminalEngagementRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 localStorage access와 mobile impression state flag를 다시 인라인하지 말 것.
+- **terminal engagement runtime 경계**: density mode state/persistence, mobile tab state/change GTM, mobile viewport/nav impression 플래그는 `src/lib/terminal/terminalEngagementRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 `mobileTab`/`densityMode` local state, localStorage access, mobile impression state flag를 다시 인라인하지 말 것.
 - **terminal panel runtime 경계**: warroom ref 등록, viewport별 active chart panel lookup, pending chart-scan flush 재시도는 `src/lib/terminal/terminalPanelRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 `warRoomRef` 기반 재시도 함수나 viewport 분기 chart ref lookup을 다시 복제하지 말 것.
 - **terminal message runtime 경계**: chat message append, max-length trim, intel chat focus key bump는 `src/lib/terminal/terminalMessageRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 message buffer slice와 append helper를 다시 풀어쓰지 말 것.
 - **terminal session runtime 경계**: `latestScan`, `terminalScanning`, `chatTradeReady`, `chatSuggestedDir`, `chatConnectionStatus`, `activeTradeSetup`, `isTyping` 접근자는 `src/lib/terminal/terminalSessionRuntime.ts`가 canonical이다. `terminal/+page.svelte`에서 각 runtime wiring마다 동일한 getter/setter closure를 다시 복제하지 말 것.
