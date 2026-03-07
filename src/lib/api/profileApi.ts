@@ -1,55 +1,14 @@
-export interface ApiProfilePayload {
-  id: string;
-  email: string | null;
-  nickname: string | null;
-  walletAddress: string | null;
-  tier: string;
-  phase: number;
-  avatar: string | null;
-  createdAt: number | null;
-  updatedAt: number | null;
-  stats: {
-    displayTier: string;
-    totalMatches: number;
-    wins: number;
-    losses: number;
-    streak: number;
-    bestStreak: number;
-    totalLp: number;
-    totalPnl: number;
-    trackedSignals?: number;
-    badges: ApiProfileBadgePayload[];
-    updatedAt: number | null;
-  };
-}
+import type { LegacyBooleanEnvelope, LegacySuccessEnvelope } from '$lib/contracts/http';
+import type {
+  PassportProjection,
+  ProfileBadge,
+  ProfileProjection,
+  UpdateProfileRequest,
+} from '$lib/contracts/profile';
 
-export interface ApiProfileBadgePayload {
-  id: string;
-  name?: string;
-  icon?: string;
-  description?: string;
-  condition?: string;
-  earnedAt?: number | null;
-}
-
-export interface ApiPassportPayload {
-  tier: string;
-  totalMatches: number;
-  wins: number;
-  losses: number;
-  streak: number;
-  bestStreak: number;
-  totalLp: number;
-  totalPnl: number;
-  badges: ApiProfileBadgePayload[];
-  openTrades: number;
-  trackedSignals: number;
-  winRate: number;
-  agentSummary: {
-    totalAgents: number;
-    avgLevel: number;
-  };
-}
+export type ApiProfileBadgePayload = ProfileBadge;
+export type ApiProfilePayload = ProfileProjection;
+export type ApiPassportPayload = PassportProjection;
 
 function canUseBrowserFetch(): boolean {
   return typeof window !== 'undefined' && typeof fetch === 'function';
@@ -82,7 +41,7 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
 export async function fetchProfileApi(): Promise<ApiProfilePayload | null> {
   if (!canUseBrowserFetch()) return null;
   try {
-    const result = await requestJson<{ success: boolean; profile: ApiProfilePayload }>('/api/profile', {
+    const result = await requestJson<LegacySuccessEnvelope<'profile', ApiProfilePayload>>('/api/profile', {
       method: 'GET',
     });
     return result.profile || null;
@@ -91,13 +50,10 @@ export async function fetchProfileApi(): Promise<ApiProfilePayload | null> {
   }
 }
 
-export async function updateProfileApi(payload: {
-  nickname?: string;
-  avatar?: string;
-}): Promise<boolean> {
+export async function updateProfileApi(payload: UpdateProfileRequest): Promise<boolean> {
   if (!canUseBrowserFetch()) return false;
   try {
-    await requestJson<{ success: boolean }>('/api/profile', {
+    await requestJson<LegacyBooleanEnvelope>('/api/profile', {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
@@ -110,9 +66,12 @@ export async function updateProfileApi(payload: {
 export async function fetchPassportApi(): Promise<ApiPassportPayload | null> {
   if (!canUseBrowserFetch()) return null;
   try {
-    const result = await requestJson<{ success: boolean; passport: ApiPassportPayload }>('/api/profile/passport', {
-      method: 'GET',
-    });
+    const result = await requestJson<LegacySuccessEnvelope<'passport', ApiPassportPayload>>(
+      '/api/profile/passport',
+      {
+        method: 'GET',
+      },
+    );
     return result.passport || null;
   } catch {
     return null;

@@ -1,33 +1,13 @@
-export interface ApiUserPreferences {
-  userId: string;
-  defaultPair: string;
-  defaultTimeframe: string;
-  battleSpeed: number;
-  signalsEnabled: boolean;
-  sfxEnabled: boolean;
-  chartTheme: string;
-  dataSource: string;
-  language: string;
-  createdAt: number;
-  updatedAt: number;
-}
+import type { LegacySuccessEnvelope } from '$lib/contracts/http';
+import type {
+  UpdatePreferencesRequest,
+  UpdateUiStateRequest,
+  UserPreferences,
+  UserUiState,
+} from '$lib/contracts/preferences';
 
-export interface ApiUserUiState {
-  userId: string;
-  terminalLeftWidth: number;
-  terminalRightWidth: number;
-  terminalLeftCollapsed: boolean;
-  terminalRightCollapsed: boolean;
-  terminalMobileTab: string;
-  terminalActiveTab: string;
-  terminalInnerTab: string;
-  passportActiveTab: string;
-  signalsFilter: string;
-  oraclePeriod: string;
-  oracleSort: string;
-  createdAt: number;
-  updatedAt: number;
-}
+export type ApiUserPreferences = UserPreferences;
+export type ApiUserUiState = UserUiState;
 
 type JsonHeaders = Record<string, string>;
 
@@ -59,22 +39,30 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
 export async function fetchPreferencesApi(): Promise<ApiUserPreferences | null> {
   if (!canUseBrowserFetch()) return null;
   try {
-    const result = await requestJson<{ success: boolean; preferences: ApiUserPreferences }>('/api/preferences', {
-      method: 'GET',
-    });
+    const result = await requestJson<LegacySuccessEnvelope<'preferences', ApiUserPreferences>>(
+      '/api/preferences',
+      {
+        method: 'GET',
+      },
+    );
     return result.preferences || null;
   } catch {
     return null;
   }
 }
 
-export async function updatePreferencesApi(payload: Partial<ApiUserPreferences>): Promise<ApiUserPreferences | null> {
+export async function updatePreferencesApi(
+  payload: UpdatePreferencesRequest,
+): Promise<ApiUserPreferences | null> {
   if (!canUseBrowserFetch()) return null;
   try {
-    const result = await requestJson<{ success: boolean; preferences: ApiUserPreferences }>('/api/preferences', {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    });
+    const result = await requestJson<LegacySuccessEnvelope<'preferences', ApiUserPreferences>>(
+      '/api/preferences',
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      },
+    );
     return result.preferences || null;
   } catch {
     return null;
@@ -84,7 +72,7 @@ export async function updatePreferencesApi(payload: Partial<ApiUserPreferences>)
 export async function fetchUiStateApi(): Promise<ApiUserUiState | null> {
   if (!canUseBrowserFetch()) return null;
   try {
-    const result = await requestJson<{ success: boolean; uiState: ApiUserUiState }>('/api/ui-state', {
+    const result = await requestJson<LegacySuccessEnvelope<'uiState', ApiUserUiState>>('/api/ui-state', {
       method: 'GET',
     });
     return result.uiState || null;
@@ -93,10 +81,10 @@ export async function fetchUiStateApi(): Promise<ApiUserUiState | null> {
   }
 }
 
-export async function updateUiStateApi(payload: Partial<ApiUserUiState>): Promise<ApiUserUiState | null> {
+export async function updateUiStateApi(payload: UpdateUiStateRequest): Promise<ApiUserUiState | null> {
   if (!canUseBrowserFetch()) return null;
   try {
-    const result = await requestJson<{ success: boolean; uiState: ApiUserUiState }>('/api/ui-state', {
+    const result = await requestJson<LegacySuccessEnvelope<'uiState', ApiUserUiState>>('/api/ui-state', {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
