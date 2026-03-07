@@ -35,11 +35,6 @@
   } from '$lib/terminal/terminalViewModel';
   import type {
     DragTarget,
-    ChatMsg,
-    ScanIntelDetail,
-    AgentTradeSetup,
-    ChatTradeDirection,
-    TerminalChatConnectionStatus,
     TerminalPanelResizeTarget,
     WarRoomHandle,
     ChartPanelHandle,
@@ -183,54 +178,23 @@
     warRoomRef;
     terminalPanelRuntime.flushPendingChartScan();
   });
-  let chatMessages: ChatMsg[] = $state(buildInitialTerminalChatMessages());
-  let isTyping = $state(false);
-  let latestScan: ScanIntelDetail | null = $state(null);
-  let terminalScanning = $state(false);
-  let chatTradeReady = $state(false);
-  let chatSuggestedDir: ChatTradeDirection = $state('LONG');
-  let chatFocusKey = $state(0);
-  let activeTradeSetup: AgentTradeSetup | null = $state(null);
-  let chatConnectionStatus: TerminalChatConnectionStatus = $state('connected');
-  const terminalSessionRuntime = createTerminalSessionRuntime({
-    getIsTyping: () => isTyping,
-    setIsTyping: (typing) => {
-      isTyping = typing;
-    },
-    getLatestScan: () => latestScan,
-    setLatestScan: (detail) => {
-      latestScan = detail;
-    },
-    getTerminalScanning: () => terminalScanning,
-    setTerminalScanning: (scanning) => {
-      terminalScanning = scanning;
-    },
-    getChatTradeReady: () => chatTradeReady,
-    setChatTradeReady: (ready) => {
-      chatTradeReady = ready;
-    },
-    getChatSuggestedDir: () => chatSuggestedDir,
-    setChatSuggestedDir: (dir) => {
-      chatSuggestedDir = dir;
-    },
-    getChatConnectionStatus: () => chatConnectionStatus,
-    setChatConnectionStatus: (status) => {
-      chatConnectionStatus = status;
-    },
-    getActiveTradeSetup: () => activeTradeSetup,
-    setActiveTradeSetup: (setup) => {
-      activeTradeSetup = setup;
-    },
-  });
-  const terminalMessageRuntime = createTerminalMessageRuntime({
-    getChatMessages: () => chatMessages,
-    setChatMessages: (messages) => {
-      chatMessages = messages;
-    },
+  const {
+    isTyping,
+    latestScan,
+    terminalScanning,
+    chatTradeReady,
+    chatSuggestedDir,
+    activeTradeSetup,
+    chatConnectionStatus,
+    ...terminalSessionRuntime
+  } = createTerminalSessionRuntime();
+  const {
+    chatMessages,
+    chatFocusKey,
+    ...terminalMessageRuntime
+  } = createTerminalMessageRuntime({
+    initialChatMessages: buildInitialTerminalChatMessages(),
     maxChatMessages: MAX_CHAT_MESSAGES,
-    bumpChatFocusKey: () => {
-      chatFocusKey += 1;
-    },
   });
   const terminalDecisionState = $derived(deriveTerminalDecisionState({
     terminalScanning: terminalSessionRuntime.getTerminalScanning(),
@@ -239,7 +203,7 @@
     chatSuggestedDir: terminalSessionRuntime.getChatSuggestedDir(),
   }));
   $effect(() => {
-    chatMessages;
+    $chatMessages;
     terminalMessageRuntime.trimChatMessages();
   });
 
@@ -250,8 +214,8 @@
     decisionState: terminalDecisionState,
     onPrimaryAction: () => {
       void terminalActionRuntime.handleDecisionPrimaryAction({
-        terminalScanning,
-        hasLatestScan: !!latestScan,
+        terminalScanning: $terminalScanning,
+        hasLatestScan: !!$latestScan,
       });
     },
     onToggleDensity: toggleDensityMode,
@@ -266,11 +230,11 @@
 
   const sharedIntelPanelProps = $derived(buildSharedIntelPanelProps({
     densityMode: $densityMode,
-    chatMessages,
-    isTyping: terminalSessionRuntime.getIsTyping(),
+    chatMessages: $chatMessages,
+    isTyping: $isTyping,
     chatTradeReady: terminalSessionRuntime.getChatTradeReady(),
-    chatFocusKey,
-    chatConnectionStatus: terminalSessionRuntime.getChatConnectionStatus(),
+    chatFocusKey: $chatFocusKey,
+    chatConnectionStatus: $chatConnectionStatus,
   }));
 
   const terminalActionRuntime = createTerminalActionRuntime({
@@ -353,8 +317,8 @@
       mobileTab={$mobileTab}
       {mobileOpenTrades}
       {mobileTrackedSignals}
-      {latestScan}
-      {terminalScanning}
+      latestScan={$latestScan}
+      terminalScanning={$terminalScanning}
       onSetMobileTab={setMobileTab}
       onScanStart={terminalScanRuntime.handleScanStart}
       onScanComplete={terminalScanRuntime.handleScanComplete}
@@ -366,8 +330,8 @@
       onSendChat={terminalChatRuntime.handleSendChat}
       onGoToTrade={handleIntelGoTrade}
       onShareToCommunity={terminalCommunityRuntime.openShareModal}
-      {chatMessages}
-      {isTyping}
+      chatMessages={$chatMessages}
+      isTyping={$isTyping}
     />
   {:else if isTablet}
     <TerminalTabletLayout
@@ -378,8 +342,8 @@
       {terminalControlBarProps}
       {sharedChartPanelProps}
       {sharedIntelPanelProps}
-      {latestScan}
-      {terminalScanning}
+      latestScan={$latestScan}
+      terminalScanning={$terminalScanning}
       {tickerSegments}
       {tickerSegmentClass}
       onScanStart={terminalScanRuntime.handleScanStart}
@@ -409,8 +373,8 @@
       {terminalControlBarProps}
       {sharedChartPanelProps}
       {sharedIntelPanelProps}
-      {latestScan}
-      {terminalScanning}
+      latestScan={$latestScan}
+      terminalScanning={$terminalScanning}
       {tickerSegments}
       {tickerSegmentClass}
       onToggleLeft={toggleLeft}

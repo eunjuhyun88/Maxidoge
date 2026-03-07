@@ -1,33 +1,45 @@
 import type { ChatMsg } from './terminalTypes';
+import { get, readonly, writable } from 'svelte/store';
 
 export function createTerminalMessageRuntime(params: {
-  getChatMessages: () => ChatMsg[];
-  setChatMessages: (messages: ChatMsg[]) => void;
+  initialChatMessages: ChatMsg[];
   maxChatMessages: number;
-  bumpChatFocusKey: () => void;
 }) {
+  const chatMessagesStore = writable<ChatMsg[]>(params.initialChatMessages);
+  const chatFocusKeyStore = writable(0);
+
+  function getChatMessages() {
+    return get(chatMessagesStore);
+  }
+
+  function setChatMessages(messages: ChatMsg[]) {
+    chatMessagesStore.set(messages);
+  }
+
   function appendChatMessage(message: ChatMsg) {
-    params.setChatMessages([...params.getChatMessages(), message]);
+    setChatMessages([...getChatMessages(), message]);
   }
 
   function appendChatMessages(messages: ChatMsg[]) {
     if (!messages.length) return;
-    params.setChatMessages([...params.getChatMessages(), ...messages]);
+    setChatMessages([...getChatMessages(), ...messages]);
   }
 
   function focusChatInput() {
-    params.bumpChatFocusKey();
+    chatFocusKeyStore.update((focusKey) => focusKey + 1);
   }
 
   function trimChatMessages() {
-    const chatMessages = params.getChatMessages();
+    const chatMessages = getChatMessages();
     if (chatMessages.length <= params.maxChatMessages) return;
-    params.setChatMessages(chatMessages.slice(-params.maxChatMessages));
+    setChatMessages(chatMessages.slice(-params.maxChatMessages));
   }
 
   return {
     appendChatMessage,
     appendChatMessages,
+    chatFocusKey: readonly(chatFocusKeyStore),
+    chatMessages: readonly(chatMessagesStore),
     focusChatInput,
     trimChatMessages,
   };

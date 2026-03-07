@@ -4,42 +4,99 @@ import type {
   ScanIntelDetail,
   TerminalChatConnectionStatus,
 } from './terminalTypes';
+import { get, readonly, writable } from 'svelte/store';
 
-export function createTerminalSessionRuntime(params: {
-  getIsTyping: () => boolean;
-  setIsTyping: (typing: boolean) => void;
-  getLatestScan: () => ScanIntelDetail | null;
-  setLatestScan: (detail: ScanIntelDetail | null) => void;
-  getTerminalScanning: () => boolean;
-  setTerminalScanning: (scanning: boolean) => void;
-  getChatTradeReady: () => boolean;
-  setChatTradeReady: (ready: boolean) => void;
-  getChatSuggestedDir: () => ChatTradeDirection;
-  setChatSuggestedDir: (dir: ChatTradeDirection) => void;
-  getChatConnectionStatus: () => TerminalChatConnectionStatus;
-  setChatConnectionStatus: (status: TerminalChatConnectionStatus) => void;
-  getActiveTradeSetup: () => AgentTradeSetup | null;
-  setActiveTradeSetup: (setup: AgentTradeSetup | null) => void;
-}) {
+export function createTerminalSessionRuntime() {
+  const isTypingStore = writable(false);
+  const latestScanStore = writable<ScanIntelDetail | null>(null);
+  const terminalScanningStore = writable(false);
+  const chatTradeReadyStore = writable(false);
+  const chatSuggestedDirStore = writable<ChatTradeDirection>('LONG');
+  const chatConnectionStatusStore = writable<TerminalChatConnectionStatus>('connected');
+  const activeTradeSetupStore = writable<AgentTradeSetup | null>(null);
+
+  function getIsTyping() {
+    return get(isTypingStore);
+  }
+
+  function setIsTyping(typing: boolean) {
+    isTypingStore.set(typing);
+  }
+
+  function getLatestScan() {
+    return get(latestScanStore);
+  }
+
+  function setLatestScan(detail: ScanIntelDetail | null) {
+    latestScanStore.set(detail);
+  }
+
+  function getTerminalScanning() {
+    return get(terminalScanningStore);
+  }
+
+  function setTerminalScanning(scanning: boolean) {
+    terminalScanningStore.set(scanning);
+  }
+
+  function getChatTradeReady() {
+    return get(chatTradeReadyStore);
+  }
+
+  function setChatTradeReady(ready: boolean) {
+    chatTradeReadyStore.set(ready);
+  }
+
+  function getChatSuggestedDir() {
+    return get(chatSuggestedDirStore);
+  }
+
+  function setChatSuggestedDir(dir: ChatTradeDirection) {
+    chatSuggestedDirStore.set(dir);
+  }
+
+  function getChatConnectionStatus() {
+    return get(chatConnectionStatusStore);
+  }
+
+  function setChatConnectionStatus(status: TerminalChatConnectionStatus) {
+    chatConnectionStatusStore.set(status);
+  }
+
+  function getActiveTradeSetup() {
+    return get(activeTradeSetupStore);
+  }
+
+  function setActiveTradeSetup(setup: AgentTradeSetup | null) {
+    activeTradeSetupStore.set(setup);
+  }
+
   function hasLatestScan(): boolean {
-    return !!params.getLatestScan();
+    return !!getLatestScan();
   }
 
   return {
-    getActiveTradeSetup: params.getActiveTradeSetup,
-    getChatConnectionStatus: params.getChatConnectionStatus,
-    getChatSuggestedDir: params.getChatSuggestedDir,
-    getChatTradeReady: params.getChatTradeReady,
-    getIsTyping: params.getIsTyping,
-    getLatestScan: params.getLatestScan,
-    getTerminalScanning: params.getTerminalScanning,
+    activeTradeSetup: readonly(activeTradeSetupStore),
+    chatConnectionStatus: readonly(chatConnectionStatusStore),
+    chatSuggestedDir: readonly(chatSuggestedDirStore),
+    chatTradeReady: readonly(chatTradeReadyStore),
+    getActiveTradeSetup,
+    getChatConnectionStatus,
+    getChatSuggestedDir,
+    getChatTradeReady,
+    getIsTyping,
+    getLatestScan,
+    getTerminalScanning,
     hasLatestScan,
-    setActiveTradeSetup: params.setActiveTradeSetup,
-    setChatConnectionStatus: params.setChatConnectionStatus,
-    setChatSuggestedDir: params.setChatSuggestedDir,
-    setChatTradeReady: params.setChatTradeReady,
-    setIsTyping: params.setIsTyping,
-    setLatestScan: params.setLatestScan,
-    setTerminalScanning: params.setTerminalScanning,
+    isTyping: readonly(isTypingStore),
+    latestScan: readonly(latestScanStore),
+    setActiveTradeSetup,
+    setChatConnectionStatus,
+    setChatSuggestedDir,
+    setChatTradeReady,
+    setIsTyping,
+    setLatestScan,
+    setTerminalScanning,
+    terminalScanning: readonly(terminalScanningStore),
   };
 }

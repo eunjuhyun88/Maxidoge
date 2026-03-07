@@ -4038,6 +4038,42 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - the branch remains broadly dirty from unrelated in-flight refactor work
 - Status: DONE
 
+## [2026-03-07 13:26:41 +0900] START terminal-session-message-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving session/message state out of `terminal/+page.svelte`
+- Planned work:
+  - move scan/chat/trade session state ownership into `terminalSessionRuntime`
+  - move chat buffer/focus-key state ownership into `terminalMessageRuntime`
+  - rewire route/layout props through runtime-owned stores
+- Status: IN PROGRESS
+
+## [2026-03-07 13:26:41 +0900] FINISH terminal-session-message-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving session/message state out of `terminal/+page.svelte`
+- What changed:
+  - Updated `src/lib/terminal/terminalSessionRuntime.ts`
+    - runtime now owns `isTyping`, `latestScan`, `terminalScanning`, `chatTradeReady`, `chatSuggestedDir`, `chatConnectionStatus`, `activeTradeSetup` stores directly
+  - Updated `src/lib/terminal/terminalMessageRuntime.ts`
+    - runtime now owns `chatMessages` and `chatFocusKey` stores directly
+    - append/trim/focus helpers now mutate canonical runtime-owned state
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local session/message state declarations
+    - rewired route/layout props and derived panel props through runtime-owned stores
+    - line count reduced from 445 to 409
+  - Updated `CLAUDE.md`
+    - documented the expanded session/message runtime boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns panel ref allocation and pending chart-scan state
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
 ## [2026-03-07 11:46:42 +0900] START terminal-message-runtime-extraction-slice-20260307 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
