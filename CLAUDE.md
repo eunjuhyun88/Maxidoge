@@ -1,15 +1,11 @@
-# ⛔ DEPRECATED — 이 폴더는 레거시입니다
+# STOCKCLAW — Canonical Frontend Full-Stack Guide
+> **Last updated: 2026-03-07** | canonical workspace + frontend/backend boundary rules + staged extraction policy
 
-**`frontend/` 으로 통합되었습니다. 이 폴더에서 작업하지 마세요.**
-**활성 코드베이스: `/Users/ej/Downloads/maxidoge-clones/frontend/`**
-**가이드: `frontend/CLAUDE.md` 참조**
-
----
-
-# (아래는 레거시 — 참고용으로만 유지)
-
-# STOCKCLAW — Claude Code Project Guide
-> **Last updated: 2026-03-06** | 워크스페이스 가드 + warning budget CI 게이트 + 경고 우선순위표 추가
+## Workspace Status
+- **활성 코드베이스:** `/Users/ej/Downloads/maxidoge-clones/frontend/`
+- **정본:** 이 폴더 하나만 live target으로 사용한다.
+- **레거시 reference-only clone:** `/Users/ej/Downloads/maxidoge-clones/backend/`, `/Users/ej/Downloads/maxidoge-clones/frontend-passport/`, `/Users/ej/Downloads/maxidoge-clones/frontend-wallet-merge/`
+- 새 기능, 리팩터, 버그 수정은 reference clone에서 시작하지 않는다.
 
 ## Project Overview
 **StockHoo / STOCKCLAW** — Crypto Intelligence OS with gamified trading arena.
@@ -57,6 +53,41 @@ export PATH="$HOME/.local/bin:$HOME/.local/node-v22.14.0-darwin-arm64/bin:$PATH"
 5. HEAD/브랜치 포인터만 되돌려야 할 때는 `git update-ref`로 ref만 이동하고, 워킹트리 변경사항은 보존한다.
 6. 동기화 직후 `git status`, `git branch -vv`, `git worktree list`로 HEAD 위치/업스트림/워크트리 상태를 확인한다.
 7. 컨텍스트 관리는 `.agent-context` 스냅샷을 유지하고, 의미 있는 결정/절차 변경은 `docs/AGENT_WATCH_LOG.md`에 기록한다.
+
+## Frontend/Backend Boundary Rules (필수, 2026-03-07)
+1. 이 워크스페이스는 **단일 SvelteKit 풀스택 앱**이지만, 모든 작업은 프론트엔드 책임과 백엔드 책임을 분리해서 설계한다.
+2. 프론트엔드 경계:
+   - `src/routes/**/*.svelte` (단, `src/routes/api/**` 제외)
+   - `src/components/**`
+   - `src/lib/stores/**`
+   - `src/lib/api/**`
+   - `src/lib/services/**` (브라우저 전용)
+3. 백엔드 경계:
+   - `src/routes/api/**/+server.ts`
+   - `src/lib/server/**`
+   - DB, 인증, 권한, 외부 시장데이터, 스캔, 정책, mutation, projection 생성
+4. 브라우저 런타임 코드에서 `$lib/server/**`를 직접 import하지 않는다.
+5. store는 **authoritative truth source가 아니다.** store는 projection cache, UI state, interaction state만 가진다. 최종 정합성, 권한, 계산은 서버가 맡는다.
+6. page/component는 화면 조합과 사용자 상호작용에 집중한다. polling, mutation orchestration, heavy derivation, business rule이 커지면 controller/view-model/helper 계층으로 내린다.
+7. 새 작업은 구현 전에 반드시 `frontend-only`, `backend-only`, `cross-boundary` 중 하나로 분류하고 설계에 적는다.
+8. `backend/` 폴더는 diff/reference 전용이다. 새 구현, 구조 리팩터, 버그 수정을 그쪽에 직접 쌓지 않는다.
+
+## Separation Strategy (필수, 2026-03-07)
+1. **지금은 새 top-level 앱 폴더를 만들지 않는다.** 먼저 이 canonical `frontend/` 내부 경계를 안정화한다.
+2. 새 폴더를 만들어도 된다. 단, `frontend/` 내부에서 extraction-ready 목적이 분명한 경우에만 만든다.
+   - 예: controller, view-model, contracts, domain helper, chart runtime 분리
+3. `backend/`와 병행 개발하거나 clone 간 복사-붙여넣기로 동기화하지 않는다. 필요한 차이는 `frontend/`로 수동 통합한다.
+4. 물리적 분리는 마지막 단계에서만 진행한다. 목표 구조:
+   - `apps/web`
+   - `apps/api`
+   - `packages/contracts`
+   - `packages/domain`
+   - `packages/chart-runtime`
+   - `packages/ui`
+   - `packages/shared`
+5. 즉시 물리 분리를 하지 않는 이유:
+   - 현재 남은 리스크는 repo 분리보다 내부 책임 과다와 서버/클라이언트 authority 혼재에 더 크다.
+   - 지금 분리하면 이동 비용과 회귀 범위가 커지고, hotspot 파일 정리 전에 경계가 다시 흔들릴 가능성이 높다.
 
 
 ## Architecture
@@ -116,7 +147,7 @@ scripts/
 │   ├── guard-active-workspace.sh         # deprecated workspace(frontend-passport) 차단
 │   └── check-svelte-warning-budget.sh    # svelte-check warning budget 게이트
 docs/
-└── warning-priority-2026-03-06.md        # 49 warnings 정리 우선순위표
+└── warning-priority-2026-03-06.md        # zero-warning baseline / warning 회귀 방지 기준
 ```
 
 ### Stores (22개 — Svelte 4 writable 패턴)
@@ -253,16 +284,69 @@ const records = result.rows.map((r: any) => ({ ... }));
 ### 2026-03-06 Refactor Additions
 - `src/lib/server/profileProjection.ts`: 프로필 tier/badge/stats 서버 projection 단일 계산 경로
 - `src/lib/profile/profileAuthority.ts`: profile 표시 규칙 shared helper
-- `src/routes/terminal/terminalTypes.ts`: terminal shell/view type contract
 - `src/components/terminal/{TerminalDesktopLayout,TerminalTabletLayout,TerminalMobileLayout}.svelte`: viewport별 shell 분리
+- `src/components/terminal/ChartVerdictOverlay.svelte`: 차트 위 반투명 오버레이 — 컨센서스 방향/신뢰도 표시 (VerdictBanner 대체, 레이아웃 0px)
+- `src/components/terminal/MobileChatSheet.svelte`: iOS 풀업 시트 패턴 AI 채팅 (peek 48px / half 50vh / full 88vh)
+- `src/components/terminal/TabletWarRoomDrawer.svelte`: 태블릿 좌측 오버레이 드로어 — WarRoom 슬라이드인 (320px)
+- `src/components/terminal/MobileActionBar.svelte`: 모바일 차트탭 하단 액션바 (스캔/컨센서스/매매/채팅 트리거)
+- `src/components/terminal/CopyTradeModalHost.svelte`: terminal route의 copy-trade lazy modal host 계층
+- `src/components/terminal/TerminalShareModalHost.svelte`: terminal route의 community share lazy modal host 계층
 - `src/components/terminal/terminalShell.css`: terminal route에서 분리한 shared shell/layout styling
-- `src/components/terminal/terminalViewModel.ts`: terminal route의 decision/control/offline-fallback 계산 계층
-- `src/components/terminal/intelViewModel.ts`: IntelPanel의 positions/trend/headline 파생 상태 계산 계층
+- `src/lib/terminal/terminalViewModel.ts`: terminal route의 decision/control/offline-fallback 계산 계층
+- `src/lib/terminal/terminalHelpers.ts`: terminal route의 layout/pattern-scan/agent-detection 순수 helper 계층
+- `src/lib/terminal/terminalTypes.ts`: terminal route/layout/panel/lib 공용 타입 계층
+- `src/lib/terminal/terminalEventMappers.ts`: terminal scan/chat/community message 및 trade-setup 조립 계층
+- `src/lib/terminal/terminalActionRuntime.ts`: terminal route의 scan request/chat focus/trade-plan/pattern-scan orchestration 계층
+- `src/lib/terminal/terminalChatRuntime.ts`: terminal route의 intel-chat transport/orchestration/offline fallback 계층
+- `src/lib/terminal/terminalCommunityRuntime.ts`: terminal route의 community signal publish/share modal prefill orchestration 계층
+- `src/lib/terminal/terminalEngagementRuntime.ts`: terminal route의 density persistence + mobile tab/viewport analytics orchestration 계층
+- `src/lib/terminal/terminalPanelRuntime.ts`: terminal route의 warroom/chart ref registry + active chart lookup + pending scan flush 계층
+- `src/lib/terminal/terminalShellRuntime.ts`: terminal shell의 GTM emitter/live ticker/bootstrap query parsing + shell mount lifecycle 계층
+- `src/lib/terminal/terminalScanRuntime.ts`: terminal route의 scan start/complete/chart-show state transition 계층
+- `src/lib/terminal/terminalLayoutRuntime.ts`: terminal shell의 desktop side-panel resize/drag + tablet intel split lifecycle 계층
+- `src/lib/terminal/terminalMessageRuntime.ts`: terminal route의 chat message append/trim + focus key orchestration 계층
+- `src/lib/api/terminalApi.ts`: terminal scan/chat/live-ticker browser transport 계층
+- `src/lib/terminal/intel/intelViewModel.ts`: IntelPanel의 positions/trend/headline 파생 상태 계산 계층
+- `src/lib/terminal/intel/{intelHelpers,intelTypes}.ts`: IntelPanel 서브패널 공용 helper/type 계층
+- `src/lib/terminal/intel/intelUiState.ts`: IntelPanel의 탭 복원/지연 저장 큐 runtime 계층
+- `src/lib/terminal/intel/intelPositionRuntime.ts`: IntelPanel의 positions polling/visibility refresh lifecycle 계층
+- `src/lib/api/intelApi.ts`: IntelPanel용 market/onchain/opportunity/policy transport 계층
+- `src/lib/terminal/intel/intelFeedMappers.ts`: IntelPanel feed/headline/flow 응답 정규화 계층
+- `src/lib/terminal/intel/intelPolicyMappers.ts`: IntelPanel policy payload 정규화 계층
+- `src/lib/terminal/warroom/warRoomTypes.ts`: WarRoom scan tab/diff/highlight/shared type 계층
+- `src/lib/terminal/warroom/warRoomScanState.ts`: WarRoom의 scan state restore/persist/server history merge 계층
+- `src/lib/terminal/warroom/warRoomScanRuntime.ts`: WarRoom의 server signal mapping/scan tab upsert/diff 계산 계층
+- `src/lib/terminal/warroom/warRoomDerivativesRuntime.ts`: WarRoom의 derivatives polling/cache/visibility lifecycle 계층
 - `src/lib/chart/tradingviewEmbed.ts`: TradingView iframe 생성/파괴/URL 조립 어댑터
 - `src/lib/chart/chartTradePlanner.ts`: ChartPanel의 line-entry / trade-plan / community-signal 계산 계층
 - `src/components/arena/chart/chartPatternEngine.ts`: ChartPanel의 패턴 스캔/visible-scope/overlay snapshot 순수 계산 계층
+- `src/components/arena/chart/chartPatternRuntime.ts`: ChartPanel의 pattern marker merge/visible-range scan scheduler/focus/line-series cleanup lifecycle 계층
+- `src/components/arena/chart/chartTradePlanRuntime.ts`: ChartPanel의 trade-plan ratio drag/confirm/cancel cleanup lifecycle 계층
+- `src/components/arena/chart/chartPositionRuntime.ts`: ChartPanel의 TP/SL/ENTRY price-line sync + hover/drag/wheel lifecycle 계층
+- `src/components/arena/chart/chartDrawingRuntime.ts`: ChartPanel의 drawing mode/global mouseup/ghost-line RAF/line-entry finalize lifecycle 계층
+- `src/components/arena/chart/chartOverlayRuntime.ts`: ChartPanel의 overlay canvas context/render/resize/agent overlay cleanup lifecycle 계층
+- `src/components/arena/chart/chartViewportRuntime.ts`: ChartPanel의 indicator pane layout/time-scale/zoom/Y-auto/reset lifecycle 계층
+- `src/components/arena/chart/chartActionRuntime.ts`: ChartPanel의 pair/timeframe 전환, chart-origin scan/chat/community signal, trade-drawing activation orchestration 계층
+- `src/components/arena/chart/chartPriceRuntime.ts`: ChartPanel의 priceStore flush/throttle, 24h stats 반영, fallback live price, data-load transient cleanup 계층
+- `src/components/arena/chart/chartRuntimeBundle.ts`: ChartPanel의 primary runtime 생성 순서, interaction binding, primary cleanup ordering 계층
+- `src/components/arena/chart/ChartTradingViewPane.svelte`: ChartPanel의 trading-mode 전용 TradingView iframe shell + loading/error/fallback UI child boundary
+- `src/components/arena/chart/ChartIndicatorStrip.svelte`: ChartPanel의 agent advanced-mode indicator strip + view toggle + legend toggle child boundary
+- `src/components/arena/chart/ChartHeaderBar.svelte`: ChartPanel의 상단 toolbar/meta/pair switch/timeframe/mode toggle/layout-preserving child boundary
+- `src/components/arena/chart/ChartAgentOverlayChrome.svelte`: ChartPanel의 agent overlay chrome(scale tools/legend/loading/error/CTA/position badge/notice) child boundary
+- `src/components/arena/chart/ChartTradePlanOverlay.svelte`: ChartPanel의 trade-plan overlay child boundary; ratio drag/open/cancel wiring만 부모가 보유하고, overlay 마크업/스타일/반응형 위치는 layout-preserving child에서 유지
+- `src/components/arena/chart/ChartAnnotationLayer.svelte`: ChartPanel의 agent annotation surface child boundary; annotation popup selection과 absolute-position markup/style를 child가 보유
+- `src/components/arena/chart/ChartDrawingCanvas.svelte`: ChartPanel의 drawing canvas DOM ownership child boundary; canvas element/class/event surface는 child가 보유하고 부모는 runtime wiring만 수행
+- `src/components/arena/chart/ChartAgentSurface.svelte`: ChartPanel의 chart-container surface child boundary; chart container DOM/class/event surface와 overlay stacking order를 child가 보유
 - `src/components/arena/chart/chartDrawingEngine.ts`: ChartPanel의 canvas drawing / persisted drawing render 순수 렌더 계층
+- `src/components/arena/chart/chartDrawingSession.ts`: ChartPanel의 drawing draft / line-entry finalize 순수 세션 전이 계층
+- `src/components/arena/chart/chartOverlayRenderer.ts`: ChartPanel의 overlay canvas 렌더 결정 계층
+- `src/components/arena/chart/chartPositionInteraction.ts`: ChartPanel의 TP/SL/ENTRY hover/drag-target/wheel-step 순수 상호작용 계산 계층
+- `src/components/arena/chart/chartRuntimeBindings.ts`: ChartPanel의 visible-range/crosshair/resize/hotkey lifecycle 바인딩 계층
+- `src/components/arena/chart/chartDataRuntime.ts`: ChartPanel의 kline bootstrap/history pagination/Binance websocket lifecycle 계층
+- `src/components/arena/chart/chartTradingViewRuntime.ts`: ChartPanel의 TradingView safe-mode fallback/retry/debounced re-init lifecycle 계층
+- `src/components/arena/chart/chartBootstrap.ts`: ChartPanel의 lightweight-charts/pane/series bootstrap 계층
 - `db/migrations/0007_copy_trade_publish_idempotency.sql`, `supabase/migrations/014_copy_trade_publish_idempotency.sql`: copy-trade publish durable idempotency index
+- warning baseline restored to `0`: shared + `arena-v2` Svelte warnings are closed; any new warning is treated as a regression
 
 ## Environment Variables
 See `.env.example` for all required keys:
@@ -563,7 +647,7 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 ### 빌드 관련
 - **node_modules synthetic 파일 깨짐**: `@sveltejs/kit/src/types/synthetic/` 안의 `.md` 파일들이 날짜 접두어로 rename될 수 있음. `npm install` 후에도 안 되면 수동으로 접두어 제거 후 복사.
 - **`npm run build` 실패 시**: `node node_modules/.bin/vite build` 직접 사용.
-- **warning budget 게이트**: `npm run check:budget`는 기본 `WARNING_BUDGET=49`를 초과하면 실패. 경고 총량을 늘리는 PR 금지.
+- **warning budget 게이트**: `npm run check:budget`는 기본 `WARNING_BUDGET=49`를 초과하면 실패. 현재 canonical baseline은 `0 warnings`라서 새 warning은 모두 회귀로 본다.
 - **CI check job 규칙**: `guard:workspace` + `check:budget`을 먼저 통과해야 함.
 
 ### Workspace / Legacy 운영
@@ -580,14 +664,61 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **localStorage 사용 금지**: 서버(PostgreSQL)가 있으므로 클라이언트 영속 저장은 서버 API 경유. localStorage는 캐시/임시 용도만.
 - **unknown error 직접 접근 금지**: 서버/API 레이어에서 `error?.code`, `error?.message` 직접 접근하지 말고 `$lib/utils/errorUtils`의 `getErrorCode()` / `getErrorMessage()`를 사용.
 - **copy-trade publish idempotency**: `clientMutationId`는 `copy_trade_runs.draft.clientMutationId`에 저장되고, 고유 인덱스는 `db/migrations/0007_*` / `supabase/migrations/014_*` migration이 있어야 보장된다.
+- **Svelte 5 `state` 변수명 금지**: Svelte 5 rune `$state`와 충돌하므로 prop/변수명으로 `state`를 절대 사용하지 말 것. 대안: `sheetState`, `drawerState`, `formState` 등 접두사 사용. (MobileChatSheet에서 발견된 함정)
 - **terminal shell CSS 위치**: `/terminal` 레이아웃 스타일은 `src/components/terminal/terminalShell.css`가 canonical. route `<style>`로 되돌리면 `css_unused_selector` 경고가 급증한다.
-- **terminal/intel view-model 경계**: `src/components/terminal/terminalViewModel.ts`, `src/components/terminal/intelViewModel.ts`는 순수 계산 전용이다. fetch/store mutation/gtm side effect를 다시 넣지 말고 route/panel에 남겨야 한다.
+- **terminal/intel view-model 경계**: `src/lib/terminal/terminalViewModel.ts`, `src/lib/terminal/intel/intelViewModel.ts`는 순수 계산 전용이다. fetch/store mutation/gtm side effect를 다시 넣지 말고 route/panel에 남겨야 한다.
+- **terminal type 경계**: terminal 공용 타입은 `src/lib/terminal/terminalTypes.ts`가 canonical이다. `src/routes/terminal/*` 아래에 타입 정본을 다시 만들면 `lib -> routes` 역참조가 생긴다.
+- **terminal event mapper 경계**: scan 완료 chat message, consensus/agent trade setup, community signal post/attachment/message 조립은 `src/lib/terminal/terminalEventMappers.ts`가 canonical이다. `terminal/+page.svelte`에 동일한 문자열 조립과 RR 계산을 다시 복제하지 말 것.
+- **terminal action runtime 경계**: scan request 대기열, chart/intel/warroom auto-switch, trade-plan 요청, pattern-scan 요청 흐름은 `src/lib/terminal/terminalActionRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 같은 orchestration 분기를 다시 복제하지 말 것.
+- **terminal chat runtime 경계**: intel chat의 user-message append, `/api/chat/messages` transport, offline fallback, suggested direction 업데이트는 `src/lib/terminal/terminalChatRuntime.ts`가 canonical이다. `terminal/+page.svelte`나 `IntelPanel.svelte`에 동일한 fetch/error/reply 조립 로직을 다시 인라인하지 말 것.
+- **terminal scan runtime 경계**: scan start/complete, latest scan 적용, consensus trade setup 반영, chart-origin signal display 반영은 `src/lib/terminal/terminalScanRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 scan payload 해석과 chat message append/state transition 분기를 다시 인라인하지 말 것.
+- **terminal community runtime 경계**: chart-origin signal tracking, community post 생성, copy-trade modal open, share modal prefill/close 흐름은 `src/lib/terminal/terminalCommunityRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 store mutation과 게시글/attachment 조립 로직을 다시 풀어쓰지 말 것.
+- **terminal engagement runtime 경계**: density mode persistence, mobile tab change GTM, mobile viewport/nav impression 플래그는 `src/lib/terminal/terminalEngagementRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 localStorage access와 mobile impression state flag를 다시 인라인하지 말 것.
+- **terminal panel runtime 경계**: warroom ref 등록, viewport별 active chart panel lookup, pending chart-scan flush 재시도는 `src/lib/terminal/terminalPanelRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 `warRoomRef` 기반 재시도 함수나 viewport 분기 chart ref lookup을 다시 복제하지 말 것.
+- **terminal message runtime 경계**: chat message append, max-length trim, intel chat focus key bump는 `src/lib/terminal/terminalMessageRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 message buffer slice와 append helper를 다시 풀어쓰지 말 것.
+- **terminal shell runtime 경계**: shell GTM emitter, live ticker 로드, alert engine mount lifecycle, `copyTrade=1` query bootstrap 파싱은 `src/lib/terminal/terminalShellRuntime.ts`가 canonical이다. route에서 raw URL param delete/rewrite, shell mount bootstrap, raw market ticker JSON shape 해석을 다시 복제하지 말 것.
+- **terminal layout runtime 경계**: desktop left/right panel resize drag, wheel 기반 side-panel resize, tablet intel split drag/wheel/reset, viewport resize lifecycle은 `src/lib/terminal/terminalLayoutRuntime.ts`가 canonical이다. `terminal/+page.svelte`에 `mousemove/pointermove/resize` listener와 panel clamp 로직을 다시 인라인하지 말 것.
+- **terminal modal lazy boundary**: `CopyTradeModal`과 `SignalPostForm`의 lazy host는 `src/components/terminal/{CopyTradeModalHost,TerminalShareModalHost}.svelte`가 canonical이다. `terminal/+page.svelte`에 dynamic import 상태/host markup/CSS를 다시 인라인하지 말 것.
+- **terminal API transport 경계**: terminal scan/chat/live-ticker 브라우저 fetch는 `src/lib/api/terminalApi.ts`가 canonical이다. `terminal/+page.svelte`에서 `/api/chat/messages`, `/api/feargreed`, `/api/coingecko/global`를 직접 fetch하지 말 것.
+- **terminal dead layout 금지**: 예전 tablet 좌/하단 2축 split(`tabletLeftWidth`, `tabletBottomHeight`) 경로는 제거됐다. 새 tablet layout은 intel width 단일 split만 유지하며, 폐기된 2축 split 상태/헬퍼를 다시 부활시키지 말 것.
+- **IntelPanel runtime 경계**: 탭 상태 저장과 positions polling/visibility refresh는 `src/lib/terminal/intel/{intelUiState,intelPositionRuntime}.ts`가 canonical이다. `IntelPanel.svelte`에 timer/visibility listener/save debounce를 다시 인라인하지 말 것.
+- **IntelPanel transport 경계**: market/onchain/opportunity/policy fetch는 `src/lib/api/intelApi.ts`, headline/flow shape 변환은 `src/lib/terminal/intel/intelFeedMappers.ts`, policy payload 정규화는 `src/lib/terminal/intel/intelPolicyMappers.ts`가 canonical이다. `IntelPanel.svelte`에 raw JSON shape 해석과 transport 세부를 다시 복제하지 말 것.
+- **WarRoom state 경계**: scan state localStorage restore/persist, server history merge, entry auto-scan stale 판정은 `src/lib/terminal/warroom/warRoomScanState.ts`가 canonical이다. `WarRoom.svelte`에 localStorage parse/normalize와 history merge 로직을 다시 인라인하지 말 것.
+- **WarRoom runtime 경계**: server signal → `AgentSignal` 매핑, server detail hydrate, scan tab upsert, diff 계산은 `src/lib/terminal/warroom/warRoomScanRuntime.ts`가 canonical이다. `WarRoom.svelte`에 agent palette lookup과 diff loop를 다시 복제하지 말 것.
+- **WarRoom derivatives 경계**: derivatives fetch/cache/polling/visibility lifecycle은 `src/lib/terminal/warroom/warRoomDerivativesRuntime.ts`가 canonical이다. 특히 cache key는 `pair`만이 아니라 `pair + timeframe` 기준이어야 하므로, `WarRoom.svelte`에 pair-only cache를 다시 두지 말 것.
 - **IntelPanel 계약 방식**: `src/components/terminal/IntelPanel.svelte`는 `sendchat/gototrade/collapse`를 component event로 dispatch하지 않고 callback prop(`onSendChat`, `onGoToTrade`, `onCollapse`)로 받는다. layout에서 `on:` 리스너를 다시 쓰면 타입 계약이 깨진다.
 - **TradingView embed canonical path**: TradingView iframe URL/cleanup은 `src/lib/chart/tradingviewEmbed.ts`가 단일 진실원이다. `ChartPanel.svelte` 안에 querystring/iframe destroy 로직을 다시 복제하면 fallback·CSP 수정이 분산된다.
 - **Chart trade planner canonical path**: line-entry 정규화, trade-plan ratio/order 계산, community signal draft 생성은 `src/lib/chart/chartTradePlanner.ts`가 단일 진실원이다. `ChartPanel.svelte`에 RR/risk/source/reason 계산을 다시 복제하지 말 것.
 - **Chart pattern/render canonical path**: visible-range candle slice, pattern signature/snapshot, overlay marker selection은 `src/components/arena/chart/chartPatternEngine.ts`가 단일 진실원이고, persisted drawing render loop는 `src/components/arena/chart/chartDrawingEngine.ts`가 단일 진실원이다. `ChartPanel.svelte`에 pattern summary/render for-loop를 다시 복제하지 말 것.
+- **Chart pattern runtime canonical path**: pattern marker merge, visible-range scan debounce, focus-range 이동, pattern guide line-series cleanup은 `src/components/arena/chart/chartPatternRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에 `_patternRangeScanTimer`, pattern signature 비교, marker merge, line-series dispose 로직을 다시 인라인하지 말 것.
+- **Chart trade-plan runtime canonical path**: trade-plan ratio pointer drag, confirm/cancel side effect, trade-plan cleanup는 `src/components/arena/chart/chartTradePlanRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에 pointermove/pointerup 바인딩과 `pendingTradePlan` confirm/cancel side effect를 다시 인라인하지 말 것.
+- **Chart position runtime canonical path**: TP/SL/ENTRY price line 생성/제거, hover target, drag state, mouse wheel adjustment는 `src/components/arena/chart/chartPositionRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에 price-line create/remove와 hover/drag/wheel 분기를 다시 인라인하지 말 것.
+- **Chart drawing runtime canonical path**: drawing mode transition, global mouseup binding, line-entry pointer lifecycle, ghost-line RAF path, line-entry finalize side effect는 `src/components/arena/chart/chartDrawingRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에 drawing mode reset, window mouseup 바인딩, `_drawRAF` 성격의 RAF bookkeeping, line-entry finalize 분기를 다시 인라인하지 말 것.
+- **Chart overlay runtime canonical path**: overlay canvas context 캐시, `renderDrawings` orchestration, canvas resize, `toOverlayPoint` 변환, agent overlay cleanup은 `src/components/arena/chart/chartOverlayRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에 canvas context 캐시, overlay render body, resize 시 context invalidation, agent price-line cleanup을 다시 인라인하지 말 것.
+- **Chart viewport runtime canonical path**: indicator visibility apply, pane stretch layout, bar-spacing time-scale apply, zoom/fit/Y-auto/reset viewport controls는 `src/components/arena/chart/chartViewportRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에 pane stretch 분기, `barSpacing` 조정 수식, Y-auto 토글 side effect, scale reset 로직을 다시 인라인하지 말 것.
+- **Chart action runtime canonical path**: pair/timeframe 전환, chart-origin scan request, chart-origin chat request, community signal publish preflight, trade-drawing activation은 `src/components/arena/chart/chartActionRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에 `changePair`, `changeTF`, `requestAgentScan`, `requestChatAssist`, `publishCommunitySignal`, `activateTradeDrawing`의 도메인 분기를 다시 인라인하지 말 것.
+- **Chart price runtime canonical path**: priceStore 즉시 반영, WS price throttle, 24h stats 반영, fallback live price 계산, chart data reload 전 transient cleanup은 `src/components/arena/chart/chartPriceRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에 `_priceUpdateTimer` 성격의 타이머 상태, fallback live price 계산, transient cleanup 분기를 다시 인라인하지 말 것.
+- **Chart runtime bundle canonical path**: primary chart runtime 생성 순서(pattern/position/tradingview/data), interaction binding, primary cleanup ordering은 `src/components/arena/chart/chartRuntimeBundle.ts`가 단일 진실원이다. `ChartPanel.svelte`에 `onMount` 내부의 primary runtime 생성 순서와 `bindChartRuntimeInteractions` wiring, primary dispose 순서를 다시 인라인하지 말 것.
+- **Chart drawing session canonical path**: hline/trendline/trade-preview draft 생성과 line-entry finalize는 `src/components/arena/chart/chartDrawingSession.ts`가 단일 진실원이다. `ChartPanel.svelte`에 drawing session branching을 다시 인라인하지 말 것.
+- **Chart overlay renderer canonical path**: overlay canvas에서 pattern/agent setup/drawing/trade preview를 어떤 순서로 그릴지 결정하는 로직은 `src/components/arena/chart/chartOverlayRenderer.ts`가 단일 진실원이다. `ChartPanel.svelte`에는 canvas clear/render 분기와 ghost line 로직을 다시 흩뿌리지 말 것.
+- **Chart position interaction canonical path**: TP/SL/ENTRY line hover target 판정, drag target 선택, mouse wheel step 계산은 `src/components/arena/chart/chartPositionInteraction.ts`가 단일 진실원이다. `ChartPanel.svelte` 안에 거리 계산/step heuristic을 다시 복제하지 말 것.
+- **Chart runtime binding canonical path**: visible-range lazy-load trigger, crosshair RAF throttle, resize observer, keyboard hotkey wiring은 `src/components/arena/chart/chartRuntimeBindings.ts`가 단일 진실원이다. `ChartPanel.svelte`의 `onMount` 안에 이벤트 바인딩을 다시 인라인하면 cleanup 경로와 단축키 계약이 다시 분산된다.
+- **Chart data runtime canonical path**: kline bootstrap, history pagination, Binance kline/miniTicker subscribe/unsubscribe는 `src/components/arena/chart/chartDataRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에서 `fetchKlines`, `fetch24hr`, `subscribeKlines`, `subscribeMiniTicker`를 다시 직접 다루지 말 것.
+- **Chart TradingView runtime canonical path**: TradingView safe-mode fallback, retry, timeout timer, pair/timeframe re-init debounce는 `src/components/arena/chart/chartTradingViewRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에 `_tvInitTimer`, `_tvLoadTimer`, `tvWidget`, `reinitKey`를 다시 인라인하면 chart mode 전환과 cleanup 계약이 다시 분산된다.
+- **Chart TradingView pane canonical path**: trading-mode 전용 iframe shell, loading/error/fallback UI, `#tradingview_widget` DOM ownership은 `src/components/arena/chart/ChartTradingViewPane.svelte`가 단일 진실원이다. `ChartPanel.svelte`에 TradingView mode 전용 마크업과 스타일을 다시 인라인하지 말 것.
+- **Chart indicator strip canonical path**: agent advanced-mode indicator strip, visual mode toggle, indicator toggle chips, legend toggle/hide controls는 `src/components/arena/chart/ChartIndicatorStrip.svelte`가 단일 진실원이다. `ChartPanel.svelte`에 expanded/collapsed strip 마크업과 strip 전용 스타일을 다시 인라인하지 말 것.
+- **Chart header bar canonical path**: pair summary, 24h stats, token switch, timeframe controls, mode toggle, draw toolbar, scan/publish CTA, collapsed MA meta는 `src/components/arena/chart/ChartHeaderBar.svelte`가 단일 진실원이다. 레이아웃/위치 회귀를 막기 위해 동일 DOM/class 구조를 유지하고, `ChartPanel.svelte`에 이 상단 바 마크업과 스타일을 다시 인라인하지 말 것.
+- **Chart agent overlay chrome canonical path**: agent mode의 scale tools, indicator legend, loading/error badge, first-scan CTA, trade CTA bar, drawing notice, chart notice, position badge, drag indicator는 `src/components/arena/chart/ChartAgentOverlayChrome.svelte`가 단일 진실원이다. `ChartPanel.svelte`에는 canvas/trade-plan/annotation shell만 남기고, overlay chrome 마크업과 전용 absolute-position 스타일을 다시 인라인하지 말 것.
+- **Chart trade-plan overlay canonical path**: trade planner overlay의 SIGNAL/ENTRY/TP/SL/RISK/R:R 표시, ratio track/preset UI, open/cancel CTA, 모바일 위치 보정 스타일은 `src/components/arena/chart/ChartTradePlanOverlay.svelte`가 단일 진실원이다. `ChartPanel.svelte`는 ratio drag wiring과 `pendingTradePlan` 상태만 보유하고, overlay 마크업/스타일을 다시 인라인하지 말 것. 레이아웃 회귀를 막기 위해 기존 class와 absolute positioning 계약을 유지할 것.
+- **Chart annotation layer canonical path**: agent annotation marker, popup selection state, popup/card absolute-position 스타일은 `src/components/arena/chart/ChartAnnotationLayer.svelte`가 단일 진실원이다. `ChartPanel.svelte`에 annotation button/popup 마크업과 `.chart-annotation` 계열 스타일을 다시 인라인하지 말 것.
+- **Chart drawing canvas canonical path**: drawing overlay canvas DOM element, `.drawing-canvas` class surface, drawing-active pointer-event 토글은 `src/components/arena/chart/ChartDrawingCanvas.svelte`가 단일 진실원이다. `ChartPanel.svelte`는 canvas ref handoff와 mouse event wiring만 보유하고, canvas 마크업/스타일을 다시 인라인하지 말 것. 레이아웃 회귀를 막기 위해 same-class/same-position 계약을 유지할 것.
+- **Chart agent surface canonical path**: `.chart-container` DOM, hidden-chart 토글, chart mouse/wheel lifecycle 표면, overlay child들의 stacking order, container ref handoff는 `src/components/arena/chart/ChartAgentSurface.svelte`가 단일 진실원이다. `ChartPanel.svelte`에 chart-container 마크업과 관련 스타일을 다시 인라인하지 말 것. 레이아웃/위치 회귀를 막기 위해 동일 DOM 순서와 클래스 계약을 유지할 것.
+- **Chart bootstrap canonical path**: lightweight-charts 인스턴스 생성, candlestick/MA/volume/RSI pane 구성은 `src/components/arena/chart/chartBootstrap.ts`가 단일 진실원이다. `ChartPanel.svelte`의 `onMount`에 pane/series 생성 코드를 다시 크게 인라인하지 말 것.
+- **ChartPanel demo fallback 제거 상태 유지**: `src/components/arena/ChartPanel.svelte`의 dead `loadFallbackData()` path는 제거됐다. 캔들 mock/demo interval이 다시 필요하면 `ChartPanel.svelte`에 임시 interval을 되살리지 말고 별도 dev-only runtime 또는 story fixture로 분리할 것.
+- **ChartPanel cleanup entrypoint 유지**: `src/components/arena/ChartPanel.svelte`의 teardown은 `runChartCleanup()` 단일 진입점으로 유지한다. `cleanup`, `chartDataRuntime.dispose()`, `destroyTradingView()`를 `onDestroy`에서 다시 중복 호출하면 websocket unsubscribe와 chart removal이 이중 실행될 수 있다.
 - **ChartPanel dual contract 유지**: `src/components/arena/ChartPanel.svelte`는 terminal shell을 위해 callback prop(`onScanRequest`, `onChatRequest`, `onCommunitySignal`, `onDrag*`)을 호출하면서, arena legacy route를 위해 `scanrequest/chatrequest/communitysignal/drag*` component events도 같이 dispatch한다. 둘 중 하나만 남기면 `/terminal` 또는 `/arena` 한쪽 타입 계약이 다시 깨진다.
 - **CSP allowlist 변경 규칙**: 외부 font/embed/RPC/WebSocket/data source를 추가하면 `src/hooks.server.ts`의 `buildCsp()`를 같이 수정해야 한다. 현재 allowlist는 Google Fonts, TradingView iframe, Binance websocket을 기준으로 맞춰져 있다.
+- **`arena/+page.svelte` runes 주의**: 이 라우트는 runes 모드다. top-level mutable UI state를 plain `let`로 남기면 warning budget이 즉시 폭증한다. 이 파일을 건드릴 때는 mutable 값은 `$state(...)`, side effect는 `$effect(...)`, 템플릿 DOM 이벤트는 `onclick` 계열로 유지할 것.
 
 ### Store vs Rune 패턴
 - Store 파일은 **Svelte 4 `writable()`** 유지 (다수 컴포넌트에서 import하므로)
@@ -684,7 +815,7 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - [x] QW-02: Svelte warning budget 게이트 추가 (`check-svelte-warning-budget.sh`, baseline=49)
 - [x] QW-03: CI check job에 guard + warning budget 반영 (`ci-check-build.yml`)
 - [x] QW-04: 경고 정리 우선순위표 문서화 (`docs/warning-priority-2026-03-06.md`)
-- [ ] QW-05: warnings 49→0 단계적 감축 (P1: a11y + deprecated slot 우선)
+- [x] QW-05: warnings 49→0 단계적 감축 완료 (`npm run check`: `0 errors / 0 warnings`)
 
 ### Arena v2 Pokemon UI Phase
 - [x] PKM-00: Sprint 0 엔진 갭 수정 (SpecBonuses, ATR, Tier, Agent ID, RAG 연동)
