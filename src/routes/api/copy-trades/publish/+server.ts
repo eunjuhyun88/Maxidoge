@@ -11,6 +11,7 @@ import {
 } from '$lib/server/apiValidation';
 import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
 import { syncUserProfileProjection } from '$lib/server/profileProjection';
+import { mapCopyTradeRunRow, type CopyTradeRunRow } from '$lib/server/copyTradeRunMapper';
 import { readJsonBodySafely } from '$lib/server/requestGuards';
 import { mapQuickTradeRow, type QuickTradeRow } from '$lib/server/quickTradeMapper';
 import { mapTrackedSignalRow, type TrackedSignalRow } from '$lib/server/trackedSignalMapper';
@@ -32,18 +33,6 @@ interface Queryable {
   query: <T = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<{ rows: T[]; rowCount?: number | null }>;
 }
 
-interface CopyTradeRunRow {
-  id: string;
-  user_id: string;
-  selected_signal_ids: string[] | null;
-  draft: Record<string, unknown> | null;
-  published: boolean;
-  published_trade_id: string | null;
-  published_signal_id: string | null;
-  created_at: string;
-  published_at: string | null;
-}
-
 function calcAverageConfidence(draft: CopyTradeDraftPayload, fallback = 70): number {
   if (!Array.isArray(draft.evidence) || draft.evidence.length === 0) return fallback;
   const vals = draft.evidence
@@ -52,20 +41,6 @@ function calcAverageConfidence(draft: CopyTradeDraftPayload, fallback = 70): num
   if (vals.length === 0) return fallback;
   const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
   return Math.max(1, Math.min(100, Math.round(avg)));
-}
-
-function mapRun(row: CopyTradeRunRow) {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    selectedSignalIds: row.selected_signal_ids ?? [],
-    draft: row.draft ?? {},
-    published: Boolean(row.published),
-    publishedTradeId: row.published_trade_id,
-    publishedSignalId: row.published_signal_id,
-    createdAt: new Date(row.created_at).getTime(),
-    publishedAt: row.published_at ? new Date(row.published_at).getTime() : null,
-  };
 }
 
 async function loadExistingCopyTradeOutcome(db: Queryable, userId: string, clientMutationId: string) {
@@ -115,7 +90,7 @@ async function loadExistingCopyTradeOutcome(db: Queryable, userId: string, clien
   if (!trade || !signal) return null;
 
   return {
-    run: mapRun(run),
+    run: mapCopyTradeRunRow(run),
     trade: mapQuickTradeRow(trade, { defaultSource: 'copy-trade' }),
     signal: mapTrackedSignalRow(signal, { defaultSource: 'COPY TRADE' }),
   };
@@ -282,7 +257,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       await syncUserProfileProjection(user.id, client).catch(() => undefined);
 
       return {
-        run: mapRun(run.rows[0]),
+        run: mapCopyTradeRunRow(run.rows[0]),
         trade: mapQuickTradeRow(trade.rows[0], { defaultSource: 'copy-trade' }),
         signal: mapTrackedSignalRow(signal.rows[0], { defaultSource: 'COPY TRADE' }),
       };
