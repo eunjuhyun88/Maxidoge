@@ -5228,6 +5228,33 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - the next chart slice should target `ChartPanel.svelte` or `ChartPanelShell.svelte` composition weight instead of re-expanding support-runtime imports
 - Status: DONE
 
+## [2026-03-08 03:33:29 +0900] FINISH chart-panel-shell-lazy-split-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing arena chart SSR weight after the support-runtime split, with another narrow slice that stays compatible with the current arena WIP
+- What changed:
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - `ChartPanelShell.svelte` is now loaded through a dynamic import instead of a static component import
+    - `chartDerivativesRuntime.ts` is now loaded through the client runtime bootstrap path instead of a static module import
+    - `ChartPanel` still owns state/view-model assembly, but presentation shell and derivatives runtime are now separate lazy chunk boundaries
+  - Updated `CLAUDE.md`
+    - locked the chart panel shell lazy boundary and chart derivatives lazy boundary as canonical rules
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `1281` lines
+  - `src/components/arena/chart/ChartPanelShell.svelte`: `299` lines
+  - `src/components/arena/chart/chartDerivativesRuntime.ts`: `259` lines
+  - server chunk `src/components/arena/ChartPanel.svelte`: `49.08 kB` (was `118.70 kB` before this slice)
+  - split server chunk `src/components/arena/chart/ChartPanelShell.svelte`: `56.29 kB`
+  - split server chunk `src/components/arena/chart/chartDerivativesRuntime.ts`: `5.27 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.25 kB`
+- Residual risks:
+  - total arena SSR pressure is still dominated by `ChartPanelShell`, `chartPanelSupportRuntime`, and `drawingManager` together
+  - `ChartPanel.svelte` is now structurally thinner at import boundaries, but it still owns a large amount of state/wiring
+  - the next slice should target `ChartHeaderBar`/`ChartAgentSurface` boundaries or trim state ownership inside `ChartPanel.svelte`
+- Status: DONE
+
 ## [2026-03-08 03:46:55 +0900] FINISH arena-battle-host-child-split-cleanup-slice-20260308 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

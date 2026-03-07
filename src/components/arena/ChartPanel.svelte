@@ -13,7 +13,6 @@
   import { openQuickTrade, type TradeDirection } from '$lib/stores/quickTradeStore';
   import type { ChartPatternDetection } from '$lib/engine/patternDetector';
   import type { IChartApi, ISeriesApi } from 'lightweight-charts';
-  import ChartPanelShell from './chart/ChartPanelShell.svelte';
   import {
     type ChartTheme,
     FALLBACK_THEME,
@@ -53,14 +52,14 @@
   import type { PrepareChartMountResult } from './chart/chartMountRuntime';
   import type { ChartPanelController } from './chart/chartPanelController';
   import type { ChartPanelSupportRuntimeController } from './chart/chartPanelSupportRuntime';
-  import {
-    createChartDerivativesRuntime,
-    type ChartDerivativesRuntimeController,
-  } from './chart/chartDerivativesRuntime';
+  import type { ChartDerivativesRuntimeController } from './chart/chartDerivativesRuntime';
+
+  const chartPanelShellModule = import('./chart/ChartPanelShell.svelte');
 
   type ChartMountRuntimeModule = typeof import('./chart/chartMountRuntime');
   type ChartPanelControllerModule = typeof import('./chart/chartPanelController');
   type ChartPanelSupportRuntimeModule = typeof import('./chart/chartPanelSupportRuntime');
+  type ChartDerivativesRuntimeModule = typeof import('./chart/chartDerivativesRuntime');
 
   // ═══ Props ═══
   interface Props {
@@ -360,8 +359,16 @@
   let chartMountRuntimeModule: ChartMountRuntimeModule | null = null;
   let chartPanelControllerModule: ChartPanelControllerModule | null = null;
   let chartPanelSupportRuntimeModule: ChartPanelSupportRuntimeModule | null = null;
+  let chartDerivativesRuntimeModulePromise: Promise<ChartDerivativesRuntimeModule> | null = null;
   let chartClientRuntimePromise: Promise<void> | null = null;
   let chartPanelController: ChartPanelController | null = null;
+
+  function loadChartDerivativesRuntime() {
+    if (!chartDerivativesRuntimeModulePromise) {
+      chartDerivativesRuntimeModulePromise = import('./chart/chartDerivativesRuntime');
+    }
+    return chartDerivativesRuntimeModulePromise;
+  }
 
   async function setChartMode(mode: 'agent' | 'trading') {
     await ensureChartClientRuntime();
@@ -1032,10 +1039,11 @@
     }
 
     chartClientRuntimePromise = (async () => {
-      const [mountModule, controllerModule, supportRuntimeModule] = await Promise.all([
+      const [mountModule, controllerModule, supportRuntimeModule, derivativesRuntimeModule] = await Promise.all([
         import('./chart/chartMountRuntime'),
         import('./chart/chartPanelController'),
         import('./chart/chartPanelSupportRuntime'),
+        loadChartDerivativesRuntime(),
       ]);
 
       chartMountRuntimeModule = mountModule;
@@ -1051,7 +1059,7 @@
       }
 
       if (!derivativesRuntime) {
-        derivativesRuntime = createChartDerivativesRuntime({
+        derivativesRuntime = derivativesRuntimeModule.createChartDerivativesRuntime({
           getChart: () => chart,
           getLwc: () => lwcModule,
           getIndicatorEnabled: () => indicatorEnabled,
@@ -1122,6 +1130,7 @@
     chartSupportRuntime = null;
     derivativesRuntime?.dispose();
     derivativesRuntime = null;
+    chartDerivativesRuntimeModulePromise = null;
     chartClientRuntimePromise = null;
   });
 
@@ -1266,4 +1275,7 @@
   } satisfies ChartPanelShellActions;
 </script>
 
-<ChartPanelShell {...chartPanelShellState} {...chartPanelShellActions} />
+{#await chartPanelShellModule then chartPanelShellNs}
+  {@const ChartPanelShell = chartPanelShellNs.default}
+  <ChartPanelShell {...chartPanelShellState} {...chartPanelShellActions} />
+{/await}
