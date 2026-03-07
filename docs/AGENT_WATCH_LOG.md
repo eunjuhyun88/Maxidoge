@@ -20,6 +20,35 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ## Entries
 
+## [2026-03-07 11:54:39 +0900] FINISH frontend-chart-panel-shell-boundary-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by extracting the remaining top-level presentation shell from `ChartPanel.svelte` without changing layout or positioning
+- What changed:
+  - Added `src/components/arena/chart/ChartPanelShell.svelte` as the canonical presentation shell boundary:
+    - owns `.chart-wrapper` DOM and wrapper styling
+    - owns top-level composition of `ChartHeaderBar`, lazily loaded `ChartIndicatorStrip`, `ChartAgentSurface`, lazily loaded `ChartTradingViewPane`
+    - owns the lazy-import effects for indicator strip and TradingView pane
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline wrapper markup and wrapper styles
+    - removed parent-owned indicator-strip/trading-pane lazy module state/effects
+    - now delegates all presentation shell composition to `ChartPanelShell.svelte`
+  - Kept behavioral and layout contracts stable:
+    - same DOM ordering inside the shell
+    - same class names and wrapper styling
+    - same callback wiring for scan/chat/publish/trade-plan/drag/tradingview container handoff
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `ChartPanelShell.svelte` as the top-level presentation shell boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `1264` -> `1169` lines
+  - server chunk `ChartPanel.js` after this slice: `107.98 kB`
+- Residual risks:
+  - structure is cleaner, but this remains a synchronous shell extraction so SSR chunk weight increased
+  - the next high-value split is the remaining `ChartPanel.svelte` on-mount/bootstrap/runtime wiring path
+- Status: DONE
+
 ## [2026-03-07 11:48:29 +0900] FINISH frontend-chart-agent-surface-boundary-slice-20260307 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
@@ -3972,3 +4001,13 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `/terminal` build artifact size remains volatile while the broader branch is still in heavy refactor
   - the branch remains broadly dirty from unrelated in-flight refactor work
 - Status: DONE
+
+## [2026-03-07 11:57:23 +0900] START extracted-module-tracking-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by making the current extracted import graph trackable on remote
+- Planned work:
+  - identify untracked extracted modules already referenced by tracked terminal/chart files
+  - add those modules so the pushed branch better matches local build state
+  - rerun validation and push the consistency slice
+- Status: IN PROGRESS
