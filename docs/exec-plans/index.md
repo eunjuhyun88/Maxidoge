@@ -5,6 +5,7 @@ Purpose:
 
 ## Active
 
+- `docs/exec-plans/active/phase-1-foundation-contract-extraction-2026-03-07.md`
 - `docs/exec-plans/active/phase-1-contract-catalog-2026-03-07.md`
 - `docs/exec-plans/active/web-api-worker-phased-migration-map-2026-03-07.md`
 - `docs/exec-plans/active/full-stack-redesign-validation-2026-03-07.md`
