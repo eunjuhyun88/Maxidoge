@@ -13,6 +13,7 @@ import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
 import { syncUserProfileProjection } from '$lib/server/profileProjection';
 import { readJsonBodySafely } from '$lib/server/requestGuards';
 import { mapQuickTradeRow, type QuickTradeRow } from '$lib/server/quickTradeMapper';
+import { mapTrackedSignalRow, type TrackedSignalRow } from '$lib/server/trackedSignalMapper';
 import { getErrorMessage } from '$lib/utils/errorUtils';
 
 interface CopyTradeDraftPayload {
@@ -43,21 +44,6 @@ interface CopyTradeRunRow {
   published_at: string | null;
 }
 
-interface TrackedSignalRow {
-  id: string;
-  pair: string;
-  dir: 'LONG' | 'SHORT';
-  confidence: number | string;
-  entry_price: number | string;
-  current_price: number | string;
-  pnl_percent: number | string | null;
-  status: 'tracking' | 'expired' | 'converted';
-  source: string | null;
-  note: string | null;
-  tracked_at: string;
-  expires_at: string;
-}
-
 function calcAverageConfidence(draft: CopyTradeDraftPayload, fallback = 70): number {
   if (!Array.isArray(draft.evidence) || draft.evidence.length === 0) return fallback;
   const vals = draft.evidence
@@ -79,23 +65,6 @@ function mapRun(row: CopyTradeRunRow) {
     publishedSignalId: row.published_signal_id,
     createdAt: new Date(row.created_at).getTime(),
     publishedAt: row.published_at ? new Date(row.published_at).getTime() : null,
-  };
-}
-
-function mapSignal(row: TrackedSignalRow) {
-  return {
-    id: row.id,
-    pair: row.pair,
-    dir: row.dir,
-    confidence: Number(row.confidence),
-    entryPrice: Number(row.entry_price),
-    currentPrice: Number(row.current_price),
-    pnlPercent: Number(row.pnl_percent ?? 0),
-    status: row.status,
-    source: row.source || 'COPY TRADE',
-    note: row.note || '',
-    trackedAt: new Date(row.tracked_at).getTime(),
-    expiresAt: new Date(row.expires_at).getTime(),
   };
 }
 
@@ -148,7 +117,7 @@ async function loadExistingCopyTradeOutcome(db: Queryable, userId: string, clien
   return {
     run: mapRun(run),
     trade: mapQuickTradeRow(trade, { defaultSource: 'copy-trade' }),
-    signal: mapSignal(signal),
+    signal: mapTrackedSignalRow(signal, { defaultSource: 'COPY TRADE' }),
   };
 }
 
@@ -315,7 +284,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       return {
         run: mapRun(run.rows[0]),
         trade: mapQuickTradeRow(trade.rows[0], { defaultSource: 'copy-trade' }),
-        signal: mapSignal(signal.rows[0]),
+        signal: mapTrackedSignalRow(signal.rows[0], { defaultSource: 'COPY TRADE' }),
       };
     });
 

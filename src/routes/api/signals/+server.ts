@@ -3,41 +3,8 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt } from '$lib/server/apiValidation';
+import { mapTrackedSignalRow, type TrackedSignalRow } from '$lib/server/trackedSignalMapper';
 import { errorContains } from '$lib/utils/errorUtils';
-
-interface TrackedSignalRow {
-  id: string;
-  user_id: string;
-  pair: string;
-  dir: 'LONG' | 'SHORT';
-  confidence: number;
-  entry_price: number;
-  current_price: number;
-  pnl_percent: number;
-  status: 'tracking' | 'expired' | 'converted';
-  source: string | null;
-  note: string | null;
-  tracked_at: string;
-  expires_at: string;
-}
-
-function mapSignal(row: TrackedSignalRow) {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    pair: row.pair,
-    dir: row.dir,
-    confidence: Number(row.confidence ?? 0),
-    entryPrice: Number(row.entry_price),
-    currentPrice: Number(row.current_price),
-    pnlPercent: Number(row.pnl_percent ?? 0),
-    status: row.status,
-    source: row.source || 'manual',
-    note: row.note || '',
-    trackedAt: new Date(row.tracked_at).getTime(),
-    expiresAt: new Date(row.expires_at).getTime(),
-  };
-}
 
 export const GET: RequestHandler = async ({ cookies, url }) => {
   try {
@@ -75,7 +42,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
     return json({
       success: true,
       total: Number(totalResult.rows[0]?.total ?? '0'),
-      records: rows.rows.map(mapSignal),
+      records: rows.rows.map((row: TrackedSignalRow) => mapTrackedSignalRow(row)),
       pagination: { limit, offset },
     });
   } catch (error: unknown) {

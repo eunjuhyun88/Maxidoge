@@ -3,20 +3,8 @@ import type { RequestHandler } from './$types';
 import { withTransaction } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toPositiveNumber, UUID_RE } from '$lib/server/apiValidation';
+import type { TrackedSignalRow } from '$lib/server/trackedSignalMapper';
 import { errorContains } from '$lib/utils/errorUtils';
-
-interface TrackedSignalRow {
-  id: string;
-  user_id: string;
-  pair: string;
-  dir: 'LONG' | 'SHORT';
-  confidence: number;
-  entry_price: number;
-  current_price: number;
-  status: 'tracking' | 'expired' | 'converted';
-  source: string | null;
-  note: string | null;
-}
 
 export const POST: RequestHandler = async ({ cookies, request, params }) => {
   try {

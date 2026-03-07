@@ -11,41 +11,8 @@ import {
 } from '$lib/server/apiValidation';
 import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
 import { syncUserProfileProjection } from '$lib/server/profileProjection';
+import { mapTrackedSignalRow, type TrackedSignalRow } from '$lib/server/trackedSignalMapper';
 import { getErrorMessage } from '$lib/utils/errorUtils';
-
-interface TrackedSignalRow {
-  id: string;
-  user_id: string;
-  pair: string;
-  dir: 'LONG' | 'SHORT';
-  confidence: number;
-  entry_price: number;
-  current_price: number;
-  pnl_percent: number;
-  status: 'tracking' | 'expired' | 'converted';
-  source: string | null;
-  note: string | null;
-  tracked_at: string;
-  expires_at: string;
-}
-
-function mapSignal(row: TrackedSignalRow) {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    pair: row.pair,
-    dir: row.dir,
-    confidence: Number(row.confidence ?? 0),
-    entryPrice: Number(row.entry_price),
-    currentPrice: Number(row.current_price),
-    pnlPercent: Number(row.pnl_percent ?? 0),
-    status: row.status,
-    source: row.source || 'manual',
-    note: row.note || '',
-    trackedAt: new Date(row.tracked_at).getTime(),
-    expiresAt: new Date(row.expires_at).getTime(),
-  };
-}
 
 export const POST: RequestHandler = async ({ cookies, request }) => {
   try {
@@ -91,7 +58,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       [user.id, result.rows[0].id, pair, dir, source, confidence, JSON.stringify({ note })]
     ).catch(() => undefined);
 
-    const signal = mapSignal(result.rows[0]);
+    const signal = mapTrackedSignalRow(result.rows[0]);
     await syncUserProfileProjection(user.id).catch(() => undefined);
 
     await enqueuePassportEventBestEffort({
