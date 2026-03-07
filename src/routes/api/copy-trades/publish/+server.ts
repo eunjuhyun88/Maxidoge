@@ -12,6 +12,7 @@ import {
 import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
 import { syncUserProfileProjection } from '$lib/server/profileProjection';
 import { readJsonBodySafely } from '$lib/server/requestGuards';
+import { mapQuickTradeRow, type QuickTradeRow } from '$lib/server/quickTradeMapper';
 import { getErrorMessage } from '$lib/utils/errorUtils';
 
 interface CopyTradeDraftPayload {
@@ -40,23 +41,6 @@ interface CopyTradeRunRow {
   published_signal_id: string | null;
   created_at: string;
   published_at: string | null;
-}
-
-interface QuickTradeRow {
-  id: string;
-  pair: string;
-  dir: 'LONG' | 'SHORT';
-  entry: number | string;
-  tp: number | string | null;
-  sl: number | string | null;
-  current_price: number | string;
-  pnl_percent: number | string | null;
-  status: 'open' | 'closed' | 'stopped';
-  source: string | null;
-  note: string | null;
-  opened_at: string;
-  closed_at: string | null;
-  close_pnl: number | string | null;
 }
 
 interface TrackedSignalRow {
@@ -95,25 +79,6 @@ function mapRun(row: CopyTradeRunRow) {
     publishedSignalId: row.published_signal_id,
     createdAt: new Date(row.created_at).getTime(),
     publishedAt: row.published_at ? new Date(row.published_at).getTime() : null,
-  };
-}
-
-function mapTrade(row: QuickTradeRow) {
-  return {
-    id: row.id,
-    pair: row.pair,
-    dir: row.dir,
-    entry: Number(row.entry),
-    tp: row.tp == null ? null : Number(row.tp),
-    sl: row.sl == null ? null : Number(row.sl),
-    currentPrice: Number(row.current_price),
-    pnlPercent: Number(row.pnl_percent ?? 0),
-    status: row.status,
-    source: row.source || 'copy-trade',
-    note: row.note || '',
-    openedAt: new Date(row.opened_at).getTime(),
-    closedAt: row.closed_at ? new Date(row.closed_at).getTime() : null,
-    closePnl: row.close_pnl == null ? null : Number(row.close_pnl),
   };
 }
 
@@ -182,7 +147,7 @@ async function loadExistingCopyTradeOutcome(db: Queryable, userId: string, clien
 
   return {
     run: mapRun(run),
-    trade: mapTrade(trade),
+    trade: mapQuickTradeRow(trade, { defaultSource: 'copy-trade' }),
     signal: mapSignal(signal),
   };
 }
@@ -242,7 +207,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
         if (existing) return existing;
       }
 
-      const trade = await client.query(
+      const trade = await client.query<QuickTradeRow>(
         `
           INSERT INTO quick_trades (
             user_id, pair, dir, entry, tp, sl, current_price,
@@ -349,7 +314,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
 
       return {
         run: mapRun(run.rows[0]),
-        trade: mapTrade(trade.rows[0]),
+        trade: mapQuickTradeRow(trade.rows[0], { defaultSource: 'copy-trade' }),
         signal: mapSignal(signal.rows[0]),
       };
     });

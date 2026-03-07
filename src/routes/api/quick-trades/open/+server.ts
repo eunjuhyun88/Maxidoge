@@ -8,48 +8,11 @@ import { runIpRateLimitGuard } from '$lib/server/authSecurity';
 import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
 import { quickTradeMutationLimiter } from '$lib/server/rateLimit';
 import { saveQuickTradeOpenRAG } from '$lib/server/ragService';
+import { mapQuickTradeRow, type QuickTradeRow } from '$lib/server/quickTradeMapper';
 import { readJsonBodySafely } from '$lib/server/requestGuards';
 import { getErrorMessage } from '$lib/utils/errorUtils';
 
 const QUICK_TRADE_MUTATION_MAX_BYTES = 16 * 1024;
-
-interface QuickTradeRow {
-  id: string;
-  user_id: string;
-  pair: string;
-  dir: 'LONG' | 'SHORT';
-  entry: number;
-  tp: number | null;
-  sl: number | null;
-  current_price: number;
-  pnl_percent: number;
-  status: 'open' | 'closed' | 'stopped';
-  source: string | null;
-  note: string | null;
-  opened_at: string;
-  closed_at: string | null;
-  close_pnl: number | null;
-}
-
-function mapTrade(row: QuickTradeRow) {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    pair: row.pair,
-    dir: row.dir,
-    entry: Number(row.entry),
-    tp: row.tp == null ? null : Number(row.tp),
-    sl: row.sl == null ? null : Number(row.sl),
-    currentPrice: Number(row.current_price),
-    pnlPercent: Number(row.pnl_percent ?? 0),
-    status: row.status,
-    source: row.source || 'manual',
-    note: row.note || '',
-    openedAt: new Date(row.opened_at).getTime(),
-    closedAt: row.closed_at ? new Date(row.closed_at).getTime() : null,
-    closePnl: row.close_pnl == null ? null : Number(row.close_pnl),
-  };
-}
 
 export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
   const guard = await runIpRateLimitGuard({
@@ -114,7 +77,7 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
       [user.id, pair, dir, entry, tp, sl, currentPrice, source, note]
     );
 
-    const trade = mapTrade(result.rows[0]);
+    const trade = mapQuickTradeRow(result.rows[0]);
 
     await enqueuePassportEventBestEffort({
       userId: user.id,
