@@ -90,8 +90,6 @@ export function createChartPanelSupportRuntime(
   const actionRuntime = createChartActionRuntime(options.action);
   const priceRuntime = createChartPriceRuntime(options.price);
 
-  void drawingRuntime.preload();
-
   function dispose() {
     tradePlanRuntime.dispose();
     priceRuntime.dispose();

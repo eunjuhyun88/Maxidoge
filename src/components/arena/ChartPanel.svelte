@@ -1054,7 +1054,7 @@
         chartSupportRuntime = createChartSupportRuntimeInstance(
           supportRuntimeModule.createChartPanelSupportRuntime,
         );
-        // Load persisted drawings for current pair/timeframe
+        // Hydrate persisted drawings only when the current pair/timeframe actually has them.
         chartSupportRuntime.syncDrawingPersistence();
       }
 

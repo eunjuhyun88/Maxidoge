@@ -23,6 +23,15 @@ export function loadDrawings(pair: string, timeframe: string): DrawingData[] {
   }
 }
 
+/** Check whether a pair+timeframe has any persisted drawings */
+export function hasDrawings(pair: string, timeframe: string): boolean {
+  try {
+    return localStorage.getItem(storageKey(pair, timeframe)) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** Save drawings to localStorage for a pair+timeframe */
 export function saveDrawings(pair: string, timeframe: string, drawings: DrawingData[]): void {
   try {
