@@ -5863,3 +5863,28 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `src/routes/arena/+page.svelte` is still controller-heavy at `1015` lines and remains the next structural hotspot
   - `ArenaBattleAgentSprite.svelte` now owns most battle-sprite CSS, so future visual changes should stay there instead of leaking back into the host or route
 - Status: DONE
+
+## [2026-03-08 18:36:16 +0900] FINISH arena-agent-bridge-cutover-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the arena route cleanup, remove more inline glue without changing layout, and close noisy helper/cast paths inside `arena/+page.svelte`
+- What changed:
+  - Added [arenaAgentBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaAgentBridge.ts#L1)
+    - centralized arena route agent speech/state/energy/chat glue above `arenaAgentRuntime`
+    - normalized the `SYSTEM` chat author path so route/controller code no longer needs `as any` casts
+    - added an explicit presentation-sync binding seam for `battlePresentationRuntime.syncAgentState` / `syncAgentEnergy`
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - removed the local `setSpeech()`, `setAgentState()`, `setAgentEnergy()`, and `addChatMsg()` helpers
+    - switched `battlePresentationRuntime`, `arenaShellController`, `arenaResultController`, `arenaBattleController`, `arenaPhaseController`, and `arenaAnalysisPresentationRuntime` to the shared `arenaAgentBridge`
+    - removed inline `SYSTEM` chat casts in hypothesis/result paths
+    - reduced route size from `1015` to `1002` lines
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaAgentBridge.ts` as the canonical agent bridge path for future arena refactors
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - server entry: `src/routes/arena/+page.svelte` = `161.03 kB`
+- Residual risks:
+  - `arena/+page.svelte` still owns the large controller/runtimes wiring block and remains the next extraction target
+  - current build pulled in unrelated `market/pulse` WIP during route-map generation, so generated-doc drift outside this slice should still be treated as separate work
+- Status: DONE

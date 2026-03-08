@@ -69,9 +69,9 @@
   } from '$lib/arena/controllers/arenaMatchController';
   import {
     createArenaAgentRuntime,
-    type ArenaAgentChatAuthor,
     type ArenaAgentUiState,
   } from '$lib/arena/controllers/arenaAgentRuntime';
+  import { createArenaAgentBridge } from '$lib/arena/controllers/arenaAgentBridge';
   import {
     createArenaChartController,
   } from '$lib/arena/controllers/arenaChartController';
@@ -241,25 +241,13 @@
     },
     safeTimeout,
   });
-
-  function setSpeech(agentId: string, text: string, dur = 1500) {
-    arenaAgentRuntime.setSpeech(agentId, text, dur);
-  }
-
-  // Keep legacy agent state and sprite state aligned through the battle runtime.
-  function setAgentState(agentId: string, st: string) {
-    arenaAgentRuntime.setAgentState(agentId, st);
-    battlePresentationRuntime.syncAgentState(agentId, st);
-  }
-
-  function setAgentEnergy(agentId: string, e: number) {
-    arenaAgentRuntime.setAgentEnergy(agentId, e);
-    battlePresentationRuntime.syncAgentEnergy(agentId, e);
-  }
-
-  function addChatMsg(author: ArenaAgentChatAuthor, text: string, isAction = false) {
-    arenaAgentRuntime.addChatMessage(author, text, isAction);
-  }
+  const arenaAgentBridge = createArenaAgentBridge({
+    runtime: arenaAgentRuntime,
+    getAgentStates: () => agentStates,
+    setAgentStates: (next) => {
+      agentStates = next;
+    },
+  });
 
   const battlePresentationRuntime = createArenaBattlePresentationRuntime({
     getActiveAgents: () => activeAgents,
@@ -271,8 +259,8 @@
     setCharSprites: (sprites) => {
       charSprites = sprites;
     },
-    setAgentState,
-    setAgentEnergy,
+    setAgentState: arenaAgentBridge.setAgentState,
+    setAgentEnergy: arenaAgentBridge.setAgentEnergy,
     setBattleTurns: (turns) => {
       battleTurns = turns;
     },
@@ -342,6 +330,10 @@
       sfx.impact();
     },
     isDestroyed: () => _arenaDestroyed,
+  });
+  arenaAgentBridge.bindPresentationSync({
+    syncAgentState: battlePresentationRuntime.syncAgentState,
+    syncAgentEnergy: battlePresentationRuntime.syncAgentEnergy,
   });
 
   const liveEventRuntime = createArenaLiveEventRuntime({
@@ -421,8 +413,8 @@
     clearHypothesisInterval: arenaPhaseTimerRuntime.clearHypothesisInterval,
     setAgentsIdle: () => {
       activeAgents.forEach((ag) => {
-        setAgentState(ag.id, 'idle');
-        setAgentEnergy(ag.id, 0);
+        arenaAgentBridge.setAgentState(ag.id, 'idle');
+        arenaAgentBridge.setAgentEnergy(ag.id, 0);
       });
     },
     stopRunning: () => {
@@ -503,9 +495,9 @@
     addMatchRecord,
     addPnLEntry,
     resolveServerMatch: resolveArenaMatch,
-    onResolveError: (error) => {
-      console.warn('[Arena] Resolve sync failed:', error);
-    },
+      onResolveError: (error) => {
+        console.warn('[Arena] Resolve sync failed:', error);
+      },
     onWinEffects: () => {
       sfx.win();
       arenaVisualEffectsRuntime.emitDogeFloatBurst();
@@ -521,13 +513,11 @@
     setBattleNarration: (text) => {
       battleNarration = text;
     },
-    addSystemChat: (icon, color, text) => {
-      addChatMsg({ id: 'SYS', name: 'SYSTEM', icon, color } as any, text, true);
-    },
-    setAgentState,
+    addSystemChat: arenaAgentBridge.addSystemChat,
+    setAgentState: arenaAgentBridge.setAgentState,
     setCharState: battlePresentationRuntime.setCharState,
     showCharAction: battlePresentationRuntime.showCharAction,
-    setSpeech,
+    setSpeech: arenaAgentBridge.setSpeech,
     pickOpponentScore: () => Math.round(50 + Math.random() * 35),
     pickWinMotto: () => WIN_MOTTOS[Math.floor(Math.random() * WIN_MOTTOS.length)],
     pickLoseMotto: () => LOSE_MOTTOS[Math.floor(Math.random() * LOSE_MOTTOS.length)],
@@ -547,8 +537,8 @@
       liveEventRuntime.start('BATTLE');
       addFeed('⚔', 'BATTLE', '#FF5E7A', 'Battle in progress!');
       activeAgents.forEach((ag, i) => {
-        setAgentState(ag.id, 'alert');
-        setSpeech(ag.id, DOGE_BATTLE[i % DOGE_BATTLE.length], 400);
+        arenaAgentBridge.setAgentState(ag.id, 'alert');
+        arenaAgentBridge.setSpeech(ag.id, DOGE_BATTLE[i % DOGE_BATTLE.length], 400);
       });
       battlePresentationRuntime.startBattleTurnSequence();
     },
@@ -583,8 +573,8 @@
         battleExitPrice: exitPrice,
       }));
     },
-    setAgentState,
-    setSpeech,
+    setAgentState: arenaAgentBridge.setAgentState,
+    setSpeech: arenaAgentBridge.setSpeech,
     setVsMeter: (value) => {
       vsMeter = value;
     },
@@ -634,8 +624,8 @@
       addFeed('🐕', 'ARENA', '#E8967D', 'Draft locked. Preparing analysis...');
       activeAgents.forEach((ag, i) => {
         safeTimeout(() => {
-          setAgentState(ag.id, 'alert');
-          setSpeech(ag.id, DOGE_DEPLOYS[i % DOGE_DEPLOYS.length], 800);
+          arenaAgentBridge.setAgentState(ag.id, 'alert');
+          arenaAgentBridge.setSpeech(ag.id, DOGE_DEPLOYS[i % DOGE_DEPLOYS.length], 800);
         }, i * 200);
       });
     },
@@ -673,12 +663,12 @@
       juice_shake('light');
       sfx.charge();
       battleNarration = '🎯 포지션을 설정하세요!';
-      addChatMsg({ id:'SYS', name:'SYSTEM', icon:'🎯', color:'#ffcc00' } as any, '배팅 타임! LONG or SHORT?', true);
+      arenaAgentBridge.addSystemChat('🎯', '#ffcc00', '배팅 타임! LONG or SHORT?');
       addFeed('🐕', 'ARENA', '#66CCE6', 'HYPOTHESIS: pick direction and set TP/SL.');
       activeAgents.forEach((ag, i) => {
         safeTimeout(() => {
-          setAgentState(ag.id, 'think');
-          setSpeech(ag.id, '🤔...', 600);
+          arenaAgentBridge.setAgentState(ag.id, 'think');
+          arenaAgentBridge.setSpeech(ag.id, '🤔...', 600);
         }, i * 300);
       });
     },
@@ -775,8 +765,8 @@
       addFeed('👁', 'PREVIEW', '#DCB970', `Position: ${hypothesis?.dir || 'NEUTRAL'} · Entry $${(hypothesis?.entry || 0).toLocaleString()} · R:R 1:${(hypothesis?.rr || 1).toFixed(1)}`);
       activeAgents.forEach((ag, i) => {
         safeTimeout(() => {
-          setAgentState(ag.id, 'think');
-          setSpeech(ag.id, '📋 reviewing...', 600);
+          arenaAgentBridge.setAgentState(ag.id, 'think');
+          arenaAgentBridge.setSpeech(ag.id, '📋 reviewing...', 600);
         }, i * 200);
       });
     },
@@ -802,14 +792,11 @@
     setBattleNarration: (text) => {
       battleNarration = text;
     },
-    addChatMessage: addChatMsg,
-    setAgentState,
-    setAgentEnergy,
-    setSpeech,
-    setVoteDir: (agentId, dir) => {
-      agentStates[agentId] = { ...agentStates[agentId], voteDir: dir };
-      agentStates = { ...agentStates };
-    },
+    addChatMessage: arenaAgentBridge.addChatMessage,
+    setAgentState: arenaAgentBridge.setAgentState,
+    setAgentEnergy: arenaAgentBridge.setAgentEnergy,
+    setSpeech: arenaAgentBridge.setSpeech,
+    setVoteDir: arenaAgentBridge.setVoteDir,
     showCharAction: battlePresentationRuntime.showCharAction,
     moveChar: battlePresentationRuntime.moveChar,
     applyScoutDecorations: () => {
