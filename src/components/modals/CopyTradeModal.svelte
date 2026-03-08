@@ -7,7 +7,7 @@
     copyTradeIsPublishing,
     copyTradePublishError,
   } from '$lib/stores/copyTradeStore';
-  import { notifySignalTracked } from '$lib/stores/notificationStore';
+  import { notifySignalTracked } from '$lib/stores/notificationEvents';
 
   const isOpen = $derived($isCopyTradeOpen);
   const step = $derived($copyTradeStep);

@@ -9,7 +9,7 @@ import { getConsensus } from '$lib/data/warroom';
 import { openQuickTrade, removeQuickTrade, replaceQuickTradeId } from './quickTradeStore';
 import { removeTracked, replaceTrackedSignalId, trackSignal } from './trackedSignalStore';
 import { hydrateUserProfile } from './userProfileStore';
-import { notifications } from './notificationStore';
+import { notifications } from './notificationsStore';
 import { publishCopyTradeApi } from '$lib/api/tradingApi';
 import type { CopyTradeEvidenceItem, PublishCopyTradeDraft, TradeDirection } from '$lib/contracts/trading';
 

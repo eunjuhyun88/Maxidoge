@@ -14,7 +14,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
-  import { notifySignalTracked } from '$lib/stores/notificationStore';
+  import { notifySignalTracked } from '$lib/stores/notificationEvents';
   import {
     buildAgentSignals,
     buildArenaSignals,

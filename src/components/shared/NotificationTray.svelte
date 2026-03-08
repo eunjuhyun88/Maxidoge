@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { notifications, unreadCount, seedNotifications, type Notification, type NotificationType } from '$lib/stores/notificationStore';
+  import { notifications, unreadCount, type Notification, type NotificationType } from '$lib/stores/notificationsStore';
 
   let open = $state(false);
   const items = $derived($notifications);
@@ -9,7 +9,6 @@
   onMount(() => {
     void (async () => {
       await notifications.hydrate();
-      seedNotifications();
     })();
   });
 

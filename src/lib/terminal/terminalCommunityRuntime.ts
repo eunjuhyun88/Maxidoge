@@ -1,5 +1,5 @@
 import type { SignalAttachment } from '$lib/stores/communityStore';
-import { notifySignalTracked } from '$lib/stores/notificationStore';
+import { notifySignalTracked } from '$lib/stores/notificationEvents';
 import { trackSignal } from '$lib/stores/trackedSignalStore';
 import { incrementTrackedSignals } from '$lib/stores/userProfileStore';
 import { readonly, writable } from 'svelte/store';

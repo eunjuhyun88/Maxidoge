@@ -5645,3 +5645,37 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `notifications` and `activity` still lack the full contract/wrapper prep needed before code cutover starts
   - `notificationStore.ts` remains one of the biggest shell-boundary tangles until it is split
 - Status: DONE
+
+## [2026-03-08 15:12:07 +0900] FINISH phase-2-notifications-activity-boundary-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the Phase 2 redesign by actually landing the notifications/activity contract seam and splitting the mixed notification store
+- What changed:
+  - Added [notifications.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/notifications.ts#L1)
+    - fixed the canonical transport contract for notification records, list queries, create payloads, and mark-read/delete responses
+  - Added [activity.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/activity.ts#L1)
+    - fixed the canonical transport contract for activity feed queries, activity records, and reaction writes
+  - Added [activityApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/activityApi.ts#L1)
+    - created the missing browser wrapper seam for durable activity feed reads and reaction writes
+  - Updated [notificationsApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/notificationsApi.ts#L1)
+    - stopped owning notification DTOs locally and moved to contract-backed notification transport shapes
+    - normalized list/create/mark-read/delete operations around the shared contracts
+  - Added [notificationsStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/notificationsStore.ts#L1), [toastStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/toastStore.ts#L1), [p0OverrideStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/p0OverrideStore.ts#L1), and [notificationEvents.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/notificationEvents.ts#L1)
+    - split durable notifications, ephemeral toasts, P0 override state, and event helper functions into distinct boundaries
+  - Replaced [notificationStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/notificationStore.ts#L1)
+    - converted the old mixed implementation file into a compatibility barrel
+  - Updated key consumers
+    - [NotificationTray.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/NotificationTray.svelte#L1) now hydrates durable notifications without seeding demo notifications by default
+    - [ToastStack.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ToastStack.svelte#L1), [P0Banner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/P0Banner.svelte#L1), [HypothesisPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/HypothesisPanel.svelte#L1), [alertEngine.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/services/alertEngine.ts#L1), [copyTradeStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/copyTradeStore.ts#L1), [hydration.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/hydration.ts#L1), [WarRoom.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/WarRoom.svelte#L1), [CopyTradeModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/CopyTradeModal.svelte#L1), [signals/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/signals/+page.svelte#L1), and [terminalCommunityRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/terminal/terminalCommunityRuntime.ts#L1) now point at the split boundaries directly
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded the landed status snapshot and narrowed the remaining blockers to `walletStore`, `userProfileStore`, and route-thinning work
+- Validation:
+  - `rg -n "notificationStore|seedNotifications" src --glob '!src/routes/api/**'`: only the compatibility barrel and manual seed helper remain
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `notificationStore.ts` still exists as a compatibility barrel, so full import migration is not complete yet
+  - route handlers under `api/notifications` and `api/activity` still own row mapping and SQL shaping
+  - `walletStore.ts` and `userProfileStore.ts` remain the next real Phase 2 boundary hotspots
+- Status: DONE

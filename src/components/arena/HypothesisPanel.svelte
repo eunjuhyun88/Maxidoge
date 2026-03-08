@@ -1,6 +1,6 @@
 <script lang="ts">
   import { gameState } from '$lib/stores/gameState';
-  import { p0Override } from '$lib/stores/notificationStore';
+  import { p0Override } from '$lib/stores/p0OverrideStore';
   import { livePrices } from '$lib/stores/priceStore';
   import { getBaseSymbolFromPair, getPairPrice } from '$lib/utils/price';
 

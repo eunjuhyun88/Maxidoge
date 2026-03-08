@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { p0Override } from '$lib/stores/notificationStore';
+  import { p0Override } from '$lib/stores/p0OverrideStore';
 
   const p0 = $derived($p0Override);
 

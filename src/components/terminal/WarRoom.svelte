@@ -8,7 +8,7 @@
   import { openQuickTrade } from '$lib/stores/quickTradeStore';
   import { trackSignal as trackSignalStore, activeSignalCount } from '$lib/stores/trackedSignalStore';
   import { incrementTrackedSignals } from '$lib/stores/userProfileStore';
-  import { notifySignalTracked } from '$lib/stores/notificationStore';
+  import { notifySignalTracked } from '$lib/stores/notificationEvents';
   import { copyTradeStore, registerScanSignals } from '$lib/stores/copyTradeStore';
   import {
     formatOI,

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { toasts, type Toast, type ToastLevel } from '$lib/stores/notificationStore';
+  import { toasts, type Toast, type ToastLevel } from '$lib/stores/toastStore';
 
   const items = $derived($toasts);
 

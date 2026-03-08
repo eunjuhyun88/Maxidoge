@@ -25,6 +25,21 @@ Primary sources:
 5. [profile-preferences-internal-boundary-inventory-2026-03-07.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/profile-preferences-internal-boundary-inventory-2026-03-07.md#L1)
 6. [global-shell-notifications-activity-boundary-inventory-2026-03-07.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/global-shell-notifications-activity-boundary-inventory-2026-03-07.md#L1)
 
+## 1.1 Status Snapshot
+
+Already landed in the current monolith:
+
+1. `notifications` contracts now live in [notifications.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/notifications.ts#L1)
+2. `activity` contracts and wrapper seam now live in [activity.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/activity.ts#L1) and [activityApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/activityApi.ts#L1)
+3. durable notifications, toasts, and P0 override now live in separate stores under `src/lib/stores`
+4. [NotificationTray.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/NotificationTray.svelte#L1) no longer seeds demo notifications by default during hydration
+
+Still blocking full Phase 2 cutover:
+
+1. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) still mixes session mirror and wallet-modal UX
+2. [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1) still mixes server projection, local cache, and client-derived overlays
+3. core route handlers still own too much inline SQL and mapping logic
+
 ## 2. Core Decision
 
 Phase 2 is not:
@@ -149,42 +164,41 @@ The transport layer may stay adjacent, but the server cutover must keep two serv
 1. user preferences persistence
 2. persisted UI-state persistence
 
-## 4.4 Notifications are mixed with toasts, P0 override, and demo seed behavior
+## 4.4 Notifications are partially untangled, but server normalization is still legacy
 
 Validated now:
 
-1. [notificationsApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/notificationsApi.ts#L1) still owns the canonical notification DTO locally
-2. [notificationStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/notificationStore.ts#L1) mixes:
-   - durable notifications
-   - ephemeral toasts
-   - `p0Override`
-   - seed/demo notification behavior
-3. [NotificationTray.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/NotificationTray.svelte#L12) still calls `seedNotifications()`
+1. [notificationsApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/notificationsApi.ts#L1) now consumes notification contracts instead of locally owning the DTO
+2. durable notifications now live in [notificationsStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/notificationsStore.ts#L1)
+3. ephemeral toasts now live in [toastStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/toastStore.ts#L1)
+4. P0 state now lives in [p0OverrideStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/p0OverrideStore.ts#L1)
+5. [NotificationTray.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/NotificationTray.svelte#L1) no longer seeds demo notifications during default hydration
 
 Implication:
 
-Phase 2 must split:
+Phase 2 no longer needs to split the browser store boundary first.
+It now needs to finish the server side:
 
-1. durable notification read/write state
-2. toast-only UI state
-3. P0 guardrail UX
-4. demo seed behavior, which should not survive the backend cutover as default behavior
+1. shared route mappers
+2. service/repository boundaries
+3. canonical envelope normalization
+4. activity-write ownership rules
 
-## 4.5 Activity has route authority but no browser wrapper boundary
+## 4.5 Activity now has a wrapper seam, but no shared server service layer
 
 Validated now:
 
 1. [activity/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/activity/+server.ts#L1) is already a durable read feed
 2. [activity/reaction/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/activity/reaction/+server.ts#L1) is already a durable mutation
-3. there is no dedicated browser `activityApi.ts` wrapper yet
+3. [activityApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/activityApi.ts#L1) now exists as the browser wrapper seam
 
 Implication:
 
-Before physical extraction, Phase 2 needs:
+Before physical extraction, Phase 2 still needs:
 
-1. activity contracts
-2. a wrapper seam for any browser-facing activity reads or writes
-3. centralized event-write ownership rules for later domains
+1. centralized event-write ownership rules for later domains
+2. shared server mappers instead of route-local row shaping
+3. route thinning so the wrapper seam hits one service boundary
 
 ## 5. Canonical Target Shape
 
@@ -328,9 +342,9 @@ Do not do these in Phase 2:
 
 The next concrete slice after this document should be:
 
-1. add `notifications` and `activity` contracts
-2. add `activityApi.ts`
-3. split `notificationStore` into durable notifications vs ephemeral shell state
-4. split auth-session mirror from wallet-modal UX state
+1. split auth-session mirror from wallet-modal UX state
+2. split user profile projection from client-derived overlays
+3. extract shared notification and activity server mappers/services
+4. keep `passport/learning/**` and venue auth out of that slice
 
 That sequence finishes the missing Phase 2 boundary prep without prematurely moving Phase 3 or Phase 6 domains.

@@ -1,22 +1,16 @@
-export type ApiNotificationType = 'alert' | 'critical' | 'info' | 'success';
+import type { LegacyBooleanEnvelope, LegacySuccessEnvelope } from '$lib/contracts/http';
+import type {
+  CreateNotificationRequest,
+  DeleteNotificationData,
+  MarkNotificationsReadData,
+  NotificationListData,
+  NotificationListQuery,
+  NotificationRecord,
+  NotificationType,
+} from '$lib/contracts/notifications';
 
-export interface ApiNotification {
-  id: string;
-  userId: string;
-  type: ApiNotificationType;
-  title: string;
-  body: string;
-  isRead: boolean;
-  dismissable: boolean;
-  createdAt: number;
-  readAt: number | null;
-}
-
-interface NotificationListResponse {
-  success: boolean;
-  total: number;
-  records: ApiNotification[];
-}
+export type ApiNotificationType = NotificationType;
+export type ApiNotification = NotificationRecord;
 
 function canUseBrowserFetch(): boolean {
   return typeof window !== 'undefined' && typeof fetch === 'function';
@@ -46,11 +40,7 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function fetchNotificationsApi(params?: {
-  limit?: number;
-  offset?: number;
-  unreadOnly?: boolean;
-}): Promise<ApiNotification[] | null> {
+export async function fetchNotificationsApi(params?: NotificationListQuery): Promise<NotificationListData | null> {
   if (!canUseBrowserFetch()) return null;
   try {
     const search = new URLSearchParams();
@@ -60,50 +50,70 @@ export async function fetchNotificationsApi(params?: {
 
     const query = search.toString();
     const url = query ? `/api/notifications?${query}` : '/api/notifications';
-    const result = await requestJson<NotificationListResponse>(url, { method: 'GET' });
-    return Array.isArray(result.records) ? result.records : [];
+    const result = await requestJson<
+      LegacySuccessEnvelope<'records', ApiNotification[]> & {
+        total: number;
+        pagination?: {
+          limit?: number;
+          offset?: number;
+        };
+      }
+    >(url, { method: 'GET' });
+
+    return {
+      total: Number(result.total ?? 0),
+      records: Array.isArray(result.records) ? result.records : [],
+      pagination: {
+        limit: Number(result.pagination?.limit ?? params?.limit ?? 50),
+        offset: Number(result.pagination?.offset ?? params?.offset ?? 0),
+      },
+    };
   } catch {
     return null;
   }
 }
 
-export async function createNotificationApi(payload: {
-  type: ApiNotificationType;
-  title: string;
-  body: string;
-  dismissable?: boolean;
-}): Promise<ApiNotification | null> {
+export async function createNotificationApi(payload: CreateNotificationRequest): Promise<ApiNotification | null> {
   if (!canUseBrowserFetch()) return null;
   try {
-    const result = await requestJson<{ success: boolean; notification: ApiNotification }>('/api/notifications', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    const result = await requestJson<LegacySuccessEnvelope<'notification', ApiNotification>>(
+      '/api/notifications',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+    );
     return result.notification || null;
   } catch {
     return null;
   }
 }
 
-export async function markNotificationsReadApi(ids?: string[]): Promise<number | null> {
+export async function markNotificationsReadApi(ids?: string[]): Promise<MarkNotificationsReadData | null> {
   if (!canUseBrowserFetch()) return null;
   try {
-    const result = await requestJson<{ success: boolean; updated: number }>('/api/notifications/read', {
+    const result = await requestJson<LegacySuccessEnvelope<'updated', number>>('/api/notifications/read', {
       method: 'POST',
       body: JSON.stringify(ids && ids.length ? { ids } : {}),
     });
-    return Number(result.updated ?? 0);
+    return {
+      updated: Number(result.updated ?? 0),
+    };
   } catch {
     return null;
   }
 }
 
-export async function deleteNotificationApi(id: string): Promise<boolean> {
-  if (!canUseBrowserFetch()) return false;
+export async function deleteNotificationApi(id: string): Promise<DeleteNotificationData | null> {
+  if (!canUseBrowserFetch()) return null;
   try {
-    await requestJson<{ success: boolean }>(`/api/notifications/${id}`, { method: 'DELETE' });
-    return true;
+    const result = await requestJson<LegacyBooleanEnvelope & { deleted?: boolean }>(`/api/notifications/${id}`, {
+      method: 'DELETE',
+    });
+    return {
+      deleted: result.deleted === true,
+    };
   } catch {
-    return false;
+    return null;
   }
 }
