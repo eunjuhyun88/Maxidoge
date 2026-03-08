@@ -23,6 +23,7 @@ import { AGENT_POOL, getFactorIds, normalizeAgentId } from './agents';
 import { getSpec } from './specs';
 import { computeAgentFactors, type MarketContext } from './factorEngine';
 import { ANALYSIS_TIMEOUT_MS } from './constants';
+import { clamp } from '$lib/utils/math';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -46,9 +47,6 @@ export interface PipelineResult {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
 
 function toDirection(score: number, threshold = 8): Direction {
   if (score > threshold) return 'LONG';

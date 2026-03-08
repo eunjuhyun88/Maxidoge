@@ -1,28 +1,44 @@
 <script lang="ts">
   import type { Phase } from '$lib/stores/gameState';
 
-  export let phase: Phase = 'DRAFT';
-  export let pair = 'BTC/USDT';
-  export let timeframe = '4h';
+  interface Props {
+    phase?: Phase;
+    pair?: string;
+    timeframe?: string;
+  }
 
-  const GUIDE: Record<Phase, { title: string; desc: string; action: string; icon: string }> = {
+  let { phase = 'DRAFT' as Phase, pair = 'BTC/USDT', timeframe = '4h' }: Props = $props();
+
+  const GUIDE = $derived<Record<Phase, { title: string; desc: string; action: string; icon: string }>>({
     DRAFT:      { title: 'BUILD SQUAD',     desc: 'Select your AI agents and configure risk parameters',  action: 'Pick agents',         icon: '⚙' },
     ANALYSIS:   { title: 'SCANNING',        desc: `Agents analyzing ${pair} ${timeframe} chart`,          action: 'Watch agents report',  icon: '◉' },
     HYPOTHESIS: { title: 'YOUR CALL',       desc: 'Set your direction, entry, TP, and SL on the chart',   action: 'Set TP/SL levels',     icon: '◎' },
     BATTLE:     { title: 'MARKET DECIDES',  desc: 'Live price tracking against your TP and SL levels',    action: 'Watch the chart',      icon: '⚡' },
     RESULT:     { title: 'COMPLETE',        desc: 'Review your performance and agent accuracy',           action: 'Review results',       icon: '■' },
-  };
+  });
 
-  $: g = GUIDE[phase] || GUIDE.DRAFT;
+  const g = $derived(GUIDE[phase] || GUIDE.DRAFT);
 
-  let visible = false;
-  let prevPhase = phase;
+  let visible = $state(false);
+  let prevPhase = $state<Phase>('DRAFT');
+  let initialized = $state(false);
 
-  $: if (phase !== prevPhase) {
-    prevPhase = phase;
-    visible = true;
-    setTimeout(() => { visible = false; }, 2800);
-  }
+  $effect(() => {
+    const currentPhase = phase;
+
+    if (!initialized) {
+      prevPhase = currentPhase;
+      initialized = true;
+      return;
+    }
+
+    if (currentPhase !== prevPhase) {
+      prevPhase = currentPhase;
+      visible = true;
+      const timer = setTimeout(() => { visible = false; }, 2800);
+      return () => clearTimeout(timer);
+    }
+  });
 </script>
 
 {#if visible}
@@ -59,7 +75,7 @@
   .pg-content { flex: 1; min-width: 0; }
   .pg-title { font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #F0EDE4; }
   .pg-desc { font-size: 9px; color: rgba(240,237,228,.5); margin-top: 2px; }
-  .pg-action { font-size: 8px; color: #E8967D; margin-top: 3px; letter-spacing: 1px; text-transform: uppercase; }
+  .pg-action { font-size: 9px; color: #E8967D; margin-top: 3px; letter-spacing: 1px; text-transform: uppercase; }
 
   @keyframes pgSlide {
     from { opacity: 0; transform: translateY(-10px); }

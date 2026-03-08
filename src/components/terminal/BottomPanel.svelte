@@ -2,7 +2,8 @@
   import { timeSince } from '$lib/utils/time';
   import { quickTradeStore, openTrades, closedTrades, totalQuickPnL, closeQuickTrade, clearClosedTrades } from '$lib/stores/quickTradeStore';
   import { trackedSignalStore, activeSignals, activeSignalCount, convertToTrade, removeTracked, clearExpired } from '$lib/stores/trackedSignalStore';
-  import { gameState } from '$lib/stores/gameState';
+  import { livePrices } from '$lib/stores/priceStore';
+  import { getPairPrice } from '$lib/utils/price';
 
   // ── Activity log ──
   interface Activity {
@@ -13,7 +14,7 @@
     color: string;
   }
 
-  let activities: Activity[] = [];
+  let activities: Activity[] = $state([]);
 
   export function addActivity(icon: string, text: string, color: string = '#fff') {
     activities = [{ id: crypto.randomUUID(), icon, text, time: Date.now(), color }, ...activities].slice(0, 50);
@@ -21,8 +22,8 @@
 
   // ── Tab state ──
   type Tab = 'positions' | 'tracked' | 'activity';
-  let activeTab: Tab = 'positions';
-  let collapsed = false;
+  let activeTab: Tab = $state<Tab>('positions');
+  let collapsed = $state(false);
 
   export function activateTab(tab: Tab) {
     activeTab = tab;
@@ -30,19 +31,17 @@
   }
 
   // ── Reactive ──
-  $: state = $gameState;
-  $: opens = $openTrades;
-  $: closed = $closedTrades;
-  $: totalPnl = $totalQuickPnL;
-  $: tracked = $activeSignals;
-  $: trackedCount = $activeSignalCount;
+  const opens = $derived($openTrades);
+  const closed = $derived($closedTrades);
+  const totalPnl = $derived($totalQuickPnL);
+  const tracked = $derived($activeSignals);
+  const trackedCount = $derived($activeSignalCount);
 
   // ── Trade actions ──
   function handleCloseTrade(tradeId: string) {
     const trade = opens.find(t => t.id === tradeId);
     if (!trade) return;
-    const token = trade.pair.split('/')[0] as keyof typeof state.prices;
-    const currentPrice = state.prices[token] || state.prices.BTC;
+    const currentPrice = getPairPrice($livePrices, trade.pair, 'BTC', trade.currentPrice || trade.entry);
     closeQuickTrade(tradeId, currentPrice);
     const pnl = trade.pnlPercent;
     addActivity(pnl >= 0 ? '🟢' : '🔴', `Closed ${trade.dir} ${trade.pair} · ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`, pnl >= 0 ? 'var(--grn)' : 'var(--red)');
@@ -51,8 +50,7 @@
   function handleConvert(signalId: string) {
     const sig = tracked.find(s => s.id === signalId);
     if (!sig) return;
-    const token = sig.pair.split('/')[0] as keyof typeof state.prices;
-    const price = state.prices[token] || state.prices.BTC;
+    const price = getPairPrice($livePrices, sig.pair, 'BTC', sig.currentPrice || sig.entryPrice);
     convertToTrade(signalId, price);
     addActivity('📊', `Converted ${sig.dir} ${sig.pair} to trade`, 'var(--yel)');
     activeTab = 'positions';
@@ -74,21 +72,21 @@
 <div class="bp" class:collapsed>
   <!-- Tab Bar -->
   <div class="bp-tabs">
-    <button class="bp-tab" class:active={activeTab === 'positions'} on:click={() => { activeTab = 'positions'; collapsed = false; }}>
+    <button class="bp-tab" class:active={activeTab === 'positions'} onclick={() => { activeTab = 'positions'; collapsed = false; }}>
       POSITIONS
       {#if opens.length > 0}<span class="bp-badge">{opens.length}</span>{/if}
     </button>
-    <button class="bp-tab" class:active={activeTab === 'tracked'} on:click={() => { activeTab = 'tracked'; collapsed = false; }}>
+    <button class="bp-tab" class:active={activeTab === 'tracked'} onclick={() => { activeTab = 'tracked'; collapsed = false; }}>
       TRACKED
       {#if trackedCount > 0}<span class="bp-badge bp-badge-cyan">{trackedCount}</span>{/if}
     </button>
-    <button class="bp-tab" class:active={activeTab === 'activity'} on:click={() => { activeTab = 'activity'; collapsed = false; }}>
+    <button class="bp-tab" class:active={activeTab === 'activity'} onclick={() => { activeTab = 'activity'; collapsed = false; }}>
       ACTIVITY
       {#if activities.length > 0}<span class="bp-badge bp-badge-dim">{activities.length}</span>{/if}
     </button>
     <div class="bp-tabs-right">
       <span class="bp-pnl" style="color:{pnlColor(totalPnl)}">{pnlPfx(totalPnl)}{totalPnl.toFixed(2)}%</span>
-      <button class="bp-collapse" on:click={() => collapsed = !collapsed}>{collapsed ? '▲' : '▼'}</button>
+      <button class="bp-collapse" onclick={() => collapsed = !collapsed}>{collapsed ? '▲' : '▼'}</button>
     </div>
   </div>
 
@@ -111,7 +109,7 @@
                 {pnlPfx(trade.pnlPercent)}{trade.pnlPercent}%
               </span>
               <span class="bp-time">{timeSince(trade.openedAt, false)}</span>
-              <button class="bp-action-btn bp-close-btn" on:click={() => handleCloseTrade(trade.id)}>CLOSE</button>
+              <button class="bp-action-btn bp-close-btn" onclick={() => handleCloseTrade(trade.id)}>CLOSE</button>
             </div>
           {/each}
         {:else}
@@ -135,15 +133,15 @@
                 {pnlPfx(sig.pnlPercent)}{sig.pnlPercent}%
               </span>
               <span class="bp-time bp-expire">⏱{timeLeft(sig.expiresAt)}</span>
-              <button class="bp-action-btn bp-trade-btn" on:click={() => handleConvert(sig.id)}>TRADE</button>
-              <button class="bp-action-btn bp-rm-btn" on:click={() => removeTracked(sig.id)}>✕</button>
+              <button class="bp-action-btn bp-trade-btn" onclick={() => handleConvert(sig.id)}>TRADE</button>
+              <button class="bp-action-btn bp-rm-btn" onclick={() => removeTracked(sig.id)}>✕</button>
             </div>
           {/each}
         {:else}
           <div class="bp-empty">No tracked signals. Use TRACK in War Room to watch signals.</div>
         {/if}
         {#if $trackedSignalStore.signals.filter(s => s.status === 'expired').length > 0}
-          <button class="bp-clear" on:click={clearExpired}>CLEAR EXPIRED</button>
+          <button class="bp-clear" onclick={clearExpired}>CLEAR EXPIRED</button>
         {/if}
       </div>
 
@@ -165,7 +163,7 @@
               </span>
             </div>
           {/each}
-          <button class="bp-clear" on:click={clearClosedTrades}>CLEAR HISTORY</button>
+          <button class="bp-clear" onclick={clearClosedTrades}>CLEAR HISTORY</button>
         {/if}
 
         <!-- Activity Log -->
@@ -208,12 +206,12 @@
     gap: 0;
     flex-shrink: 0;
     background: linear-gradient(90deg, #0f0f28, #1a0f28);
-    border-bottom: 1px solid rgba(232,150,125,.1);
+    border-bottom: 1px solid rgba(var(--t-accent-rgb),.1);
   }
   .bp-tab {
     padding: 6px 12px;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1.5px;
     color: rgba(255,255,255,.3);
@@ -230,10 +228,10 @@
   .bp-tab.active {
     color: var(--yel);
     border-bottom-color: var(--yel);
-    background: rgba(232,150,125,.04);
+    background: rgba(var(--t-accent-rgb),.04);
   }
   .bp-badge {
-    font-size: 7px;
+    font-size: 9px;
     background: var(--yel);
     color: #000;
     padding: 1px 4px;
@@ -291,7 +289,7 @@
   .bp-row-closed { opacity: .4; }
 
   .bp-dir {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     padding: 2px 5px;
     border-radius: 3px;
@@ -304,18 +302,18 @@
 
   .bp-pair { font-size: 9px; font-weight: 700; color: rgba(255,255,255,.7); }
   .bp-src {
-    font-size: 6px;
-    color: rgba(255,255,255,.25);
+    font-size: 9px;
+    color: rgba(255,255,255,.5);
     background: rgba(255,255,255,.04);
     padding: 1px 4px;
     border-radius: 3px;
   }
   .bp-conf {
-    font-size: 8px;
+    font-size: 9px;
     color: var(--cyan);
     font-weight: 700;
   }
-  .bp-entry { font-size: 8px; color: rgba(255,255,255,.4); }
+  .bp-entry { font-size: 9px; color: rgba(255,255,255,.4); }
   .bp-pnl-val {
     font-family: var(--fd);
     font-size: 10px;
@@ -323,12 +321,12 @@
     min-width: 45px;
     text-align: right;
   }
-  .bp-time { font-size: 7px; color: rgba(255,255,255,.2); }
+  .bp-time { font-size: 9px; color: rgba(255,255,255,.5); }
   .bp-expire { color: var(--ora); }
 
   .bp-action-btn {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: .5px;
     padding: 3px 6px;
@@ -360,16 +358,16 @@
   .bp-empty {
     padding: 20px;
     text-align: center;
-    font-size: 8px;
-    color: rgba(255,255,255,.2);
+    font-size: 9px;
+    color: rgba(255,255,255,.5);
     letter-spacing: 1px;
   }
   .bp-section-lbl {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
-    color: rgba(255,255,255,.25);
+    color: rgba(255,255,255,.5);
     padding: 6px 4px 3px;
     border-bottom: 1px solid rgba(255,255,255,.06);
     margin-bottom: 2px;
@@ -383,8 +381,8 @@
     width: 100%;
     padding: 4px;
     font-family: var(--fm);
-    font-size: 7px;
-    color: rgba(255,255,255,.2);
+    font-size: 9px;
+    color: rgba(255,255,255,.5);
     background: none;
     border: none;
     cursor: pointer;
@@ -395,6 +393,6 @@
   /* Activity */
   .bp-act-row { gap: 8px; }
   .bp-act-icon { font-size: 11px; }
-  .bp-act-text { font-size: 8px; flex: 1; }
+  .bp-act-text { font-size: 9px; flex: 1; }
 
 </style>

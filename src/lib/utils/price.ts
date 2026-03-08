@@ -23,7 +23,28 @@ export function getBaseSymbolFromPair(pair: string): string {
   return raw;
 }
 
-function normalizePrice(value: unknown): number | null {
+export function getNumericPrice(input: PriceLikeMap, symbol: string): number | null {
+  const normalizedSymbol = normalizeSymbol(symbol);
+  if (!normalizedSymbol) return null;
+  return readPrice(input[normalizedSymbol]);
+}
+
+export function getPairPrice(
+  input: PriceLikeMap,
+  pair: string,
+  fallbackSymbol = 'BTC',
+  fallbackPrice = 0
+): number {
+  const pairBase = getBaseSymbolFromPair(pair);
+  return (
+    getNumericPrice(input, pairBase)
+    ?? getNumericPrice(input, fallbackSymbol)
+    ?? normalizePrice(fallbackPrice)
+    ?? 0
+  );
+}
+
+export function normalizePrice(value: unknown): number | null {
   const num = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(num) || num <= 0) return null;
   return num;

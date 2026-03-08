@@ -11,6 +11,7 @@
 
 import { createPublicClient, http, encodeFunctionData, parseAbi, formatUnits, type Hex } from 'viem';
 import { arbitrum } from 'viem/chains';
+import type { GmxBalanceInfo, GmxCalldata, GmxMarket } from '$lib/contracts/positions';
 
 // ═══ Constants ═══════════════════════════════════════════════
 
@@ -119,21 +120,7 @@ function getPublicClient() {
 
 // ═══ Types ═══════════════════════════════════════════════════
 
-export interface GmxMarketInfo {
-  address: string;
-  label: string;
-  indexToken: string;
-  longToken: string;
-  shortToken: string;
-  maxLeverage: number;
-  indexPrice?: number;
-}
-
-export interface GmxOrderCalldata {
-  to: string;
-  data: string;
-  value: string; // hex ETH value (execution fee)
-}
+export type GmxOrderCalldata = GmxCalldata;
 
 export interface GmxPrepareResult {
   calldata: GmxOrderCalldata;
@@ -146,16 +133,6 @@ export interface GmxPrepareResult {
     acceptablePrice: bigint;
     executionFee: bigint;
   };
-}
-
-export interface GmxBalanceInfo {
-  usdcBalance: number;
-  usdcBalanceRaw: string;
-  ethBalance: number;
-  ethBalanceRaw: string;
-  usdcAllowance: number;
-  usdcAllowanceRaw: string;
-  needsApproval: boolean;
 }
 
 // ═══ Cache Layer ═════════════════════════════════════════════
@@ -220,7 +197,7 @@ export async function getBalanceInfo(walletAddress: string): Promise<GmxBalanceI
 // ═══ Market Data ════════════════════════════════════════════
 
 /** Get supported markets with basic info */
-export function getMarkets(): GmxMarketInfo[] {
+export function getMarkets(): GmxMarket[] {
   return Object.values(GMX_MARKETS).map(m => ({
     address: m.address,
     label: m.label,

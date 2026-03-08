@@ -8,6 +8,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { syncUserProfileProjection } from '$lib/server/profileProjection';
 import { resolveProgression, getTier, tierToDisplay } from '$lib/stores/progressionRules';
 import { LP_REWARDS, LOSS_STREAK_MERCY_THRESHOLD, LOSS_STREAK_MERCY_LP, CLUTCH_FBS_THRESHOLD } from '$lib/engine/constants';
 import type { LPReason } from '$lib/engine/types';
@@ -51,7 +52,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
     });
 
     return json({ success: true, progression });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[progression/GET]', err);
     return json({ error: 'Failed to fetch progression' }, { status: 500 });
   }
@@ -176,6 +177,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       console.warn('[progression/POST] LP transaction log failed:', logErr);
     }
 
+    await syncUserProfileProjection(user.id).catch(() => undefined);
+
     // 응답
     const progression = resolveProgression({
       lp: lpAfter,
@@ -197,7 +200,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       tierChanged,
       progression,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[progression/POST]', err);
     return json({ error: 'Failed to update progression' }, { status: 500 });
   }

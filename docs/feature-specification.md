@@ -11,7 +11,7 @@ Workspace: `/Users/ej/Downloads/stockclaw-unified`
 ## 2) 시스템 개요
 
 - 제품 성격: AI 에이전트 기반 트레이딩 시뮬레이션 웹앱
-- 핵심 도메인: `Arena`, `Terminal`, `Signals/Community`, `Passport`, `Oracle`, `Settings`
+- 핵심 도메인: `Arena`, `Terminal`, `Signals/Community/AI Leaderboard`, `Passport`, `Settings`
 - 런타임
   - 클라이언트: Svelte store + localStorage + 주기/실시간 업데이트
   - 서버: SvelteKit API (`/api/*`)
@@ -25,7 +25,7 @@ Workspace: `/Users/ej/Downloads/stockclaw-unified`
 5. 아레나(`/arena`)에서 가설 입력 후 배틀 진행, 결과(승패/LP/기록) 저장
 6. 시그널 허브(`/signals`)에서 커뮤니티 아이디어 탐색 및 트레이드 전환
 7. 패스포트(`/passport`)에서 프로필/포지션/성과/배지 확인
-8. 오라클(`/oracle`)에서 에이전트 정확도 랭킹 확인
+8. 레거시 오라클 링크(`/oracle`) 또는 Signals AI 탭(`/signals?view=ai`)에서 에이전트 정확도 랭킹 확인
 9. 설정(`/settings`)에서 기본 환경(시간봉/속도/알림/UI 상태) 저장
 
 ### 2.2 핵심 기능 그룹
@@ -157,8 +157,8 @@ Workspace: `/Users/ej/Downloads/stockclaw-unified`
 
 ### F-SIGNAL-001 View 스위치
 - 위치: `/src/routes/signals/+page.svelte`
-- 모드: `community` / `signals`
-- URL 동기화: `?view=signals`
+- 모드: `feed` / `trending` / `following` / `ai` / `signals`
+- URL 동기화: `?view=<mode>`
 
 ### F-SIGNAL-002 신호 집계/필터
 - 집계 소스:
@@ -208,11 +208,17 @@ Workspace: `/Users/ej/Downloads/stockclaw-unified`
 
 ## 4.8 오라클 (`/oracle`)
 
-### F-ORACLE-001 에이전트 정확도 랭킹
+### F-ORACLE-001 레거시 오라클 라우트 리다이렉트
 - 위치: `/src/routes/oracle/+page.svelte`
+- 동작: mount 시 `goto('/signals?view=ai', { replaceState: true, noScroll: true, keepFocus: true, invalidateAll: false })`
+- 출력: redirect 메시지 + fallback 링크
+
+### F-ORACLE-002 실제 AI Leaderboard 렌더
+- 위치: `/src/components/community/OracleLeaderboard.svelte`
 - 입력: agent stats + match history
-- 필터: 기간(`7d/30d/all`), 정렬(`accuracy/level/sample/conf`)
-- 출력: 랭킹 테이블 + agent detail
+- 렌더 위치: `/signals?view=ai`
+- 필터: 기간(`7d/30d/all`), 정렬(`wilson/accuracy/sample/calibration`)
+- 출력: 랭킹 테이블 + agent detail overlay + Arena deep-link
 
 ## 4.9 설정 (`/settings`)
 
@@ -301,7 +307,7 @@ Workspace: `/Users/ej/Downloads/stockclaw-unified`
 
 ### A-UISTATE-001 `GET|PUT /api/ui-state`
 - 인증: 필요
-- 기능: 터미널 패널 폭/탭/오라클 정렬/패스포트 탭 상태 저장
+- 기능: 터미널 패널 폭/탭, 패스포트 탭, AI leaderboard 호환 필드(`oraclePeriod`, `oracleSort`) 상태 저장
 
 ## 5.4 커뮤니티/알림/채팅
 

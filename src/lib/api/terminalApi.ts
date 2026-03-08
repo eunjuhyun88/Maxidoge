@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Terminal Scan API Client (browser-side)
+// STOCKCLAW — Terminal API Client (browser-side)
 // ═══════════════════════════════════════════════════════════════
 //
-// Wraps /api/terminal/scan/* endpoints for the Terminal page.
+// Wraps terminal-facing endpoints for the Terminal page.
 
 import type {
   TerminalScanSummary,
@@ -50,6 +50,45 @@ export interface MarketSnapshotResponse {
   at: number;
   sources: Record<string, boolean>;
   warning?: string;
+}
+
+export interface TerminalChatRow {
+  id: string;
+  userId: string;
+  channel: string;
+  senderKind: string;
+  senderId: string | null;
+  senderName: string;
+  message: string;
+  meta: Record<string, unknown>;
+  createdAt: number;
+}
+
+export interface TerminalChatResponse {
+  success: boolean;
+  message: TerminalChatRow | null;
+  agentResponse: TerminalChatRow | null;
+}
+
+export interface TerminalLiveTickerSnapshot {
+  btcDominance: number | null;
+  ethDominance: number | null;
+  totalVolumeUsd: number | null;
+  totalMarketCapUsd: number | null;
+  marketCapChange24hPct: number | null;
+  fearGreedValue: number | null;
+  fearGreedClassification: string | null;
+  stablecoinTotalMcapUsd: number | null;
+}
+
+export class TerminalApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'TerminalApiError';
+    this.status = status;
+  }
 }
 
 // ─── Helper ─────────────────────────────────────────────────
@@ -110,6 +149,26 @@ function pickWarning(payload: JsonRecord, data: JsonRecord | null): string | und
   if (typeof payload.warning === 'string') return payload.warning;
   if (data && typeof data.warning === 'string') return data.warning;
   return undefined;
+}
+
+function toJsonRecord(value: unknown): JsonRecord {
+  return isRecord(value) ? value : {};
+}
+
+function mapTerminalChatRow(value: unknown): TerminalChatRow | null {
+  if (!isRecord(value)) return null;
+
+  return {
+    id: pickString(value.id),
+    userId: pickString(value.userId),
+    channel: pickString(value.channel),
+    senderKind: pickString(value.senderKind),
+    senderId: typeof value.senderId === 'string' ? value.senderId : null,
+    senderName: pickString(value.senderName, 'ORCHESTRATOR'),
+    message: pickString(value.message),
+    meta: toJsonRecord(value.meta),
+    createdAt: parseTimestampMs(value.createdAt),
+  };
 }
 
 async function apiCall<T extends JsonRecord>(url: string, options?: RequestInit): Promise<T> {
@@ -244,11 +303,11 @@ export async function getMarketSnapshot(
 }
 
 /** Get Fear & Greed index */
-export async function getFearGreed(): Promise<{
+export async function getFearGreed(options?: { signal?: AbortSignal }): Promise<{
   success: boolean;
   current: { value: number; classification: string } | null;
 }> {
-  const payload = await apiCall<JsonRecord>('/api/feargreed');
+  const payload = await apiCall<JsonRecord>('/api/feargreed', { signal: options?.signal });
   const data = extractDataRecord(payload) ?? payload;
   const currentRaw = data.current;
 
@@ -271,24 +330,39 @@ export async function getFearGreed(): Promise<{
 }
 
 /** Get CoinGecko global data */
-export async function getCoinGeckoGlobal(): Promise<{
+export async function getCoinGeckoGlobal(options?: { signal?: AbortSignal }): Promise<{
   success: boolean;
   data: {
-    btcDominance: number;
-    totalMarketCap: number;
-    marketCapChange24hPct: number;
+    btcDominance: number | null;
+    ethDominance: number | null;
+    totalMarketCapUsd: number | null;
+    totalVolumeUsd: number | null;
+    marketCapChange24hPct: number | null;
+    stablecoinTotalMcapUsd: number | null;
   } | null;
 }> {
-  const payload = await apiCall<JsonRecord>('/api/coingecko/global');
+  const payload = await apiCall<JsonRecord>('/api/coingecko/global', { signal: options?.signal });
   const data = extractDataRecord(payload) ?? payload;
   const global = isRecord(data.global) ? data.global : null;
+  const stablecoin = isRecord(data.stablecoin) ? data.stablecoin : null;
 
   const btcDominance = parseNumber(data.btcDominance) ?? parseNumber(global?.btcDominance);
-  const totalMarketCap = parseNumber(data.totalMarketCap) ?? parseNumber(global?.totalMarketCapUsd);
+  const ethDominance = parseNumber(data.ethDominance) ?? parseNumber(global?.ethDominance);
+  const totalMarketCapUsd = parseNumber(data.totalMarketCap) ?? parseNumber(global?.totalMarketCapUsd);
+  const totalVolumeUsd = parseNumber(data.totalVolumeUsd) ?? parseNumber(global?.totalVolumeUsd);
   const marketCapChange24hPct =
     parseNumber(data.marketCapChange24hPct) ?? parseNumber(global?.marketCapChange24hPct);
+  const stablecoinTotalMcapUsd =
+    parseNumber(data.stablecoinTotalMcapUsd) ?? parseNumber(stablecoin?.totalMcapUsd);
 
-  if (btcDominance === null || totalMarketCap === null || marketCapChange24hPct === null) {
+  if (
+    btcDominance === null
+    && ethDominance === null
+    && totalMarketCapUsd === null
+    && totalVolumeUsd === null
+    && marketCapChange24hPct === null
+    && stablecoinTotalMcapUsd === null
+  ) {
     return { success: true, data: null };
   }
 
@@ -296,9 +370,73 @@ export async function getCoinGeckoGlobal(): Promise<{
     success: true,
     data: {
       btcDominance,
-      totalMarketCap,
+      ethDominance,
+      totalMarketCapUsd,
+      totalVolumeUsd,
       marketCapChange24hPct,
+      stablecoinTotalMcapUsd,
     },
+  };
+}
+
+export async function getTerminalLiveTicker(
+  options?: { signal?: AbortSignal },
+): Promise<TerminalLiveTickerSnapshot | null> {
+  const [fearGreed, coingecko] = await Promise.all([
+    getFearGreed(options).catch(() => ({ success: true as const, current: null })),
+    getCoinGeckoGlobal(options).catch(() => ({ success: true as const, data: null })),
+  ]);
+
+  const data = coingecko.data;
+  const current = fearGreed.current;
+  if (!data && !current) return null;
+
+  return {
+    btcDominance: data?.btcDominance ?? null,
+    ethDominance: data?.ethDominance ?? null,
+    totalVolumeUsd: data?.totalVolumeUsd ?? null,
+    totalMarketCapUsd: data?.totalMarketCapUsd ?? null,
+    marketCapChange24hPct: data?.marketCapChange24hPct ?? null,
+    fearGreedValue: current?.value ?? null,
+    fearGreedClassification: current?.classification ?? null,
+    stablecoinTotalMcapUsd: data?.stablecoinTotalMcapUsd ?? null,
+  };
+}
+
+export async function sendTerminalChatMessage(input: {
+  channel: string;
+  senderKind: string;
+  senderName: string;
+  message: string;
+  meta?: Record<string, unknown>;
+  signal?: AbortSignal;
+}): Promise<TerminalChatResponse> {
+  const res = await fetch('/api/chat/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      channel: input.channel,
+      senderKind: input.senderKind,
+      senderName: input.senderName,
+      message: input.message,
+      meta: input.meta ?? {},
+    }),
+    signal: input.signal ?? AbortSignal.timeout(20_000),
+  });
+
+  const payload: unknown = await res.json().catch(() => null);
+  if (!res.ok || !isSuccessEnvelope(payload)) {
+    throw new TerminalApiError(parseErrorMessage(payload, res.status), res.status);
+  }
+
+  if (!isRecord(payload)) {
+    throw new TerminalApiError(`Invalid API response (${res.status})`, res.status);
+  }
+
+  return {
+    success: true,
+    message: mapTerminalChatRow(payload.message),
+    agentResponse: mapTerminalChatRow(payload.agentResponse),
   };
 }
 

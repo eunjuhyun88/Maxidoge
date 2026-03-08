@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ cookies, params }) => {
     if (!match) return json({ error: 'Match not found' }, { status: 404 });
 
     return json({ success: true, match });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[arena/match/id/get]', err);
     return json({ error: 'Failed to load match' }, { status: 500 });
   }

@@ -12,7 +12,7 @@
     lockHumanDecision,
   } from '$lib/stores/arenaWarStore';
   import { AGENT_POOL } from '$lib/engine/agents';
-  import { REASON_TAGS, ALL_REASON_TAGS, type ReasonTagCategory } from '$lib/engine/arenaWarTypes';
+  import { REASON_TAGS, type ReasonTagCategory } from '$lib/engine/arenaWarTypes';
   import type { Direction, CtxFlag } from '$lib/engine/types';
 
   // Derived from store (use 'ws' to avoid name conflict with $state rune)
@@ -28,14 +28,21 @@
   let showFactorDetail: boolean = $state(false);
   let activeReasonCategory: ReasonTagCategory | null = $state(null);
   let reasonTextInput: string = $state('');
+  let mobileTab = $state<'ai' | 'human'>('human');
+  const reasonTagCategories = Object.entries(REASON_TAGS) as [ReasonTagCategory, readonly string[]][];
 
   // Agent outputs grouped by role
+  const offenseAgentIds = ['STRUCTURE', 'VPA', 'ICT'] as const;
   let offenseAgents = $derived(
-    c02 ? [
-      { id: 'STRUCTURE', def: AGENT_POOL.STRUCTURE, factors: factors.filter(f => AGENT_POOL.STRUCTURE.factors.some(fd => fd.id === f.factorId)) },
-      { id: 'VPA', def: AGENT_POOL.VPA, factors: factors.filter(f => AGENT_POOL.VPA.factors.some(fd => fd.id === f.factorId)) },
-      { id: 'ICT', def: AGENT_POOL.ICT, factors: factors.filter(f => AGENT_POOL.ICT.factors.some(fd => fd.id === f.factorId)) },
-    ] : []
+    c02
+      ? offenseAgentIds.map(id => {
+        const def = AGENT_POOL[id];
+        const agentFactors = factors.filter(f => def.factors.some(fd => fd.id === f.factorId));
+        const score = agentFactors.reduce((sum, factor) => sum + factor.value, 0);
+        const direction = directionFromScore(score);
+        return { id, def, factors: agentFactors, score, direction };
+      })
+      : []
   );
 
   let canLock = $derived(
@@ -63,10 +70,10 @@
     return 'var(--arena-text-2, #5a7d6e)';
   }
 
-  function factorBar(value: number): string {
-    const pct = Math.abs(value);
-    const color = value > 0 ? 'var(--arena-good, #00cc88)' : 'var(--arena-bad, #ff5e7a)';
-    return `linear-gradient(${value > 0 ? '90deg' : '270deg'}, ${color} ${pct}%, transparent ${pct}%)`;
+  function directionFromScore(score: number): Direction {
+    if (score > 15) return 'LONG';
+    if (score < -15) return 'SHORT';
+    return 'NEUTRAL';
   }
 
   function handleLock() {
@@ -104,9 +111,19 @@
     <span class="timer-text">{timer}s</span>
   </div>
 
+  <!-- Mobile Tab Bar (visible ≤768px only via CSS) -->
+  <div class="mobile-tab-bar">
+    <button class="mtab" class:active={mobileTab === 'ai'} onclick={() => mobileTab = 'ai'}>
+      🤖 AI 분석
+    </button>
+    <button class="mtab" class:active={mobileTab === 'human'} onclick={() => mobileTab = 'human'}>
+      👤 내 판단
+    </button>
+  </div>
+
   <div class="main-layout">
     <!-- LEFT: AI Analysis (전체 공개) -->
-    <div class="ai-panel">
+    <div class="ai-panel" class:mobile-hidden={mobileTab !== 'ai'}>
       <div class="panel-header">
         <span class="panel-icon">🤖</span>
         <span class="panel-title">AI 분석 — 전체 공개</span>
@@ -120,8 +137,8 @@
             <div class="agent-row">
               <span class="agent-icon">{agent.def.icon}</span>
               <span class="agent-id">{agent.id}</span>
-              <span class="agent-dir" style="color: {dirColor(agent.factors.reduce((s, f) => s + f.value, 0) > 15 ? 'LONG' : agent.factors.reduce((s, f) => s + f.value, 0) < -15 ? 'SHORT' : 'NEUTRAL')}">
-                {agent.factors.reduce((s, f) => s + f.value, 0) > 15 ? 'LONG' : agent.factors.reduce((s, f) => s + f.value, 0) < -15 ? 'SHORT' : 'NEUTRAL'}
+              <span class="agent-dir" style="color: {dirColor(agent.direction)}">
+                {agent.direction}
               </span>
               <div class="factor-chips">
                 {#each agent.factors as f}
@@ -206,7 +223,7 @@
         </div>
 
         <!-- Factor Detail Toggle -->
-        <button class="factor-toggle" onclick={() => showFactorDetail = !showFactorDetail}>
+        <button type="button" class="factor-toggle" onclick={() => showFactorDetail = !showFactorDetail}>
           {showFactorDetail ? '▲ 48팩터 접기' : '▼ 48팩터 전체 보기'}
         </button>
 
@@ -233,7 +250,7 @@
     </div>
 
     <!-- RIGHT: Human Decision -->
-    <div class="human-panel">
+    <div class="human-panel" class:mobile-hidden={mobileTab !== 'human'}>
       <div class="panel-header">
         <span class="panel-icon">👤</span>
         <span class="panel-title">당신의 판단</span>
@@ -241,9 +258,10 @@
 
       <!-- Direction -->
       <div class="decision-section">
-        <label class="dec-label">방향</label>
+        <p class="dec-label">방향</p>
         <div class="dir-buttons">
           <button
+            type="button"
             class="dir-btn long"
             class:active={ws.humanDirection === 'LONG'}
             onclick={() => setHumanDirection('LONG')}
@@ -252,6 +270,7 @@
             LONG ▲
           </button>
           <button
+            type="button"
             class="dir-btn neutral"
             class:active={ws.humanDirection === 'NEUTRAL'}
             onclick={() => setHumanDirection('NEUTRAL')}
@@ -260,6 +279,7 @@
             NEUTRAL
           </button>
           <button
+            type="button"
             class="dir-btn short"
             class:active={ws.humanDirection === 'SHORT'}
             onclick={() => setHumanDirection('SHORT')}
@@ -272,8 +292,9 @@
 
       <!-- Confidence -->
       <div class="decision-section">
-        <label class="dec-label">확신도: {ws.humanConfidence}%</label>
+        <label class="dec-label" for="human-confidence">확신도: {ws.humanConfidence}%</label>
         <input
+          id="human-confidence"
           type="range"
           min="10"
           max="95"
@@ -288,8 +309,9 @@
       <!-- TP / SL -->
       <div class="decision-section tp-sl-row">
         <div class="tp-input">
-          <label class="dec-label">TP</label>
+          <label class="dec-label" for="human-tp">TP</label>
           <input
+            id="human-tp"
             type="number"
             value={ws.humanTp}
             oninput={(e) => setHumanTp(Number(e.currentTarget.value))}
@@ -299,8 +321,9 @@
           />
         </div>
         <div class="sl-input">
-          <label class="dec-label">SL</label>
+          <label class="dec-label" for="human-sl">SL</label>
           <input
+            id="human-sl"
             type="number"
             value={ws.humanSl}
             oninput={(e) => setHumanSl(Number(e.currentTarget.value))}
@@ -310,7 +333,7 @@
           />
         </div>
         <div class="rr-display">
-          <label class="dec-label">R:R</label>
+          <span class="dec-label">R:R</span>
           <span class="rr-value" class:good={rr >= 2} class:warn={rr >= 1.5 && rr < 2} class:bad={rr < 1.5}>
             {rr.toFixed(1)}
           </span>
@@ -319,27 +342,29 @@
 
       <!-- Reason Tags -->
       <div class="decision-section">
-        <label class="dec-label">근거 태그 (AI를 왜 따르거나 거부하는가?)</label>
+        <p class="dec-label">근거 태그 (AI를 왜 따르거나 거부하는가?)</p>
         <div class="tag-categories">
-          {#each Object.entries(REASON_TAGS) as [cat, tags]}
+          {#each reasonTagCategories as [cat, tags]}
             <div class="tag-category">
               <button
+                type="button"
                 class="cat-header"
-                style="border-color: {getCategoryColor(cat as ReasonTagCategory)}"
-                onclick={() => activeReasonCategory = activeReasonCategory === cat ? null : cat as ReasonTagCategory}
+                style="border-color: {getCategoryColor(cat)}"
+                onclick={() => activeReasonCategory = activeReasonCategory === cat ? null : cat}
               >
-                <span style="color: {getCategoryColor(cat as ReasonTagCategory)}">{getCategoryLabel(cat as ReasonTagCategory)}</span>
-                <span class="cat-count">{ws.humanReasonTags.filter(t => (tags as readonly string[]).includes(t)).length}</span>
+                <span style="color: {getCategoryColor(cat)}">{getCategoryLabel(cat)}</span>
+                <span class="cat-count">{ws.humanReasonTags.filter(t => tags.includes(t)).length}</span>
               </button>
               {#if activeReasonCategory === cat}
                 <div class="tag-list">
                   {#each tags as tag}
                     <button
+                      type="button"
                       class="reason-tag"
                       class:selected={ws.humanReasonTags.includes(tag)}
                       onclick={() => toggleReasonTag(tag)}
                       disabled={ws.humanLocked}
-                      style="--cat-color: {getCategoryColor(cat as ReasonTagCategory)}"
+                      style="--cat-color: {getCategoryColor(cat)}"
                     >
                       {tag.replace(/_/g, ' ')}
                     </button>
@@ -353,8 +378,9 @@
 
       <!-- Reason Text (optional) -->
       <div class="decision-section">
-        <label class="dec-label">메모 (선택)</label>
+        <label class="dec-label" for="human-reason-text">메모 (선택)</label>
         <textarea
+          id="human-reason-text"
           class="reason-text"
           placeholder="AI의 판단과 다르게 생각하는 이유..."
           maxlength="280"
@@ -365,6 +391,7 @@
 
       <!-- Lock In Button -->
       <button
+        type="button"
         class="lock-btn"
         onclick={handleLock}
         disabled={!canLock}
@@ -452,6 +479,7 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.6rem;
     color: var(--arena-text-2, #5a7d6e);
+    margin: 0;
     margin-bottom: 0.4rem;
     letter-spacing: 1px;
   }
@@ -709,6 +737,7 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.65rem;
     color: var(--arena-accent, #e8967d);
+    margin: 0;
     letter-spacing: 1px;
     text-transform: uppercase;
   }
@@ -917,5 +946,139 @@
     opacity: 0.4;
     cursor: not-allowed;
     box-shadow: none;
+  }
+
+  /* ═══ MOBILE TAB BAR ═══ */
+  .mobile-tab-bar {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .mobile-tab-bar {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--arena-line, #1a3d2e);
+      background: var(--arena-bg-1, #0d2118);
+      flex-shrink: 0;
+    }
+    .mtab {
+      flex: 1;
+      padding: 10px 8px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--arena-text-2, #5a7d6e);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      min-height: 40px;
+    }
+    .mtab.active {
+      color: var(--arena-accent, #e8967d);
+      border-bottom-color: var(--arena-accent, #e8967d);
+      background: rgba(232, 150, 125, 0.06);
+    }
+
+    /* Stack layout to single column */
+    .main-layout {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+
+    /* Hide inactive panel on mobile */
+    .mobile-hidden {
+      display: none !important;
+    }
+
+    /* Panels take full space */
+    .ai-panel, .human-panel {
+      max-height: none;
+      padding: 0.5rem;
+    }
+
+    /* TP/SL row: stack vertically on small screens */
+    .tp-sl-row {
+      flex-direction: column !important;
+      gap: 0.4rem !important;
+      align-items: stretch;
+    }
+    .tp-input, .sl-input { flex: none; }
+    .rr-display {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
+      justify-content: center;
+      padding: 0.3rem;
+      background: var(--arena-bg-1, #0d2118);
+      border-radius: 4px;
+    }
+
+    /* Direction buttons: bigger touch targets */
+    .dir-btn {
+      padding: 0.7rem;
+      font-size: 0.75rem;
+      min-height: 44px;
+    }
+
+    /* Lock button: compact */
+    .lock-btn {
+      font-size: 1.1rem;
+      letter-spacing: 1.5px;
+      padding: 0.7rem;
+      box-shadow: 2px 2px 0 #000;
+    }
+
+    /* Category headers: bigger touch */
+    .cat-header {
+      padding: 0.45rem 0.5rem;
+      min-height: 36px;
+    }
+
+    /* Reason tags: bigger touch */
+    .reason-tag {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.55rem;
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    /* Timer: sticky on mobile */
+    .timer-bar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .timer-text {
+      font-size: 0.85rem;
+      font-weight: 900;
+    }
+
+    /* Factor chips: wrap better */
+    .factor-chip {
+      font-size: 0.5rem;
+      padding: 2px 4px;
+    }
+    .ctx-headline { white-space: normal; }
+  }
+
+  @media (max-width: 480px) {
+    .panel-title {
+      font-size: 0.65rem;
+      letter-spacing: 0.5px;
+    }
+    .dir-btn {
+      font-size: 0.65rem;
+      padding: 0.6rem 0.3rem;
+    }
+    .lock-btn {
+      font-size: 1rem;
+      letter-spacing: 1px;
+    }
+    .agent-id { width: 55px; font-size: 0.6rem; }
+    .agent-dir { width: 45px; font-size: 0.6rem; }
   }
 </style>

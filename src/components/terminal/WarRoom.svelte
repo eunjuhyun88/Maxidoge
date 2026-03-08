@@ -1,31 +1,43 @@
 <script lang="ts">
   import { type AgentSignal } from '$lib/data/warroom';
   import { STORAGE_KEYS } from '$lib/stores/storageKeys';
-  import { gameState, setView } from '$lib/stores/gameState';
+  import type { TerminalDensityMode, ChartCommunitySignal } from '$lib/terminal/terminalTypes';
+  import { agentSignalToCommunitySignal } from '$lib/terminal/terminalEventMappers';
+  import { buildAiScanEvidence } from '$lib/terminal/signalEvidence';
+  import { gameState } from '$lib/stores/gameState';
   import { openQuickTrade } from '$lib/stores/quickTradeStore';
   import { trackSignal as trackSignalStore, activeSignalCount } from '$lib/stores/trackedSignalStore';
   import { incrementTrackedSignals } from '$lib/stores/userProfileStore';
-  import { notifySignalTracked } from '$lib/stores/notificationStore';
+  import { notifySignalTracked } from '$lib/stores/notificationEvents';
   import { copyTradeStore, registerScanSignals } from '$lib/stores/copyTradeStore';
   import {
-    fetchCurrentOI,
-    fetchCurrentFunding,
-    fetchPredictedFunding,
-    fetchLiquidationHistory,
-    fetchLSRatioHistory,
     formatOI,
     formatFunding
   } from '$lib/api/coinalyze';
   import { runTerminalScan, getScanHistory, getScanDetail } from '$lib/api/terminalApi';
-  import { AGENT_POOL } from '$lib/engine/agents';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
-  import { createEventDispatcher } from 'svelte';
+  import {
+    createWarRoomDerivativesRuntime,
+    type WarRoomDerivativesSnapshot
+  } from '$lib/terminal/warroom/warRoomDerivativesRuntime';
+  import {
+    mergeServerTabs,
+    persistWarRoomScanState,
+    restoreWarRoomScanState,
+    shouldAutoRunScan
+  } from '$lib/terminal/warroom/warRoomScanState';
+  import {
+    buildSignalDiffs,
+    hydrateServerScanTab,
+    mapScanResultSnapshot,
+    upsertScanTab
+  } from '$lib/terminal/warroom/warRoomScanRuntime';
+  import type { TokenFilter, ScanTab, SignalDiff, ScanHighlight } from '$lib/terminal/warroom/warRoomTypes';
   import WarRoomHeaderSection from './warroom/WarRoomHeaderSection.svelte';
   import WarRoomSignalFeed from './warroom/WarRoomSignalFeed.svelte';
   import WarRoomFooterSection from './warroom/WarRoomFooterSection.svelte';
   // C02 카드 → 채팅으로 통합됨 (VerdictCard + handleScanComplete)
-  import type { TokenFilter, ScanTab, SignalDiff, ScanHighlight } from './warroom/types';
   import './warroom/warroom.css';
 
   type ScanCompleteDetail = {
@@ -41,16 +53,27 @@
     signals: AgentSignal[];
   };
 
-  type WarRoomEvents = {
-    collapse: void;
-    tracked: { dir: AgentSignal['vote']; pair: string };
-    quicktrade: { dir: 'LONG' | 'SHORT'; pair: string; price: number };
-    scanstart: void;
-    scancomplete: ScanCompleteDetail;
-    showonchart: { signal: AgentSignal };
+  type WarRoomProps = {
+    densityMode?: TerminalDensityMode;
+    onCollapse?: () => void;
+    onTracked?: (detail: { dir: AgentSignal['vote']; pair: string }) => void;
+    onQuickTrade?: (detail: { dir: 'LONG' | 'SHORT'; pair: string; price: number }) => void;
+    onScanStart?: () => void;
+    onScanComplete?: (detail: ScanCompleteDetail) => void;
+    onShowOnChart?: (detail: { signal: AgentSignal }) => void;
+    onShareToCommunity?: (detail: ChartCommunitySignal) => void;
   };
 
-  const dispatch = createEventDispatcher<WarRoomEvents>();
+  let {
+    densityMode = 'essential',
+    onCollapse,
+    onTracked,
+    onQuickTrade,
+    onScanStart,
+    onScanComplete,
+    onShowOnChart,
+    onShareToCommunity,
+  }: WarRoomProps = $props();
 
   const SCAN_STATE_STORAGE_KEY = STORAGE_KEYS.warRoomScan;
   const MAX_SCAN_TABS = 6;
@@ -67,10 +90,8 @@
   let scanStep = $state('');
   let scanError = $state('');
   let scanStateHydrated = $state(false);
-  let serverScanSynced = $state(false);
 
   // ── Scan Diff: 이전 스캔과 비교 ──
-  let _prevSignalMap = new Map<string, { vote: AgentSignal['vote']; conf: number }>();
   let signalDiffs: Map<string, SignalDiff> = $state(new Map());
   let diffFreshUntil = $state(0);     // diff 하이라이트 유지 시간 (ms)
 
@@ -79,63 +100,27 @@
   let derivFunding: number | null = $state(null);
   let derivPredFunding: number | null = $state(null);
   let derivLSRatio: number | null = $state(null);
-  let derivLiqLong = $state(0);
-  let derivLiqShort = $state(0);
   let derivLoading = $state(false);
-  let derivLastPair = $state('');
-  let derivRefreshTimer: ReturnType<typeof setInterval> | null = null;
-  let _visibilityHandler: (() => void) | null = null;
+  let derivativesRuntimeStarted = $state(false);
 
-  // ── Cache: avoid redundant API calls (60s TTL per pair) ──
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const _derivCache = new Map<string, { ts: number; data: any }>();
-  const DERIV_CACHE_TTL = 60_000;
-  let _derivDebounce: ReturnType<typeof setTimeout> | null = null;
+  const applyDerivativesSnapshot = (snapshot: WarRoomDerivativesSnapshot) => {
+    derivOI = snapshot.oi;
+    derivFunding = snapshot.funding;
+    derivPredFunding = snapshot.predFunding;
+    derivLSRatio = snapshot.lsRatio;
+  };
 
-  // ── Server History Hydration Helpers ──
-  import type { TerminalScanSummary, TerminalScanSignal } from '$lib/services/scanService';
-
-  function serverSignalToAgent(sig: TerminalScanSignal, pair: string, token: string): AgentSignal {
-    const pool = AGENT_POOL[sig.agentId as keyof typeof AGENT_POOL];
-    return {
-      id: sig.id,
-      agentId: sig.agentId,
-      icon: pool?.icon ?? '🤖',
-      name: sig.name || sig.agentId,
-      color: pool?.color ?? '#888',
-      token,
-      pair,
-      vote: sig.vote as AgentSignal['vote'],
-      conf: sig.conf,
-      text: sig.text,
-      src: sig.src,
-      time: sig.time,
-      entry: sig.entry,
-      tp: sig.tp,
-      sl: sig.sl,
-    };
-  }
-
-  function summaryToStubTab(rec: TerminalScanSummary): ScanTab {
-    return {
-      id: `server-${rec.scanId}`,
-      pair: rec.pair,
-      timeframe: rec.timeframe,
-      token: rec.token,
-      createdAt: rec.createdAt,
-      label: rec.label,
-      signals: [], // lazy-loaded on activation
-    };
-  }
-
-  /** Merge server records into existing local tabs. Local tabs win on conflict. */
-  function mergeServerTabs(localTabs: ScanTab[], serverRecords: TerminalScanSummary[]): ScanTab[] {
-    const localKeys = new Set(localTabs.map(t => `${t.pair}|${t.timeframe}|${t.createdAt}`));
-    const newTabs = serverRecords
-      .filter(rec => !localKeys.has(`${rec.pair}|${rec.timeframe}|${rec.createdAt}`))
-      .map(summaryToStubTab);
-    return [...localTabs, ...newTabs].slice(0, MAX_SCAN_TABS);
-  }
+  const derivativesRuntime = createWarRoomDerivativesRuntime({
+    getPair: () => currentPair || '',
+    getTimeframe: () => String(currentTF || '4h'),
+    applySnapshot: applyDerivativesSnapshot,
+    setLoading: (loading) => {
+      derivLoading = loading;
+    },
+    onError: (error) => {
+      console.error('[WarRoom] Derivatives fetch error:', error);
+    }
+  });
 
   // Track which server tabs are being loaded
   let _loadingServerTabs = new Set<string>();
@@ -148,10 +133,7 @@
     try {
       const res = await getScanDetail(scanId);
       if (res.record?.signals && res.record.signals.length > 0) {
-        const signals = res.record.signals.map(s =>
-          serverSignalToAgent(s, tab.pair, tab.token)
-        );
-        scanTabs = scanTabs.map(t => t.id === tabId ? { ...t, signals } : t);
+        scanTabs = hydrateServerScanTab(scanTabs, tabId, res.record);
       }
     } catch (err) {
       console.warn('[WarRoom] Failed to load server scan detail:', err);
@@ -198,19 +180,12 @@
   });
 
   $effect(() => {
-    if (scanStateHydrated && typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(
-          SCAN_STATE_STORAGE_KEY,
-          JSON.stringify({
-            activeScanId,
-            activeToken,
-            scanTabs: scanTabs.slice(0, MAX_SCAN_TABS)
-          })
-        );
-      } catch (err) {
-        console.warn('[WarRoom] Failed to persist scan state', err);
-      }
+    if (scanStateHydrated) {
+      persistWarRoomScanState(SCAN_STATE_STORAGE_KEY, {
+        activeScanId,
+        activeToken,
+        scanTabs
+      }, MAX_SCAN_TABS);
     }
   });
 
@@ -238,6 +213,15 @@
     return base;
   });
   let selectedCount = $derived(selectedIds.size);
+  let summarySignals = $derived.by(() => {
+    const source = activeScanTab?.signals?.length ? activeScanTab.signals : signalPool;
+    const ranked = [...source].sort((a, b) => b.conf - a.conf);
+    const dedup = new Map<string, AgentSignal>();
+    for (const sig of ranked) {
+      if (!dedup.has(sig.agentId)) dedup.set(sig.agentId, sig);
+    }
+    return Array.from(dedup.values()).slice(0, 8);
+  });
   let avgConfidence = $derived.by(() => signalPool.length > 0
     ? Math.round(signalPool.reduce((sum, sig) => sum + sig.conf, 0) / signalPool.length)
     : 0);
@@ -248,11 +232,18 @@
     }, 0) / signalPool.length
     : 0);
   let consensusDir = $derived.by(() => {
+    const consensusSource = activeScanTab?.signals?.length ? activeScanTab.signals : signalPool;
     const counts = { long: 0, short: 0, neutral: 0 };
-    signalPool.forEach((sig) => counts[sig.vote]++);
+    consensusSource.forEach((sig) => counts[sig.vote]++);
     if (counts.long > counts.short && counts.long > counts.neutral) return 'LONG';
     if (counts.short > counts.long && counts.short > counts.neutral) return 'SHORT';
     return 'NEUTRAL';
+  });
+  let topActionSignal = $derived.by(() => {
+    const source = activeScanTab?.signals?.length ? activeScanTab.signals : filteredSignals;
+    return [...source]
+      .filter((sig) => sig.vote === 'long' || sig.vote === 'short')
+      .sort((a, b) => b.conf - a.conf)[0] ?? null;
   });
   let trackedCount = $derived($activeSignalCount);
 
@@ -299,6 +290,11 @@
     copyTradeStore.openModal([...selectedIds]);
   }
 
+  function applyTopSignalToChart() {
+    if (!topActionSignal) return;
+    onShowOnChart?.({ signal: topActionSignal });
+  }
+
   function scrollXOnWheel(event: WheelEvent) {
     const el = event.currentTarget as HTMLElement | null;
     if (!el || el.scrollWidth <= el.clientWidth) return;
@@ -306,104 +302,6 @@
     if (!delta) return;
     el.scrollLeft += delta;
     if (Math.abs(event.deltaY) > 0) event.preventDefault();
-  }
-
-  function restoreScanState() {
-    if (typeof window === 'undefined') return;
-    try {
-      const raw = localStorage.getItem(SCAN_STATE_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as {
-        activeScanId?: string;
-        activeToken?: string;
-        scanTabs?: unknown[];
-      };
-      if (!parsed || !Array.isArray(parsed.scanTabs)) return;
-
-      const restoredTabs = parsed.scanTabs
-        .filter((tab): tab is ScanTab =>
-          Boolean(tab) &&
-          typeof (tab as ScanTab).id === 'string' &&
-          typeof (tab as ScanTab).pair === 'string' &&
-          typeof (tab as ScanTab).timeframe === 'string' &&
-          typeof (tab as ScanTab).token === 'string' &&
-          typeof (tab as ScanTab).label === 'string' &&
-          typeof (tab as ScanTab).createdAt === 'number' &&
-          Array.isArray((tab as ScanTab).signals)
-        )
-        .map((tab) => {
-          const rawLabel = String(tab.label || '').trim();
-          const tokenPrefix = `${String(tab.token || '').trim()} `;
-          const label = tokenPrefix && rawLabel.toUpperCase().startsWith(tokenPrefix.toUpperCase())
-            ? rawLabel.slice(tokenPrefix.length).trim()
-            : rawLabel;
-          return { ...tab, label: label || rawLabel };
-        })
-        .slice(0, MAX_SCAN_TABS);
-
-      if (restoredTabs.length === 0) return;
-
-      scanTabs = restoredTabs;
-      activeScanId =
-        typeof parsed.activeScanId === 'string' && restoredTabs.some((tab) => tab.id === parsed.activeScanId)
-          ? parsed.activeScanId
-          : restoredTabs[0].id;
-      if (typeof parsed.activeToken === 'string') activeToken = parsed.activeToken;
-    } catch (err) {
-      console.warn('[WarRoom] Failed to restore scan state', err);
-    }
-  }
-
-  async function fetchDerivativesData() {
-    const pair = currentPair;
-    if (!pair) return;
-    const cached = _derivCache.get(pair);
-    if (cached && Date.now() - cached.ts < DERIV_CACHE_TTL) {
-      const d = cached.data;
-      derivOI = d.oi;
-      derivFunding = d.funding;
-      derivPredFunding = d.predFunding;
-      derivLSRatio = d.lsRatio;
-      derivLiqLong = d.liqLong;
-      derivLiqShort = d.liqShort;
-      derivLastPair = pair;
-      return;
-    }
-
-    derivLoading = true;
-    try {
-      const [oi, funding, predFunding, lsRatio, liqs] = await Promise.allSettled([
-        fetchCurrentOI(pair),
-        fetchCurrentFunding(pair),
-        fetchPredictedFunding(pair),
-        fetchLSRatioHistory(pair, currentTF, 2),
-        fetchLiquidationHistory(pair, currentTF, 24),
-      ]);
-
-      if (oi.status === 'fulfilled' && oi.value) derivOI = oi.value.value;
-      if (funding.status === 'fulfilled' && funding.value) derivFunding = funding.value.value;
-      if (predFunding.status === 'fulfilled' && predFunding.value) derivPredFunding = predFunding.value.value;
-      if (lsRatio.status === 'fulfilled' && lsRatio.value.length > 0) derivLSRatio = lsRatio.value[lsRatio.value.length - 1].value;
-      if (liqs.status === 'fulfilled' && liqs.value.length > 0) {
-        derivLiqLong = liqs.value.reduce((sum, d) => sum + d.long, 0);
-        derivLiqShort = liqs.value.reduce((sum, d) => sum + d.short, 0);
-      }
-      derivLastPair = pair;
-      _derivCache.set(pair, {
-        ts: Date.now(),
-        data: {
-          oi: derivOI,
-          funding: derivFunding,
-          predFunding: derivPredFunding,
-          lsRatio: derivLSRatio,
-          liqLong: derivLiqLong,
-          liqShort: derivLiqShort
-        }
-      });
-    } catch (err) {
-      console.error('[WarRoom] Derivatives fetch error:', err);
-    }
-    derivLoading = false;
   }
 
   async function runAgentScan() {
@@ -416,7 +314,7 @@
     scanQueued = false;
     scanError = '';
     scanStep = 'ANALYSIS · loading market data';
-    dispatch('scanstart');
+    onScanStart?.();
 
     const pair = currentPair || 'BTC/USDT';
     const timeframe = String(currentTF || '4h');
@@ -424,103 +322,22 @@
     try {
       scanStep = 'COUNCIL · synthesizing outputs';
 
-      // ── 스캔 전 현재 시그널 스냅샷 저장 (diff 비교용) ──
-      const prevMap = new Map<string, { vote: AgentSignal['vote']; conf: number }>();
-      for (const sig of signalPool) {
-        const key = `${sig.agentId}:${sig.token}`;
-        prevMap.set(key, { vote: sig.vote, conf: sig.conf });
-      }
-
       // ── 서버 API 1회 호출로 스캔 + DB 저장 동시 처리 ──
       const res = await runTerminalScan(pair, timeframe);
-      const detail = res.data;
+      const scan = mapScanResultSnapshot(res.data);
+      const nextTab = upsertScanTab(scanTabs, scan, MAX_SIGNALS_PER_TAB);
+      const nextScanTabs = [nextTab, ...scanTabs.filter((tab) => tab.id !== nextTab.id)].slice(0, MAX_SCAN_TABS);
 
-      // ── 서버 응답 → AgentSignal 변환 ──
-      const agentMeta: Record<string, { icon: string; color: string }> = {};
-      for (const [id, def] of Object.entries(AGENT_POOL)) {
-        agentMeta[id] = { icon: def.icon, color: def.color };
-      }
-      const signals: AgentSignal[] = detail.signals.map(s => {
-        const meta = agentMeta[s.agentId.toUpperCase()] ?? { icon: '?', color: '#888' };
-        return {
-          id: s.id,
-          agentId: s.agentId,
-          icon: meta.icon,
-          name: s.name,
-          color: meta.color,
-          token: detail.token,
-          pair: detail.pair,
-          vote: s.vote as AgentSignal['vote'],
-          conf: s.conf,
-          text: s.text,
-          src: s.src,
-          time: s.time,
-          entry: s.entry,
-          tp: s.tp,
-          sl: s.sl,
-        };
-      });
-
-      const scan = {
-        pair: detail.pair,
-        timeframe: detail.timeframe,
-        token: detail.token,
-        createdAt: detail.createdAt,
-        label: detail.label,
-        signals,
-        consensus: detail.consensus as AgentSignal['vote'],
-        avgConfidence: detail.avgConfidence,
-        summary: detail.summary,
-        highlights: detail.highlights as ScanHighlight[],
-      };
-
-      const existingTab = scanTabs.find((tab) => tab.pair === scan.pair && tab.timeframe === scan.timeframe);
-      const nextTab: ScanTab = existingTab
-        ? {
-          ...existingTab,
-          token: scan.token,
-          createdAt: scan.createdAt,
-          label: scan.label,
-          signals: [...scan.signals, ...existingTab.signals].slice(0, MAX_SIGNALS_PER_TAB)
-        }
-        : {
-          id: `scan-${scan.createdAt}-${Math.floor(Math.random() * 10_000).toString(16)}`,
-          pair: scan.pair,
-          timeframe: scan.timeframe,
-          token: scan.token,
-          createdAt: scan.createdAt,
-          label: scan.label,
-          signals: scan.signals
-        };
-
-      // ── Diff 계산: 이전 vs 새 시그널 비교 ──
-      const diffs = new Map<string, SignalDiff>();
-      for (const sig of scan.signals) {
-        const key = `${sig.agentId}:${sig.token}`;
-        const prev = prevMap.get(key);
-        if (!prev) {
-          diffs.set(sig.id, { prevVote: null, confDelta: 0, voteChanged: false, isNew: true });
-        } else {
-          const voteChanged = prev.vote !== sig.vote;
-          diffs.set(sig.id, {
-            prevVote: voteChanged ? prev.vote : null,
-            confDelta: sig.conf - prev.conf,
-            voteChanged,
-            isNew: false,
-          });
-        }
-      }
-      signalDiffs = diffs;
-      _prevSignalMap = prevMap;
+      signalDiffs = buildSignalDiffs(signalPool, scan.signals);
       diffFreshUntil = Date.now() + 30_000; // 30초 동안 diff 표시
 
-      scanTabs = [nextTab, ...scanTabs.filter((tab) => tab.id !== nextTab.id)].slice(0, MAX_SCAN_TABS);
+      scanTabs = nextScanTabs;
       activeScanId = nextTab.id;
       activeToken = 'ALL';
       // CopyTrade에서 참조할 수 있도록 현재 시그널 등록
-      registerScanSignals(scanTabs.flatMap(t => t.signals));
+      registerScanSignals(nextScanTabs.flatMap((tab) => tab.signals));
       selectedIds = new Set();
-      dispatch('scancomplete', {
+      onScanComplete?.({
         pair: scan.pair,
         timeframe: scan.timeframe,
         token: scan.token,
@@ -530,11 +347,10 @@
         avgConfidence: scan.avgConfidence,
         summary: scan.summary,
         highlights: scan.highlights,
-        signals: nextTab.signals,
+        signals: scan.signals,
       });
       scanError = '';
       scanStep = 'DONE';
-      serverScanSynced = res.persisted;
       if (res.warning) console.warn('[WarRoom] Scan warning:', res.warning);
     } catch (err) {
       console.error('[WarRoom] Agent scan error:', err);
@@ -556,11 +372,11 @@
     runAgentScan();
   }
 
-  // Debounced refetch when pair changes (prevents rapid switching spam)
   $effect(() => {
-    if (currentPair && currentPair !== derivLastPair) {
-      if (_derivDebounce) clearTimeout(_derivDebounce);
-      _derivDebounce = setTimeout(fetchDerivativesData, 200);
+    currentPair;
+    currentTF;
+    if (derivativesRuntimeStarted) {
+      derivativesRuntime.queueRefreshForMarket();
     }
   });
 
@@ -570,12 +386,23 @@
     trackSignalStore(sig.pair, sig.vote === 'long' ? 'LONG' : sig.vote === 'short' ? 'SHORT' : 'LONG', sig.entry, sig.name, sig.conf);
     incrementTrackedSignals();
     notifySignalTracked(sig.pair, sig.vote.toUpperCase());
-    dispatch('tracked', { dir: sig.vote, pair: sig.pair });
+    onTracked?.({ dir: sig.vote, pair: sig.pair });
   }
 
-  function goArena() {
-    setView('arena');
-    goto('/arena');
+  function handleShareToCommunity(sig: AgentSignal) {
+    const communitySignal = agentSignalToCommunitySignal(sig);
+    if (communitySignal) {
+      // activeScanTab의 전체 시그널에서 AI evidence 조립
+      const scanSignals = activeScanTab?.signals ?? [sig];
+      const evidence = buildAiScanEvidence({
+        signals: scanSignals,
+        pair: sig.pair,
+        timeframe: String(currentTF || '4h'),
+        livePrice: sig.entry,
+      });
+      communitySignal.evidence = evidence;
+      onShareToCommunity?.(communitySignal);
+    }
   }
 
   function goSignals() {
@@ -589,39 +416,26 @@
     const sl = dir === 'LONG' ? roundPrice(entry - baseRisk) : roundPrice(entry + baseRisk);
     const tp = dir === 'LONG' ? roundPrice(entry + baseRisk * rr) : roundPrice(entry - baseRisk * rr);
     openQuickTrade(sig.pair, dir, entry, tp, sl, sig.name);
-    dispatch('quicktrade', { dir, pair: sig.pair, price: entry });
-  }
-
-  function isDocumentVisible() {
-    return typeof document === 'undefined' || document.visibilityState === 'visible';
-  }
-
-  function handleVisibilityChange() {
-    if (!isDocumentVisible()) return;
-    fetchDerivativesData();
+    onQuickTrade?.({ dir, pair: sig.pair, price: entry });
   }
 
   onMount(() => {
-    restoreScanState();
+    const restoredState = restoreWarRoomScanState(SCAN_STATE_STORAGE_KEY, MAX_SCAN_TABS);
+    if (restoredState) {
+      scanTabs = restoredState.scanTabs;
+      activeScanId = restoredState.activeScanId;
+      activeToken = restoredState.activeToken;
+    }
     scanStateHydrated = true;
 
-    fetchDerivativesData();
-    derivRefreshTimer = setInterval(() => {
-      if (!isDocumentVisible()) return;
-      fetchDerivativesData();
-    }, 30000);
-
-    if (typeof document !== 'undefined') {
-      _visibilityHandler = handleVisibilityChange;
-      document.addEventListener('visibilitychange', _visibilityHandler);
-    }
+    derivativesRuntimeStarted = true;
+    derivativesRuntime.start();
 
     // Load scan history from server and merge with local tabs
     getScanHistory({ pair: currentPair, limit: MAX_SCAN_TABS })
       .then(res => {
         if (res.records.length > 0) {
-          scanTabs = mergeServerTabs(scanTabs, res.records);
-          serverScanSynced = true;
+          scanTabs = mergeServerTabs(scanTabs, res.records, MAX_SCAN_TABS);
         }
       })
       .catch(() => {
@@ -629,21 +443,15 @@
       })
       .finally(() => {
         // C1: Auto-Scan on Entry — 스캔이 없거나 5분 이상 stale이면 자동 실행
-        const latestTab = scanTabs[0];
-        const isStale = !latestTab || (Date.now() - latestTab.createdAt > AUTO_SCAN_STALE_MS);
-        if (isStale && !scanRunning) {
+        if (shouldAutoRunScan(scanTabs, AUTO_SCAN_STALE_MS) && !scanRunning) {
           void runAgentScan();
         }
       });
   });
 
   onDestroy(() => {
-    if (derivRefreshTimer) clearInterval(derivRefreshTimer);
-    if (_derivDebounce) clearTimeout(_derivDebounce);
-    if (typeof document !== 'undefined' && _visibilityHandler) {
-      document.removeEventListener('visibilitychange', _visibilityHandler);
-      _visibilityHandler = null;
-    }
+    derivativesRuntimeStarted = false;
+    derivativesRuntime.stop();
   });
 </script>
 
@@ -661,8 +469,6 @@
     {derivFunding}
     {derivPredFunding}
     {derivLSRatio}
-    {derivLiqLong}
-    {derivLiqShort}
     {derivLoading}
     {scanRunning}
     {scanStep}
@@ -670,7 +476,7 @@
     {formatOI}
     {formatFunding}
     onWheel={scrollXOnWheel}
-    onCollapse={() => dispatch('collapse')}
+    onCollapse={() => onCollapse?.()}
     onRunScan={runAgentScan}
     onActivateScanTab={activateScanTab}
     onSetActiveToken={(tok) => { activeToken = tok; selectedIds = new Set(); }}
@@ -678,6 +484,8 @@
 
   <WarRoomSignalFeed
     {filteredSignals}
+    {summarySignals}
+    {densityMode}
     {scanTabs}
     {selectedIds}
     {selectedCount}
@@ -689,7 +497,8 @@
     onQuickTrade={quickTrade}
     onTrack={handleTrack}
     onRunScan={runAgentScan}
-    onShowOnChart={(sig) => dispatch('showonchart', { signal: sig })}
+    onShowOnChart={(sig) => onShowOnChart?.({ signal: sig })}
+    onShareToCommunity={handleShareToCommunity}
   />
 
   <WarRoomFooterSection
@@ -699,7 +508,10 @@
     {avgConfidence}
     {avgRR}
     {consensusDir}
+    topSignalHint={topActionSignal ? `${topActionSignal.name} ${topActionSignal.vote.toUpperCase()} ${topActionSignal.conf}%` : ''}
+    canApplyTopSignal={!!topActionSignal}
     onOpenCopyTrade={openCopyTrade}
+    onApplyTopSignal={applyTopSignalToChart}
     onGoSignals={goSignals}
   />
 </div>

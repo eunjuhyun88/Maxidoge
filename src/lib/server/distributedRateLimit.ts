@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { query } from './db';
 import { createRateLimiter } from './rateLimit';
+import { createErrorWithCode, getErrorMessage } from '$lib/utils/errorUtils';
 
 let _infraReady = false;
 let _redisWarned = false;
@@ -19,9 +20,7 @@ async function ensureRateLimitInfrastructure(): Promise<void> {
     `SELECT to_regclass('public.request_rate_limits') IS NOT NULL AS exists`
   );
   if (!result.rows[0]?.exists) {
-    const error: any = new Error('request_rate_limits table is missing. Run migration 0005 first.');
-    error.code = '42P01';
-    throw error;
+    throw createErrorWithCode('request_rate_limits table is missing. Run migration 0005 first.', '42P01');
   }
   _infraReady = true;
 }
@@ -119,10 +118,10 @@ async function checkRedisRateLimit(args: {
     }
 
     return Number(hitCount) <= args.max;
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (!_redisWarned) {
       _redisWarned = true;
-      console.error('[distributedRateLimit] Redis backend unavailable, falling back to DB/local:', error?.message || error);
+      console.error('[distributedRateLimit] Redis backend unavailable, falling back to DB/local:', getErrorMessage(error));
     }
     return null;
   } finally {

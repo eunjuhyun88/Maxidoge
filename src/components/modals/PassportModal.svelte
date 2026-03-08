@@ -2,22 +2,23 @@
   import { AGDEFS } from '$lib/data/agents';
   import { agentStats, getWinRate } from '$lib/stores/agentData';
 
-  export let agentId: string = AGDEFS[0].id;
-  export let onClose: () => void = () => {};
+  interface Props {
+    agentId?: string;
+    onClose?: () => void;
+  }
 
-  let stats = $agentStats;
-  $: stats = $agentStats;
-  $: agent = AGDEFS.find(a => a.id === agentId) || AGDEFS[0];
-  $: st = stats[agentId] || { level: 1, xp: 0, xpMax: 100, wins: 0, losses: 0, bestStreak: 0, curStreak: 0, avgConf: 0, bestConf: 0, matches: [], stamps: { win: 0, lose: 0, streak: 0, diamond: 0, crown: 0 } };
-  $: wr = getWinRate(st);
+  let { agentId = AGDEFS[0].id, onClose = () => {} }: Props = $props();
+
+  const agent = $derived(AGDEFS.find(a => a.id === agentId) || AGDEFS[0]);
+  const st = $derived($agentStats[agentId] || { level: 1, xp: 0, xpMax: 100, wins: 0, losses: 0, bestStreak: 0, curStreak: 0, avgConf: 0, bestConf: 0, matches: [], stamps: { win: 0, lose: 0, streak: 0, diamond: 0, crown: 0 } });
+  const wr = $derived(getWinRate(st));
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="modal-overlay" on:click={onClose}>
-  <div class="passport" on:click|stopPropagation>
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<div class="modal-overlay" onclick={onClose} role="presentation">
+  <div class="passport" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
     <div class="pass-header" style="background:{agent.color}">
-      <div class="pass-close" on:click={onClose}>✕</div>
+      <button class="pass-close" onclick={onClose}>✕</button>
       <div class="pass-icon">{agent.icon}</div>
       <div class="pass-name">{agent.name}</div>
       <div class="pass-role">{agent.role}</div>
@@ -131,7 +132,7 @@
   .pass-close {
     position: absolute; top: 8px; right: 12px;
     font-size: 16px; cursor: pointer; color: rgba(255,255,255,.6);
-    transition: color .15s;
+    transition: color .15s; background: none; border: none; padding: 0;
   }
   .pass-close:hover { color: #fff; }
   .pass-icon { font-size: 48px; margin-bottom: 6px; filter: drop-shadow(2px 2px 0 rgba(0,0,0,.3)); }
@@ -147,31 +148,31 @@
   .pass-body { padding: 14px; overflow-y: auto; max-height: calc(85vh - 140px); }
 
   .xp-section { margin-bottom: 14px; }
-  .xp-label { font-size: 7px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 4px; }
+  .xp-label { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 4px; }
   .xp-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.1); }
   .xp-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #E8967D, #ffaa00); transition: width .5s; }
-  .xp-text { font-size: 7px; color: #666; font-family: var(--fm); text-align: right; margin-top: 2px; }
+  .xp-text { font-size: 9px; color: #666; font-family: var(--fm); text-align: right; margin-top: 2px; }
 
   .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
   .sg-item { text-align: center; padding: 8px; border-radius: 8px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); }
   .sg-val { font-size: 16px; font-weight: 900; font-family: var(--fd); color: #fff; }
-  .sg-label { font-size: 6px; color: #666; font-family: var(--fd); letter-spacing: 1px; margin-top: 2px; }
+  .sg-label { font-size: 9px; color: #666; font-family: var(--fd); letter-spacing: 1px; margin-top: 2px; }
 
   .abilities { margin-bottom: 14px; }
-  .ab-title { font-size: 7px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
-  .ab-item { font-size: 8px; color: #ccc; font-family: var(--fm); padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+  .ab-title { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
+  .ab-item { font-size: 9px; color: #ccc; font-family: var(--fm); padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
 
   .stamps { margin-bottom: 14px; }
-  .st-title { font-size: 7px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
+  .st-title { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
   .st-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .stamp { font-size: 9px; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,.05); color: #ccc; font-family: var(--fm); }
 
-  .rc-title { font-size: 7px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
-  .rc-empty { font-size: 8px; color: #555; font-family: var(--fm); }
+  .rc-title { font-size: 9px; font-weight: 900; font-family: var(--fd); color: #888; letter-spacing: 2px; margin-bottom: 6px; }
+  .rc-empty { font-size: 9px; color: #555; font-family: var(--fm); }
   .rc-row {
     display: flex; align-items: center; gap: 6px;
     padding: 4px 6px; border-radius: 4px; margin-bottom: 2px;
-    font-size: 8px; font-family: var(--fm);
+    font-size: 9px; font-family: var(--fm);
   }
   .rc-row.win { background: rgba(0,255,136,.05); }
   .rc-row.lose { background: rgba(255,45,85,.05); }

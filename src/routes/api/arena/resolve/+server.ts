@@ -51,7 +51,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       lpUpdate,
       priceChange: match.entryPrice > 0 ? ((exitPrice - match.entryPrice) / match.entryPrice * 100).toFixed(2) + '%' : '0%',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });
     console.error('[arena/resolve/post]', err);
     return json({ error: 'Failed to resolve match' }, { status: 500 });

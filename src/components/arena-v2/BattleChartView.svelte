@@ -7,31 +7,37 @@
   import type { V2BattleState, TickResult, BattleLogEntry } from '$lib/engine/v2BattleTypes';
   import { AGDEFS } from '$lib/data/agents';
 
-  export let battleState: V2BattleState | null = null;
+  interface Props {
+    battleState?: V2BattleState | null;
+  }
 
-  $: bs = battleState;
-  $: tickN = bs?.tickN ?? 0;
-  $: maxTicks = bs?.maxTicks ?? 24;
-  $: currentPrice = bs?.currentPrice ?? 0;
-  $: entryPrice = bs?.config.entryPrice ?? 0;
-  $: tpPrice = bs?.config.tpPrice ?? 0;
-  $: slPrice = bs?.config.slPrice ?? 0;
-  $: direction = bs?.config.direction ?? 'LONG';
-  $: priceHistory = bs?.priceHistory ?? [];
-  $: vs = bs?.vsMeter.value ?? 50;
-  $: combo = bs?.combo.count ?? 0;
-  $: log = bs?.log.slice(-4) ?? [];
-  $: agentStates = bs ? Object.values(bs.agentStates) : [];
+  let {
+    battleState = null,
+  }: Props = $props();
 
-  $: pnl = entryPrice > 0
+  const bs = $derived(battleState);
+  const tickN = $derived(bs?.tickN ?? 0);
+  const maxTicks = $derived(bs?.maxTicks ?? 24);
+  const currentPrice = $derived(bs?.currentPrice ?? 0);
+  const entryPrice = $derived(bs?.config.entryPrice ?? 0);
+  const tpPrice = $derived(bs?.config.tpPrice ?? 0);
+  const slPrice = $derived(bs?.config.slPrice ?? 0);
+  const direction = $derived(bs?.config.direction ?? 'LONG');
+  const priceHistory = $derived(bs?.priceHistory ?? []);
+  const vs = $derived(bs?.vsMeter.value ?? 50);
+  const combo = $derived(bs?.combo.count ?? 0);
+  const log = $derived(bs?.log.slice(-4) ?? []);
+  const agentStates = $derived(bs ? Object.values(bs.agentStates) : []);
+
+  const pnl = $derived(entryPrice > 0
     ? (direction === 'LONG'
       ? ((currentPrice - entryPrice) / entryPrice) * 100
       : ((entryPrice - currentPrice) / entryPrice) * 100)
-    : 0;
+    : 0);
 
   // ── Chart SVG calculations ──
-  $: chartData = (() => {
-    if (priceHistory.length < 2) return { path: '', priceMin: 0, priceMax: 0, candles: [] };
+  const chartData = $derived((() => {
+    if (priceHistory.length < 2) return { path: '', priceMin: 0, priceMax: 0, candles: [] as never[], entryY: 0, tpY: 0, slY: 0, W: 800, H: 300, step: 0, markers: [] as { x: number; y: number; isFav: boolean; actions: unknown[]; tickN: number }[] };
 
     const prices = priceHistory.map(p => p.price);
     const allPrices = [...prices, tpPrice, slPrice].filter(p => p > 0);
@@ -65,7 +71,7 @@
     });
 
     return { path, priceMin: min, priceMax: max, entryY, tpY, slY, W, H, step, markers };
-  })();
+  })());
 
   function getAgentIcon(agentId: string): string {
     const def = AGDEFS.find(a => a.id === agentId.toLowerCase());
@@ -142,7 +148,7 @@
         <span class="chip-icon">{getAgentIcon(agent.agentId)}</span>
         <span class="chip-action">{agent.currentAction}</span>
         <div class="chip-energy">
-          <div class="chip-energy-fill" style:width="{(agent.energy / agent.maxEnergy) * 100}%" />
+          <div class="chip-energy-fill" style:width="{(agent.energy / agent.maxEnergy) * 100}%"></div>
         </div>
       </div>
     {/each}
@@ -181,7 +187,7 @@
     gap: 8px;
   }
   .hud-dir {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
     color: rgba(240,237,228,0.4);
@@ -254,7 +260,7 @@
   }
   .chip-icon { font-size: 12px; }
   .chip-action {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     color: rgba(240,237,228,0.5);
@@ -281,7 +287,7 @@
     border-top: 1px solid rgba(240,237,228,0.04);
   }
   .chart-log-entry {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 600;
     white-space: nowrap;
     opacity: 0.7;

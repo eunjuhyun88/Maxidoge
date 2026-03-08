@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { toBoundedInt, UUID_RE } from '$lib/server/apiValidation';
 import { query, withTransaction } from '$lib/server/db';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 const TRAIN_TYPES = new Set(['pretrain', 'sft', 'orpo', 'retrain']);
 const MODEL_ROLES = new Set(['policy', 'analyst']);
@@ -834,7 +835,7 @@ export async function runPassportOutboxWorker(input: {
       failed += 1;
       const message =
         error instanceof Error
-          ? error.message
+          ? getErrorMessage(error)
           : typeof error === 'string'
             ? error
             : 'unknown outbox processing error';

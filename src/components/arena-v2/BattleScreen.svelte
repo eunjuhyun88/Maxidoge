@@ -36,8 +36,11 @@
   import PartyTray from '../shared/PartyTray.svelte';
 
   // ── Props ──
-  export let battleState: V2BattleState | null = null;
-  export let currentView: V2ArenaView = 'arena';
+  interface Props {
+    battleState?: V2BattleState | null;
+    currentView?: V2ArenaView;
+  }
+  let { battleState = null, currentView = 'arena' }: Props = $props();
 
   // ── Local state ──
   let tickInterval: ReturnType<typeof setInterval> | null = null;
@@ -45,81 +48,81 @@
   let initialized = false;
 
   // Screen shake
-  let shakeX = 0;
-  let shakeY = 0;
+  let shakeX = $state(0);
+  let shakeY = $state(0);
   let shakeTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Floating damage numbers
-  let damageNumbers: Array<{
+  let damageNumbers = $state<Array<{
     id: string;
     value: number;
     color: string;
     agentId: string;
-  }> = [];
+  }>>([]);
 
   // Milestone banner
-  let activeMilestone: string | null = null;
-  let milestoneColor = '#FFD700';
+  let activeMilestone = $state<string | null>(null);
+  let milestoneColor = $state('#FFD700');
   let milestoneTimer: ReturnType<typeof setTimeout> | null = null;
 
   // End overlay
-  let endOverlay: { text: string; sub: string; color: string } | null = null;
+  let endOverlay = $state<{ text: string; sub: string; color: string } | null>(null);
 
   // Combo flash
-  let comboFlash = false;
+  let comboFlash = $state(false);
 
   // ── Derived battle data ──
-  $: bs = battleState;
-  $: tickN = bs?.tickN ?? 0;
-  $: maxTicks = bs?.maxTicks ?? 24;
-  $: vs = bs?.vsMeter.value ?? 50;
-  $: combo = bs?.combo.count ?? 0;
-  $: maxCombo = bs?.combo.maxCombo ?? 0;
-  $: currentPrice = bs?.currentPrice ?? 0;
-  $: entryPrice = bs?.config.entryPrice ?? 0;
-  $: direction = bs?.config.direction ?? 'LONG';
-  $: agentStates = bs ? Object.values(bs.agentStates) : [];
-  $: log = bs?.log.slice(-5) ?? [];
-  $: status = bs?.status ?? 'waiting';
-  $: pnl = entryPrice > 0
+  const bs = $derived(battleState);
+  const tickN = $derived(bs?.tickN ?? 0);
+  const maxTicks = $derived(bs?.maxTicks ?? 24);
+  const vs = $derived(bs?.vsMeter.value ?? 50);
+  const combo = $derived(bs?.combo.count ?? 0);
+  const maxCombo = $derived(bs?.combo.maxCombo ?? 0);
+  const currentPrice = $derived(bs?.currentPrice ?? 0);
+  const entryPrice = $derived(bs?.config.entryPrice ?? 0);
+  const direction = $derived(bs?.config.direction ?? 'LONG');
+  const agentStates = $derived(bs ? Object.values(bs.agentStates) : []);
+  const log = $derived(bs?.log.slice(-5) ?? []);
+  const status = $derived(bs?.status ?? 'waiting');
+  const pnl = $derived(entryPrice > 0
     ? (direction === 'LONG'
       ? ((currentPrice - entryPrice) / entryPrice) * 100
       : ((entryPrice - currentPrice) / entryPrice) * 100)
-    : 0;
+    : 0);
 
-  $: tpPrice = bs?.config.tpPrice ?? 0;
-  $: slPrice = bs?.config.slPrice ?? 0;
-  $: tpDistPct = entryPrice > 0 ? ((Math.abs(tpPrice - entryPrice) / entryPrice) * 100) : 0;
-  $: slDistPct = entryPrice > 0 ? ((Math.abs(slPrice - entryPrice) / entryPrice) * 100) : 0;
-  $: tpProgress = tpDistPct > 0 ? Math.min(1, Math.max(0, Math.max(0, pnl) / tpDistPct)) : 0;
-  $: slProgress = slDistPct > 0 ? Math.min(1, Math.max(0, Math.abs(Math.min(0, pnl)) / slDistPct)) : 0;
+  const tpPrice = $derived(bs?.config.tpPrice ?? 0);
+  const slPrice = $derived(bs?.config.slPrice ?? 0);
+  const tpDistPct = $derived(entryPrice > 0 ? ((Math.abs(tpPrice - entryPrice) / entryPrice) * 100) : 0);
+  const slDistPct = $derived(entryPrice > 0 ? ((Math.abs(slPrice - entryPrice) / entryPrice) * 100) : 0);
+  const tpProgress = $derived(tpDistPct > 0 ? Math.min(1, Math.max(0, Math.max(0, pnl) / tpDistPct)) : 0);
+  const slProgress = $derived(slDistPct > 0 ? Math.min(1, Math.max(0, Math.abs(Math.min(0, pnl)) / slDistPct)) : 0);
 
   // Player actions
-  $: focusLeft = bs?.playerActions.tacticalFocusUsesLeft ?? 0;
-  $: recallLeft = bs?.playerActions.emergencyRecallUsesLeft ?? 0;
-  $: focusCooldown = bs ? bs.playerActions.tacticalFocusCooldownTick >= bs.tickN : false;
-  $: activeFocusAgent = bs?.playerActions.activeFocusAgentId ?? null;
+  const focusLeft = $derived(bs?.playerActions.tacticalFocusUsesLeft ?? 0);
+  const recallLeft = $derived(bs?.playerActions.emergencyRecallUsesLeft ?? 0);
+  const focusCooldown = $derived(bs ? bs.playerActions.tacticalFocusCooldownTick >= bs.tickN : false);
+  const activeFocusAgent = $derived(bs?.playerActions.activeFocusAgentId ?? null);
 
   // VS sparkline
-  $: vsHistory = bs?.vsMeter.history ?? [50];
+  const vsHistory = $derived(bs?.vsMeter.history ?? [50]);
 
   // Tick progress as percentage
-  $: tickPct = maxTicks > 0 ? (tickN / maxTicks) * 100 : 0;
+  const tickPct = $derived(maxTicks > 0 ? (tickN / maxTicks) * 100 : 0);
 
   // Latest tick info
-  $: latestTick = bs?.tickResults[bs.tickResults.length - 1] ?? null;
-  $: tickClass = latestTick?.classifiedTick.tickClass ?? 'NEUTRAL';
+  const latestTick = $derived(bs?.tickResults[bs.tickResults.length - 1] ?? null);
+  const tickClass = $derived(latestTick?.classifiedTick.tickClass ?? 'NEUTRAL');
 
   // ── Pokemon-style derived state ──
   // Active agent = first non-exhausted agent (for player sprite)
-  $: activeAgent = agentStates.find(a => !a.isExhausted) ?? agentStates[0] ?? null;
-  $: activeAgentIdx = activeAgent ? agentStates.indexOf(activeAgent) : 0;
+  const activeAgent = $derived(agentStates.find((a: AgentBattleState) => !a.isExhausted) ?? agentStates[0] ?? null);
+  const activeAgentIdx = $derived(activeAgent ? agentStates.indexOf(activeAgent) : 0);
 
   // Market HP = inverse of VS (100 - vs → market's "health")
-  $: marketHP = 100 - vs;
+  const marketHP = $derived(100 - vs);
 
   // Party tray data
-  $: partyAgents = agentStates.map(a => {
+  const partyAgents = $derived(agentStates.map((a: AgentBattleState) => {
     const def = getAgentDef(a.agentId);
     return {
       agentId: a.agentId,
@@ -131,10 +134,10 @@
       isActive: a === activeAgent,
       isExhausted: a.isExhausted,
     };
-  });
+  }));
 
   // Pokemon-style battle messages from log
-  $: pokemonMessages = formatPokemonMessages(latestTick);
+  const pokemonMessages = $derived(formatPokemonMessages(latestTick));
 
   function formatPokemonMessages(tick: TickResult | null): string[] {
     if (!tick) return ['Waiting for battle to begin...'];
@@ -451,9 +454,11 @@
   ];
 
   // ── Reactive init retry (for when btcPrice arrives after mount) ──
-  $: if ($arenaV2State.hypothesis && $arenaV2State.btcPrice > 0 && !initialized) {
-    initializeBattle();
-  }
+  $effect(() => {
+    if ($arenaV2State.hypothesis && $arenaV2State.btcPrice > 0 && !initialized) {
+      initializeBattle();
+    }
+  });
 
   // ── Lifecycle ──
   onMount(() => {
@@ -480,7 +485,7 @@
       <span class="tick-label">TICK</span>
       <span class="tick-val">{tickN}<span class="tick-max">/{maxTicks}</span></span>
       <div class="tick-bar">
-        <div class="tick-fill" style:width="{tickPct}%" />
+        <div class="tick-fill" style:width="{tickPct}%"></div>
       </div>
     </div>
 
@@ -498,7 +503,7 @@
           <button
             class="view-btn"
             class:active={currentView === v.key}
-            on:click={() => v2SetView(v.key)}
+            onclick={() => v2SetView(v.key)}
             title="{v.label} ({i + 1})"
           >
             <span class="view-icon">{v.icon}</span>
@@ -527,8 +532,8 @@
           class:vs-winning={vs >= 60}
           class:vs-losing={vs <= 40}
           class:vs-danger={vs <= 25}
-        />
-        <div class="vs-center-mark" />
+        ></div>
+        <div class="vs-center-mark"></div>
         <span class="vs-value">{vs.toFixed(0)}</span>
       </div>
       <span class="vs-label-right" class:winning={vs < 45}>MKT</span>
@@ -558,7 +563,7 @@
             <img src="/doge/trade-bear.png" alt="MARKET" class="enemy-img" />
             <!-- Hit flash on favorable tick -->
             {#if tickClass === 'FAVORABLE' || tickClass === 'STRONG_FAVORABLE'}
-              <div class="hit-flash" />
+              <div class="hit-flash"></div>
             {/if}
           </div>
         </div>
@@ -596,7 +601,7 @@
                 class:img-windup={activeAgent.animState === 'WINDUP'}
               />
               {#if activeAgent.currentAction === 'SHIELD'}
-                <div class="shield-overlay" />
+                <div class="shield-overlay"></div>
               {/if}
               <!-- Action badge over sprite -->
               <div class="player-action-icon">
@@ -618,11 +623,11 @@
               <div class="tp-sl-mini">
                 <div class="tp-sl-row">
                   <span class="tp-sl-lbl tp">TP</span>
-                  <div class="tp-sl-track"><div class="tp-sl-fill tp" style:width="{tpProgress * 100}%" /></div>
+                  <div class="tp-sl-track"><div class="tp-sl-fill tp" style:width="{tpProgress * 100}%"></div></div>
                 </div>
                 <div class="tp-sl-row">
                   <span class="tp-sl-lbl sl">SL</span>
-                  <div class="tp-sl-track"><div class="tp-sl-fill sl" style:width="{slProgress * 100}%" /></div>
+                  <div class="tp-sl-track"><div class="tp-sl-fill sl" style:width="{slProgress * 100}%"></div></div>
                 </div>
               </div>
             </div>
@@ -633,12 +638,12 @@
         {#if status === 'running'}
           <div class="poke-actions">
             {#if focusLeft > 0 && !focusCooldown && activeAgent}
-              <button class="poke-btn focus" on:click={() => handleTacticalFocus(activeAgent.agentId)}>
+              <button class="poke-btn focus" onclick={() => handleTacticalFocus(activeAgent.agentId)}>
                 🎯 FOCUS ({focusLeft})
               </button>
             {/if}
             {#if recallLeft > 0 && activeAgent && activeAgent.energy < 40}
-              <button class="poke-btn recall" on:click={() => handleEmergencyRecall(activeAgent.agentId)}>
+              <button class="poke-btn recall" onclick={() => handleEmergencyRecall(activeAgent.agentId)}>
                 🚨 RECALL ({recallLeft})
               </button>
             {/if}
@@ -724,7 +729,7 @@
     gap: 8px;
   }
   .tick-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 2px;
     color: rgba(240,237,228,0.4);
@@ -736,7 +741,7 @@
   }
   .tick-max {
     font-size: 10px;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
   }
   .tick-bar {
     width: 80px;
@@ -784,13 +789,13 @@
     border: 1px solid rgba(240,237,228,0.1);
     border-radius: 6px;
     background: transparent;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
     cursor: pointer;
     transition: all 150ms;
     font-family: inherit;
   }
   .view-btn:hover {
-    border-color: rgba(240,237,228,0.2);
+    border-color: rgba(240,237,228,0.5);
     color: rgba(240,237,228,0.6);
   }
   .view-btn.active {
@@ -800,7 +805,7 @@
   }
   .view-icon { font-size: 14px; }
   .view-key {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     opacity: 0.5;
@@ -815,10 +820,10 @@
     flex-shrink: 0;
   }
   .vs-label-left, .vs-label-right {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
     width: 32px;
     text-align: center;
     transition: color 300ms;
@@ -864,7 +869,7 @@
     right: 8px;
     top: 50%;
     transform: translateY(-50%);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     color: rgba(240,237,228,0.5);
   }
@@ -1005,7 +1010,7 @@
     text-shadow: 0 0 8px rgba(248,88,88,0.4);
   }
   .tick-class-badge.neutral {
-    color: rgba(240,237,228,0.35);
+    color: rgba(240,237,228,0.5);
     border-color: rgba(240,237,228,0.08);
   }
 
@@ -1136,7 +1141,7 @@
     gap: 4px;
   }
   .tp-sl-lbl {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1px;
     width: 14px;

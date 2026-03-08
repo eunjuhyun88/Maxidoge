@@ -81,7 +81,8 @@ async function withTimeout(url: string, timeoutMs = 5000): Promise<Response> {
 }
 
 export function normalizePair(pairRaw: unknown): string {
-  const pair = typeof pairRaw === 'string' ? decodeURIComponent(pairRaw).trim().toUpperCase() : '';
+  if (typeof pairRaw !== 'string' || !pairRaw || pairRaw.length > 30) return 'BTC/USDT';
+  const pair = decodeURIComponent(pairRaw).trim().toUpperCase();
   const canonical = pair.replace(/[-_]/g, '/');
   if (!canonical) return 'BTC/USDT';
   if (!PAIR_RE.test(canonical)) throw new Error('pair must be like BTC/USDT');

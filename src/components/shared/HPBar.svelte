@@ -36,7 +36,7 @@
       class="hp-fill"
       style:width="{pct}%"
       style:background={barColor}
-    />
+    ></div>
   </div>
   {#if showValue}
     <span class="hp-val">{Math.round(value)}<span class="hp-max">/{Math.round(max)}</span></span>
@@ -51,7 +51,7 @@
     width: 100%;
   }
   .hp-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1px;
     color: #f8d030;
@@ -81,7 +81,7 @@
     font-variant-numeric: tabular-nums;
   }
   .hp-max {
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(224,224,224,0.4);
   }
 </style>

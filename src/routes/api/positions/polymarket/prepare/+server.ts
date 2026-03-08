@@ -12,28 +12,38 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
+import { runIpRateLimitGuard } from '$lib/server/authSecurity';
 import { query } from '$lib/server/db';
-import { prepareOrder, getOrderbook } from '$lib/server/polymarketClob';
+import { prepareOrder } from '$lib/server/polymarketClob';
 import { polymarketOrderLimiter } from '$lib/server/rateLimit';
+import { readJsonBodySafely } from '$lib/server/requestGuards';
 
 const ETH_ADDRESS_RE = /^0x[0-9a-f]{40}$/i;
+const POLYMARKET_MUTATION_MAX_BYTES = 16 * 1024;
 
 export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
-  // Rate limit
-  const ip = getClientAddress();
-  if (!polymarketOrderLimiter.check(ip)) {
-    return json({ error: 'Too many requests. Please wait.' }, { status: 429 });
-  }
+  const guard = await runIpRateLimitGuard({
+    request,
+    fallbackIp: getClientAddress(),
+    limiter: polymarketOrderLimiter,
+    scope: 'polymarket:prepare',
+    max: 10,
+    tooManyMessage: 'Too many requests. Please wait.',
+  });
+  if (!guard.ok) return guard.response;
 
   try {
-    // Auth
     const user = await getAuthUserFromCookies(cookies);
     if (!user) return json({ error: 'Authentication required' }, { status: 401 });
 
-    const body = await request.json().catch(() => null);
-    if (!body) return json({ error: 'Invalid request body' }, { status: 400 });
+    const bodyResult = await readJsonBodySafely<Record<string, unknown>>(request, POLYMARKET_MUTATION_MAX_BYTES);
+    if (!bodyResult.ok) return bodyResult.response;
 
-    // Validate inputs
+    const body = bodyResult.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return json({ error: 'Invalid request body' }, { status: 400 });
+    }
+
     const { marketId, direction, price, amount, walletAddress } = body;
 
     if (typeof marketId !== 'string' || !marketId.trim()) {
@@ -61,8 +71,10 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
     if (typeof walletAddress !== 'string' || !ETH_ADDRESS_RE.test(walletAddress)) {
       return json({ error: 'Invalid wallet address' }, { status: 400 });
     }
+    if (user.wallet_address && user.wallet_address.toLowerCase() !== walletAddress.toLowerCase()) {
+      return json({ error: 'walletAddress must match the authenticated wallet' }, { status: 403 });
+    }
 
-    // Prepare order (fetches market, calculates amounts, builds EIP-712)
     const prepared = await prepareOrder({
       marketId: marketId.trim(),
       direction: dir as 'YES' | 'NO',

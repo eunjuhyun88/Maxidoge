@@ -1,6 +1,8 @@
 <script lang="ts">
   import { gameState } from '$lib/stores/gameState';
-  import { p0Override } from '$lib/stores/notificationStore';
+  import { p0Override } from '$lib/stores/p0OverrideStore';
+  import { livePrices } from '$lib/stores/priceStore';
+  import { getBaseSymbolFromPair, getPairPrice } from '$lib/utils/price';
 
   interface Props {
     timeLeft?: number;
@@ -9,8 +11,13 @@
   let { timeLeft = 45, onsubmit }: Props = $props();
 
   // Get current price from the active pair
-  let pairBase = $derived($gameState.pair.split('/')[0]);
-  let currentPrice = $derived($gameState.prices[pairBase as keyof typeof $gameState.prices] || $gameState.prices.BTC);
+  const pairBaseSymbol = $derived(getBaseSymbolFromPair($gameState.pair) || 'BTC');
+  const pairBaseFallbackPrice = $derived(
+    $gameState.bases[pairBaseSymbol as keyof typeof $gameState.bases] || $gameState.bases.BTC || 0
+  );
+  let currentPrice = $derived(
+    getPairPrice($livePrices, $gameState.pair, pairBaseSymbol, pairBaseFallbackPrice)
+  );
 
   // Hypothesis state
   let dir: 'LONG' | 'SHORT' | 'NEUTRAL' | null = $state(null);
@@ -350,7 +357,7 @@
     background: linear-gradient(90deg, rgba(232,150,125,.25), rgba(232,150,125,.12));
     color: #e8967d;
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1px;
     padding: 5px 8px;
@@ -366,7 +373,7 @@
     background: rgba(255,94,122,.2);
     color: #ff5e7a;
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1px;
     padding: 5px 8px;
@@ -409,11 +416,11 @@
   .dir-pill.long.sel { background: rgba(0,204,136,.2); color: #00ff88; border-color: #00cc88; box-shadow: 0 0 12px rgba(0,204,136,.3), inset 0 0 8px rgba(0,204,136,.1); }
   .dir-pill.short { background: rgba(255,94,122,.08); color: #ff5e7a; border-color: rgba(255,94,122,.25); }
   .dir-pill.short.sel { background: rgba(255,94,122,.2); color: #ff5e7a; border-color: #ff5e7a; box-shadow: 0 0 12px rgba(255,94,122,.3), inset 0 0 8px rgba(255,94,122,.1); }
-  .dir-pill:hover:not(:disabled):not(.sel) { border-color: rgba(240,237,228,.3); }
+  .dir-pill:hover:not(:disabled):not(.sel) { border-color: rgba(240,237,228,.5); }
 
   /* Sections */
-  .section-label { font-size: 7px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; color: rgba(240,237,228,.45); display: block; margin-bottom: 4px; }
-  .optional-tag { font-size: 6px; color: rgba(240,237,228,.3); letter-spacing: 1px; }
+  .section-label { font-size: 9px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; color: rgba(240,237,228,.45); display: block; margin-bottom: 4px; }
+  .optional-tag { font-size: 9px; color: rgba(240,237,228,.5); letter-spacing: 1px; }
 
   /* Confidence Dots */
   .conf-section { margin-bottom: 8px; }
@@ -434,7 +441,7 @@
   .conf-dot.on .dot-fill { background: #e8967d; }
   .conf-dot:hover:not(:disabled) { border-color: rgba(232,150,125,.5); transform: scale(1.1); }
   .conf-label {
-    font-family: var(--fm); font-size: 8px; font-weight: 900;
+    font-family: var(--fm); font-size: 9px; font-weight: 900;
     letter-spacing: 2px; color: rgba(240,237,228,.5); margin-left: 4px;
   }
 
@@ -442,7 +449,7 @@
   .tags-section { margin-bottom: 8px; }
   .tag-chips { display: flex; flex-wrap: wrap; gap: 4px; }
   .tag-chip {
-    font-family: var(--fm); font-size: 7px; font-weight: 900;
+    font-family: var(--fm); font-size: 9px; font-weight: 900;
     letter-spacing: 1px; padding: 4px 8px;
     border: 1px solid rgba(240,237,228,.15); border-radius: 20px;
     background: rgba(10,26,18,.6); color: rgba(240,237,228,.45); cursor: pointer;
@@ -454,7 +461,7 @@
     box-shadow: 0 0 8px rgba(232,150,125,.15);
   }
   .tag-chip:hover:not(:disabled):not(.sel) {
-    border-color: rgba(240,237,228,.3); color: rgba(240,237,228,.6);
+    border-color: rgba(240,237,228,.5); color: rgba(240,237,228,.6);
   }
 
   /* Text Reason */
@@ -462,7 +469,7 @@
   .reason-input {
     width: 100%; padding: 6px 8px;
     border: 1px solid rgba(240,237,228,.15); border-radius: 8px;
-    font-family: var(--fm); font-size: 8px;
+    font-family: var(--fm); font-size: 9px;
     background: rgba(7,19,13,.7); color: #f0ede4;
     resize: none; outline: none;
     transition: border-color .15s;
@@ -472,7 +479,7 @@
   .reason-input:disabled { opacity: .5; }
   .char-count {
     position: absolute; bottom: 4px; right: 8px;
-    font-family: var(--fm); font-size: 7px; color: rgba(240,237,228,.3);
+    font-family: var(--fm); font-size: 9px; color: rgba(240,237,228,.5);
   }
   .char-count.warn { color: #ff5e7a; }
 
@@ -481,7 +488,7 @@
   .tf-btns { display: flex; gap: 3px; }
   .tf-btn {
     flex: 1; padding: 4px 2px; border: 1px solid rgba(240,237,228,.15); border-radius: 6px;
-    font-size: 8px; font-weight: 900; font-family: var(--fd);
+    font-size: 9px; font-weight: 900; font-family: var(--fd);
     background: rgba(10,26,18,.6); cursor: pointer; color: rgba(240,237,228,.45);
   }
   .tf-btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -492,7 +499,7 @@
   .vmode-btns { display: flex; gap: 4px; }
   .vmode-btn {
     flex: 1; padding: 5px 4px; border: 1px solid rgba(240,237,228,.15); border-radius: 8px;
-    font-size: 8px; font-weight: 700; font-family: var(--fm);
+    font-size: 9px; font-weight: 700; font-family: var(--fm);
     background: rgba(10,26,18,.6); cursor: pointer; color: rgba(240,237,228,.45);
   }
   .vmode-btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -513,10 +520,10 @@
   .level-row.tp { background: rgba(0,204,136,.06); border-bottom: 1px solid rgba(240,237,228,.08); }
   .level-row.entry { background: rgba(232,150,125,.06); border-bottom: 1px solid rgba(240,237,228,.08); }
   .level-row.sl { background: rgba(255,94,122,.06); }
-  .level-label { font-size: 8px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; width: 36px; }
+  .level-label { font-size: 9px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; width: 36px; }
   .level-price { font-size: 11px; font-weight: 900; font-family: var(--fd); }
-  .level-pct { font-size: 8px; font-weight: 700; margin-left: auto; }
-  .level-tag { font-size: 6px; color: rgba(240,237,228,.4); margin-left: auto; font-weight: 700; letter-spacing: 1px; }
+  .level-pct { font-size: 9px; font-weight: 700; margin-left: auto; }
+  .level-tag { font-size: 9px; color: rgba(240,237,228,.55); margin-left: auto; font-weight: 700; letter-spacing: 1px; }
   .level-controls { display: flex; align-items: center; gap: 4px; }
   .adj-btn { width: 22px; height: 22px; border: 1px solid rgba(240,237,228,.25); border-radius: 6px; background: rgba(10,26,18,.6); cursor: pointer; font-weight: 900; font-size: 12px; display: flex; align-items: center; justify-content: center; color: #f0ede4; }
   .adj-btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -529,7 +536,7 @@
     padding: 6px 10px; margin-bottom: 8px;
     background: rgba(7,19,13,.8); border: 1px solid rgba(240,237,228,.1); border-radius: 8px;
   }
-  .rr-label { font-size: 7px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; color: rgba(240,237,228,.45); }
+  .rr-label { font-size: 9px; font-weight: 900; font-family: var(--fd); letter-spacing: 2px; color: rgba(240,237,228,.45); }
   .rr-value { font-size: 16px; font-weight: 900; font-family: var(--fd); color: #e8967d; }
 
   /* Submit */
@@ -537,7 +544,7 @@
   .submit-btn {
     flex: 1; padding: 10px; border: 1px solid rgba(240,237,228,.15); border-radius: 12px;
     font-family: var(--fc); font-size: 12px; font-weight: 900; letter-spacing: 2px;
-    background: rgba(10,26,18,.6); color: rgba(240,237,228,.35);
+    background: rgba(10,26,18,.6); color: rgba(240,237,228,.5);
     cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.3); transition: all .15s;
   }
   .submit-btn.long-btn:not(:disabled) { background: linear-gradient(180deg, rgba(0,204,136,.3), rgba(0,180,100,.2)); color: #00ff88; border-color: rgba(0,204,136,.4); box-shadow: 0 4px 16px rgba(0,204,136,.2); }
@@ -547,7 +554,7 @@
   .submit-btn.locked-btn {
     background: rgba(10,26,18,.8);
     color: #e8967d;
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1px;
     border-color: rgba(232,150,125,.2);
   }
@@ -561,5 +568,5 @@
   }
   .skip-btn:hover { background: rgba(240,237,228,.08); }
 
-  .drag-hint { text-align: center; font-size: 7px; color: rgba(240,237,228,.3); margin-top: 6px; font-family: var(--fm); }
+  .drag-hint { text-align: center; font-size: 9px; color: rgba(240,237,228,.5); margin-top: 6px; font-family: var(--fm); }
 </style>

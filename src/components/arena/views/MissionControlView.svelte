@@ -1,49 +1,61 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import type { Phase, Hypothesis } from '$lib/stores/gameState';
   import type { BattleTickState, BattlePriceTick } from '$lib/engine/battleResolver';
 
-  export let phase: Phase = 'DRAFT';
-  export let battleTick: BattleTickState | null = null;
-  export let hypothesis: Hypothesis | null = null;
-  export let prices: { BTC: number } = { BTC: 0 };
-  export let battleResult: string | null = null;
-  export let battlePriceHistory: BattlePriceTick[] = [];
-  export let activeAgents: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }> = [];
+  interface Props {
+    phase?: Phase;
+    battleTick?: BattleTickState | null;
+    hypothesis?: Hypothesis | null;
+    prices?: { BTC: number };
+    battleResult?: string | null;
+    battlePriceHistory?: BattlePriceTick[];
+    activeAgents?: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }>;
+    onGoLobby?: () => void;
+    onPlayAgain?: () => void;
+  }
+  let {
+    phase = 'DRAFT',
+    battleTick = null,
+    hypothesis = null,
+    prices = { BTC: 0 },
+    battleResult = null,
+    battlePriceHistory = [],
+    activeAgents = [],
+    onGoLobby = () => {},
+    onPlayAgain = () => {},
+  }: Props = $props();
 
-  const dispatch = createEventDispatcher();
-
-  $: isBattle = phase === 'BATTLE';
-  $: isResult = phase === 'RESULT';
-  $: currentPrice = battleTick?.currentPrice ?? prices.BTC;
-  $: entryPrice = battleTick?.entryPrice ?? hypothesis?.entry ?? 0;
-  $: tpPrice = battleTick?.tpPrice ?? hypothesis?.tp ?? 0;
-  $: slPrice = battleTick?.slPrice ?? hypothesis?.sl ?? 0;
-  $: pnl = battleTick?.pnlPercent ?? 0;
-  $: pnlPositive = pnl >= 0;
-  $: pnlAbs = battleTick?.pnlAbsolute ?? 0;
-  $: distToTP = battleTick?.distToTP ?? 0;
-  $: distToSL = battleTick?.distToSL ?? 0;
-  $: maxRunup = battleTick?.maxRunup ?? 0;
-  $: maxDrawdown = battleTick?.maxDrawdown ?? 0;
-  $: rr = hypothesis?.rr ?? 0;
-  $: dir = hypothesis?.dir ?? 'NEUTRAL';
-  $: elapsed = battleTick?.elapsed ?? 0;
-  $: timeProgress = battleTick?.timeProgress ?? 0;
+  const isBattle = $derived(phase === 'BATTLE');
+  const isResult = $derived(phase === 'RESULT');
+  const currentPrice = $derived(battleTick?.currentPrice ?? prices.BTC);
+  const entryPrice = $derived(battleTick?.entryPrice ?? hypothesis?.entry ?? 0);
+  const tpPrice = $derived(battleTick?.tpPrice ?? hypothesis?.tp ?? 0);
+  const slPrice = $derived(battleTick?.slPrice ?? hypothesis?.sl ?? 0);
+  const pnl = $derived(battleTick?.pnlPercent ?? 0);
+  const pnlPositive = $derived(pnl >= 0);
+  const pnlAbs = $derived(battleTick?.pnlAbsolute ?? 0);
+  const distToTP = $derived(battleTick?.distToTP ?? 0);
+  const distToSL = $derived(battleTick?.distToSL ?? 0);
+  const maxRunup = $derived(battleTick?.maxRunup ?? 0);
+  const maxDrawdown = $derived(battleTick?.maxDrawdown ?? 0);
+  const rr = $derived(hypothesis?.rr ?? 0);
+  const dir = $derived(hypothesis?.dir ?? 'NEUTRAL');
+  const elapsed = $derived(battleTick?.elapsed ?? 0);
+  const timeProgress = $derived(battleTick?.timeProgress ?? 0);
 
   // Amber glow threshold
-  $: amberGlow = distToTP > 70 || distToSL > 70;
+  const amberGlow = $derived(distToTP > 70 || distToSL > 70);
 
   // Duration formatted
-  $: durationStr = (() => {
+  const durationStr = $derived((() => {
     const s = Math.floor(elapsed / 1000);
     const m = Math.floor(s / 60);
     const sec = s % 60;
     return m.toString().padStart(2, '0') + ':' + sec.toString().padStart(2, '0');
-  })();
+  })());
 
   // Last 5 ticks for live feed
-  $: liveFeed = (() => {
+  const liveFeed = $derived((() => {
     const recent = battlePriceHistory.slice(-5).reverse();
     return recent.map((tick, i) => {
       const prev = battlePriceHistory[battlePriceHistory.length - 5 + (4 - i) - 1];
@@ -53,7 +65,7 @@
       const timeStr = time.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
       return { price: tick.price, change, pct, timeStr };
     });
-  })();
+  })());
 
   function fmtPrice(p: number): string {
     if (!p) return '---';
@@ -225,8 +237,8 @@
           {battleResult === 'tp' ? 'TP HIT' : battleResult === 'sl' ? 'SL HIT' : battleResult === 'timeout_win' ? 'TIMEOUT WIN' : 'TIMEOUT LOSS'}
         </span>
         <span class="result-pnl" class:positive={pnlPositive} class:negative={!pnlPositive}>{fmtPnl(pnl)}</span>
-        <button on:click={() => dispatch('goLobby')}>LOBBY</button>
-        <button class="btn-again" on:click={() => dispatch('playAgain')}>AGAIN</button>
+        <button onclick={() => onGoLobby()}>LOBBY</button>
+        <button class="btn-again" onclick={() => onPlayAgain()}>AGAIN</button>
       </div>
     {/if}
 
@@ -282,10 +294,10 @@
     box-shadow: inset 0 0 12px rgba(255, 170, 50, 0.04);
   }
   .panel-header {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 2.5px;
-    color: rgba(240, 237, 228, 0.35);
+    color: rgba(240, 237, 228, 0.5);
     margin-bottom: 6px;
     padding-bottom: 4px;
     border-bottom: 1px solid rgba(240, 237, 228, 0.06);
@@ -302,10 +314,10 @@
     align-items: center;
   }
   .label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1.5px;
-    color: rgba(240, 237, 228, 0.35);
+    color: rgba(240, 237, 228, 0.5);
   }
   .value {
     font-size: 10px;
@@ -354,8 +366,8 @@
     letter-spacing: 4px;
   }
   .chart-note {
-    font-size: 8px;
-    color: rgba(240, 237, 228, 0.4);
+    font-size: 9px;
+    color: rgba(240, 237, 228, 0.55);
   }
 
   /* ── Ticker Feed ── */
@@ -379,8 +391,8 @@
     border-bottom: 1px solid rgba(240, 237, 228, 0.03);
   }
   .feed-time {
-    font-size: 8px;
-    color: rgba(240, 237, 228, 0.3);
+    font-size: 9px;
+    color: rgba(240, 237, 228, 0.5);
     width: 60px;
     font-variant-numeric: tabular-nums;
   }
@@ -393,14 +405,14 @@
     font-variant-numeric: tabular-nums;
   }
   .feed-change {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     width: 55px;
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
   .feed-pct {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     width: 60px;
     text-align: right;
@@ -408,7 +420,7 @@
   }
   .feed-empty {
     font-size: 9px;
-    color: rgba(240, 237, 228, 0.2);
+    color: rgba(240, 237, 228, 0.5);
     padding: 8px 0;
   }
 
@@ -425,10 +437,10 @@
     gap: 6px;
   }
   .dist-label {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1px;
-    color: rgba(240, 237, 228, 0.35);
+    color: rgba(240, 237, 228, 0.5);
     width: 40px;
   }
   .dist-bar {
@@ -446,7 +458,7 @@
   .dist-fill.tp { background: var(--grn, #00ff88); }
   .dist-fill.sl { background: var(--red, #ff2d55); }
   .dist-val {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240, 237, 228, 0.5);
     width: 24px;
@@ -466,23 +478,23 @@
     font-size: 10px;
   }
   .agent-name {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240, 237, 228, 0.6);
     flex: 1;
     letter-spacing: 0.5px;
   }
   .agent-dir {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1px;
   }
   .agent-dir.long { color: var(--grn, #00ff88); }
   .agent-dir.short { color: var(--red, #ff2d55); }
   .agent-conf {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
     font-variant-numeric: tabular-nums;
   }
 
@@ -546,7 +558,7 @@
     font-size: 12px;
     font-weight: 900;
     letter-spacing: 4px;
-    color: rgba(240, 237, 228, 0.2);
+    color: rgba(240, 237, 228, 0.5);
     font-family: var(--fb, 'Space Grotesk', sans-serif);
   }
   .standby-phase {
@@ -557,13 +569,13 @@
   }
   .standby-msg {
     font-size: 9px;
-    color: rgba(240, 237, 228, 0.3);
+    color: rgba(240, 237, 228, 0.5);
     animation: blinkStandby 2.5s ease-in-out infinite;
   }
   .standby-price {
     font-size: 13px;
     font-weight: 700;
-    color: rgba(240, 237, 228, 0.25);
+    color: rgba(240, 237, 228, 0.5);
     font-variant-numeric: tabular-nums;
     margin-top: 4px;
   }

@@ -374,7 +374,9 @@ ELO와 LP는 분리한다.
 
 ### 9.4 Integration
 
-1. `GET /api/oracle/leaderboard`
+1. Historical: `GET /api/oracle/leaderboard`
+   - Current frontend leaderboard lives on `/signals?view=ai` and is rendered by `OracleLeaderboard.svelte`
+   - Current shipped route `/oracle` is a redirect shim, not the canonical leaderboard owner
 2. `POST /api/agents/:id/challenge`
 3. `GET /api/passport/me`
 
@@ -442,4 +444,3 @@ ELO와 LP는 분리한다.
 
 5. `docs/REFACTORING_BACKLOG.md`
 - BE/FE 티켓으로 세분화 반영
-

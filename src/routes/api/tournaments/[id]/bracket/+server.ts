@@ -7,7 +7,7 @@ export const GET: RequestHandler = async ({ params }) => {
     const bracket = await getTournamentBracket(params.id);
     if (!bracket) return json({ error: 'Tournament not found' }, { status: 404 });
     return json({ success: true, ...bracket });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[tournaments/id/bracket/get]', err);
     return json({ error: 'Failed to load tournament bracket' }, { status: 500 });
   }

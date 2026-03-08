@@ -140,7 +140,7 @@ export async function pollPendingPositions(): Promise<void> {
 
       const p = result.position;
       updatePosition(pos.id, {
-        status: p.orderStatus,
+        status: p.orderStatus ?? pos.status,
         currentPrice: p.currentPrice ?? pos.currentPrice,
         pnlUsdc: p.pnlUsdc ?? pos.pnlUsdc,
         pnlPercent:

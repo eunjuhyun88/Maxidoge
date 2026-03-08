@@ -25,6 +25,7 @@ import type {
 } from './types';
 import type { MarketContext } from './factorEngine';
 import { calcATR } from './indicators';
+import { clamp } from '$lib/utils/math';
 
 // ─── ATR from Klines ────────────────────────────────────────
 
@@ -75,9 +76,6 @@ const REGIME_MULTIPLIER: Record<MarketRegime, { slMult: number; tpMult: number }
 
 // ─── Helpers ────────────────────────────────────────────────
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
 
 function round(v: number, decimals = 2): number {
   const factor = 10 ** decimals;

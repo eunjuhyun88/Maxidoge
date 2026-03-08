@@ -20,6 +20,7 @@ import type {
 import type { MarketContext } from '$lib/engine/factorEngine';
 import type {
   ArenaWarPhase,
+  ArenaWarMode,
   ArenaWarSetup,
   WagerAmount,
   ConsensusType,
@@ -27,6 +28,8 @@ import type {
   HumanDelta,
   GameRecord,
 } from '$lib/engine/arenaWarTypes';
+import type { AgentId } from '$lib/engine/types';
+import { AGENT_IDS } from '$lib/engine/types';
 import {
   computeHumanDelta,
   computeEmphasizedFactors,
@@ -47,6 +50,22 @@ import {
 import { computeFBS } from '$lib/engine/scoring';
 import { computeEmbedding } from '$lib/engine/ragEmbedding';
 import type { RAGRecall } from '$lib/engine/arenaWarTypes';
+
+// ── v3 Battle Engine imports ──
+import type { V3BattleState, V3BattleInitConfig } from '$lib/engine/v3BattleTypes';
+import {
+  initV3Battle,
+  processV3Tick,
+  applyV3TickResult,
+  submitChallengeAnswer as v3SubmitChallenge,
+  switchLead as v3SwitchLead,
+  activateGuard as v3ActivateGuard,
+  getV3Winner,
+  getTeamHPPercent,
+} from '$lib/engine/v3BattleEngine';
+import { getAgentCharacter, getTierForLevel } from '$lib/engine/agentCharacter';
+import type { V2BattleConfig, V2BattleAgent } from '$lib/engine/v2BattleTypes';
+import { getCombinedSynergyBonuses, findTeamSynergies } from '$lib/engine/teamSynergy';
 
 // ─── State Interface ────────────────────────────────────────
 
@@ -105,6 +124,15 @@ export interface ArenaWarState {
   // RAG Context
   ragRecall: RAGRecall | null;
 
+  // v3 Battle Engine State
+  v3BattleState: V3BattleState | null;
+
+  // Mode & Teams
+  selectedMode: ArenaWarMode;
+  humanTeam: AgentId[];
+  aiTeam: AgentId[];
+  bannedAgents: AgentId[];
+
   // Global
   matchId: string;
   isActive: boolean;
@@ -162,6 +190,13 @@ const DEFAULT_STATE: ArenaWarState = {
 
   ragRecall: null,
 
+  v3BattleState: null,
+
+  selectedMode: 'pvai',
+  humanTeam: [],
+  aiTeam: [],
+  bannedAgents: [],
+
   matchId: '',
   isActive: false,
   error: null,
@@ -188,10 +223,30 @@ export const arenaWarHumanRR = derived(arenaWarStore, $s => {
 
 let _timerInterval: ReturnType<typeof setInterval> | null = null;
 let _battleInterval: ReturnType<typeof setInterval> | null = null;
+let _phaseTimeouts: ReturnType<typeof setTimeout>[] = [];
+let _phaseIntervals: ReturnType<typeof setInterval>[] = [];
+
+/** Track a setTimeout so it can be cleared on phase transition */
+function trackedTimeout(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
+  const t = setTimeout(fn, ms);
+  _phaseTimeouts.push(t);
+  return t;
+}
+
+/** Track a setInterval so it can be cleared on phase transition */
+function trackedInterval(fn: () => void, ms: number): ReturnType<typeof setInterval> {
+  const t = setInterval(fn, ms);
+  _phaseIntervals.push(t);
+  return t;
+}
 
 function clearTimers() {
   if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
   if (_battleInterval) { clearInterval(_battleInterval); _battleInterval = null; }
+  for (const t of _phaseTimeouts) clearTimeout(t);
+  _phaseTimeouts = [];
+  for (const t of _phaseIntervals) clearInterval(t);
+  _phaseIntervals = [];
 }
 
 function startPhaseTimer(seconds: number, onComplete: () => void) {
@@ -216,11 +271,25 @@ export function startMatch(setup?: Partial<ArenaWarSetup>) {
   clearTimers();
 
   const matchId = `AW-${Date.now().toString(36)}`;
+  const currentState = get(arenaWarStore);
+
+  // Auto-assign teams if not already set (e.g. non-draft mode)
+  let humanTeam = currentState.humanTeam;
+  let aiTeam = currentState.aiTeam;
+  if (humanTeam.length === 0 || aiTeam.length === 0) {
+    const teams = autoAssignTeams();
+    humanTeam = teams.humanTeam;
+    aiTeam = teams.aiTeam;
+  }
 
   arenaWarStore.update(s => ({
     ...DEFAULT_STATE,
     phase: 'AI_ANALYZE' as ArenaWarPhase,
     setup: { ...s.setup, ...setup },
+    selectedMode: s.selectedMode,
+    humanTeam,
+    aiTeam,
+    bannedAgents: s.bannedAgents,
     matchId,
     isActive: true,
   }));
@@ -237,7 +306,7 @@ export function startMatch(setup?: Partial<ArenaWarSetup>) {
 
   // Animate progress over 4 seconds (faster for prototype)
   let progress = 0;
-  const progressInterval = setInterval(() => {
+  const progressInterval = trackedInterval(() => {
     progress += 5;
     arenaWarStore.update(s => ({ ...s, analyzeProgress: Math.min(100, progress) }));
     if (progress >= 100) {
@@ -246,7 +315,7 @@ export function startMatch(setup?: Partial<ArenaWarSetup>) {
   }, 200);
 
   // After 4 seconds, transition to HUMAN_CALL (with RAG search)
-  setTimeout(async () => {
+  trackedTimeout(async () => {
     clearInterval(progressInterval);
 
     // ── RAG Search (fire-and-forget style — doesn't block phase transition) ──
@@ -320,22 +389,30 @@ export function setHumanDirection(direction: Direction) {
   });
 }
 
+function normalizePriceInput(nextValue: number, previousValue: number): number {
+  if (!Number.isFinite(nextValue)) return previousValue;
+  return Math.max(0, Math.round(nextValue * 100) / 100);
+}
+
 /** Update human confidence */
 export function setHumanConfidence(confidence: number) {
-  arenaWarStore.update(s => ({
-    ...s,
-    humanConfidence: Math.max(0, Math.min(100, confidence)),
-  }));
+  arenaWarStore.update(s => {
+    const safeConfidence = Number.isFinite(confidence) ? confidence : s.humanConfidence;
+    return {
+      ...s,
+      humanConfidence: Math.max(0, Math.min(100, safeConfidence)),
+    };
+  });
 }
 
 /** Update human TP */
 export function setHumanTp(tp: number) {
-  arenaWarStore.update(s => ({ ...s, humanTp: tp }));
+  arenaWarStore.update(s => ({ ...s, humanTp: normalizePriceInput(tp, s.humanTp) }));
 }
 
 /** Update human SL */
 export function setHumanSl(sl: number) {
-  arenaWarStore.update(s => ({ ...s, humanSl: sl }));
+  arenaWarStore.update(s => ({ ...s, humanSl: normalizePriceInput(sl, s.humanSl) }));
 }
 
 /** Toggle reason tag */
@@ -403,7 +480,7 @@ export function lockHumanDecision() {
   });
 }
 
-/** REVEAL → BATTLE */
+/** REVEAL → BATTLE (v3 engine) */
 function startBattle() {
   const state = get(arenaWarStore);
   // Determine which direction the market actually goes (random with slight bias)
@@ -412,51 +489,163 @@ function startBattle() {
 
   const battleKlines = generateBattleKlines(state.currentPrice, actualBias);
 
+  // ── Build v3 battle config ──
+  const humanDir = state.humanDirection ?? 'NEUTRAL';
+  const allAgentIds = [...state.humanTeam, ...state.aiTeam];
+
+  // Build v2 agent config for all participating agents
+  const buildV2Agent = (agentId: AgentId, weight: number): V2BattleAgent => {
+    const char = getAgentCharacter(agentId);
+    const role = getAgentRole(agentId);
+    return {
+      agentId,
+      role,
+      weight,
+      abilities: {
+        analysis: char.baseStats.analysis,
+        accuracy: char.baseStats.accuracy,
+        speed: char.baseStats.speed,
+        instinct: char.baseStats.instinct,
+      },
+      specBonuses: {
+        primaryActionBonus: 0.05,
+        secondaryActionPenalty: -0.05,
+        critBonus: 0,
+        targetActions: ['DASH', 'BURST'],
+      },
+    };
+  };
+
+  // Build v2 agents (all 6 in the battle)
+  const v2Agents: V2BattleAgent[] = allAgentIds.map((id, i) => buildV2Agent(id, 50 - i * 5));
+
+  // Get synergy IDs for human team
+  const humanSynergies = findTeamSynergies(state.humanTeam);
+  const synergyIds = humanSynergies.map(s => s.id);
+
+  // Build finding directions (mock: all agree with human direction)
+  const findingDirections: Record<string, Direction> = {};
+  for (const id of allAgentIds) {
+    findingDirections[id] = humanDir;
+  }
+
+  const atr1m = state.currentPrice * 0.002; // ~0.2% of price as ATR
+
+  const v2Config: V2BattleConfig = {
+    entryPrice: state.humanEntryPrice,
+    tpPrice: state.humanTp,
+    slPrice: state.humanSl,
+    direction: humanDir,
+    agents: v2Agents,
+    synergyIds,
+    councilConsensus: state.consensusType === 'consensus' ? 'unanimous' :
+                       state.consensusType === 'partial' ? 'majority' : 'split',
+    hypothesisRR: state.humanTp && state.humanSl && state.humanEntryPrice
+      ? Math.abs(state.humanTp - state.humanEntryPrice) / Math.abs(state.humanSl - state.humanEntryPrice)
+      : 2.0,
+    findingDirections: findingDirections as Record<AgentId, Direction>,
+    tierVSStart: 50,
+    tierTickCount: Math.min(24, battleKlines.length),
+    tierAIBonus: 0,
+    atr1m,
+  };
+
+  // Build v3 team configs with HP
+  const agentLevel = 1; // TODO: load from agentData store when available
+  const agentTier = getTierForLevel(agentLevel);
+
+  const buildTeamConfig = (teamIds: AgentId[]) =>
+    teamIds.map(id => {
+      const char = getAgentCharacter(id);
+      return {
+        agentId: id,
+        level: agentLevel,
+        tier: agentTier,
+        type: char.type,
+        resilience: char.baseStats.resilience,
+        accuracy: char.baseStats.accuracy,
+      };
+    });
+
+  const v3Config: V3BattleInitConfig = {
+    v2Config,
+    humanTeam: buildTeamConfig(state.humanTeam),
+    aiTeam: buildTeamConfig(state.aiTeam),
+  };
+
+  // Initialize v3 battle state
+  const v3BattleState = initV3Battle(v3Config);
+
   arenaWarStore.update(s => ({
     ...s,
     phase: 'BATTLE',
     battleKlines,
     battleCurrentIndex: 0,
     phaseTimer: 120,
+    v3BattleState,
   }));
 
-  // Animate candles — one every 5 seconds
+  // ── v3 Battle tick loop ──
+  // Feed one candle price per tick (1.5s interval, fast for prototype: 800ms)
   _battleInterval = setInterval(() => {
     const current = get(arenaWarStore);
     if (current.battlePaused) return;
+    if (!current.v3BattleState) return;
 
     const nextIndex = current.battleCurrentIndex + 1;
 
-    if (nextIndex >= current.battleKlines.length) {
+    // Check if battle is over
+    if (nextIndex >= current.battleKlines.length ||
+        current.v3BattleState.v3Status !== 'running') {
       if (_battleInterval) clearInterval(_battleInterval);
       _battleInterval = null;
       finishBattle();
       return;
     }
 
-    // Check TP/SL hit
     const candle = current.battleKlines[nextIndex];
-    const humanDir = current.humanDirection ?? 'NEUTRAL';
-    let hit = false;
+    const newPrice = candle.close;
 
-    if (humanDir === 'LONG') {
+    // Process v3 tick (wraps v2)
+    const v3Result = processV3Tick(current.v3BattleState, newPrice);
+
+    // Apply tick result to state
+    const updatedV3State = applyV3TickResult(current.v3BattleState, v3Result);
+
+    // Check TP/SL hit on the candle
+    const dir = current.humanDirection ?? 'NEUTRAL';
+    let hit = false;
+    if (dir === 'LONG') {
       if (candle.high >= current.humanTp || candle.low <= current.humanSl) hit = true;
-    } else if (humanDir === 'SHORT') {
+    } else if (dir === 'SHORT') {
       if (candle.low <= current.humanTp || candle.high >= current.humanSl) hit = true;
     }
+
+    // Check v3 status (team wipe)
+    const isV3Over = updatedV3State.v3Status !== 'running';
 
     arenaWarStore.update(s => ({
       ...s,
       battleCurrentIndex: nextIndex,
-      phaseTimer: Math.max(0, s.phaseTimer - 5),
+      phaseTimer: Math.max(0, s.phaseTimer - 1),
+      v3BattleState: updatedV3State,
     }));
 
-    if (hit) {
+    if (hit || isV3Over) {
       if (_battleInterval) clearInterval(_battleInterval);
       _battleInterval = null;
-      setTimeout(finishBattle, 500);
+      trackedTimeout(finishBattle, 500);
     }
-  }, 800); // Faster for prototype (800ms per candle instead of 5s)
+  }, 800); // 800ms per tick for prototype (plan: 1500ms)
+}
+
+/** Helper: get agent role from ID */
+function getAgentRole(agentId: AgentId): 'OFFENSE' | 'DEFENSE' | 'CONTEXT' {
+  const offenseAgents: AgentId[] = ['STRUCTURE', 'VPA', 'ICT'];
+  const defenseAgents: AgentId[] = ['DERIV', 'VALUATION', 'FLOW'];
+  if (offenseAgents.includes(agentId)) return 'OFFENSE';
+  if (defenseAgents.includes(agentId)) return 'DEFENSE';
+  return 'CONTEXT';
 }
 
 /** Add battle action (HOLD/ADJUST_TP/ADJUST_SL/CUT) */
@@ -506,7 +695,7 @@ function finishBattle() {
     priceChange < -0.001 ? 'SHORT' :
     'NEUTRAL';
 
-  // Determine winner
+  // Determine winner — prefer v3 HP-based winner if available
   const humanDir = state.humanDirection ?? 'NEUTRAL';
   const aiDir = state.aiDecision?.direction ?? 'NEUTRAL';
   const humanCorrect = humanDir === actualDirection;
@@ -515,10 +704,22 @@ function finishBattle() {
   const humanFBS = generateMockFBS(humanCorrect);
   const aiFBS = generateMockFBS(aiCorrect);
 
-  const winner: 'human' | 'ai' | 'draw' =
-    humanFBS.fbs > aiFBS.fbs ? 'human' :
-    aiFBS.fbs > humanFBS.fbs ? 'ai' :
-    'draw';
+  // v3 winner determination: HP-based + challenge score weighting
+  let winner: 'human' | 'ai' | 'draw';
+  if (state.v3BattleState) {
+    const v3Winner = getV3Winner(state.v3BattleState);
+    // Blend v3 HP winner with FBS score (v3 is primary)
+    if (v3Winner !== 'draw') {
+      winner = v3Winner;
+    } else {
+      // Tie-break with FBS
+      winner = humanFBS.fbs > aiFBS.fbs ? 'human' :
+               aiFBS.fbs > humanFBS.fbs ? 'ai' : 'draw';
+    }
+  } else {
+    winner = humanFBS.fbs > aiFBS.fbs ? 'human' :
+             aiFBS.fbs > humanFBS.fbs ? 'ai' : 'draw';
+  }
 
   const fbsMargin = Math.abs(humanFBS.fbs - aiFBS.fbs);
 
@@ -534,7 +735,7 @@ function finishBattle() {
 
   // Animate judge score count-up over 3 seconds
   let progress = 0;
-  const judgeInterval = setInterval(() => {
+  const judgeInterval = trackedInterval(() => {
     progress += 4;
     arenaWarStore.update(s => ({
       ...s,
@@ -544,7 +745,7 @@ function finishBattle() {
     if (progress >= 100) {
       clearInterval(judgeInterval);
       // After animation, go to RESULT
-      setTimeout(() => {
+      trackedTimeout(() => {
         showResult(exitPrice, priceChange, actualDirection);
       }, 500);
     }
@@ -796,6 +997,35 @@ function generateFeedback(state: ArenaWarState): string {
   return parts.join(' ');
 }
 
+// ─── v3 Player Actions (exported for BattlePhase) ───────────
+
+/** Submit answer to active chart reading challenge */
+export function submitBattleChallengeAnswer(answer: string) {
+  arenaWarStore.update(s => {
+    if (!s.v3BattleState) return s;
+    const updated = v3SubmitChallenge(s.v3BattleState, answer);
+    return { ...s, v3BattleState: updated };
+  });
+}
+
+/** Switch lead agent during battle */
+export function switchBattleLead(newLeadIdx: number) {
+  arenaWarStore.update(s => {
+    if (!s.v3BattleState) return s;
+    const updated = v3SwitchLead(s.v3BattleState, newLeadIdx);
+    return { ...s, v3BattleState: updated };
+  });
+}
+
+/** Activate guard on lead agent */
+export function activateBattleGuard() {
+  arenaWarStore.update(s => {
+    if (!s.v3BattleState) return s;
+    const updated = v3ActivateGuard(s.v3BattleState);
+    return { ...s, v3BattleState: updated };
+  });
+}
+
 /** Reset and start a new match */
 export function rematch() {
   const state = get(arenaWarStore);
@@ -816,3 +1046,35 @@ export function updateSetup(updates: Partial<ArenaWarSetup>) {
     setup: { ...s.setup, ...updates },
   }));
 }
+
+/** Set game mode */
+export function setSelectedMode(mode: ArenaWarMode) {
+  arenaWarStore.update(s => ({ ...s, selectedMode: mode }));
+}
+
+/** Set teams (from draft or auto-assign) */
+export function setTeams(humanTeam: AgentId[], aiTeam: AgentId[], banned: AgentId[] = []) {
+  arenaWarStore.update(s => ({ ...s, humanTeam, aiTeam, bannedAgents: banned }));
+}
+
+/** Start draft phase */
+export function startDraft(setup?: Partial<ArenaWarSetup>) {
+  arenaWarStore.update(s => ({
+    ...s,
+    phase: 'DRAFT' as ArenaWarPhase,
+    setup: { ...s.setup, ...setup },
+    selectedMode: 'draft',
+  }));
+}
+
+/** Auto-assign random teams for non-draft modes */
+function autoAssignTeams(): { humanTeam: AgentId[]; aiTeam: AgentId[] } {
+  const shuffled = [...AGENT_IDS].sort(() => Math.random() - 0.5) as AgentId[];
+  return {
+    humanTeam: shuffled.slice(0, 3),
+    aiTeam: shuffled.slice(3, 6),
+  };
+}
+
+/** Derived store: current mode */
+export const arenaWarMode = derived(arenaWarStore, $s => $s.selectedMode);

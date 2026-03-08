@@ -352,7 +352,7 @@
     background: rgba(255,255,255,.03); color: rgba(255,255,255,.5);
     cursor: pointer; transition: all .15s;
   }
-  .wr-action-btn:hover { border-color: rgba(255,255,255,.25); }
+  .wr-action-btn:hover { border-color: rgba(255,255,255,.5); }
   .wr-action-btn.agree.selected { border-color: rgba(0,204,136,.5); background: rgba(0,204,136,.15); color: #00cc88; }
   .wr-action-btn.challenge.selected { border-color: rgba(255,94,122,.5); background: rgba(255,94,122,.15); color: #ff5e7a; }
   .wr-action-btn.question.selected { border-color: rgba(100,149,237,.5); background: rgba(100,149,237,.15); color: #6495ed; }

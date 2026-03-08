@@ -1,12 +1,18 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { fetch24hr, fetch24hrMulti, type Binance24hr } from '$lib/api/binance';
   import { TOKENS, TOKEN_CATEGORIES, TOKEN_MAP, getAllBinanceSymbols, type TokenDef } from '$lib/data/tokens';
 
-  const dispatch = createEventDispatcher<{ select: { pair: string; token: TokenDef } }>();
-
-  export let value = 'BTC/USDT';
-  export let compact = false;
+  interface Props {
+    value?: string;
+    compact?: boolean;
+    onSelect?: (detail: { pair: string; token: TokenDef }) => void;
+  }
+  let {
+    value = 'BTC/USDT',
+    compact = false,
+    onSelect = () => {},
+  }: Props = $props();
 
   type CategoryKey = keyof typeof TOKEN_CATEGORIES;
   type TabKey = 'all' | CategoryKey;
@@ -35,32 +41,32 @@
   const QUICK_SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP', 'BNB', 'DOGE', 'ADA', 'CRV'] as const;
   const TOKEN_ORDER = new Map(TOKENS.map((t, idx) => [t.symbol, idx]));
 
-  let open = false;
-  let filter = '';
-  let showSearch = false;
-  let activeTab: TabKey = 'all';
-  let isMobileSheet = false;
-  let panelStyle = '';
+  let open = $state(false);
+  let filter = $state('');
+  let showSearch = $state(false);
+  let activeTab: TabKey = $state('all');
+  let isMobileSheet = $state(false);
+  let panelStyle = $state('');
 
-  let triggerEl: HTMLButtonElement | null = null;
-  let searchEl: HTMLInputElement | null = null;
+  let triggerEl = $state<HTMLButtonElement | null>(null);
+  let searchEl = $state<HTMLInputElement | null>(null);
 
-  let statsLoading = false;
-  let statsError = '';
-  let statsMap = new Map<string, MarketStats>();
+  let statsLoading = $state(false);
+  let statsError = $state('');
+  let statsMap = $state(new Map<string, MarketStats>());
 
-  $: currentSymbol = (value.split('/')[0] || 'BTC').toUpperCase();
-  $: currentToken = TOKEN_MAP.get(currentSymbol) || TOKENS[0];
+  const currentSymbol = $derived((value.split('/')[0] || 'BTC').toUpperCase());
+  const currentToken = $derived(TOKEN_MAP.get(currentSymbol) || TOKENS[0]);
 
-  $: rows = TOKENS.map((token) => ({
+  const rows = $derived(TOKENS.map((token) => ({
     token,
     pair: `${token.symbol}/USDT`,
     stats: statsMap.get(token.symbol) || { price: null, change24h: null, quoteVolume: null },
-  })) as MarketRow[];
+  })) as MarketRow[]);
 
-  $: filteredRows = rows
-    .filter((row) => matchTab(row, activeTab) && matchFilter(row, filter))
-    .sort((a, b) => {
+  const filteredRows = $derived(rows
+    .filter((row: MarketRow) => matchTab(row, activeTab) && matchFilter(row, filter))
+    .sort((a: MarketRow, b: MarketRow) => {
       const av = a.stats.quoteVolume;
       const bv = b.stats.quoteVolume;
       const aa = Number.isFinite(av as number) ? (av as number) : -1;
@@ -69,10 +75,10 @@
       const ai = TOKEN_ORDER.get(a.token.symbol) ?? 0;
       const bi = TOKEN_ORDER.get(b.token.symbol) ?? 0;
       return ai - bi;
-    });
-  $: quickRows = QUICK_SYMBOLS
-    .map((sym) => rows.find((row) => row.token.symbol === sym))
-    .filter((row): row is MarketRow => !!row);
+    }));
+  const quickRows = $derived(QUICK_SYMBOLS
+    .map((sym) => rows.find((row: MarketRow) => row.token.symbol === sym))
+    .filter((row): row is MarketRow => !!row));
 
   function matchTab(row: MarketRow, tab: TabKey) {
     if (tab === 'all') return true;
@@ -148,7 +154,7 @@
   function selectToken(sym: string) {
     const token = TOKEN_MAP.get(sym);
     if (!token) return;
-    dispatch('select', { pair: `${sym}/USDT`, token });
+    onSelect({ pair: `${sym}/USDT`, token });
     closeDropdown();
   }
 
@@ -262,7 +268,7 @@
   });
 </script>
 
-<svelte:window on:keydown={handleGlobalKeydown} />
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <div class="tdd" class:compact>
   <button
@@ -270,7 +276,7 @@
     class="tdd-trigger"
     class:open
     bind:this={triggerEl}
-    on:click|stopPropagation={toggleDropdown}
+    onclick={(e: MouseEvent) => { e.stopPropagation(); toggleDropdown(); }}
   >
     <span class="tdd-icon" style="color:{currentToken.color}">{currentToken.icon}</span>
     <span class="tdd-sym">{currentToken.symbol}</span>
@@ -286,7 +292,7 @@
       type="button"
       class="tdd-backdrop"
       aria-label="Close market selector"
-      on:click={closeDropdown}
+      onclick={closeDropdown}
     ></button>
 
     <div class="tdd-panel" class:mobile={isMobileSheet} style={isMobileSheet ? '' : panelStyle}>
@@ -296,10 +302,10 @@
           <div class="tdd-sub">Binance USDT Pairs</div>
         </div>
         <div class="tdd-head-actions">
-          <button type="button" class="tdd-search-toggle" class:on={showSearch} on:click={toggleSearch}>
+          <button type="button" class="tdd-search-toggle" class:on={showSearch} onclick={toggleSearch}>
             {showSearch ? 'LIST' : 'SEARCH'}
           </button>
-          <button type="button" class="tdd-close" on:click={closeDropdown}>✕</button>
+          <button type="button" class="tdd-close" onclick={closeDropdown}>✕</button>
         </div>
       </div>
 
@@ -317,7 +323,7 @@
 
       <div class="tdd-tabs">
         {#each TAB_ORDER as tab}
-          <button type="button" class="tdd-tab" class:active={activeTab === tab} on:click={() => (activeTab = tab)}>
+          <button type="button" class="tdd-tab" class:active={activeTab === tab} onclick={() => (activeTab = tab)}>
             {TAB_LABELS[tab]}
           </button>
         {/each}
@@ -331,7 +337,7 @@
               type="button"
               class="tdd-quick-chip"
               class:active={row.token.symbol === currentSymbol}
-              on:click={() => selectToken(row.token.symbol)}
+              onclick={() => selectToken(row.token.symbol)}
             >
               {row.token.symbol}
             </button>
@@ -361,7 +367,7 @@
               type="button"
               class="tdd-row"
               class:active={row.token.symbol === currentSymbol}
-              on:click={() => selectToken(row.token.symbol)}
+              onclick={() => selectToken(row.token.symbol)}
             >
               <span class="tdd-market">
                 <span class="tdd-item-icon" style="color:{row.token.color}">{row.token.icon}</span>
@@ -430,7 +436,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: rgba(200, 211, 227, 0.72);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: .32px;
   }
   .tdd-pair {
@@ -503,7 +509,7 @@
     background: rgba(255, 255, 255, 0.06);
     color: rgba(224, 232, 244, 0.88);
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .58px;
     cursor: pointer;
@@ -530,7 +536,7 @@
     margin-top: 2px;
     color: rgba(173, 186, 204, 0.68);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: .42px;
   }
   .tdd-close {
@@ -598,7 +604,7 @@
     flex: 0 0 auto;
     color: rgba(168, 180, 197, 0.72);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: .42px;
     text-transform: uppercase;
@@ -630,14 +636,14 @@
     background: rgba(255, 255, 255, 0.04);
     color: rgba(222, 231, 244, 0.9);
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .58px;
     cursor: pointer;
     white-space: nowrap;
   }
   .tdd-quick-chip:hover {
-    border-color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
   }
@@ -662,7 +668,7 @@
     background: rgba(255, 255, 255, 0.04);
     color: rgba(207, 217, 232, 0.85);
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .68px;
     cursor: pointer;
@@ -682,7 +688,7 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     color: rgba(168, 180, 197, 0.7);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: .42px;
   }
@@ -712,7 +718,7 @@
     background: rgba(44, 55, 72, 0.28);
     color: rgba(177, 192, 212, 0.82);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: .35px;
   }
   .tdd-hint.warn {
@@ -773,14 +779,14 @@
   }
   .tdd-item-pair {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(173, 185, 201, 0.74);
     white-space: nowrap;
   }
   .tdd-item-name {
     margin-left: 3px;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(163, 176, 196, 0.72);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -809,7 +815,7 @@
   }
   .tdd-vol {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(189, 199, 215, 0.84);
   }
 
@@ -838,13 +844,13 @@
     }
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 768px) {
     .tdd-head-actions {
       gap: 5px;
     }
     .tdd-search-toggle {
       padding: 0 7px;
-      font-size: 8px;
+      font-size: 9px;
     }
     .tdd-head-row,
     .tdd-row {
@@ -860,7 +866,7 @@
     }
     .tdd-tab {
       height: 22px;
-      font-size: 8px;
+      font-size: 9px;
       padding: 0 7px;
     }
   }

@@ -2,25 +2,14 @@
 // STOCKCLAW — Portfolio API Client
 // ═══════════════════════════════════════════════════════════════
 
-export interface PortfolioHolding {
-  id: string;
-  symbol: string;
-  name: string;
-  amount: number;
-  avgPrice: number;
-  currentPrice: number;
-  source: string;
-  updatedAt: number;
-}
+import type {
+  PortfolioHolding,
+  PortfolioHoldingsData,
+  UpsertPortfolioHoldingRequest,
+} from '$lib/contracts/positions';
 
-export interface PortfolioResponse {
-  ok: boolean;
-  data: {
-    holdings: PortfolioHolding[];
-    totalValue: number;
-    totalCost: number;
-  };
-}
+export type { PortfolioHolding };
+export type PortfolioResponse = PortfolioHoldingsData;
 
 function canFetch(): boolean {
   return typeof window !== 'undefined' && typeof fetch === 'function';
@@ -37,14 +26,7 @@ export async function fetchHoldings(): Promise<PortfolioResponse | null> {
   }
 }
 
-export async function upsertHolding(data: {
-  symbol: string;
-  name: string;
-  amount: number;
-  avgPrice: number;
-  currentPrice?: number;
-  source?: string;
-}): Promise<boolean> {
+export async function upsertHolding(data: UpsertPortfolioHoldingRequest): Promise<boolean> {
   if (!canFetch()) return false;
   try {
     const res = await fetch('/api/portfolio/holdings', {

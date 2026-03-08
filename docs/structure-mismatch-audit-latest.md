@@ -36,10 +36,10 @@
 - 실제:
   - 구형 7-Agent 정의 사용: `src/lib/data/agents.ts`
   - 엔진 8-Agent 정의 별도 존재: `src/lib/engine/agents.ts`
-  - UI 주요 화면은 여전히 `AGDEFS` 의존 (`/arena`, `/terminal`, `/oracle`)
+  - UI 주요 화면은 여전히 `AGDEFS` 의존 (`/arena`, `/terminal`, `/signals?view=ai` leaderboard surface; historical `/oracle`)
 - 영향:
   - 같은 앱 내에서 에이전트 정의가 화면마다 다르게 보임
-  - Spec 시스템, Oracle/Passport 통계 기준 불일치
+  - Spec 시스템, AI leaderboard/Passport 통계 기준 불일치
 
 ## P0-2. Phase 모델 3중 분리
 
@@ -192,4 +192,3 @@
 2. `src/components/terminal/WarRoom.svelte`
 3. `src/routes/arena/+page.svelte`
 4. `src/routes/terminal/+page.svelte`
-

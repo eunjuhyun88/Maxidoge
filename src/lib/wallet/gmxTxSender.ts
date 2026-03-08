@@ -8,12 +8,9 @@
 // to call eth_sendTransaction.
 
 import { resolveEvmProvider, type WalletProviderKey } from './providers';
+import type { GmxCalldata } from '$lib/contracts/positions';
 
-export interface TxCalldata {
-  to: string;
-  data: string;
-  value: string; // hex
-}
+export type TxCalldata = GmxCalldata;
 
 /**
  * Send a transaction using the user's wallet.
@@ -22,7 +19,7 @@ export interface TxCalldata {
 export async function sendTransaction(
   providerKey: WalletProviderKey,
   from: string,
-  calldata: TxCalldata,
+  calldata: GmxCalldata,
 ): Promise<string> {
   const provider = await resolveEvmProvider(providerKey);
   if (!provider) {
@@ -45,9 +42,9 @@ export async function sendTransaction(
     }
 
     return txHash;
-  } catch (err: any) {
+  } catch (err: unknown) {
     // User rejected
-    if (err?.code === 4001) {
+    if ((err as {code?:number})?.code === 4001) {
       throw new Error('트랜잭션이 거부되었습니다.');
     }
     throw err;
@@ -62,7 +59,7 @@ export async function sendTransaction(
 export async function approveUsdc(
   providerKey: WalletProviderKey,
   from: string,
-  approveCalldata: TxCalldata,
+  approveCalldata: GmxCalldata,
 ): Promise<string> {
   return sendTransaction(providerKey, from, approveCalldata);
 }
@@ -73,7 +70,7 @@ export async function approveUsdc(
 export async function sendGmxOrder(
   providerKey: WalletProviderKey,
   from: string,
-  calldata: TxCalldata,
+  calldata: GmxCalldata,
 ): Promise<string> {
   return sendTransaction(providerKey, from, calldata);
 }

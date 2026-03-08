@@ -17,6 +17,7 @@ import { fetchCoinMarketCapQuote } from '$lib/server/coinmarketcap';
 import { estimateExchangeNetflow, fetchGasOracle } from '$lib/server/etherscan';
 import { fetchWhaleActivity, fetchActiveAddresses, fetchExchangeBalance } from '$lib/server/dune';
 import { analyzeTrend } from '$lib/engine/trend';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 // ── Health Tracker ──────────────────────────────────────────────
 
@@ -45,7 +46,7 @@ function trackError(name: string, error: unknown): void {
   };
   h.available = false;
   h.errorCount += 1;
-  h.lastError = error instanceof Error ? error.message : String(error);
+  h.lastError = error instanceof Error ? getErrorMessage(error) : String(error);
   healthMap.set(name, h);
 }
 

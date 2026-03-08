@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { normalizePair, normalizeTimeframe } from '$lib/server/marketFeedService';
 import { buildIntelPolicyOutput, emptyPanels } from '$lib/server/intelPolicyRuntime';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 const CACHE_TTL_MS = 20_000;
 
@@ -129,12 +130,12 @@ export const GET: RequestHandler = async ({ fetch, url }) => {
         },
       },
     );
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('pair must be like')) {
-      return json({ error: error.message }, { status: 400 });
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('pair must be like')) {
+      return json({ error: getErrorMessage(error) }, { status: 400 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('timeframe must be one of')) {
-      return json({ error: error.message }, { status: 400 });
+    if (getErrorMessage(error).includes('timeframe must be one of')) {
+      return json({ error: getErrorMessage(error) }, { status: 400 });
     }
 
     console.error('[api/terminal/intel-policy] error:', error);

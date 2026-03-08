@@ -1,32 +1,44 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import type { Phase, Hypothesis } from '$lib/stores/gameState';
   import type { BattleTickState, BattlePriceTick } from '$lib/engine/battleResolver';
 
-  export let phase: Phase = 'DRAFT';
-  export let battleTick: BattleTickState | null = null;
-  export let hypothesis: Hypothesis | null = null;
-  export let prices: { BTC: number } = { BTC: 0 };
-  export let battleResult: string | null = null;
-  export let battlePriceHistory: BattlePriceTick[] = [];
-  export let activeAgents: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }> = [];
+  interface Props {
+    phase?: Phase;
+    battleTick?: BattleTickState | null;
+    hypothesis?: Hypothesis | null;
+    prices?: { BTC: number };
+    battleResult?: string | null;
+    battlePriceHistory?: BattlePriceTick[];
+    activeAgents?: Array<{ id: string; name: string; icon: string; color: string; dir: string; conf: number }>;
+    onGoLobby?: () => void;
+    onPlayAgain?: () => void;
+  }
+  let {
+    phase = 'DRAFT',
+    battleTick = null,
+    hypothesis = null,
+    prices = { BTC: 0 },
+    battleResult = null,
+    battlePriceHistory = [],
+    activeAgents = [],
+    onGoLobby = () => {},
+    onPlayAgain = () => {},
+  }: Props = $props();
 
-  const dispatch = createEventDispatcher();
+  const isBattle = $derived(phase === 'BATTLE');
+  const isResult = $derived(phase === 'RESULT');
+  const currentPrice = $derived(battleTick?.currentPrice ?? prices.BTC);
+  const pnl = $derived(battleTick?.pnlPercent ?? 0);
+  const pnlPositive = $derived(pnl >= 0);
+  const distToTP = $derived(battleTick?.distToTP ?? 0);
+  const distToSL = $derived(battleTick?.distToSL ?? 0);
+  const rr = $derived(hypothesis?.rr ?? 0);
+  const dir = $derived(hypothesis?.dir ?? 'NEUTRAL');
+  const timeProgress = $derived(battleTick?.timeProgress ?? 0);
 
-  $: isBattle = phase === 'BATTLE';
-  $: isResult = phase === 'RESULT';
-  $: currentPrice = battleTick?.currentPrice ?? prices.BTC;
-  $: pnl = battleTick?.pnlPercent ?? 0;
-  $: pnlPositive = pnl >= 0;
-  $: distToTP = battleTick?.distToTP ?? 0;
-  $: distToSL = battleTick?.distToSL ?? 0;
-  $: rr = hypothesis?.rr ?? 0;
-  $: dir = hypothesis?.dir ?? 'NEUTRAL';
-  $: timeProgress = battleTick?.timeProgress ?? 0;
-
-  $: tpGlow = distToTP > 80;
-  $: slGlow = distToSL > 80;
-  $: topBarClass = tpGlow ? 'top-bar glow-green' : slGlow ? 'top-bar glow-red' : 'top-bar';
+  const tpGlow = $derived(distToTP > 80);
+  const slGlow = $derived(distToSL > 80);
+  const topBarClass = $derived(tpGlow ? 'top-bar glow-green' : slGlow ? 'top-bar glow-red' : 'top-bar');
 
   // Format price
   function fmtPrice(p: number): string {
@@ -40,7 +52,7 @@
   }
 
   // Timer display
-  $: timerSec = battleTick ? Math.max(0, Math.ceil((battleTick.duration - battleTick.elapsed) / 1000)) : 0;
+  const timerSec = $derived(battleTick ? Math.max(0, Math.ceil((battleTick.duration - battleTick.elapsed) / 1000)) : 0);
 </script>
 
 <div class="chart-war" class:battle={isBattle}>
@@ -117,8 +129,8 @@
         </div>
         <div class="result-pnl" class:positive={pnlPositive}>{fmtPnl(pnl)}</div>
         <div class="result-actions">
-          <button class="btn-lobby" on:click={() => dispatch('goLobby')}>LOBBY</button>
-          <button class="btn-again" on:click={() => dispatch('playAgain')}>AGAIN</button>
+          <button class="btn-lobby" onclick={() => onGoLobby()}>LOBBY</button>
+          <button class="btn-again" onclick={() => onPlayAgain()}>AGAIN</button>
         </div>
       </div>
     {/if}
@@ -180,7 +192,7 @@
     color: #E8967D;
   }
   .sep {
-    color: rgba(240, 237, 228, 0.15);
+    color: rgba(240, 237, 228, 0.5);
     font-size: 10px;
   }
   .btc-price {
@@ -201,7 +213,7 @@
     gap: 6px;
   }
   .dist-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1px;
     width: 16px;
@@ -223,7 +235,7 @@
   .tp-fill { background: var(--grn, #00ff88); }
   .sl-fill { background: var(--red, #ff2d55); }
   .dist-val {
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(240, 237, 228, 0.5);
     width: 28px;
     text-align: right;
@@ -262,7 +274,7 @@
   }
   .chart-note {
     font-size: 9px;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
   }
 
   /* ── Bottom Bar ── */
@@ -344,7 +356,7 @@
     border-radius: 6px;
   }
   .rr-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240, 237, 228, 0.5);
     letter-spacing: 1px;
@@ -407,7 +419,7 @@
   }
   .result-actions button:hover {
     background: rgba(240, 237, 228, 0.1);
-    border-color: rgba(240, 237, 228, 0.4);
+    border-color: rgba(240, 237, 228, 0.55);
   }
   .btn-again {
     border-color: rgba(232, 150, 125, 0.4) !important;
@@ -435,13 +447,13 @@
   }
   .waiting-msg {
     font-size: 12px;
-    color: rgba(240, 237, 228, 0.4);
+    color: rgba(240, 237, 228, 0.55);
     animation: blink 2s ease-in-out infinite;
   }
   .waiting-price {
     font-size: 16px;
     font-weight: 700;
-    color: rgba(240, 237, 228, 0.3);
+    color: rgba(240, 237, 228, 0.5);
     font-variant-numeric: tabular-nums;
   }
 

@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { isValidEthAddress, issueWalletNonce, normalizeEthAddress } from '$lib/server/walletAuthRepository';
 import { authNonceLimiter } from '$lib/server/rateLimit';
 import { readAuthBodyWithTurnstile, runAuthAbuseGuard } from '$lib/server/authSecurity';
+import { getErrorMessage, getErrorCode } from '$lib/utils/errorUtils';
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   const fallbackIp = getClientAddress();
@@ -63,14 +64,14 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
       message: issued.message,
       expiresAt: issued.expiresAt,
     });
-  } catch (error: any) {
-    if (error?.code === '42P01') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === '42P01') {
       return json({ error: 'auth_nonces table is missing. Run migration 0003 first.' }, { status: 500 });
     }
-    if (error?.code === '42501') {
+    if (getErrorCode(error) === '42501') {
       return json({ error: 'Database role lacks permissions for auth_nonces setup. Run migration 0003 with owner role.' }, { status: 500 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+    if (getErrorMessage(error).includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[auth/nonce] unexpected error:', error);

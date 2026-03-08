@@ -3,22 +3,8 @@ import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { UUID_RE } from '$lib/server/apiValidation';
+import { mapCopyTradeRunRow, type CopyTradeRunRow } from '$lib/server/copyTradeRunMapper';
 import { errorContains } from '$lib/utils/errorUtils';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRow(row: Record<string, any>) {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    selectedSignalIds: row.selected_signal_ids ?? [],
-    draft: row.draft ?? {},
-    published: Boolean(row.published),
-    publishedTradeId: row.published_trade_id,
-    publishedSignalId: row.published_signal_id,
-    createdAt: new Date(row.created_at).getTime(),
-    publishedAt: row.published_at ? new Date(row.published_at).getTime() : null,
-  };
-}
 
 export const GET: RequestHandler = async ({ cookies, params }) => {
   try {
@@ -28,7 +14,7 @@ export const GET: RequestHandler = async ({ cookies, params }) => {
     const id = params.id;
     if (!id || !UUID_RE.test(id)) return json({ error: 'Invalid run id' }, { status: 400 });
 
-    const result = await query(
+    const result = await query<CopyTradeRunRow>(
       `
         SELECT
           id, user_id, selected_signal_ids, draft, published,
@@ -41,7 +27,7 @@ export const GET: RequestHandler = async ({ cookies, params }) => {
     );
 
     if (!result.rowCount) return json({ error: 'Copy-trade run not found' }, { status: 404 });
-    return json({ success: true, run: mapRow(result.rows[0]) });
+    return json({ success: true, run: mapCopyTradeRunRow(result.rows[0]) });
   } catch (error: unknown) {
     if (errorContains(error, 'DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });

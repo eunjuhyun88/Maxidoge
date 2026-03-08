@@ -5,6 +5,7 @@
 
 import { writable, derived } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 
 export interface PnLEntry {
   id: string;
@@ -19,29 +20,13 @@ interface PnLState {
   entries: PnLEntry[];
 }
 
-const STORAGE_KEY = STORAGE_KEYS.pnl;
 const MAX_ENTRIES = 500;
 
-function loadPnL(): PnLState {
-  if (typeof window === 'undefined') return { entries: [] };
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
-  } catch {}
-  return { entries: [] };
-}
+export const pnlStore = writable<PnLState>(
+  loadFromStorage<PnLState>(STORAGE_KEYS.pnl, { entries: [] })
+);
 
-export const pnlStore = writable<PnLState>(loadPnL());
-
-// Persist (debounced)
-let _pnlSaveTimer: ReturnType<typeof setTimeout> | null = null;
-pnlStore.subscribe(s => {
-  if (typeof window === 'undefined') return;
-  if (_pnlSaveTimer) clearTimeout(_pnlSaveTimer);
-  _pnlSaveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-  }, 300);
-});
+autoSave(pnlStore, STORAGE_KEYS.pnl);
 
 // Derived stores
 export const pnlEntries = derived(pnlStore, $s => $s.entries);

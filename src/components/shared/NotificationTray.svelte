@@ -1,18 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { notifications, unreadCount, seedNotifications, type Notification, type NotificationType } from '$lib/stores/notificationStore';
+  import { notifications, unreadCount, type Notification, type NotificationType } from '$lib/stores/notificationsStore';
 
-  let open = false;
-  let items: Notification[] = [];
-  let count = 0;
-
-  $: items = $notifications;
-  $: count = $unreadCount;
+  let open = $state(false);
+  const items = $derived($notifications);
+  const count = $derived($unreadCount);
 
   onMount(() => {
     void (async () => {
       await notifications.hydrate();
-      seedNotifications();
     })();
   });
 
@@ -73,7 +69,7 @@
 </script>
 
 <!-- Bell Button -->
-<button class="bell-btn" on:click={toggle} aria-label="Notifications">
+<button class="bell-btn" onclick={toggle} aria-label="Notifications">
   <span class="bell-icon">🔔</span>
   {#if count > 0}
     <span class="bell-badge">{count > 9 ? '9+' : count}</span>
@@ -82,7 +78,7 @@
 
 <!-- Overlay -->
 {#if open}
-  <button class="notif-overlay" on:click={close} aria-label="Close notifications"></button>
+  <button class="notif-overlay" onclick={close} aria-label="Close notifications"></button>
 {/if}
 
 <!-- Tray Panel -->
@@ -90,10 +86,10 @@
   <div class="tray-header">
     <span class="tray-title">NOTIFICATIONS</span>
     <div class="tray-actions">
-      <button class="tray-action" on:click={handleMarkAllRead}>MARK ALL READ</button>
-      <button class="tray-action danger" on:click={handleClearAll}>CLEAR ALL</button>
+      <button class="tray-action" onclick={handleMarkAllRead}>MARK ALL READ</button>
+      <button class="tray-action danger" onclick={handleClearAll}>CLEAR ALL</button>
     </div>
-    <button class="tray-close" on:click={close}>✕</button>
+    <button class="tray-close" onclick={close}>✕</button>
   </div>
 
   <div class="tray-list">
@@ -107,8 +103,8 @@
           style="border-left-color: {typeColor(notif.type)}"
           role="button"
           tabindex="0"
-          on:click={() => handleMarkRead(notif.id)}
-          on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleMarkRead(notif.id); }}
+          onclick={() => handleMarkRead(notif.id)}
+          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleMarkRead(notif.id); }}
         >
           <div class="notif-icon">{typeIcon(notif.type)}</div>
           <div class="notif-content">
@@ -119,7 +115,7 @@
             <div class="notif-body">{notif.body}</div>
           </div>
           {#if notif.dismissable}
-            <button class="notif-dismiss" on:click|stopPropagation={() => handleDismiss(notif.id)}>✕</button>
+            <button class="notif-dismiss" onclick={(e: MouseEvent) => { e.stopPropagation(); handleDismiss(notif.id); }}>✕</button>
           {/if}
         </div>
       {/each}
@@ -131,8 +127,8 @@
   /* ── Bell Button ── */
   .bell-btn {
     position: fixed;
-    bottom: 72px;
-    right: 18px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    right: 12px;
     z-index: 200;
     width: 44px;
     height: 44px;
@@ -161,7 +157,7 @@
     background: var(--red);
     color: #fff;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     min-width: 18px;
     height: 18px;
@@ -172,6 +168,13 @@
     border: 2px solid #000;
     letter-spacing: 0.5px;
     animation: pulse 2s ease infinite;
+  }
+
+  @media (min-width: 1024px) {
+    .bell-btn {
+      bottom: 26px;
+      right: 18px;
+    }
   }
 
   /* ── Overlay ── */
@@ -232,7 +235,7 @@
   }
   .tray-action {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     color: var(--dim);
@@ -337,14 +340,14 @@
   }
   .notif-time {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     color: var(--dim);
     flex-shrink: 0;
     margin-left: auto;
   }
   .notif-body {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: var(--fg-medium);
     line-height: var(--lh-relaxed);
     word-wrap: break-word;

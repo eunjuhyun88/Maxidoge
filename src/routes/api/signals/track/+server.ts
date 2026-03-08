@@ -10,40 +10,9 @@ import {
   toPositiveNumber,
 } from '$lib/server/apiValidation';
 import { enqueuePassportEventBestEffort } from '$lib/server/passportOutbox';
-
-interface TrackedSignalRow {
-  id: string;
-  user_id: string;
-  pair: string;
-  dir: 'LONG' | 'SHORT';
-  confidence: number;
-  entry_price: number;
-  current_price: number;
-  pnl_percent: number;
-  status: 'tracking' | 'expired' | 'converted';
-  source: string | null;
-  note: string | null;
-  tracked_at: string;
-  expires_at: string;
-}
-
-function mapSignal(row: TrackedSignalRow) {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    pair: row.pair,
-    dir: row.dir,
-    confidence: Number(row.confidence ?? 0),
-    entryPrice: Number(row.entry_price),
-    currentPrice: Number(row.current_price),
-    pnlPercent: Number(row.pnl_percent ?? 0),
-    status: row.status,
-    source: row.source || 'manual',
-    note: row.note || '',
-    trackedAt: new Date(row.tracked_at).getTime(),
-    expiresAt: new Date(row.expires_at).getTime(),
-  };
-}
+import { syncUserProfileProjection } from '$lib/server/profileProjection';
+import { mapTrackedSignalRow, type TrackedSignalRow } from '$lib/server/trackedSignalMapper';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 export const POST: RequestHandler = async ({ cookies, request }) => {
   try {
@@ -58,6 +27,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const currentPrice = toPositiveNumber(body?.currentPrice, entryPrice);
     const source = typeof body?.source === 'string' ? body.source.trim() : 'manual';
     const note = typeof body?.note === 'string' ? body.note.trim() : '';
+    const clientMutationId = typeof body?.clientMutationId === 'string' ? body.clientMutationId.trim() : null;
 
     const ttlHours = toBoundedInt(body?.ttlHours, 24, 1, 168);
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
@@ -88,7 +58,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       [user.id, result.rows[0].id, pair, dir, source, confidence, JSON.stringify({ note })]
     ).catch(() => undefined);
 
-    const signal = mapSignal(result.rows[0]);
+    const signal = mapTrackedSignalRow(result.rows[0]);
+    await syncUserProfileProjection(user.id).catch(() => undefined);
 
     await enqueuePassportEventBestEffort({
       userId: user.id,
@@ -111,9 +82,9 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       },
     });
 
-    return json({ success: true, signal });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+    return json({ success: true, signal: { ...signal, clientMutationId } });
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

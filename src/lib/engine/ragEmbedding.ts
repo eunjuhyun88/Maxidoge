@@ -18,6 +18,7 @@
 //   [255]     data completeness
 
 import type { FactorResult, MarketRegime } from './types';
+import { clamp } from '$lib/utils/math';
 
 // ─── 48 팩터 정규 순서 (OFFENSE → DEFENSE → CONTEXT) ─────────
 
@@ -563,6 +564,3 @@ export function computeDedupeHash(params: {
   return `dh_${Math.abs(hash).toString(36)}`;
 }
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}

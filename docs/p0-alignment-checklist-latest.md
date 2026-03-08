@@ -30,7 +30,7 @@ P0 범위에서 아래 4가지를 먼저 맞춘다.
 - [ ] `AGDEFS` 참조 파일 전수 치환 대상 확정
 - [ ] UI에서 사용하는 `id/name/icon/color/role` 필드 호환 어댑터 정의
 - [ ] `commander/scanner/guardian` 구형 역할 처리 방안 확정
-- [ ] `/arena`, `/terminal`, `/oracle`에서 동일 Agent 풀 렌더링 확인
+- [ ] `/arena`, `/terminal`, `/signals?view=ai`에서 동일 Agent 풀 렌더링 확인
 
 ## 점검 파일
 
@@ -41,7 +41,8 @@ P0 범위에서 아래 4가지를 먼저 맞춘다.
 - `src/components/arena/SquadConfig.svelte`
 - `src/routes/terminal/+page.svelte`
 - `src/components/terminal/WarRoom.svelte`
-- `src/routes/oracle/+page.svelte`
+- `src/routes/signals/+page.svelte`
+- `src/components/community/OracleLeaderboard.svelte`
 - `src/lib/stores/agentData.ts`
 
 ## 완료 기준
@@ -157,4 +158,3 @@ P0 범위에서 아래 4가지를 먼저 맞춘다.
 3. Spec 연결
 4. API 스캐폴딩
 5. 회귀 점검 및 문서 동기화
-

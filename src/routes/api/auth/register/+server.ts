@@ -20,6 +20,7 @@ import {
 } from '$lib/server/walletAuthRepository';
 import { authRegisterLimiter } from '$lib/server/rateLimit';
 import { readAuthBodyWithTurnstile, runAuthAbuseGuard } from '$lib/server/authSecurity';
+import { getErrorMessage, getErrorCode } from '$lib/utils/errorUtils';
 
 const EVM_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
 
@@ -154,11 +155,11 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
         createdAt: new Date(createdAt).toISOString(),
       },
     });
-  } catch (error: any) {
-    if (error?.code === '23505') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === '23505') {
       return json({ error: 'Email or nickname already exists' }, { status: 409 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+    if (getErrorMessage(error).includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     console.error('[auth/register] unexpected error:', error);

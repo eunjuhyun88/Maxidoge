@@ -14,7 +14,8 @@
 //        alertEngine.start();   // called from +layout.svelte or terminal page
 //        alertEngine.stop();    // on destroy if needed
 
-import { notifications, toasts } from '$lib/stores/notificationStore';
+import { notifications } from '$lib/stores/notificationsStore';
+import { toasts } from '$lib/stores/toastStore';
 
 // ── Types ────────────────────────────────────────────────────
 

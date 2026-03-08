@@ -1,15 +1,14 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { toasts, type Toast, type ToastLevel } from '$lib/stores/notificationStore';
+  import { toasts, type Toast, type ToastLevel } from '$lib/stores/toastStore';
 
-  let items: Toast[] = [];
-  $: items = $toasts;
+  const items = $derived($toasts);
 
   // Auto-dismiss timer map
   let timers: Record<string, ReturnType<typeof setTimeout>> = {};
 
   // Set auto-dismiss timers when items change
-  $: {
+  $effect(() => {
     for (const toast of items) {
       if (!timers[toast.id]) {
         timers[toast.id] = setTimeout(() => {
@@ -18,7 +17,7 @@
         }, 7000);
       }
     }
-  }
+  });
 
   onDestroy(() => {
     for (const id of Object.keys(timers)) {
@@ -72,7 +71,7 @@
         <span class="toast-title">{toast.title}</span>
         <span class="toast-score">SCORE: {toast.score}</span>
       </div>
-      <button class="toast-dismiss" on:click={() => dismiss(toast.id)}>✕</button>
+      <button class="toast-dismiss" onclick={() => dismiss(toast.id)}>✕</button>
       <div class="toast-timer-bar"></div>
     </div>
   {/each}
@@ -138,7 +137,7 @@
 
   .toast-badge {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1.5px;
     padding: 2px 7px;
@@ -168,7 +167,7 @@
 
   .toast-score {
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 2px;
     color: var(--dim);

@@ -1,0 +1,70 @@
+/* ═══════════════════════════════════════════════════════════
+   Terminal Design Tokens
+   ═══════════════════════════════════════════════════════════
+   Single source of truth for all terminal component visuals.
+   Inherits from --term-* (defined in terminal/+page.svelte)
+   with hard fallbacks for standalone preview.
+
+   Usage in any terminal child component:
+     @import '../terminal-tokens.css';          (warroom/, intel/)
+     @import './terminal-tokens.css';           (same dir)
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Base RGB channels (for arbitrary opacity) ── */
+:root {
+  --t-accent-rgb: 232, 150, 125;
+  --t-text-rgb: 240, 237, 228;
+  --t-white-rgb: 255, 255, 255;
+  --t-live-rgb: 135, 220, 190;
+  --t-danger-rgb: 216, 107, 121;
+}
+
+/* ── Semantic Color Tokens ── */
+/* Accent (salmon) */
+/* --t-accent: var(--term-accent, #e8967d);  — use via parent cascade */
+
+/* ── Accent Opacity Scale ─────────────────────────────── */
+/* bg:    .02–.05  — subtle backgrounds, hover hints      */
+/* light: .06–.12  — hover states, tab active bg           */
+/* mid:   .14–.22  — borders, active button bg             */
+/* bold:  .25–.45  — prominent borders, scrollbar thumb    */
+/* text:  .5–.95   — text, icon fills                      */
+
+/* ── Spacing Scale (4px base) ── */
+/* Inherited from parent --space-N, with local aliases:
+   --t-sp-1: var(--space-1, 4px);
+   --t-sp-2: var(--space-2, 6px);
+   --t-sp-3: var(--space-3, 8px);
+   --t-sp-4: var(--space-4, 12px);
+   --t-sp-5: 16px;
+   --t-sp-6: 24px;
+*/
+
+/* ── Typography Scale ── */
+/* --t-fs-2xs: 7px;  — micro labels */
+/* --t-fs-xs:  8px;  — badges, metadata */
+/* --t-fs-sm:  9px;  — secondary text, tabs */
+/* --t-fs-md:  10px; — body, buttons */
+/* --t-fs-base:11px; — primary text */
+/* --t-fs-lg:  12px; — section headers */
+/* --t-fs-xl:  14px; — stat values */
+
+/* ── Border Radius ── */
+/* --t-radius-sm:   3px;  — subtle rounding */
+/* --t-radius-md:   4px;  — cards, buttons */
+/* --t-radius-lg:   8px;  — panels */
+/* --t-radius-pill: 999px; — pills, badges */
+
+/* ── Transitions ── */
+/* --t-ease-fast: .12s ease-out;  — hover feedback */
+/* --t-ease-std:  .15s ease-out;  — standard transitions */
+/* --t-ease-slow: .25s ease-out;  — panel expand/collapse */
+
+/* ── Focus Visible (accessibility) ── */
+/* Keyboard users get a visible outline; mouse clicks don't. */
+
+/* ── Shared scrollbar (thin, accent-tinted) ── */
+/* Applied by parent .terminal-shell :global() already.
+   Components needing horizontal scroll should set:
+     scrollbar-color: rgba(var(--t-accent-rgb), .35) transparent;
+*/

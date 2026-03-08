@@ -42,9 +42,10 @@ export async function ensurePolygonChain(providerKey: WalletProviderKey): Promis
       params: [{ chainId: POLYGON_CHAIN_ID }],
     });
     return true;
-  } catch (switchError: any) {
+  } catch (switchError: unknown) {
     // Chain not added to wallet — try adding it
-    if (switchError?.code === 4902) {
+    const errCode = (switchError as { code?: number })?.code;
+    if (errCode === 4902) {
       try {
         await provider.request({
           method: 'wallet_addEthereumChain',
@@ -56,7 +57,7 @@ export async function ensurePolygonChain(providerKey: WalletProviderKey): Promis
       }
     }
     // User rejected switch
-    if (switchError?.code === 4001) return false;
+    if (errCode === 4001) return false;
     return false;
   }
 }
@@ -120,8 +121,9 @@ export async function ensureArbitrumChain(providerKey: WalletProviderKey): Promi
       params: [{ chainId: ARBITRUM_CHAIN_ID }],
     });
     return true;
-  } catch (switchError: any) {
-    if (switchError?.code === 4902) {
+  } catch (switchError: unknown) {
+    const errCode = (switchError as { code?: number })?.code;
+    if (errCode === 4902) {
       try {
         await provider.request({
           method: 'wallet_addEthereumChain',
@@ -132,7 +134,7 @@ export async function ensureArbitrumChain(providerKey: WalletProviderKey): Promi
         return false;
       }
     }
-    if (switchError?.code === 4001) return false;
+    if (errCode === 4001) return false;
     return false;
   }
 }

@@ -5,6 +5,7 @@
 
 import { writable, derived } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import {
   createSimulatedSignature,
   createSimulatedWalletConnection
@@ -76,35 +77,24 @@ const defaultWallet: WalletState = {
 
 // Load from localStorage
 function loadWallet(): WalletState {
-  if (typeof window === 'undefined') return defaultWallet;
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.wallet);
-    if (saved) {
-      const merged = { ...defaultWallet, ...JSON.parse(saved) };
-      const provider = normalizeProvider(merged.provider);
-      return {
-        ...merged,
-        provider,
-        chain: typeof merged.chain === 'string' && merged.chain.trim() ? merged.chain.toUpperCase() : defaultWallet.chain,
-        phase: resolveLifecyclePhase(merged.matchesPlayed, merged.totalLP)
-      };
-    }
-  } catch {}
-  return defaultWallet;
+  const saved = loadFromStorage<Partial<WalletState>>(STORAGE_KEYS.wallet, null as unknown as Partial<WalletState>);
+  if (!saved) return defaultWallet;
+  const merged = { ...defaultWallet, ...saved };
+  const provider = normalizeProvider(merged.provider);
+  return {
+    ...merged,
+    provider,
+    chain: typeof merged.chain === 'string' && merged.chain.trim() ? merged.chain.toUpperCase() : defaultWallet.chain,
+    phase: resolveLifecyclePhase(merged.matchesPlayed, merged.totalLP)
+  };
 }
 
 export const walletStore = writable<WalletState>(loadWallet());
 
-// Persist (300ms 디바운스 — 매 업데이트마다 JSON.stringify + localStorage 쓰기 방지)
-let _walletPersistTimer: ReturnType<typeof setTimeout> | null = null;
-walletStore.subscribe(w => {
-  if (typeof window === 'undefined') return;
-  if (_walletPersistTimer) clearTimeout(_walletPersistTimer);
-  _walletPersistTimer = setTimeout(() => {
-    const { showWalletModal, walletModalStep, signature, ...persistable } = w;
-    localStorage.setItem(STORAGE_KEYS.wallet, JSON.stringify(persistable));
-  }, 300);
-});
+autoSave(walletStore, STORAGE_KEYS.wallet, (w) => {
+  const { showWalletModal, walletModalStep, signature, ...persistable } = w;
+  return persistable;
+}, 300);
 
 // Derived stores
 export const isWalletConnected = derived(walletStore, $w => $w.connected);
