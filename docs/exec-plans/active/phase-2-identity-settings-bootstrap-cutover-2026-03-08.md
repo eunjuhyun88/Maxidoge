@@ -33,11 +33,13 @@ Already landed in the current monolith:
 2. `activity` contracts and wrapper seam now live in [activity.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/activity.ts#L1) and [activityApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/activityApi.ts#L1)
 3. durable notifications, toasts, and P0 override now live in separate stores under `src/lib/stores`
 4. [NotificationTray.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/NotificationTray.svelte#L1) no longer seeds demo notifications by default during hydration
+5. authenticated session authority now lives in [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) instead of [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+6. profile projection and client-derived profile metrics now split across [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1), [userProfileDerivedStatsStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileDerivedStatsStore.ts#L1), and the compatibility aggregate [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
 
 Still blocking full Phase 2 cutover:
 
-1. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) still mixes session mirror and wallet-modal UX
-2. [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1) still mixes server projection, local cache, and client-derived overlays
+1. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) still mirrors some auth-facing fields for compatibility and has not yet fully shed that compatibility layer
+2. `profile` still exposes a compatibility aggregate surface for existing consumers
 3. core route handlers still own too much inline SQL and mapping logic
 
 ## 2. Core Decision
@@ -115,33 +117,34 @@ Reason:
 
 ## 4. Current Problems That Block Clean Cutover
 
-## 4.1 Auth still mixes cookie authority and browser lifecycle assumptions
+## 4.1 Auth is now split at the store layer, but wallet compatibility remains
 
 Validated now:
 
 1. [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1) still normalizes legacy `success` envelopes into contract shapes locally
-2. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L158) hydrates authenticated identity from `/api/auth/session`
-3. the same store also owns wallet connection UX state such as `walletModalStep`, `signature`, and `showWalletModal`
+2. [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) now owns authenticated session hydration and cookie-backed identity state
+3. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) now behaves as wallet/modal shell state and mirrors auth state only for compatibility
 
 Implication:
 
-Phase 2 must not move `walletStore` wholesale.
-It must split:
+Phase 2 no longer needs to invent a new auth-session store.
+It now needs to finish removing compatibility-only auth fields from wallet consumers over time.
 
 1. server-derived session mirror
 2. browser-only wallet connection and modal flow
 
-## 4.2 Profile projection and client-derived stats still share one store
+## 4.2 Profile projection and derived metrics are now split, but the compatibility aggregate remains
 
 Validated now:
 
-1. [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L117) hydrates from both `/api/profile` and `/api/profile/passport`
-2. the same store persists a local cache to `localStorage`
-3. the same store derives secondary metrics from [matchHistoryStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/matchHistoryStore.ts#L1)
+1. [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1) now owns cached server projection and optimistic profile edits
+2. [userProfileDerivedStatsStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileDerivedStatsStore.ts#L1) now owns client-derived metrics from [matchHistoryStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/matchHistoryStore.ts#L1)
+3. [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1) is now the compatibility aggregate that merges those layers for existing consumers
 
 Implication:
 
-Phase 2 must separate:
+Phase 2 no longer needs to perform the first projection/derived split.
+It now needs to keep trimming direct consumers toward the narrower stores where useful.
 
 1. server profile projection
 2. server passport projection
@@ -343,7 +346,7 @@ Do not do these in Phase 2:
 The next concrete slice after this document should be:
 
 1. split auth-session mirror from wallet-modal UX state
-2. split user profile projection from client-derived overlays
+2. keep moving direct consumers from compatibility stores toward the narrower auth/profile stores
 3. extract shared notification and activity server mappers/services
 4. keep `passport/learning/**` and venue auth out of that slice
 

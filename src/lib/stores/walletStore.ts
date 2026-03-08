@@ -7,11 +7,14 @@ import { writable, derived } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
 import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import {
+  authSessionStore,
+  type AuthSessionState,
+} from './authSessionStore';
+import {
   createSimulatedSignature,
   createSimulatedWalletConnection
 } from '$lib/wallet/simulatedWallet';
 import { resolveLifecyclePhase } from './progressionRules';
-import { fetchAuthSession, type AuthUserPayload } from '$lib/api/auth';
 
 export type UserTier = 'guest' | 'registered' | 'connected' | 'verified';
 
@@ -92,7 +95,18 @@ function loadWallet(): WalletState {
 export const walletStore = writable<WalletState>(loadWallet());
 
 autoSave(walletStore, STORAGE_KEYS.wallet, (w) => {
-  const { showWalletModal, walletModalStep, signature, ...persistable } = w;
+  const {
+    email,
+    nickname,
+    tier,
+    showWalletModal,
+    walletModalStep,
+    signature,
+    ...persistable
+  } = w;
+  void email;
+  void nickname;
+  void tier;
   return persistable;
 }, 300);
 
@@ -100,9 +114,6 @@ autoSave(walletStore, STORAGE_KEYS.wallet, (w) => {
 export const isWalletConnected = derived(walletStore, $w => $w.connected);
 export const userTier = derived(walletStore, $w => $w.tier);
 export const userPhase = derived(walletStore, $w => $w.phase);
-
-let _authHydrated = false;
-let _authHydrationPromise: Promise<void> | null = null;
 
 function normalizeTier(value: unknown, fallback: UserTier): UserTier {
   const tier = typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -117,22 +128,23 @@ function toShortAddr(address: string | null): string | null {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-export function applyAuthenticatedUser(user: AuthUserPayload) {
-  walletStore.update((w) => {
-    const walletAddress = typeof user.walletAddress === 'string'
-      ? user.walletAddress
-      : typeof user.wallet === 'string'
-        ? user.wallet
-        : null;
-    const keepLiveConnection = w.connected && !!w.address;
-    const address = keepLiveConnection ? w.address : walletAddress;
-    const shortAddr = keepLiveConnection ? w.shortAddr : toShortAddr(address);
-    const phase = Number.isFinite(Number(user.phase)) ? Math.max(1, Number(user.phase)) : Math.max(1, w.phase);
+function applyAuthSessionToWalletState(wallet: WalletState, session: AuthSessionState): WalletState {
+  const user = session.user;
+  const keepLiveConnection = wallet.connected && !!wallet.address;
+  const walletAddress = typeof user?.walletAddress === 'string'
+    ? user.walletAddress
+    : typeof user?.wallet === 'string'
+      ? user.wallet
+      : null;
+  const address = keepLiveConnection ? wallet.address : walletAddress;
+  const shortAddr = keepLiveConnection ? wallet.shortAddr : toShortAddr(address);
 
+  if (user && session.authenticated) {
+    const phase = Number.isFinite(Number(user.phase)) ? Math.max(1, Number(user.phase)) : Math.max(1, wallet.phase);
     return {
-      ...w,
-      email: user.email || w.email,
-      nickname: user.nickname || w.nickname,
+      ...wallet,
+      email: user.email || null,
+      nickname: user.nickname || null,
       tier: normalizeTier(user.tier, keepLiveConnection ? 'connected' : 'registered'),
       phase,
       hasCompletedOnboarding: true,
@@ -141,45 +153,27 @@ export function applyAuthenticatedUser(user: AuthUserPayload) {
       address,
       shortAddr,
     };
-  });
-}
+  }
 
-export function clearAuthenticatedUser() {
-  walletStore.update((w) => ({
-    ...w,
+  if (!session.hydrated) {
+    return wallet;
+  }
+
+  return {
+    ...wallet,
     email: null,
     nickname: null,
-    tier: w.connected ? 'connected' : 'guest',
+    tier: wallet.connected ? 'connected' : 'guest',
     showWalletModal: false,
-    walletModalStep: w.connected ? 'connected' : 'welcome',
-  }));
+    walletModalStep: wallet.connected ? 'connected' : 'welcome',
+    address: wallet.connected ? wallet.address : null,
+    shortAddr: wallet.connected ? wallet.shortAddr : null,
+  };
 }
 
-export async function hydrateAuthSession(force = false) {
-  if (typeof window === 'undefined') return;
-  if (_authHydrated && !force) return;
-  if (_authHydrationPromise) return _authHydrationPromise;
-
-  _authHydrationPromise = (async () => {
-    try {
-      const res = await fetchAuthSession();
-      if (res.authenticated && res.user) {
-        applyAuthenticatedUser(res.user);
-      } else {
-        clearAuthenticatedUser();
-      }
-      _authHydrated = true;
-    } catch (error) {
-      console.warn('[walletStore] auth session hydrate failed', error);
-    }
-  })();
-
-  try {
-    await _authHydrationPromise;
-  } finally {
-    _authHydrationPromise = null;
-  }
-}
+authSessionStore.subscribe((session) => {
+  walletStore.update((wallet) => applyAuthSessionToWalletState(wallet, session));
+});
 
 // ═══ Actions ═══
 

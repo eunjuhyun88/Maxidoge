@@ -3,12 +3,11 @@
     walletStore,
     closeWalletModal,
     setWalletModalStep,
-    applyAuthenticatedUser,
-    clearAuthenticatedUser,
     connectWallet,
     signMessage,
     disconnectWallet
   } from '$lib/stores/walletStore';
+  import { applyAuthenticatedUser, clearAuthenticatedUser } from '$lib/stores/authSessionStore';
   import type { WalletState } from '$lib/stores/walletStore';
   import { loginAuth, logoutAuth, registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
   import {

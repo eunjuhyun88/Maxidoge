@@ -5705,3 +5705,66 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - route handlers still own inline SQL and have not yet been moved behind dedicated service/repository modules
   - `walletStore.ts` and `userProfileStore.ts` remain the larger unresolved Phase 2 boundary hotspots
 - Status: DONE
+
+## [2026-03-08 15:58:24 +0900] FINISH phase-2-auth-profile-store-split-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going after notifications/activity and split the next real Phase 2 hotspots: auth session vs wallet shell, and profile projection vs client-derived metrics
+- What changed:
+  - Added [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1)
+    - moved cookie-backed session hydration and authenticated user ownership out of `walletStore.ts`
+  - Updated [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+    - `walletStore` now consumes `authSessionStore` and acts as wallet/modal shell state with compatibility mirroring
+    - local persistence no longer treats `email`, `nickname`, and `tier` as authoritative persisted fields
+  - Updated [Header.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/Header.svelte#L1) and [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - moved auth-session function imports to the dedicated auth-session store
+  - Added [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1)
+    - moved cached server projection and optimistic profile edits into a dedicated projection store
+  - Added [userProfileDerivedStatsStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileDerivedStatsStore.ts#L1)
+    - moved client-derived metrics from match history into a dedicated derived store
+  - Replaced [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
+    - converted it into a compatibility aggregate that merges projection and derived stats for existing consumers
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded the landed auth/profile store split and narrowed the remaining blockers
+  - Updated [refresh-generated-context.mjs](/Users/ej/Downloads/maxidoge-clones/frontend/scripts/dev/refresh-generated-context.mjs#L1)
+    - added metadata for `authSessionStore`, `userProfileProjectionStore`, and `userProfileDerivedStatsStore`
+- Validation:
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `walletStore.ts` and `userProfileStore.ts` still expose compatibility read models, so full consumer migration is not complete yet
+  - Phase 2 route handlers still need deeper service/repository extraction
+- Status: DONE
+
+## [2026-03-08 18:22:18 +0900] FINISH arena-scene-contract-typing-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the arena refactor, close the uncommitted scene-shell contract slice, and make the new boundary explicit before pushing
+- What changed:
+  - Added [arenaMatchSceneTypes.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/arenaMatchSceneTypes.ts#L1)
+    - fixed the canonical typed contract for `ArenaMatchScene` alt-view props, result-panel props, and battle-layout bundle props
+    - replaced the old loose `Record<string, unknown>` contract with explicit `ArenaAltViewProps`, `ArenaResultPanelProps`, and `ArenaBattleLayoutSceneProps`
+  - Added [arenaSceneProps.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/selectors/arenaSceneProps.ts#L1)
+    - created the route-side typed wrapper seam for scene, result, chart, and battle-layout prop bundles
+    - locked the route-to-scene bundle handoff under a single canonical helper path instead of ad-hoc object literals
+  - Updated [ArenaMatchScene.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaMatchScene.svelte#L1)
+    - switched the component to the shared `ArenaMatchSceneProps` contract
+    - replaced ambiguous empty-object defaults with shape-safe defaults for alt-view and result-panel props
+    - removed the now-unused local prop-interface type imports after the shared contract cutover
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - routed scene/result/chart/layout bundle creation through the typed `arenaSceneProps.ts` helpers
+    - kept the route focused on controller/state ownership while the scene shell remains in `ArenaMatchScene.svelte`
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaMatchSceneTypes.ts` and `arenaSceneProps.ts` as the canonical scene-contract path so future refactors do not regress to untyped bundle props
+- Validation:
+  - `npm run check`: PASS
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+  - `npm run gate`: PASS
+  - server entry: `src/routes/arena/+page.svelte` = `159.42 kB`
+  - line counts: `src/routes/arena/+page.svelte` = `1015`, `src/components/arena/ArenaMatchScene.svelte` = `279`
+- Residual risks:
+  - `arenaSceneProps.ts` is intentionally a thin typed wrapper seam today; if scene bundle derivation grows, the next extraction should move real formatting logic there instead of back into `arena/+page.svelte`
+  - unrelated WIP remains dirty in `ChartIndicatorStrip.svelte` and `marketPulse`-related files and was intentionally excluded from this slice
+- Status: DONE
