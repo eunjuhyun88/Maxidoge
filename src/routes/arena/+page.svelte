@@ -23,9 +23,8 @@
     buildArenaViewAgentSummaries,
   } from '$lib/arena/selectors/arenaViewModel';
   import Lobby from '../../components/arena/Lobby.svelte';
-  import ArenaBattleLayout from '../../components/arena/ArenaBattleLayout.svelte';
+  import ArenaMatchScene from '../../components/arena/ArenaMatchScene.svelte';
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
-  import MatchHistory from '../../components/arena/MatchHistory.svelte';
   import { addMatchRecord } from '$lib/stores/matchHistoryStore';
   import { addPnLEntry } from '$lib/stores/pnlStore';
   import { onMount, onDestroy } from 'svelte';
@@ -41,12 +40,6 @@
   import { createArenaLiveEventRuntime } from '$lib/arena/feed/arenaLiveEventRuntime';
   import { createArenaBattleFeedRuntime } from '$lib/arena/feed/arenaBattleFeedRuntime';
   import { btcPrice } from '$lib/stores/priceStore';
-  import ViewPicker from '../../components/arena/ViewPicker.svelte';
-  import PhaseGuide from '../../components/arena/PhaseGuide.svelte';
-  import ResultPanel from '../../components/arena/ResultPanel.svelte';
-  import ChartWarView from '../../components/arena/views/ChartWarView.svelte';
-  import MissionControlView from '../../components/arena/views/MissionControlView.svelte';
-  import CardDuelView from '../../components/arena/views/CardDuelView.svelte';
   import type { ArenaResultState } from '$lib/arena/state/arenaTypes';
   import { createArenaTimerRegistry } from '$lib/arena/state/arenaTimerRegistry';
   import { createArenaPhaseTimerRuntime } from '$lib/arena/state/arenaPhaseTimerRuntime';
@@ -88,6 +81,12 @@
   import type { CharSpriteState, BattleTurn } from '$lib/engine/arenaCharacters';
   import { juice_shake, juice_flash, juice_confetti } from '$lib/engine/arenaGameJuice';
 
+  type MatchHistoryComponentType = typeof import('../../components/arena/MatchHistory.svelte').default;
+  type ResultPanelComponentType = typeof import('../../components/arena/ResultPanel.svelte').default;
+  type ChartWarViewComponentType = typeof import('../../components/arena/views/ChartWarView.svelte').default;
+  type MissionControlViewComponentType = typeof import('../../components/arena/views/MissionControlView.svelte').default;
+  type CardDuelViewComponentType = typeof import('../../components/arena/views/CardDuelView.svelte').default;
+
   const gs = $derived($gameState);
   const currentBtcPrice = $derived($btcPrice || gs.bases.BTC || 97000);
   const arenaModeDisplay = $derived(buildArenaModeDisplay(gs.arenaMode, gs.tournament, gs.pair));
@@ -98,6 +97,11 @@
   const arenaHypothesisBadge = $derived(buildArenaHypothesisBadge(gs.hypothesis));
   const arenaPhaseTrack = $derived(buildArenaPhaseTrack(gs.phase));
   const arenaPreviewDisplay = $derived(buildArenaPreviewDisplay(gs.hypothesis, gs.squadConfig));
+  let MatchHistoryComponent = $state<MatchHistoryComponentType | null>(null);
+  let ResultPanelComponent = $state<ResultPanelComponentType | null>(null);
+  let ChartWarViewComponent = $state<ChartWarViewComponentType | null>(null);
+  let MissionControlViewComponent = $state<MissionControlViewComponentType | null>(null);
+  let CardDuelViewComponent = $state<CardDuelViewComponentType | null>(null);
   let resultData = $state<ArenaResultState>(buildArenaResultStateSeed());
   const arenaAltViewProps = $derived({
     phase: gs.phase,
@@ -133,6 +137,45 @@
   let resultVisible = $state(false);
   const resultOverlayTitle = $derived(buildArenaResultOverlayTitle(gs.arenaMode, resultData.win));
   let floatingWords = $state<ArenaFloatingWord[]>([]);
+
+  function ensureMatchHistoryComponent() {
+    if (MatchHistoryComponent || typeof window === 'undefined') return;
+    void import('../../components/arena/MatchHistory.svelte').then((module) => {
+      MatchHistoryComponent = module.default;
+    });
+  }
+
+  function ensureResultPanelComponent() {
+    if (ResultPanelComponent || typeof window === 'undefined') return;
+    void import('../../components/arena/ResultPanel.svelte').then((module) => {
+      ResultPanelComponent = module.default;
+    });
+  }
+
+  function ensureAltArenaViewComponent(view: 'chart' | 'mission' | 'card') {
+    if (typeof window === 'undefined') return;
+
+    if (view === 'chart') {
+      if (ChartWarViewComponent) return;
+      void import('../../components/arena/views/ChartWarView.svelte').then((module) => {
+        ChartWarViewComponent = module.default;
+      });
+      return;
+    }
+
+    if (view === 'mission') {
+      if (MissionControlViewComponent) return;
+      void import('../../components/arena/views/MissionControlView.svelte').then((module) => {
+        MissionControlViewComponent = module.default;
+      });
+      return;
+    }
+
+    if (CardDuelViewComponent) return;
+    void import('../../components/arena/views/CardDuelView.svelte').then((module) => {
+      CardDuelViewComponent = module.default;
+    });
+  }
 
   // ═══════ CHARACTER-CENTERED ARENA STATE ═══════
   // Character sprite state per agent
@@ -829,6 +872,116 @@
     },
   });
 
+  const arenaBattleLayoutProps = $derived({
+    chartRailProps: {
+      chartPanelProps: arenaChartPanelProps,
+      onDragTP: arenaChartController.onDragTP,
+      onDragSL: arenaChartController.onDragSL,
+      onDragEntry: arenaChartController.onDragEntry,
+      hypothesisVisible,
+      hypothesisTimer,
+      onHypothesisSubmit: arenaPhaseController.submitHypothesis,
+      floatDir,
+      onSelectFloatDir: arenaShellController.selectFloatDir,
+      previewVisible,
+      previewDisplay: arenaPreviewDisplay,
+      onConfirmPreview: arenaPhaseController.confirmPreview,
+      score: gs.score,
+      scoreSummary: arenaScoreSummary,
+      streak: gs.streak,
+      wins: gs.wins,
+      losses: gs.losses,
+      lp: gs.lp,
+      arenaMode: gs.arenaMode,
+      arenaModeDisplay,
+      hypothesisBadge: arenaHypothesisBadge,
+      hypothesisDir: gs.hypothesis?.dir ?? null,
+      showMarkers,
+      onToggleMarkers: arenaChartController.toggleMarkers,
+      onTogglePositionVisibility: arenaChartController.togglePositionVisibility,
+      onGoLobby: arenaShellController.goLobby,
+    },
+    battleSidebarProps: {
+      missionText,
+      battlePhaseDisplay: arenaBattlePhaseDisplay,
+      vsMeter,
+      enemyHp: enemyHP,
+      battleHudDisplay: arenaBattleHudDisplay,
+      arenaParticles,
+      activeAgents,
+      charSprites,
+      currentTurnIdx,
+      battleTurns,
+      agentStates,
+      showVsSplash,
+      showCritical,
+      criticalText,
+      showCombo,
+      comboCount,
+      battleLogPreview: arenaBattleLogPreview,
+      battleLogCount: chatMessages.length,
+      rewardState,
+      onCloseReward: arenaResultController.closeReward,
+      resultVisible,
+      resultData,
+      streak: gs.streak,
+      fbScore: gs.fbScore,
+      pvpVisible,
+      resultOverlayTitle,
+      arenaModeDisplay,
+      score: gs.score,
+      hypothesis: gs.hypothesis,
+      onGoLobby: arenaShellController.goLobby,
+      onPlayAgain: arenaShellController.playAgain,
+      floatingWords,
+    },
+  });
+  const arenaMatchSceneProps = $derived({
+    arenaSyncStatus,
+    confirmingExit,
+    phaseTrack: arenaPhaseTrack,
+    arenaMode: gs.arenaMode,
+    arenaModeDisplay,
+    lp: gs.lp,
+    wins: gs.wins,
+    losses: gs.losses,
+    onConfirmGoLobby: arenaShellController.confirmGoLobby,
+    onToggleMatchHistory: arenaShellController.toggleMatchHistory,
+    MatchHistoryComponent,
+    matchHistoryOpen,
+    onCloseMatchHistory: arenaShellController.closeMatchHistory,
+    phase: gs.phase,
+    pair: gs.pair,
+    timeframe: gs.timeframe,
+    arenaView: gs.arenaView,
+    onSelectArenaView: arenaShellController.selectArenaView,
+    ChartWarViewComponent,
+    MissionControlViewComponent,
+    CardDuelViewComponent,
+    altViewProps: arenaAltViewProps,
+    resultVisible: gs.phase === 'RESULT' && resultVisible,
+    ResultPanelComponent,
+    resultPanelProps: arenaResultPanelProps,
+    onPlayAgain: arenaShellController.playAgain,
+    onLobby: arenaShellController.goLobby,
+    battleLayoutProps: arenaBattleLayoutProps,
+  });
+
+  $effect(() => {
+    if (matchHistoryOpen) {
+      ensureMatchHistoryComponent();
+    }
+  });
+
+  $effect(() => {
+    if (gs.arenaView === 'chart' || gs.arenaView === 'mission' || gs.arenaView === 'card') {
+      ensureAltArenaViewComponent(gs.arenaView);
+      if (gs.phase === 'RESULT' && resultVisible) {
+        ensureResultPanelComponent();
+      }
+    }
+  });
+
   onMount(() => {
     setPhaseInitCallback((phase) => {
       arenaPhaseController.onPhaseInit(phase);
@@ -853,181 +1006,17 @@
 </script>
 
 <div class="arena-page arena-space-theme">
-  <!-- API Sync Status -->
-  {#if arenaSyncStatus}
-    <div class="api-status {arenaSyncStatus.tone}">{arenaSyncStatus.label}</div>
-  {/if}
-
   {#if gs.inLobby}
     <Lobby />
   {:else if gs.phase === 'DRAFT'}
     <SquadConfig selectedAgents={gs.selectedAgents} ondeploy={onSquadDeploy} onback={onSquadBack} />
   {:else}
-    <!-- ═══════ TOP ARENA NAV BAR ═══════ -->
-    <div class="arena-topbar">
-      <button class="atb-back" onclick={arenaShellController.confirmGoLobby}>
-        {#if confirmingExit}
-          <span class="atb-confirm-pulse">EXIT? CLICK AGAIN</span>
-        {:else}
-          <span class="atb-arrow">←</span> LOBBY
-        {/if}
-      </button>
-      <div class="atb-phase-track">
-        {#each arenaPhaseTrack as step, idx}
-          <div class="atb-phase" class:active={step.active} class:done={step.done}>
-            <span class="atp-dot"></span><span class="atp-label">{step.label}</span>
-          </div>
-          {#if idx < arenaPhaseTrack.length - 1}
-            <div class="atb-connector"></div>
-          {/if}
-        {/each}
-      </div>
-      <div class="atb-right">
-        <div class="atb-mode" class:pvp={gs.arenaMode === 'PVP'} class:tour={gs.arenaMode === 'TOURNAMENT'}>
-          {arenaModeDisplay.fullLabel}
-        </div>
-        <div class="atb-stats">
-          <span class="atb-lp">⚡{gs.lp}</span>
-          <span class="atb-wl">{gs.wins}W-{gs.losses}L</span>
-        </div>
-        <button class="atb-hist" onclick={arenaShellController.toggleMatchHistory}>📋</button>
-      </div>
-    </div>
-    <MatchHistory visible={matchHistoryOpen} onclose={arenaShellController.closeMatchHistory} />
-
-    <!-- ═══════ PHASE GUIDE (all views) ═══════ -->
-    <div class="phase-guide-wrap">
-      <PhaseGuide phase={gs.phase} pair={gs.pair} timeframe={gs.timeframe} />
-    </div>
-
-    <!-- ═══════ VIEW PICKER (always visible) ═══════ -->
-    <div class="view-picker-bar">
-      <ViewPicker current={gs.arenaView} onselect={arenaShellController.selectArenaView} />
-    </div>
-
-    <!-- ═══════ VIEW SWITCHING ═══════ -->
-    {#if gs.arenaView !== 'arena'}
-      <div class="view-container">
-        {#if gs.arenaView === 'chart'}
-          <ChartWarView {...arenaAltViewProps} />
-        {:else if gs.arenaView === 'mission'}
-          <MissionControlView {...arenaAltViewProps} />
-        {:else if gs.arenaView === 'card'}
-          <CardDuelView {...arenaAltViewProps} />
-        {/if}
-
-        <!-- Result Panel for new views -->
-        {#if gs.phase === 'RESULT' && resultVisible}
-          <div class="result-panel-wrap">
-            <ResultPanel
-              {...arenaResultPanelProps}
-              onPlayAgain={arenaShellController.playAgain}
-              onLobby={arenaShellController.goLobby}
-            />
-          </div>
-        {/if}
-      </div>
-    {:else}
-      <ArenaBattleLayout
-        chartPanelProps={arenaChartPanelProps}
-        onDragTP={arenaChartController.onDragTP}
-        onDragSL={arenaChartController.onDragSL}
-        onDragEntry={arenaChartController.onDragEntry}
-        hypothesisVisible={hypothesisVisible}
-        hypothesisTimer={hypothesisTimer}
-        onHypothesisSubmit={arenaPhaseController.submitHypothesis}
-        floatDir={floatDir}
-        onSelectFloatDir={arenaShellController.selectFloatDir}
-        previewVisible={previewVisible}
-        previewDisplay={arenaPreviewDisplay}
-        onConfirmPreview={arenaPhaseController.confirmPreview}
-        score={gs.score}
-        scoreSummary={arenaScoreSummary}
-        streak={gs.streak}
-        wins={gs.wins}
-        losses={gs.losses}
-        lp={gs.lp}
-        arenaMode={gs.arenaMode}
-        arenaModeDisplay={arenaModeDisplay}
-        hypothesisBadge={arenaHypothesisBadge}
-        hypothesisDir={gs.hypothesis?.dir ?? null}
-        showMarkers={showMarkers}
-        onToggleMarkers={arenaChartController.toggleMarkers}
-        onTogglePositionVisibility={arenaChartController.togglePositionVisibility}
-        onGoLobby={arenaShellController.goLobby}
-        missionText={missionText}
-        battlePhaseDisplay={arenaBattlePhaseDisplay}
-        vsMeter={vsMeter}
-        enemyHp={enemyHP}
-        battleHudDisplay={arenaBattleHudDisplay}
-        arenaParticles={arenaParticles}
-        activeAgents={activeAgents}
-        charSprites={charSprites}
-        currentTurnIdx={currentTurnIdx}
-        battleTurns={battleTurns}
-        agentStates={agentStates}
-        showVsSplash={showVsSplash}
-        showCritical={showCritical}
-        criticalText={criticalText}
-        showCombo={showCombo}
-        comboCount={comboCount}
-        battleLogPreview={arenaBattleLogPreview}
-        battleLogCount={chatMessages.length}
-        rewardState={rewardState}
-        onCloseReward={arenaResultController.closeReward}
-        resultVisible={resultVisible}
-        resultData={resultData}
-        fbScore={gs.fbScore}
-        pvpVisible={pvpVisible}
-        resultOverlayTitle={resultOverlayTitle}
-        hypothesis={gs.hypothesis}
-        onPlayAgain={arenaShellController.playAgain}
-        floatingWords={floatingWords}
-      />
-    {/if}
+    <ArenaMatchScene {...arenaMatchSceneProps} />
   {/if}
 </div>
 
 <style>
   /* ═══ View Switching + New Components ═══ */
-  .lobby-view-picker {
-    position: relative;
-    z-index: 20;
-    padding: 0 16px 16px;
-  }
-  .view-picker-bar {
-    position: relative;
-    z-index: 20;
-    padding: 0 12px;
-    border-bottom: 1px solid rgba(255,105,180,.08);
-  }
-  .phase-guide-wrap {
-    position: relative;
-    z-index: 35;
-    padding: 0 10px;
-  }
-  .view-container {
-    flex: 1;
-    min-height: 0;
-    overflow: auto;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 12px;
-    gap: 12px;
-  }
-  .result-panel-wrap {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,.7);
-    backdrop-filter: blur(8px);
-  }
-
   .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; display: flex; flex-direction: column; }
   .arena-space-theme {
     --space-line: rgba(232, 150, 125, 0.25);
@@ -1069,154 +1058,6 @@
     to { transform: translate3d(2%, -2%, 0) scale(1.03); }
   }
 
-  .arena-topbar {
-    position: relative;
-    z-index: 40;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--space-line);
-    background:
-      linear-gradient(180deg, rgba(8, 19, 13, 0.95), rgba(7, 16, 11, 0.9)),
-      radial-gradient(circle at 8% -20%, rgba(232, 150, 125, 0.12), transparent 40%);
-    backdrop-filter: blur(10px);
-  }
-  .atb-back {
-    border: 1px solid var(--space-line-strong);
-    border-radius: 999px;
-    background: rgba(10, 26, 18, 0.72);
-    color: var(--space-text);
-    font: 800 10px/1 var(--fd);
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    padding: 7px 13px;
-    cursor: pointer;
-    transition: transform .16s ease, border-color .16s ease, background .16s ease;
-  }
-  .atb-back:hover {
-    transform: translateY(-1px);
-    border-color: rgba(232, 150, 125, 0.7);
-    background: rgba(10, 26, 18, 0.84);
-  }
-  .atb-arrow {
-    margin-right: 5px;
-  }
-  .atb-confirm-pulse {
-    color: #ff9c89;
-    animation: pulseWarn .9s ease-in-out infinite;
-  }
-  @keyframes pulseWarn {
-    0%, 100% { opacity: .8; }
-    50% { opacity: 1; }
-  }
-  .atb-phase-track {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 0;
-  }
-  .atb-phase {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    opacity: .62;
-    transition: opacity .2s ease, filter .2s ease;
-  }
-  .atb-phase.active,
-  .atb-phase.done {
-    opacity: 1;
-  }
-  .atp-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    border: 1px solid rgba(232, 150, 125, 0.35);
-    background: rgba(232, 150, 125, 0.2);
-    box-shadow: 0 0 0 rgba(232, 150, 125, 0);
-  }
-  .atb-phase.active .atp-dot {
-    background: #e8967d;
-    box-shadow: 0 0 10px rgba(232, 150, 125, 0.7);
-  }
-  .atb-phase.done .atp-dot {
-    background: #1effa0;
-    border-color: rgba(130, 255, 207, 0.9);
-  }
-  .atp-label {
-    font: 800 8px/1 var(--fd);
-    letter-spacing: 1.3px;
-    color: var(--space-text-soft);
-    white-space: nowrap;
-  }
-  .atb-connector {
-    width: 20px;
-    height: 1px;
-    margin: 0 4px;
-    background: linear-gradient(90deg, rgba(232, 150, 125, 0.1), rgba(232, 150, 125, 0.35), rgba(232, 150, 125, 0.1));
-  }
-  .atb-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .atb-mode {
-    border: 1px solid rgba(232, 150, 125, 0.4);
-    border-radius: 999px;
-    background: rgba(232, 150, 125, 0.1);
-    color: #e8967d;
-    font: 800 8px/1 var(--fd);
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    padding: 4px 8px;
-  }
-  .atb-mode.pvp {
-    border-color: rgba(255, 158, 112, 0.7);
-    background: rgba(198, 93, 52, 0.18);
-    color: #ffd7bb;
-  }
-  .atb-mode.tour {
-    border-color: rgba(249, 199, 127, 0.72);
-    background: rgba(186, 133, 54, 0.18);
-    color: #ffdeb2;
-  }
-  .atb-stats {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    font: 700 8px/1 var(--fm);
-    color: var(--space-text-soft);
-  }
-  .atb-lp {
-    color: #ffd39e;
-  }
-  .atb-hist {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 1px solid rgba(232, 150, 125, 0.4);
-    background: rgba(10, 26, 18, 0.8);
-    color: #f0ede4;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .atb-hist:hover {
-    border-color: rgba(232, 150, 125, 0.6);
-    background: rgba(232, 150, 125, 0.12);
-  }
-
-  .live-event-stack {
-    position: absolute;
-    z-index: 21;
-    top: 70px;
-    left: 10px;
-    width: min(328px, calc(100% - 220px));
-    display: grid;
-    gap: 7px;
-    pointer-events: none;
-  }
-
   /* ═══ GAME JUICE KEYFRAMES ═══ */
   :global(.jc-shake-light) { animation: jcShakeL .3s ease; }
   :global(.jc-shake-medium) { animation: jcShakeM .35s ease; }
@@ -1234,159 +1075,4 @@
   @keyframes jcFly { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-60px) scale(1.3); } }
   :global(.jc-confetti) { position: fixed; top: -10px; z-index: 9997; pointer-events: none; animation: jcConfettiFall ease-out forwards; }
   @keyframes jcConfettiFall { 0% { opacity: 1; transform: translateY(0) rotate(0deg); } 100% { opacity: 0; transform: translateY(100vh) rotate(720deg); } }
-
-  @media (max-width: 1024px) {
-    .atb-phase-track {
-      justify-content: flex-start;
-      overflow-x: auto;
-      scrollbar-width: none;
-      -webkit-overflow-scrolling: touch;
-    }
-    .atb-phase-track::-webkit-scrollbar {
-      display: none;
-    }
-    .live-event-stack {
-      width: min(288px, calc(100% - 190px));
-    }
-  }
-  @media (max-width: 1024px) {
-    .arena-topbar {
-      grid-template-columns: 1fr auto;
-      grid-template-areas:
-        'back right'
-        'track track';
-      row-gap: 8px;
-    }
-    .atb-back {
-      grid-area: back;
-      justify-self: start;
-    }
-    .atb-right {
-      grid-area: right;
-      justify-self: end;
-    }
-    .atb-phase-track {
-      grid-area: track;
-      justify-content: flex-start;
-      width: 100%;
-    }
-    .live-event-stack {
-      width: min(300px, calc(100% - 18px));
-      top: 106px;
-    }
-  }
-
-  @media (max-width: 768px) {
-    .atp-label {
-      font-size: 9px;
-      letter-spacing: 1px;
-    }
-    .atb-connector {
-      width: 12px;
-      margin: 0 3px;
-    }
-    .atb-back {
-      font-size: 9px;
-      padding: 6px 10px;
-    }
-    .atb-hist {
-      width: 28px;
-      height: 28px;
-    }
-    .live-event-stack {
-      top: 98px;
-    }
-  }
-
-  /* ── Wallet Gate ── */
-  .wallet-gate {
-    position: absolute;
-    inset: 0;
-    z-index: 90;
-    background: rgba(0,0,0,.85);
-    backdrop-filter: blur(8px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .wg-card {
-    background: #111;
-    border: 4px solid var(--yel);
-    border-radius: 16px;
-    box-shadow: 0 0 40px rgba(232,150,125,.15), 8px 8px 0 #000;
-    padding: 40px 48px;
-    text-align: center;
-    max-width: 400px;
-    position: relative;
-    overflow: hidden;
-  }
-  .wg-card::before {
-    content: '';
-    position: absolute;
-    inset: -50%;
-    background: repeating-conic-gradient(transparent 0deg 8deg, rgba(232,150,125,.04) 8deg 16deg);
-    animation: spin 60s linear infinite;
-    z-index: 0;
-  }
-  .wg-icon { font-size: 48px; margin-bottom: 12px; position: relative; z-index: 1; }
-  .wg-title {
-    font-family: var(--fd);
-    font-size: 22px;
-    font-weight: 900;
-    letter-spacing: 4px;
-    color: var(--yel);
-    margin-bottom: 8px;
-    position: relative; z-index: 1;
-  }
-  .wg-sub {
-    font-family: var(--fm);
-    font-size: 11px;
-    color: rgba(255,255,255,.5);
-    line-height: 1.5;
-    margin-bottom: 20px;
-    position: relative; z-index: 1;
-  }
-  .wg-btn {
-    font-family: var(--fd);
-    font-size: 13px;
-    font-weight: 900;
-    letter-spacing: 3px;
-    padding: 12px 32px;
-    border-radius: 24px;
-    border: 3px solid #000;
-    box-shadow: 4px 4px 0 #000;
-    cursor: pointer;
-    background: var(--pk);
-    color: #fff;
-    transition: all .2s;
-    position: relative; z-index: 1;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .wg-btn:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #000; background: #ff1a8a; }
-  .wg-btn:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
-  .wg-hint {
-    font-family: var(--fm);
-    font-size: 9px;
-    color: rgba(255,255,255,.5);
-    margin-top: 14px;
-    letter-spacing: .5px;
-    position: relative; z-index: 1;
-  }
-
-  /* ═══════ API SYNC STATUS ═══════ */
-  .api-status {
-    position: fixed;
-    bottom: 8px;
-    right: 8px;
-    font-size: 10px;
-    padding: 2px 8px;
-    border-radius: 8px;
-    z-index: 100;
-    opacity: 0.7;
-    font-family: monospace;
-  }
-  .api-status.synced { background: rgba(0,170,68,0.2); color: #00aa44; }
-  .api-status.error { background: rgba(255,45,85,0.15); color: #ff6666; }
 </style>

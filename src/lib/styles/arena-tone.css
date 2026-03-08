@@ -254,32 +254,6 @@
 .arena-page .hlp.neg { color: var(--arena-bad); }
 .arena-page .hres { background: transparent; border: 1px solid currentColor; }
 
-/* wallet gate */
-.arena-page .wallet-gate {
-  background: rgba(2, 8, 5, 0.86);
-}
-
-.arena-page .wg-card {
-  background: linear-gradient(180deg, #10251a, #0c1c14);
-  border: 1px solid var(--arena-line);
-  box-shadow: var(--arena-shadow);
-}
-
-.arena-page .wg-title { color: var(--arena-accent); }
-.arena-page .wg-sub,
-.arena-page .wg-hint { color: var(--arena-text-muted); }
-
-.arena-page .wg-btn {
-  background: rgba(232, 150, 125, 0.2);
-  border: 1px solid var(--arena-line);
-  color: var(--arena-accent);
-  box-shadow: none;
-}
-
-.arena-page .wg-btn:hover {
-  background: rgba(232, 150, 125, 0.28);
-}
-
 .arena-page .api-status.synced {
   background: rgba(0, 204, 136, 0.15);
   color: var(--arena-good);
@@ -524,28 +498,6 @@
   color: var(--arena-text-muted);
 }
 
-/* BattleStage (legacy component) */
-.battle-stage {
-  background: linear-gradient(180deg, #08150f 0%, #06100c 100%);
-}
-
-.battle-stage .ground,
-.battle-stage .fcard,
-.battle-stage .agent-sprite,
-.battle-stage #phase,
-.battle-stage #ctable {
-  background: rgba(10, 22, 16, 0.88);
-  border-color: var(--arena-line);
-  color: var(--arena-text);
-  box-shadow: none;
-}
-
-.battle-stage .fdir.long { background: rgba(0, 204, 136, 0.2); color: var(--arena-good); }
-.battle-stage .fdir.short { background: rgba(255, 94, 122, 0.2); color: var(--arena-bad); }
-.battle-stage .fdir.neutral { background: rgba(220, 185, 112, 0.18); color: var(--arena-warn); }
-
-/* Readability boost (merged into rules above, duplicates removed) */
-
 /* Chart footer */
 .arena-page .chart-footer {
   border-top: 1px solid var(--arena-line-soft);
@@ -586,8 +538,7 @@
 }
 
 /* Lost-in-space tone for upgraded Arena flow */
-.arena-page.arena-space-theme,
-.arena-page.arena-space-theme .battle-stage {
+.arena-page.arena-space-theme {
   --arena-bg-0: #040916;
   --arena-bg-1: #071129;
   --arena-bg-2: #0a1734;
