@@ -9,13 +9,18 @@ function buildAgentFeedId(name: string) {
   return name.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
+function normalizeFeedDirection(dir?: string | null): Direction | undefined {
+  if (dir === 'LONG' || dir === 'SHORT' || dir === 'NEUTRAL') return dir;
+  return undefined;
+}
+
 export function createArenaBattleFeedRuntime(options: CreateArenaBattleFeedRuntimeOptions) {
   function addFeed(
     icon: string,
     name: string,
     color: string,
     text: string,
-    dir?: Direction | null,
+    dir?: string | null,
   ) {
     pushFeedItem({
       agentId: buildAgentFeedId(name),
@@ -23,7 +28,7 @@ export function createArenaBattleFeedRuntime(options: CreateArenaBattleFeedRunti
       agentIcon: icon,
       agentColor: color,
       text,
-      dir: dir || undefined,
+      dir: normalizeFeedDirection(dir),
       phase: options.getPhase(),
     });
   }

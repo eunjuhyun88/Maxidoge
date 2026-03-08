@@ -4,7 +4,7 @@
   import { recordAgentMatch } from '$lib/stores/agentData';
   import { AGDEFS } from '$lib/data/agents';
   import { sfx } from '$lib/audio/sfx';
-  import { PHASE_LABELS, DOGE_DEPLOYS, DOGE_BATTLE, DOGE_WIN, DOGE_LOSE, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
+  import { PHASE_LABELS, DOGE_WIN, DOGE_LOSE, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
   import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, resetPhaseInit, startAnalysisFromDraft } from '$lib/engine/gameLoop';
   import { determineActualDirection } from '$lib/engine/scoring';
   import {
@@ -39,8 +39,6 @@
   import type { AnalyzeResponse } from '$lib/api/arenaApi';
   import { mapAnalysisToC02 } from '../../components/arena/arenaState';
   import {
-    buildArenaChartDecorations,
-    buildArenaChartPositionFromHypothesis,
     createArenaChartBridgeState,
   } from '$lib/arena/adapters/arenaChartBridge';
   import { createArenaLiveEventRuntime } from '$lib/arena/feed/arenaLiveEventRuntime';
@@ -54,10 +52,7 @@
     type ArenaFloatingWord,
     type ArenaParticle,
   } from '$lib/arena/state/arenaVisualEffectsRuntime';
-  import {
-    createArenaBattlePresentationRuntime,
-    type ArenaBattleChatMessage,
-  } from '$lib/arena/battle/arenaBattlePresentationRuntime';
+  import type { ArenaBattleChatMessage } from '$lib/arena/battle/arenaBattlePresentationRuntime';
   import { createArenaRewardState } from '$lib/arena/reward/arenaRewardRuntime';
   import {
     createArenaLobbyTournamentSeed,
@@ -74,17 +69,11 @@
   import {
     createArenaChartController,
   } from '$lib/arena/controllers/arenaChartController';
-  import {
-    createArenaBattleController,
-  } from '$lib/arena/controllers/arenaBattleController';
   import { createArenaBattleStateBridge } from '$lib/arena/controllers/arenaBattleStateBridge';
   import { createArenaPageStateBridge } from '$lib/arena/controllers/arenaPageStateBridge';
   import { createArenaGameStateBridge } from '$lib/arena/controllers/arenaGameStateBridge';
   import { createArenaUiStateBridge } from '$lib/arena/controllers/arenaUiStateBridge';
-  import {
-    createArenaPhaseController,
-  } from '$lib/arena/controllers/arenaPhaseController';
-  import { createArenaAnalysisPresentationRuntime } from '$lib/arena/controllers/arenaAnalysisPresentationRuntime';
+  import { createArenaPhaseRuntimeBundle } from '$lib/arena/controllers/arenaPhaseRuntimeBundle';
   import {
     createArenaResultController,
   } from '$lib/arena/controllers/arenaResultController';
@@ -313,67 +302,6 @@
     setServerMatchId: (next) => (serverMatchId = next),
   });
 
-  const battlePresentationRuntime = createArenaBattlePresentationRuntime({
-    getActiveAgents: () => activeAgents,
-    getHypothesisDir: () => gs.hypothesis?.dir,
-    getCharSprites: arenaBattleStateBridge.getCharSprites,
-    getVsMeterTarget: arenaBattleStateBridge.getVsMeterTarget,
-    getEnemyHP: arenaBattleStateBridge.getEnemyHp,
-    getAgentEnergy: (agentId) => agentStates[agentId]?.energy || 0,
-    setCharSprites: arenaBattleStateBridge.setCharSprites,
-    setAgentState: arenaAgentBridge.setAgentState,
-    setAgentEnergy: arenaAgentBridge.setAgentEnergy,
-    setBattleTurns: arenaBattleStateBridge.setBattleTurns,
-    setCurrentTurnIdx: arenaBattleStateBridge.setCurrentTurnIdx,
-    clearChatMessages: () => {
-      chatMessages = [];
-    },
-    appendChatMessage: arenaAgentRuntime.appendChatMessage,
-    setBattleNarration: arenaBattleStateBridge.setBattleNarration,
-    setBattlePhaseLabel: arenaBattleStateBridge.setBattlePhaseLabel,
-    setVsMeter: arenaBattleStateBridge.setVsMeter,
-    setVsMeterTarget: arenaBattleStateBridge.setVsMeterTarget,
-    setEnemyHP: arenaBattleStateBridge.setEnemyHp,
-    setComboCount: arenaBattleStateBridge.setComboCount,
-    setShowCombo: arenaBattleStateBridge.setShowCombo,
-    setShowCritical: arenaBattleStateBridge.setShowCritical,
-    setCriticalText: arenaBattleStateBridge.setCriticalText,
-    setShowVsSplash: arenaBattleStateBridge.setShowVsSplash,
-    runChargeEffect: () => {
-      sfx.charge();
-    },
-    runSplashEffect: () => {
-      juice_shake('heavy');
-      sfx.enter();
-      arenaVisualEffectsRuntime.seedArenaParticles();
-    },
-    runImpactEffect: (variant) => {
-      if (variant === 'critical') {
-        juice_shake('heavy');
-        juice_flash('gold');
-        sfx.verdict();
-        return;
-      }
-      if (variant === 'super') {
-        juice_shake('medium');
-        juice_flash('white');
-        sfx.impact();
-        return;
-      }
-      if (variant === 'weak') {
-        sfx.step();
-        return;
-      }
-      juice_shake('light');
-      sfx.impact();
-    },
-    isDestroyed: () => _arenaDestroyed,
-  });
-  arenaAgentBridge.bindPresentationSync({
-    syncAgentState: battlePresentationRuntime.syncAgentState,
-    syncAgentEnergy: battlePresentationRuntime.syncAgentEnergy,
-  });
-
   const liveEventRuntime = createArenaLiveEventRuntime({
     emitFeed: (message) => addFeed(message.icon, message.name, message.color, message.text),
     getSpeed: () => gs.speed || 1,
@@ -386,11 +314,64 @@
   }
 
   let confirmingExit = $state(false);
-  let clearBattleSession = () => {};
   const arenaGameStateBridge = createArenaGameStateBridge({
     updateGameState: gameState.update,
     createLobbyTournamentSeed: createArenaLobbyTournamentSeed,
   });
+  let arenaResultController: {
+    closeReward: () => void;
+    initResult: () => void;
+  };
+  const arenaPhaseRuntimeBundle = createArenaPhaseRuntimeBundle({
+    getActiveAgents: () => activeAgents,
+    getAgentStates: () => agentStates,
+    getCurrentPrice: () => currentBtcPrice,
+    getHypothesis: () => gs.hypothesis,
+    getPosition: () => gs.pos,
+    getSpeed: () => gs.speed || 3,
+    isDestroyed: () => _arenaDestroyed,
+    safeTimeout,
+    addFeed,
+    advancePhase,
+    clearArenaDynamics,
+    liveEventStart: (phase) => {
+      liveEventRuntime.start(phase);
+    },
+    onAnalysisError: (error) => {
+      console.warn('[Arena] Server analysis failed:', error);
+    },
+    onHypothesisSyncError: (error) => {
+      console.warn('[Arena] Hypothesis sync failed:', error);
+    },
+    onResultEnter: () => {
+      arenaResultController.initResult();
+    },
+    runAnalysisSync: runArenaAnalysis,
+    submitHypothesisSync: async (dir, conf) => {
+      await submitArenaHypothesis(arenaPageStateBridge.getServerMatchId()!, dir, conf);
+    },
+    mapAnalysisToProjection: (analysis) => {
+      const c02 = mapAnalysisToC02(analysis);
+      return {
+        orpoOutput: c02.orpo,
+        ctxBeliefs: c02.ctx,
+        guardianCheck: c02.guardian,
+        commanderVerdict: c02.commander,
+      };
+    },
+    clearChatMessages: () => {
+      chatMessages = [];
+    },
+    agentRuntime: arenaAgentRuntime,
+    agentBridge: arenaAgentBridge,
+    battleStateBridge: arenaBattleStateBridge,
+    pageStateBridge: arenaPageStateBridge,
+    gameStateBridge: arenaGameStateBridge,
+    phaseTimerRuntime: arenaPhaseTimerRuntime,
+    visualEffectsRuntime: arenaVisualEffectsRuntime,
+  });
+  const arenaPhaseController = arenaPhaseRuntimeBundle.phaseController;
+  const battlePresentationRuntime = arenaPhaseRuntimeBundle.battlePresentationRuntime;
 
   const arenaMatchController = createArenaMatchController({
     getCurrentState: () => ({
@@ -417,9 +398,7 @@
     setMatchHistoryOpen: arenaPageStateBridge.setMatchHistoryOpen,
     safeTimeout,
     clearArenaDynamics,
-    clearBattleSession: () => {
-      clearBattleSession();
-    },
+    clearBattleSession: arenaPhaseRuntimeBundle.clearBattleSession,
     getChartBridge: arenaPageStateBridge.getChartBridge,
     setChartBridge: arenaPageStateBridge.setChartBridge,
     setResultVisible: arenaPageStateBridge.setResultVisible,
@@ -444,7 +423,7 @@
     setArenaView: arenaGameStateBridge.setArenaView,
   });
 
-  const arenaResultController = createArenaResultController({
+  arenaResultController = createArenaResultController({
     getSnapshot: () => ({
       score: Math.round(gs.score),
       battleResult: gs.battleResult,
@@ -510,44 +489,6 @@
     pickLoseSpeech: () => DOGE_LOSE[Math.floor(Math.random() * DOGE_LOSE.length)],
   });
 
-  const arenaBattleController = createArenaBattleController({
-    getSnapshot: () => ({
-      activeAgents,
-      speed: gs.speed || 3,
-      pos: gs.pos,
-      hypothesis: gs.hypothesis,
-    }),
-    isDestroyed: () => _arenaDestroyed,
-    onBattleEnter: () => {
-      liveEventRuntime.start('BATTLE');
-      addFeed('⚔', 'BATTLE', '#FF5E7A', 'Battle in progress!');
-      activeAgents.forEach((ag, i) => {
-        arenaAgentBridge.setAgentState(ag.id, 'alert');
-        arenaAgentBridge.setSpeech(ag.id, DOGE_BATTLE[i % DOGE_BATTLE.length], 400);
-      });
-      battlePresentationRuntime.startBattleTurnSequence();
-    },
-    onMissingPosition: () => {
-      arenaGameStateBridge.clearBattleResultAndStop();
-      safeTimeout(() => {
-        advancePhase();
-      }, 3000);
-    },
-    applyBattleBootstrapState: () => {
-      arenaGameStateBridge.applyBattleBootstrapState(Date.now());
-    },
-    applyBattleTick: arenaGameStateBridge.applyBattleTick,
-    applyResolvedBattleState: arenaGameStateBridge.applyResolvedBattleState,
-    setAgentState: arenaAgentBridge.setAgentState,
-    setSpeech: arenaAgentBridge.setSpeech,
-    setVsMeter: arenaBattleStateBridge.setVsMeter,
-    setVsMeterTarget: arenaBattleStateBridge.setVsMeterTarget,
-    setEnemyHP: arenaBattleStateBridge.setEnemyHp,
-    addFeed,
-    advancePhase,
-    safeTimeout,
-  });
-
   const arenaChartController = createArenaChartController({
     getHypothesis: () => gs.hypothesis,
     getChartBridge: arenaPageStateBridge.getChartBridge,
@@ -555,164 +496,6 @@
     setHypothesis: arenaGameStateBridge.setHypothesis,
     getShowMarkers: arenaUiStateBridge.getShowMarkers,
     setShowMarkers: arenaUiStateBridge.setShowMarkers,
-  });
-  clearBattleSession = () => {
-    arenaBattleController.clearBattleSession();
-    battlePresentationRuntime.clearTurnTimers();
-  };
-
-  const arenaPhaseController = createArenaPhaseController({
-    onDraftEnter: () => {
-      clearArenaDynamics();
-      arenaPageStateBridge.setResultVisible(false);
-      arenaPageStateBridge.setPvpVisible(false);
-      arenaPageStateBridge.setHypothesisVisible(false);
-      arenaGameStateBridge.resetArenaView();
-      arenaPageStateBridge.setPreviewVisible(false);
-      arenaPageStateBridge.setFloatDir(null);
-      arenaPageStateBridge.setChartBridge(createArenaChartBridgeState());
-      arenaAgentRuntime.initAgentStates();
-      sfx.enter();
-      arenaVisualEffectsRuntime.emitDogeFloatBurst();
-      addFeed('🐕', 'ARENA', '#E8967D', 'Draft locked. Preparing analysis...');
-      activeAgents.forEach((ag, i) => {
-        safeTimeout(() => {
-          arenaAgentBridge.setAgentState(ag.id, 'alert');
-          arenaAgentBridge.setSpeech(ag.id, DOGE_DEPLOYS[i % DOGE_DEPLOYS.length], 800);
-        }, i * 200);
-      });
-    },
-    getSpeed: () => gs.speed || 3,
-    getCurrentPrice: () => currentBtcPrice,
-    getServerMatchId: arenaPageStateBridge.getServerMatchId,
-    runAnalysisSync: runArenaAnalysis,
-    setServerAnalysis: arenaPageStateBridge.setServerAnalysis,
-    applyAnalysisProjection: (analysis) => {
-      const c02 = mapAnalysisToC02(analysis);
-      arenaGameStateBridge.applyAnalysisProjection({
-        orpoOutput: c02.orpo,
-        ctxBeliefs: c02.ctx,
-        guardianCheck: c02.guardian,
-        commanderVerdict: c02.commander,
-      });
-    },
-    onAnalysisEnter: () => {
-      liveEventRuntime.start('ANALYSIS');
-      battlePresentationRuntime.initCharSprites();
-      arenaVisualEffectsRuntime.seedArenaParticles();
-      arenaAnalysisPresentationRuntime.runScoutSequence();
-      arenaAnalysisPresentationRuntime.runGatherSequence();
-      arenaAnalysisPresentationRuntime.runCouncilSequence();
-      addFeed('🔍', 'ANALYSIS', '#66CCE6', '5-agent analysis pipeline running...');
-    },
-    onAnalysisError: (error) => {
-      console.warn('[Arena] Server analysis failed:', error);
-    },
-    onHypothesisEnter: () => {
-      liveEventRuntime.start('HYPOTHESIS');
-      juice_shake('light');
-      sfx.charge();
-      battleNarration = '🎯 포지션을 설정하세요!';
-      arenaAgentBridge.addSystemChat('🎯', '#ffcc00', '배팅 타임! LONG or SHORT?');
-      addFeed('🐕', 'ARENA', '#66CCE6', 'HYPOTHESIS: pick direction and set TP/SL.');
-      activeAgents.forEach((ag, i) => {
-        safeTimeout(() => {
-          arenaAgentBridge.setAgentState(ag.id, 'think');
-          arenaAgentBridge.setSpeech(ag.id, '🤔...', 600);
-        }, i * 300);
-      });
-    },
-    setHypothesisVisible: arenaPageStateBridge.setHypothesisVisible,
-    setFloatDir: arenaPageStateBridge.setFloatDir,
-    getHypothesisTimer: arenaPageStateBridge.getHypothesisTimer,
-    setHypothesisTimer: arenaPageStateBridge.setHypothesisTimer,
-    clearHypothesisInterval: arenaPhaseTimerRuntime.clearHypothesisInterval,
-    setHypothesisInterval: arenaPhaseTimerRuntime.setHypothesisInterval,
-    applyNeutralTimeoutSelection: (price) => {
-      const nextHypothesis = arenaGameStateBridge.applyNeutralTimeoutSelection(price);
-      const nextChartBridge = {
-        ...arenaPageStateBridge.getChartBridge(),
-        position: buildArenaChartPositionFromHypothesis(nextHypothesis),
-      };
-      arenaPageStateBridge.setChartBridge(nextChartBridge);
-      addFeed('⏰', 'TIMEOUT', '#93A699', 'Time expired — auto-skip');
-    },
-    applySubmittedHypothesis: (hypothesis) => {
-      const nextHypothesis = arenaGameStateBridge.applySubmittedHypothesis(hypothesis);
-      const nextChartBridge = {
-        ...arenaPageStateBridge.getChartBridge(),
-        position: buildArenaChartPositionFromHypothesis(nextHypothesis),
-      };
-      arenaPageStateBridge.setChartBridge(nextChartBridge);
-      addFeed(
-        '🐕',
-        'YOU',
-        '#E8967D',
-        `${hypothesis.dir} · TP $${hypothesis.tp.toLocaleString()} · SL $${hypothesis.sl.toLocaleString()} · R:R 1:${hypothesis.rr}`,
-        hypothesis.dir,
-      );
-      sfx.vote();
-    },
-    submitHypothesisSync: async (dir, conf) => {
-      await submitArenaHypothesis(arenaPageStateBridge.getServerMatchId()!, dir, conf);
-    },
-    onHypothesisSyncError: (error) => {
-      console.warn('[Arena] Hypothesis sync failed:', error);
-    },
-    advancePhase,
-    setPreviewVisible: arenaPageStateBridge.setPreviewVisible,
-    onPreviewEnter: () => {
-      const hypothesis = gs.hypothesis;
-      addFeed('👁', 'PREVIEW', '#DCB970', `Position: ${hypothesis?.dir || 'NEUTRAL'} · Entry $${(hypothesis?.entry || 0).toLocaleString()} · R:R 1:${(hypothesis?.rr || 1).toFixed(1)}`);
-      activeAgents.forEach((ag, i) => {
-        safeTimeout(() => {
-          arenaAgentBridge.setAgentState(ag.id, 'think');
-          arenaAgentBridge.setSpeech(ag.id, '📋 reviewing...', 600);
-        }, i * 200);
-      });
-    },
-    clearPreviewAutoTimer: arenaPhaseTimerRuntime.clearPreviewAutoTimer,
-    setPreviewAutoTimer: arenaPhaseTimerRuntime.setPreviewAutoTimer,
-    onPreviewConfirm: () => {
-      sfx.charge();
-      addFeed('✅', 'CONFIRMED', '#00CC88', 'Position confirmed — scouting begins!');
-    },
-    onBattleEnter: () => {
-      arenaBattleController.initBattle();
-    },
-    onResultEnter: () => {
-      arenaResultController.initResult();
-    },
-  });
-
-  const arenaAnalysisPresentationRuntime = createArenaAnalysisPresentationRuntime({
-    getActiveAgents: () => activeAgents,
-    getSpeed: () => gs.speed || 3,
-    safeTimeout,
-    addFeed,
-    setBattleNarration: arenaBattleStateBridge.setBattleNarration,
-    addChatMessage: arenaAgentBridge.addChatMessage,
-    setAgentState: arenaAgentBridge.setAgentState,
-    setAgentEnergy: arenaAgentBridge.setAgentEnergy,
-    setSpeech: arenaAgentBridge.setSpeech,
-    setVoteDir: arenaAgentBridge.setVoteDir,
-    showCharAction: battlePresentationRuntime.showCharAction,
-    moveChar: battlePresentationRuntime.moveChar,
-    applyScoutDecorations: () => {
-      arenaPageStateBridge.setChartBridge({
-        ...arenaPageStateBridge.getChartBridge(),
-        ...buildArenaChartDecorations(activeAgents),
-      });
-    },
-    playScanSound: () => {
-      sfx.scan();
-    },
-    playChargeSound: () => {
-      sfx.charge();
-    },
-    playVoteSound: () => {
-      sfx.vote();
-    },
   });
 
   const arenaBattleLayoutProps = $derived(buildArenaBattleLayoutProps({
@@ -832,9 +615,8 @@
     }
     _arenaDestroyed = true;
     liveEventRuntime.destroy();
-    arenaBattleController.destroy();
     arenaAgentRuntime.destroy();
-    battlePresentationRuntime.destroy();
+    arenaPhaseRuntimeBundle.destroy();
     arenaPhaseTimerRuntime.destroy();
     arenaTimerRegistry.destroy();
   });

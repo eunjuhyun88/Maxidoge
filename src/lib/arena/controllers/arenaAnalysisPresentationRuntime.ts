@@ -2,13 +2,11 @@ import type { AgentDef } from '$lib/data/agents';
 import { SOURCES } from '$lib/data/agents';
 import { DOGE_GATHER } from '$lib/engine/phases';
 import { getFormPos } from '$lib/engine/arenaCharacters';
-import type { Direction } from '$lib/stores/gameState';
-
 interface ArenaAnalysisPresentationRuntimeOptions {
   getActiveAgents: () => AgentDef[];
   getSpeed: () => number;
   safeTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
-  addFeed: (icon: string, name: string, color: string, text: string, dir?: Direction | null) => void;
+  addFeed: (icon: string, name: string, color: string, text: string, dir?: string | null) => void;
   setBattleNarration: (text: string) => void;
   addChatMessage: (agent: AgentDef, text: string, isAction?: boolean) => void;
   setAgentState: (agentId: string, state: string) => void;

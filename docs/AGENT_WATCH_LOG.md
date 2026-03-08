@@ -6226,6 +6226,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
 - Status: IN PROGRESS
 
+## [2026-03-09 02:34:00 +0900] FINISH arena-phase-runtime-bundle-land-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing self-contained arena refactor slices, resolve the remaining runtime-bundle type drift, and avoid mixing the unrelated position-sizer WIP
+- What changed:
+  - Added [arenaPhaseRuntimeBundle.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaPhaseRuntimeBundle.ts#L1)
+    - canonicalized the assembly of `battlePresentationRuntime`, `analysisPresentationRuntime`, `phaseEffectsRuntime`, `phaseController`, and `battleController`
+    - owns `clearBattleSession()` and `destroy()` boundaries for the bundled arena phase stack
+  - Added [arenaPhaseEffectsRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaPhaseEffectsRuntime.ts#L1)
+    - owns `DRAFT/ANALYSIS/HYPOTHESIS/PREVIEW/BATTLE` entry choreography, feed/audio hooks, and preview-confirm/battle-enter effects
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - removed route-local phase/battle runtime construction and rewired the page through the canonical phase runtime bundle
+    - switched shell cleanup to `arenaPhaseRuntimeBundle.clearBattleSession()` and `arenaPhaseRuntimeBundle.destroy()`
+  - Updated [arenaBattleFeedRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/feed/arenaBattleFeedRuntime.ts#L1), [arenaAnalysisPresentationRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaAnalysisPresentationRuntime.ts#L1), and [arenaGameStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaGameStateBridge.ts#L1)
+    - widened feed-direction input at the runtime edge but normalized back to canonical `Direction` before store writes
+    - exported the arena game-state bridge contract so `applyAnalysisProjection` no longer degrades to `unknown` across the runtime bundle boundary
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `arena/+page.svelte` still assembles the wider page controller graph around the bundle
+  - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
+- Status: DONE
+
 ## [2026-03-09 02:18:00 +0900] FINISH phase-2-auth-api-normalizer-extraction-20260309 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

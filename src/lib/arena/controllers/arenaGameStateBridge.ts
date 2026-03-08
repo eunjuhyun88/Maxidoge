@@ -11,7 +11,7 @@ import type {
 
 import type { ArenaHypothesisSubmitInput } from './arenaPhaseController';
 
-interface AnalysisProjectionPatch {
+export interface AnalysisProjectionPatch {
   orpoOutput: GameState['orpoOutput'];
   ctxBeliefs: GameState['ctxBeliefs'];
   guardianCheck: GameState['guardianCheck'];
@@ -67,7 +67,26 @@ function buildSubmittedHypothesis(input: ArenaHypothesisSubmitInput): Hypothesis
   };
 }
 
-export function createArenaGameStateBridge(options: CreateArenaGameStateBridgeOptions) {
+export interface ArenaGameStateBridge {
+  applyAnalysisProjection: (patch: AnalysisProjectionPatch) => void;
+  applyBattleBootstrapState: (entryTime: number) => void;
+  applyBattleTick: (tick: BattleTickState) => void;
+  applyNeutralTimeoutSelection: (price: number) => Hypothesis;
+  applyResolvedBattleState: (result: string, exitTime: number, exitPrice: number) => void;
+  applyResolvedGameState: (resolved: ArenaResolvedResultPayload) => void;
+  applySquadConfig: (config: SquadConfig) => void;
+  applySubmittedHypothesis: (input: ArenaHypothesisSubmitInput) => Hypothesis;
+  clearBattleResultAndStop: () => void;
+  enterLobby: () => void;
+  resetArenaView: () => void;
+  setArenaView: (view: ArenaView) => void;
+  setHypothesis: (next: Hypothesis) => void;
+  stopRunning: () => void;
+}
+
+export function createArenaGameStateBridge(
+  options: CreateArenaGameStateBridgeOptions
+): ArenaGameStateBridge {
   function applySquadConfig(config: SquadConfig) {
     options.updateGameState((state) => ({ ...state, squadConfig: config }));
   }
