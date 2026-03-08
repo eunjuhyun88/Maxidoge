@@ -16,7 +16,7 @@
     toBinanceInterval,
     toTradingViewInterval,
   } from '$lib/utils/timeframe';
-  import { openQuickTrade, type TradeDirection } from '$lib/stores/quickTradeStore';
+  import { openQuickTrade } from '$lib/stores/quickTradeStore';
   import {
     detectChartPatterns,
     type ChartPatternDetection,
@@ -39,7 +39,6 @@
     dragTP: { price: number };
     dragSL: { price: number };
     dragEntry: { price: number };
-    clearTradeSetup: void;
   }>();
 
   let chartContainer: HTMLDivElement;
@@ -135,7 +134,6 @@
   let _ratioDragBound = false;
   let isDrawing = false;
   let drawingsVisible = true;
-  let _agentCloseBtn: { x: number; y: number; r: number } | null = null; // ✕ button hit area
   let chartNotice = '';
   let _chartNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -156,7 +154,6 @@
   export let chatFirstMode = false;
   export let chatTradeReady = false;
   export let chatTradeDir: 'LONG' | 'SHORT' = 'LONG';
-  export let hasScanned = false; // true after first scan completes
 
   // ═══ Agent Trade Overlay (TradingView-style TP/SL zones) ═══
   type AgentTradeSetup = {
@@ -412,14 +409,14 @@
       shortRatio: planned.shortRatio,
     });
     pushChartNotice(
-      `OPEN ${planned.dir} · ${planned.longRatio}:${planned.shortRatio} · ENTRY ${formatPrice(planned.entry)}`
+      `포지션 생성 · ${planned.dir} ${planned.longRatio}:${planned.shortRatio} · ENTRY ${formatPrice(planned.entry)}`
     );
     pendingTradePlan = null;
   }
 
   function cancelTradePlan() {
     pendingTradePlan = null;
-    pushChartNotice('Trade cancelled');
+    pushChartNotice('포지션 생성 취소');
   }
 
   function ratioFromClientX(clientX: number): number | null {
@@ -625,43 +622,36 @@
 
     ctx.save();
 
-    // ── App palette (matches warroom + chart toolbar) ──
-    const GREEN = chartTheme.candleUp;   // same as candle up / --grn
-    const RED = chartTheme.candleDown;   // same as candle down / --red
-    const ACCENT = '#E8967D';            // salmon accent (primary UI accent)
-    const BG_DARK = 'rgba(10,9,8,';     // near-black base for labels
-    const TEXT = '#F0EDE4';              // off-white text
+    const GREEN = '#26a69a';
+    const RED = '#ef5350';
 
-    // ── TP zone (profit) — subtle tinted band ──
+    // ── TP zone (profit) — visible fill + boundary ──
     const tpTop = Math.min(entryY, tpY);
     const tpH = Math.abs(tpY - entryY);
-    ctx.fillStyle = withAlpha(GREEN, 0.10);
+    ctx.fillStyle = withAlpha(GREEN, 0.15);
     ctx.fillRect(0, tpTop, R, tpH);
-    ctx.strokeStyle = withAlpha(GREEN, 0.5);
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = withAlpha(GREEN, 0.7);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
     ctx.beginPath();
     ctx.moveTo(0, tpY);
     ctx.lineTo(R, tpY);
     ctx.stroke();
-    ctx.setLineDash([]);
 
-    // ── SL zone (risk) — subtle tinted band ──
+    // ── SL zone (risk) — visible fill + boundary ──
     const slTop = Math.min(entryY, slY);
     const slH = Math.abs(slY - entryY);
-    ctx.fillStyle = withAlpha(RED, 0.10);
+    ctx.fillStyle = withAlpha(RED, 0.15);
     ctx.fillRect(0, slTop, R, slH);
-    ctx.strokeStyle = withAlpha(RED, 0.5);
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = withAlpha(RED, 0.7);
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(0, slY);
     ctx.lineTo(R, slY);
     ctx.stroke();
-    ctx.setLineDash([]);
 
-    // ── Entry line — salmon accent dashed ──
-    ctx.strokeStyle = withAlpha(ACCENT, 0.7);
+    // ── Entry line — dashed, prominent ──
+    ctx.strokeStyle = withAlpha('#fff', 0.6);
     ctx.lineWidth = 1.5;
     ctx.setLineDash([6, 4]);
     ctx.beginPath();
@@ -670,117 +660,102 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // ── Right-edge price axis tags ──
+    // ── Right-edge price axis tags (TradingView colored labels) ──
     const tagW = rightPad - 2;
-    const tagH = 16;
+    const tagH = 18;
     const tagX = R + 1;
-    ctx.font = "bold 9px 'JetBrains Mono', monospace";
+    ctx.font = "bold 10px 'JetBrains Mono', monospace";
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
-    // TP tag
-    ctx.fillStyle = withAlpha(GREEN, 0.85);
+    // TP price tag
+    ctx.fillStyle = GREEN;
     _roundRect(ctx, tagX, tpY - tagH / 2, tagW, tagH, 2);
     ctx.fill();
-    ctx.fillStyle = TEXT;
+    ctx.fillStyle = '#fff';
     ctx.fillText(formatPrice(setup.tp), tagX + tagW / 2, tpY);
-    // Entry tag
-    ctx.fillStyle = withAlpha(ACCENT, 0.85);
-    _roundRect(ctx, tagX, entryY - tagH / 2, tagW, tagH, 2);
-    ctx.fill();
-    ctx.fillStyle = TEXT;
-    ctx.fillText(formatPrice(setup.entry), tagX + tagW / 2, entryY);
-    // SL tag
-    ctx.fillStyle = withAlpha(RED, 0.85);
+    // SL price tag
+    ctx.fillStyle = RED;
     _roundRect(ctx, tagX, slY - tagH / 2, tagW, tagH, 2);
     ctx.fill();
-    ctx.fillStyle = TEXT;
+    ctx.fillStyle = '#fff';
     ctx.fillText(formatPrice(setup.sl), tagX + tagW / 2, slY);
     ctx.textAlign = 'left';
 
-    // ── Zone labels (inside zones, dark pill) ──
-    ctx.font = "700 9px 'JetBrains Mono', monospace";
+    // ── Zone labels (always visible inside zones) ──
+    ctx.font = "bold 10px 'JetBrains Mono', monospace";
     ctx.textBaseline = 'middle';
     // TP label
     const tpZoneMid = tpTop + tpH / 2;
-    const tpLabel = `TP +${tpPct}%`;
+    const tpLabel = `Take Profit  ${tpPct}%`;
     const tpLabelW = ctx.measureText(tpLabel).width;
-    ctx.fillStyle = BG_DARK + '0.7)';
-    _roundRect(ctx, 8, tpZoneMid - 8, tpLabelW + 12, 16, 3);
+    ctx.fillStyle = withAlpha('#000', 0.55);
+    _roundRect(ctx, 10, tpZoneMid - 9, tpLabelW + 14, 18, 3);
     ctx.fill();
     ctx.fillStyle = GREEN;
-    ctx.fillText(tpLabel, 14, tpZoneMid);
+    ctx.fillText(tpLabel, 17, tpZoneMid);
     // SL label
     const slZoneMid = slTop + slH / 2;
-    const slLabel = `SL -${slPct}%`;
+    const slLabel = `Stop Loss  ${slPct}%`;
     const slLabelW = ctx.measureText(slLabel).width;
-    ctx.fillStyle = BG_DARK + '0.7)';
-    _roundRect(ctx, 8, slZoneMid - 8, slLabelW + 12, 16, 3);
+    ctx.fillStyle = withAlpha('#000', 0.55);
+    _roundRect(ctx, 10, slZoneMid - 9, slLabelW + 14, 18, 3);
     ctx.fill();
     ctx.fillStyle = RED;
-    ctx.fillText(slLabel, 14, slZoneMid);
+    ctx.fillText(slLabel, 17, slZoneMid);
 
-    // ── Entry info bar (single compact row above entry line) ──
+    // ── Entry info bar (above entry line) ──
     const srcLabel = setup.source === 'consensus' ? 'CONSENSUS' : (setup.agentName?.toUpperCase() ?? 'AGENT');
     const dirArrow = isLong ? '▲' : '▼';
-    ctx.font = "800 9px 'JetBrains Mono', monospace";
-    const eLabelH = 16;
-    const eLabelY = entryY - eLabelH - 4;
-    let curX = 8;
+    ctx.font = "bold 10px 'JetBrains Mono', monospace";
+    const eLabelH = 18;
+    const eLabelY = entryY - eLabelH - 3;
 
-    // Badge 1: Direction + source (accent bg)
-    const b1Text = `${dirArrow} ${srcLabel} ${setup.dir}`;
-    const b1W = ctx.measureText(b1Text).width + 12;
-    ctx.fillStyle = withAlpha(isLong ? GREEN : RED, 0.8);
-    _roundRect(ctx, curX, eLabelY, b1W, eLabelH, 3);
-    ctx.fill();
-    ctx.fillStyle = TEXT;
-    ctx.textBaseline = 'middle';
-    ctx.fillText(b1Text, curX + 6, eLabelY + eLabelH / 2);
-    curX += b1W + 3;
-
-    // Badge 2: R:R (dark pill)
-    const b2Text = `R:R 1:${setup.rr.toFixed(1)}`;
-    const b2W = ctx.measureText(b2Text).width + 12;
-    ctx.fillStyle = BG_DARK + '0.75)';
-    _roundRect(ctx, curX, eLabelY, b2W, eLabelH, 3);
-    ctx.fill();
-    ctx.strokeStyle = withAlpha(ACCENT, 0.25);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = withAlpha(TEXT, 0.85);
-    ctx.fillText(b2Text, curX + 6, eLabelY + eLabelH / 2);
-    curX += b2W + 3;
-
-    // Badge 3: Confidence (dark pill)
-    const b3Text = `${setup.conf}%`;
-    const b3W = ctx.measureText(b3Text).width + 12;
-    ctx.fillStyle = BG_DARK + '0.75)';
-    _roundRect(ctx, curX, eLabelY, b3W, eLabelH, 3);
-    ctx.fill();
-    ctx.strokeStyle = withAlpha(ACCENT, 0.25);
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    // Badge 1: Direction + Source + Entry price (colored)
+    const b1Text = `${dirArrow} ${srcLabel} ${setup.dir} · $${formatPrice(setup.entry)}`;
+    const b1W = ctx.measureText(b1Text).width + 14;
+    const b1X = 8;
     ctx.fillStyle = withAlpha(isLong ? GREEN : RED, 0.85);
-    ctx.fillText(b3Text, curX + 6, eLabelY + eLabelH / 2);
-    curX += b3W + 3;
+    _roundRect(ctx, b1X, eLabelY, b1W, eLabelH, 3);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(b1Text, b1X + 7, eLabelY + eLabelH / 2);
 
-    // Badge 4: Live P&L
+    // Badge 2: R:R ratio (dark)
+    const b2Text = `R:R 1:${setup.rr.toFixed(1)}`;
+    const b2W = ctx.measureText(b2Text).width + 14;
+    const b2X = b1X + b1W + 4;
+    ctx.fillStyle = withAlpha('#000', 0.65);
+    _roundRect(ctx, b2X, eLabelY, b2W, eLabelH, 3);
+    ctx.fill();
+    ctx.fillStyle = withAlpha('#fff', 0.9);
+    ctx.fillText(b2Text, b2X + 7, eLabelY + eLabelH / 2);
+
+    // Badge 3: Confidence
+    const b3Text = `${setup.conf}%`;
+    const b3W = ctx.measureText(b3Text).width + 14;
+    const b3X = b2X + b2W + 4;
+    ctx.fillStyle = withAlpha('#000', 0.65);
+    _roundRect(ctx, b3X, eLabelY, b3W, eLabelH, 3);
+    ctx.fill();
+    ctx.fillStyle = withAlpha(isLong ? GREEN : RED, 0.9);
+    ctx.fillText(b3Text, b3X + 7, eLabelY + eLabelH / 2);
+
+    // Badge 4: Live P&L (colored)
     if (livePrice > 0) {
       const pnl = isLong
         ? ((livePrice - setup.entry) / setup.entry) * 100
         : ((setup.entry - livePrice) / setup.entry) * 100;
       const pnlColor = pnl >= 0 ? GREEN : RED;
-      const pnlText = `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`;
-      const b4W = ctx.measureText(pnlText).width + 12;
-      ctx.fillStyle = withAlpha(pnlColor, 0.75);
-      _roundRect(ctx, curX, eLabelY, b4W, eLabelH, 3);
+      const pnlText = `P&L ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`;
+      const b4W = ctx.measureText(pnlText).width + 14;
+      const b4X = b3X + b3W + 4;
+      ctx.fillStyle = withAlpha(pnlColor, 0.85);
+      _roundRect(ctx, b4X, eLabelY, b4W, eLabelH, 3);
       ctx.fill();
-      ctx.fillStyle = TEXT;
-      ctx.fillText(pnlText, curX + 6, eLabelY + eLabelH / 2);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(pnlText, b4X + 7, eLabelY + eLabelH / 2);
     }
-
-    // Close button position (used by HTML overlay-close-btn)
-    _agentCloseBtn = { x: R - 14, y: tpTop + 14, r: 14 };
 
     ctx.restore();
   }
@@ -801,7 +776,6 @@
     if (agentPriceLines.entry && series) { try { series.removePriceLine(agentPriceLines.entry); } catch {} }
     if (agentPriceLines.sl && series) { try { series.removePriceLine(agentPriceLines.sl); } catch {} }
     agentPriceLines = { tp: null, entry: null, sl: null };
-    if (!setup) _agentCloseBtn = null;
     renderDrawings();
   }
 
@@ -1195,10 +1169,8 @@
   }
 
   function handleDrawingMouseDown(e: MouseEvent) {
-    if (!drawingCanvas) return;
+    if (drawingMode === 'none' || !drawingCanvas) return;
     const rect = drawingCanvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    if (drawingMode === 'none') return;
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     if (drawingMode === 'hline') {
       const linePrice = toChartPrice(y);
@@ -1266,7 +1238,7 @@
           riskPct: preview.riskPct,
           longRatio: preview.dir === 'LONG' ? 70 : 30,
         };
-        pushChartNotice('Drag complete — adjust ratio and confirm');
+        pushChartNotice('드래그 완료 · 비율 조정 후 포지션 생성 버튼을 누르세요');
       } else {
         openTradeByLine(preview.dir, preview.entry, preview.sl, preview.rr);
       }
@@ -1281,8 +1253,7 @@
 
   let _drawRAF: number | null = null;
   function handleDrawingMouseMove(e: MouseEvent) {
-    if (!drawingCanvas) return;
-    if (!isDrawing) return;
+    if (!isDrawing || !drawingCanvas) return;
     if (_drawRAF) return; // throttle to animation frame
     _drawRAF = requestAnimationFrame(() => {
       _drawRAF = null;
@@ -2340,7 +2311,7 @@
     });
     if (chatTradeReady) {
       void activateTradeDrawing(chatTradeDir);
-      pushChartNotice(`${chatTradeDir} draw mode active`);
+      pushChartNotice(`${chatTradeDir} 드래그 모드 활성화`);
       return;
     }
     dispatch('chatrequest', {
@@ -2366,9 +2337,9 @@
       timeframe: state.timeframe,
     });
     if (dir) {
-      pushChartNotice(`${dir} mode — drag on chart to set ENTRY/TP/SL`);
+      pushChartNotice(`${dir} 드래그 모드 시작 · 차트에서 드래그해 ENTRY/TP/SL 생성`);
     } else {
-      pushChartNotice('Position mode — drag down LONG · drag up SHORT');
+      pushChartNotice('Position 모드 · 드래그 ↓ LONG · 드래그 ↑ SHORT');
     }
   }
 
@@ -2474,7 +2445,7 @@
               <button class="draw-btn" class:active={drawingMode === 'trendline'} on:click={() => setDrawingMode(drawingMode === 'trendline' ? 'none' : 'trendline')} title="Trend Line">&#x2571;</button>
             {/if}
             {#if enableTradeLineEntry}
-              <button class="draw-btn trade-tool" class:active={drawingMode === 'trade' || drawingMode === 'longentry' || drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'trade' ? 'none' : 'trade')} title="Position Tool (R) — drag down LONG · drag up SHORT">⬡</button>
+              <button class="draw-btn trade-tool" class:active={drawingMode === 'trade' || drawingMode === 'longentry' || drawingMode === 'shortentry'} on:click={() => setDrawingMode(drawingMode === 'trade' ? 'none' : 'trade')} title="Position Tool (R) · 드래그 아래=LONG 위=SHORT">⬡</button>
             {/if}
             {#if drawings.length > 0 || activeTradeSetup}
               <button class="draw-btn vis-toggle" class:off={!drawingsVisible} on:click={toggleDrawingsVisible} title={drawingsVisible ? 'Hide drawings (V)' : 'Show drawings (V)'}>
@@ -2509,7 +2480,7 @@
           </button>
 
           {#if advancedMode && indicatorStripState === 'hidden' && !isTvLikePreset}
-            <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>IND ON</button>
+            <button class="strip-restore-btn" on:click={() => setIndicatorStripState('expanded')}>지표 ON</button>
           {/if}
         {/if}
 
@@ -2566,7 +2537,7 @@
         <button class="legend-chip" on:click={() => setIndicatorStripState('collapsed')}>접기</button>
         <button class="legend-chip danger" on:click={() => setIndicatorStripState('hidden')}>끄기</button>
         {#if enableTradeLineEntry}
-          <span class="ind-hint">L/S drag · +/- zoom · 0 reset</span>
+          <span class="ind-hint">L/S 드래그 · +/- 줌 · 0 리셋</span>
         {/if}
       {:else}
         <div class="collapsed-summary">
@@ -2644,41 +2615,6 @@
         on:mousedown={handleDrawingMouseDown} on:mousemove={handleDrawingMouseMove} on:mouseup={handleDrawingMouseUp}></canvas>
     {/if}
 
-    <!-- ═══ Overlay close button (HTML, always clickable above canvas) ═══ -->
-    {#if activeTradeSetup && drawingsVisible && chartMode === 'agent'}
-      <button class="overlay-close-btn"
-        on:click|stopPropagation={() => { activeTradeSetup = null; _agentCloseBtn = null; dispatch('clearTradeSetup'); renderDrawings(); }}
-        title="Close overlay">&#x2715;</button>
-    {/if}
-
-    <!-- ═══ First-scan CTA (shows before any scan) ═══ -->
-    {#if !hasScanned && !activeTradeSetup && chartMode === 'agent'}
-      <div class="first-scan-cta">
-        <button class="fsc-btn" on:click={requestAgentScan}>
-          <span class="fsc-icon">&#x25C9;</span>
-          <span class="fsc-label">RUN SCAN</span>
-          <span class="fsc-sub">AI agents analyze current market</span>
-        </button>
-      </div>
-    {/if}
-
-    <!-- ═══ Post-scan Trade CTA (shows after scan with active setup) ═══ -->
-    {#if activeTradeSetup && chartMode === 'agent'}
-      <div class="trade-cta-bar">
-        <span class="tcb-dir" class:long={activeTradeSetup.dir === 'LONG'} class:short={activeTradeSetup.dir === 'SHORT'}>
-          {activeTradeSetup.dir === 'LONG' ? '▲' : '▼'} {activeTradeSetup.dir}
-        </span>
-        <span class="tcb-conf">{activeTradeSetup.conf}%</span>
-        <span class="tcb-rr">R:R 1:{activeTradeSetup.rr.toFixed(1)}</span>
-        <button class="tcb-execute" class:long={activeTradeSetup.dir === 'LONG'} class:short={activeTradeSetup.dir === 'SHORT'}
-          on:click={() => {
-            if (activeTradeSetup) openQuickTrade(activeTradeSetup.pair, activeTradeSetup.dir as TradeDirection, activeTradeSetup.entry, activeTradeSetup.tp, activeTradeSetup.sl);
-          }}>
-          EXECUTE {activeTradeSetup.dir}
-        </button>
-      </div>
-    {/if}
-
     {#if drawingMode !== 'none' && chartMode === 'agent'}
       <div class="drawing-indicator">
         {#if drawingMode === 'hline'}
@@ -2686,11 +2622,11 @@
         {:else if drawingMode === 'trendline'}
           CLICK two points for trend line
         {:else if drawingMode === 'trade'}
-          Position — drag down LONG · drag up SHORT
+          Position: 드래그 ↓ LONG · 드래그 ↑ SHORT — 자동 ENTRY/TP/SL 생성
         {:else if drawingMode === 'longentry'}
-          LONG — drag to set ENTRY / SL / TP
+          LONG: 클릭 후 드래그로 ENTRY/SL/TP 생성
         {:else if drawingMode === 'shortentry'}
-          SHORT — drag to set ENTRY / SL / TP
+          SHORT: 클릭 후 드래그로 ENTRY/SL/TP 생성
         {/if}
         <button class="drawing-cancel" on:click={() => setDrawingMode('none')}>ESC</button>
       </div>
@@ -2703,7 +2639,7 @@
     {#if showPosition && posEntry !== null && posTp !== null && posSl !== null}
       <div class="pos-overlay">
         <div class="pos-badge {posDir.toLowerCase()}">
-          {posDir === 'LONG' ? '▲ LONG' : posDir === 'SHORT' ? '▼ SHORT' : '— NEUTRAL'}
+          {posDir === 'LONG' ? '🚀 LONG' : posDir === 'SHORT' ? '💀 SHORT' : '— NEUTRAL'}
         </div>
         <div class="pos-levels">
           <span class="pos-tp" class:highlight={hoverLine === 'tp' || isDragging === 'tp'}>{hoverLine === 'tp' ? '↕' : ''} TP ${Math.round(posTp).toLocaleString()}</span>
@@ -2752,9 +2688,9 @@
           <button type="button" on:click={() => setTradePlanRatio(20)}>20/80</button>
         </div>
         <div class="plan-actions">
-          <button type="button" class="plan-action ghost" on:click={cancelTradePlan}>CANCEL</button>
+          <button type="button" class="plan-action ghost" on:click={cancelTradePlan}>취소</button>
           <button type="button" class="plan-action primary" class:long={planned.dir === 'LONG'} class:short={planned.dir === 'SHORT'} on:click={openTradeFromPlan}>
-            OPEN {planned.dir}
+            포지션 생성 ({planned.dir})
           </button>
         </div>
       </div>
@@ -3546,61 +3482,6 @@
     pointer-events: none;
     white-space: nowrap;
   }
-
-  /* ═══ Overlay close button (HTML) ═══ */
-  .overlay-close-btn {
-    position: absolute; top: 8px; right: 80px; z-index: 10;
-    width: 22px; height: 22px; border-radius: 4px;
-    background: rgba(10,9,8,.8); border: 1px solid rgba(232,150,125,.35);
-    color: rgba(232,150,125,.9); font-size: 11px; line-height: 1;
-    cursor: pointer; transition: all .15s;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .overlay-close-btn:hover { background: rgba(232,150,125,.15); border-color: #E8967D; color: #E8967D; }
-
-  /* ═══ First-scan CTA overlay ═══ */
-  .first-scan-cta {
-    position: absolute; inset: 0; z-index: 12;
-    display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(ellipse at center, rgba(10,9,8,.6) 0%, transparent 70%);
-    pointer-events: none;
-  }
-  .fsc-btn {
-    pointer-events: auto;
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    padding: 20px 36px; border-radius: 8px;
-    background: rgba(10,9,8,.85); border: 1.5px solid rgba(232,150,125,.35);
-    cursor: pointer; transition: all .2s;
-  }
-  .fsc-btn:hover { border-color: #E8967D; box-shadow: 0 0 20px rgba(232,150,125,.15); background: rgba(10,9,8,.95); }
-  .fsc-icon { font-size: 20px; color: #E8967D; animation: fscPulse 2s ease infinite; }
-  @keyframes fscPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.92)} }
-  .fsc-label { font-family: var(--fm); font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #E8967D; }
-  .fsc-sub { font-family: var(--fm); font-size: 9px; color: rgba(240,237,228,.4); letter-spacing: .5px; }
-
-  /* ═══ Post-scan Trade CTA bar ═══ */
-  .trade-cta-bar {
-    position: absolute; bottom: 0; left: 0; right: 0; z-index: 14;
-    display: flex; align-items: center; gap: 10px;
-    padding: 6px 12px;
-    background: rgba(10,9,8,.9); border-top: 1px solid rgba(232,150,125,.2);
-    backdrop-filter: blur(4px);
-  }
-  .tcb-dir { font-family: var(--fm); font-size: 11px; font-weight: 900; letter-spacing: 1px; }
-  .tcb-dir.long { color: var(--grn, #00ff88); }
-  .tcb-dir.short { color: var(--red, #ff2d55); }
-  .tcb-conf { font-family: var(--fd); font-size: 12px; font-weight: 800; color: rgba(240,237,228,.6); }
-  .tcb-rr { font-family: var(--fm); font-size: 9px; color: rgba(240,237,228,.4); letter-spacing: .5px; }
-  .tcb-execute {
-    margin-left: auto;
-    padding: 5px 16px; border-radius: 4px;
-    font-family: var(--fm); font-size: 10px; font-weight: 900; letter-spacing: 1px;
-    cursor: pointer; transition: all .15s; border: 1px solid;
-  }
-  .tcb-execute.long { color: #0A0908; background: var(--grn, #00ff88); border-color: var(--grn, #00ff88); }
-  .tcb-execute.long:hover { box-shadow: 0 0 12px rgba(0,255,136,.3); }
-  .tcb-execute.short { color: #fff; background: var(--red, #ff2d55); border-color: var(--red, #ff2d55); }
-  .tcb-execute.short:hover { box-shadow: 0 0 12px rgba(255,45,85,.3); }
 
   .tv-container { flex: 1; position: relative; overflow: hidden; background: #0a0a1a; }
   .tv-container :global(iframe) { width: 100% !important; height: 100% !important; border: none !important; }

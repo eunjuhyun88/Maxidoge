@@ -325,14 +325,7 @@
   .wr-msg-sl { color: var(--red); }
   .wr-msg-src { font-family: var(--fm); font-size: 8px; color: rgba(232,150,125,.4); margin-left: auto; opacity: 0; transition: opacity .15s; }
   .wr-msg:hover .wr-msg-src { opacity: 1; }
-  .wr-msg-text.expanded { -webkit-line-clamp: unset; cursor: pointer; }
-  .wr-msg-text { cursor: pointer; }
   .wr-msg-actions { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
-  .wr-msg-actions-secondary {
-    display: flex; align-items: center; gap: 4px; margin-top: 3px;
-    opacity: 0; max-height: 0; overflow: hidden; transition: opacity .15s, max-height .15s;
-  }
-  .wr-msg:hover .wr-msg-actions-secondary { opacity: 1; max-height: 30px; }
   .wr-act-btn {
     font-family: var(--fm); font-size: 9px; font-weight: 800; letter-spacing: .5px;
     padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all .12s; border: 1px solid;
@@ -341,10 +334,12 @@
   .wr-act-btn.long:hover { background: rgba(0,255,136,.18); border-color: rgba(0,255,136,.45); }
   .wr-act-btn.short { color: var(--red); border-color: rgba(255,45,85,.25); background: rgba(255,45,85,.05); flex: 1; text-align: center; }
   .wr-act-btn.short:hover { background: rgba(255,45,85,.18); border-color: rgba(255,45,85,.45); }
-  .wr-act-btn.track { color: #00ccff; border-color: rgba(0,204,255,.2); background: rgba(0,204,255,.04); }
+  .wr-act-btn.track { color: #00ccff; border-color: rgba(0,204,255,.2); background: rgba(0,204,255,.04); opacity: 0; transition: opacity .15s; }
   .wr-act-btn.track:hover { background: rgba(0,204,255,.15); }
-  .wr-act-btn.chart { color: #E8967D; border-color: rgba(232,150,125,.25); background: rgba(232,150,125,.05); }
+  .wr-msg:hover .wr-act-btn.track { opacity: 1; }
+  .wr-act-btn.chart { color: #E8967D; border-color: rgba(232,150,125,.25); background: rgba(232,150,125,.05); padding: 5px 6px; opacity: 0; transition: opacity .15s; }
   .wr-act-btn.chart:hover { background: rgba(232,150,125,.15); border-color: rgba(232,150,125,.5); }
+  .wr-msg:hover .wr-act-btn.chart { opacity: 1; }
 
   /* ═══ Empty State ═══ */
   .wr-empty {

@@ -1390,7 +1390,6 @@
                 {chatTradeReady}
                 chatTradeDir={chatSuggestedDir}
                 {activeTradeSetup}
-                hasScanned={!!latestScan}
                 on:scanrequest={handleChartScanRequest}
                 on:chatrequest={handleChartChatRequest}
                 on:clearTradeSetup={() => { activeTradeSetup = null; }}

@@ -400,56 +400,6 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 
 ---
 
-## Feature Details (주요 기능별 상세)
-
-### 1. Arena (전략형 — `/arena`, 4,236줄)
-- **5-phase**: DRAFT → ANALYSIS → HYPOTHESIS → BATTLE → RESULT
-- 8-에이전트 드래프트 → 48-factor 분석 → 유저 가설 → 실시간 배틀
-- 캐릭터 상태머신 (9 states), 8 action types, PnL 추적
-- 핵심 파일: `arena/+page.svelte`, `gameState` store, `gameLoop`/`scoring`/`battleResolver` engine
-
-### 2. Arena v2 (간소화 — `/arena-v2`, 262줄)
-- DRAFT → ANALYSIS → HYPOTHESIS → BATTLE → RESULT (간소화 5-phase)
-- 4가지 뷰 전환: Arena, Chart, Mission, Card (키보드 1/2/3/4)
-- 핵심 파일: `arena-v2/+page.svelte`, `arenaV2State` store, `v2BattleEngine`
-
-### 3. Arena War (스피드형 AI 대전 — `/arena-war`, 54줄)
-**핵심 원칙:** "같은 데이터, 다른 해석" — AI와 인간이 동일 데이터(48팩터+C02)를 보고 다르게 판단
-- **7-Phase**: `SETUP(10s) → AI_ANALYZE(8s) → HUMAN_CALL(45s) → REVEAL(3s) → BATTLE(2min) → JUDGE(3s) → RESULT`
-- 매 판 = 게임 플레이 + ORPO 학습 신호 + RAG 메모리 포인트
-- 데이터 파이프라인: `GameRecord → OrpoPair → RAGEntry → arena_war_records + arena_war_rag(PostgreSQL)`
-- **RAG 파이프라인**: AI_ANALYZE 시 256d 임베딩→유사게임 검색→Few-shot 주입→Commander LLM, RESULT 시 RAG 저장
-- 핵심 파일: `arenaWarStore`(~830줄), `arenaWarTypes`, `mockArenaData`, `gameRecordStore`, `ragEmbedding`, `fewShotBuilder`
-- 컴포넌트: `components/arena-war/` (7: Setup, Analyze, HumanCall, Reveal, Battle, Judge, Result)
-- **현재 상태**: ✅ Phase 1 완성 (UI + 상태머신 + mock + 서버 저장) | ✅ Phase 2 RAG + Few-Shot 완성 | ✅ Phase 3 Decision Memory 완성
-- ⬚ DB 마이그레이션 미적용 (`001_arena_war_records.sql`, `002_arena_war_rag.sql`, `003_decision_memory.sql`)
-
-### 4. Terminal (마켓 스캐너 — `/terminal`, 3,333줄)
-- 3패널 리사이즈: War Room(200-450px) | Chart | Intel(220-500px)
-- War Room: 채팅 기반 시장 분석 → 패턴 감지 → 에이전트 추론
-- QuickTrade: LONG/SHORT 포지션 + PnL 추적
-- Copy Trade: War Room 시그널 → 트레이드 변환
-- **RAG Decision Memory**: 스캔 완료 시 8에이전트 시그널→256d 임베딩→`arena_war_rag` 테이블 저장 (source='terminal_scan', agent_signals JSONB, chain_id, semantic dedup, fire-and-forget)
-- Intel Agent Shadow: 백그라운드 분석 에이전트 (`/api/terminal/intel-agent-shadow`)
-- Intel Policy: 정책 기반 인텔 런타임 (`/api/terminal/intel-policy`)
-- Opportunity Scan: 멀티자산 기회 스캔 (`/api/terminal/opportunity-scan`)
-- 핵심 파일: `terminal/+page.svelte`, `quickTradeStore`, `copyTradeStore`, `scanEngine`(서버), `intelShadowAgent`, `intelPolicyRuntime`
-
-### 5. Passport (유저 프로필 — `/passport`, 2,688줄)
-- 탭 기반: Holdings | Trades | Signals | Agents | Learning
-- Holdings: 지갑 자산 + 실시간 가격
-- Learning: ORPO 데이터셋 빌드, 트레이닝 잡, 평가 리포트
-- 진행 시스템: LP → Tier (BRONZE→SILVER→GOLD→DIAMOND→MASTER)
-- 핵심 파일: `passport/+page.svelte`, `userProfileStore`, `progressionRules`
-
-### 6. Signals (시그널 허브 — `/signals`, 983줄)
-- 3가지 뷰: Community | Signals | Oracle
-- 시그널 소스: Arena + Trade + Tracked + Agent
-- 시그널 추적 → QuickTrade 전환 가능
-- 핵심 파일: `signals/+page.svelte`, `trackedSignalStore`, `OracleLeaderboard`
-
----
-
 ## UIUX Optimization (Loox Reference)
 
 **디자인 레퍼런스:** Loox "Lost in Space" (https://loox.app/lost-in-space)
