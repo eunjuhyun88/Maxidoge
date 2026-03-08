@@ -5164,6 +5164,44 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `chartDrawingRuntime.ts` is back to green, but the drawing stack is still a large synchronous chunk footprint
 - Status: DONE
 
+## [2026-03-08 11:50:45 +0900] FINISH arena-optional-panel-lazy-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor with a performance bias, but avoid another failed lazy boundary on the always-on chart surface
+- What changed:
+  - Updated `src/routes/arena/+page.svelte`
+    - removed top-level static imports for optional arena surfaces:
+      - `src/components/arena/MatchHistory.svelte`
+      - `src/components/arena/views/ChartWarView.svelte`
+      - `src/components/arena/views/MissionControlView.svelte`
+      - `src/components/arena/views/CardDuelView.svelte`
+      - `src/components/arena/ResultPanel.svelte`
+    - added on-demand loaders so match history opens lazily and alternate arena views / alt-view result panel only load when those branches are actually active
+    - kept always-on shell imports (`ArenaTopbar`, `PhaseGuide`, `ViewPicker`, `ArenaBattleLayout`) unchanged to avoid regressing the main battle view
+    - added lightweight loading placeholders for lazy alternate views and the alt-view result panel
+  - Updated `CLAUDE.md`
+    - documented the arena optional-panel lazy policy so those imports are not silently made static again later
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `1192`
+  - `src/components/arena/ArenaChartRail.svelte`: `124` lines
+  - `src/components/arena/MatchHistory.svelte`: `412` lines
+  - `src/components/arena/views/ChartWarView.svelte`: `468` lines
+  - `src/components/arena/views/MissionControlView.svelte`: `587` lines
+  - `src/components/arena/views/CardDuelView.svelte`: `643` lines
+  - `src/components/arena/ResultPanel.svelte`: `279` lines
+  - server entry `src/routes/arena/+page.svelte`: `167.89 kB`
+  - server chunk `src/components/arena/ChartPanel.svelte`: `49.08 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.25 kB`
+  - server chunk `src/lib/chart/primitives/drawingManager.ts`: `100.39 kB`
+- Residual risks:
+  - the arena SSR entry improved meaningfully, but `drawingManager.js` is still the single heaviest chart-adjacent server chunk
+  - the always-on battle path is now dominated by `ArenaBattleLayout` + chart drawing/runtime internals, not by optional modal/view shells
+  - a failed attempt to lazy-load the always-on `ChartPanel` through `ArenaChartRail` was intentionally discarded because it worsened chunk distribution instead of helping it
+- Status: DONE
+
 ## [2026-03-08 03:15:50 +0900] FINISH arena-battle-layout-derivatives-cleanup-slice-20260308 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
@@ -5417,4 +5455,57 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - the blueprint is now the top-level design authority, but execution still depends on the detailed boundary inventory and contract extraction documents being kept aligned
   - the codebase still contains unrelated arena WIP in the worktree, so future execution slices must keep commit scope narrow
   - the next design-to-implementation bridge should be a domain-by-domain execution checklist derived from this blueprint, not another competing top-level architecture doc
+- Status: DONE
+
+## [2026-03-08 12:07:54 +0900] FINISH arena-scene-shell-extraction-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning arena without changing layout positions and move the remaining scene shell markup out of the route
+- What changed:
+  - Added `src/components/arena/ArenaMatchScene.svelte`
+    - moved API sync badge, topbar, match-history mount point, phase guide, view picker, alt-view lazy host, result-panel overlay, and battle-layout switching out of `arena/+page.svelte`
+  - Updated `src/routes/arena/+page.svelte`
+    - replaced the large non-lobby/non-draft scene markup with a single `ArenaMatchScene` boundary
+    - introduced derived `arenaMatchSceneProps` bundle so the route now hands off scene-shell presentation in one contract
+    - removed scene-shell-local CSS from the route
+  - Updated `CLAUDE.md`
+    - locked `ArenaMatchScene.svelte` as the canonical post-lobby/post-draft arena scene shell
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `1078` lines
+  - `src/components/arena/ArenaMatchScene.svelte`: `233` lines
+  - `src/components/arena/ArenaBattleLayout.svelte`: `51` lines
+  - `src/components/arena/ArenaChartRail.svelte`: `124` lines
+  - `src/components/arena/ArenaBattleSidebar.svelte`: `142` lines
+  - server entry `src/routes/arena/+page.svelte`: `173.86 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns significant phase/controller runtime despite the scene shell extraction
+  - `src/components/arena/ArenaBattleStageSurface.svelte` remains the largest pure battle presentation hotspot
+  - arena SSR pressure is still dominated by `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
+- Status: DONE
+
+## [2026-03-08 12:16:13 +0900] FINISH phase-0-boundary-freeze-checklist-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing the redesign forward by turning the top-level blueprint into an execution checklist with an actual current-state baseline
+- What changed:
+  - Added `docs/exec-plans/active/phase-0-boundary-freeze-checklist-2026-03-08.md`
+    - translated the redesign blueprint into the concrete Phase 0 execution checklist
+    - captured the current baseline:
+      - browser-side `$lib/server` imports in `src/routes`, `src/components`, `src/lib/stores`, `src/lib/api`: `0`
+      - confirmed browser-side direct `/api` fetch bypass still alive in `src/lib/stores/warRoomStore.ts`
+      - `31` files under `src/lib/api/**` still declare local `interface` or `type` shapes
+    - fixed the Phase 0 workstreams, domain readiness scorecard, immediate execution queue, and repeated validation commands
+  - Updated `docs/exec-plans/active/README.md`
+    - added the Phase 0 checklist right under the master redesign blueprint
+  - Updated `docs/exec-plans/index.md`
+    - added the Phase 0 checklist to the Active section
+- Validation:
+  - `npm run docs:check`: PASS
+  - `docs/exec-plans/active/phase-0-boundary-freeze-checklist-2026-03-08.md`: `309` lines
+- Residual risks:
+  - the checklist is only useful if the baseline numbers keep being refreshed as slices land
+  - the current direct `/api` bypass in `warRoomStore.ts` still blocks a fully clean seam
+  - `terminalApi.ts` and `arenaApi.ts` still need more contract-owned DTO coverage before Phase 0 can be treated as complete
 - Status: DONE
