@@ -6175,3 +6175,26 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `arena/+page.svelte` still assembles the full controller/runtime bundle even though local state wiring is thinner
   - unrelated auth/position-sizer WIP remains outside this slice
 - Status: DONE
+
+## [2026-03-09 02:18:00 +0900] FINISH passport-learning-panel-controller-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/passport-learning-panel
+- Request: keep pushing safe refactor slices while the main worktree has unrelated staged wallet/auth WIP
+- What changed:
+  - Added [passportLearningPanelController.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/passport/passportLearningPanelController.ts#L1)
+    - centralizes passport learning-panel hydration, worker execution, retrain queue, and report generation side effects
+    - owns shared loading/action/error message choreography so the route stops repeating the same async flow four times
+    - provides a canonical `createPassportLearningPanelState()` initializer for the route-owned panel state object
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - collapsed multiple learning panel state atoms into one panel state object with derived aliases
+    - moved learning action handlers to the new controller while keeping the existing template and styling intact
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `passportLearningPanelController.ts` as the canonical passport learning side-effect boundary
+- Validation:
+  - `npm run check`: PASS
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+- Residual risks:
+  - `passport/+page.svelte` is still a large shell and continues to own holdings orchestration plus all tab markup/CSS
+  - this slice was validated in an isolated worktree because the main worktree had unrelated staged wallet/auth changes
+- Status: DONE
