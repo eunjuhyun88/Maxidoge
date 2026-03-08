@@ -6021,6 +6021,29 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - unrelated arena bridge and position-sizer WIP remain dirty and must stay out of this slice
 - Status: DONE
 
+## [2026-03-09 01:18:00 +0900] FINISH arena-game-state-bridge-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena split, keep layout/position unchanged, and keep pushing with CLAUDE-aligned records
+- What changed:
+  - Added [arenaGameStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaGameStateBridge.ts#L1)
+    - centralized arena route `gameState` mutations for squad config, lobby entry, arena view, result progression, battle bootstrap/tick/result, analysis projection, and hypothesis submission/timeout
+    - keeps hypothesis and `pos` synchronized so chart-dragged TP/SL/ENTRY changes no longer leave stale battle position state behind
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - removed all remaining inline `gameState.update(...)` closures from controller wiring
+    - rewired match/shell/result/battle/chart/phase controllers to consume the canonical game-state bridge
+    - reduced route-local mutation glue so the page remains a phase/runtime coordinator rather than a direct store mutator
+- Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaGameStateBridge` as the canonical owner for arena route `gameState` mutations
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - arena route still owns controller/runtime assembly and should keep shrinking toward a bundle/controller host
+  - unrelated auth/position-sizer WIP in the worktree must stay out of this slice
+- Status: DONE
+
 ## [2026-03-08 23:49:43 +0900] FINISH phase-2-auth-route-helper-extraction-20260308 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
