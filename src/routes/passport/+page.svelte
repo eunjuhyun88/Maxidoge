@@ -14,20 +14,9 @@
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
   import { fetchHoldings } from '$lib/api/portfolioApi';
   import {
-    fetchPassportLearningStatus,
-    fetchPassportLearningDatasets,
-    fetchPassportLearningEvals,
-    fetchPassportLearningTrainJobs,
-    fetchPassportLearningReports,
-    runPassportLearningWorker,
-    queuePassportRetrainJob,
-    generatePassportLearningReport,
-    type PassportLearningStatus,
-    type PassportDatasetVersion,
-    type PassportEvalReport,
-    type PassportTrainJob,
-    type PassportReport
-  } from '$lib/api/passportLearningApi';
+    createPassportLearningPanelController,
+    createPassportLearningPanelState,
+  } from '$lib/passport/passportLearningPanelController';
   import { livePrices } from '$lib/stores/priceStore';
   import EmptyState from '../../components/shared/EmptyState.svelte';
   import {
@@ -359,98 +348,30 @@
     learningInsight
   ]);
 
-  let learningStatusRemote: PassportLearningStatus | null = $state(null);
-  let learningDatasetsRemote: PassportDatasetVersion[] = $state([]);
-  let learningEvalsRemote: PassportEvalReport[] = $state([]);
-  let learningTrainJobsRemote: PassportTrainJob[] = $state([]);
-  let learningReportsRemote: PassportReport[] = $state([]);
-  let learningHydrated = $state(false);
-  let learningRefreshing = $state(false);
-  let learningActionRunning = $state(false);
-  let learningActionMessage = $state('');
-  let learningErrorMessage = $state('');
+  let learningPanel = $state(createPassportLearningPanelState());
+  const learningStatusRemote = $derived(learningPanel.statusRemote);
+  const learningDatasetsRemote = $derived(learningPanel.datasetsRemote);
+  const learningEvalsRemote = $derived(learningPanel.evalsRemote);
+  const learningTrainJobsRemote = $derived(learningPanel.trainJobsRemote);
+  const learningReportsRemote = $derived(learningPanel.reportsRemote);
+  const learningHydrated = $derived(learningPanel.hydrated);
+  const learningRefreshing = $derived(learningPanel.refreshing);
+  const learningActionRunning = $derived(learningPanel.actionRunning);
+  const learningActionMessage = $derived(learningPanel.actionMessage);
+  const learningErrorMessage = $derived(learningPanel.errorMessage);
 
-  async function hydrateLearningPanel() {
-    learningRefreshing = true;
-    learningErrorMessage = '';
-    try {
-      const [status, datasets, evals, jobs, reports] = await Promise.all([
-        fetchPassportLearningStatus(),
-        fetchPassportLearningDatasets({ limit: 6 }),
-        fetchPassportLearningEvals({ limit: 6 }),
-        fetchPassportLearningTrainJobs(6),
-        fetchPassportLearningReports({ limit: 4 }),
-      ]);
-      learningStatusRemote = status;
-      learningDatasetsRemote = datasets;
-      learningEvalsRemote = evals;
-      learningTrainJobsRemote = jobs;
-      learningReportsRemote = reports;
-      learningHydrated = true;
-    } catch (error) {
-      learningErrorMessage = error instanceof Error ? error.message : 'Failed to load learning pipeline';
-      learningHydrated = true;
-    } finally {
-      learningRefreshing = false;
-    }
-  }
-
-  async function runLearningWorkerNow() {
-    if (learningActionRunning) return;
-    learningActionRunning = true;
-    learningActionMessage = '';
-    const worker = await runPassportLearningWorker({
-      workerId: `passport-ui:${Date.now()}`,
-      limit: 50,
-    });
-    if (!worker) {
-      learningErrorMessage = 'Worker run failed. Check auth or DB connection.';
-    } else {
-      learningActionMessage = `Worker ${worker.workerId} processed ${worker.processed}/${worker.claimed} events`;
-      learningErrorMessage = '';
-    }
-    await hydrateLearningPanel();
-    learningActionRunning = false;
-  }
-
-  async function queueLearningRetrainNow() {
-    if (learningActionRunning) return;
-    learningActionRunning = true;
-    learningActionMessage = '';
-    const datasetVersionIds = learningDatasetsRemote.slice(0, 3).map((item) => item.datasetVersionId);
-    const job = await queuePassportRetrainJob({
-      modelRole: 'policy',
-      targetModelVersion: `policy-ui-${Date.now()}`,
-      datasetVersionIds,
-      triggerReason: 'manual_passport_ui',
-    });
-    if (!job) {
-      learningErrorMessage = 'Failed to queue retrain job.';
-    } else {
-      learningActionMessage = `Retrain job queued: ${job.targetModelVersion}`;
-      learningErrorMessage = '';
-    }
-    await hydrateLearningPanel();
-    learningActionRunning = false;
-  }
-
-  async function generateLearningReportNow() {
-    if (learningActionRunning) return;
-    learningActionRunning = true;
-    learningActionMessage = '';
-    const report = await generatePassportLearningReport({
-      reportType: 'on_demand',
-      summary: `# Passport AI Report\n\n- generated_at: ${new Date().toISOString()}\n- closed_win_rate: ${closedWinRate}%\n- avg_win: ${avgWinPnl.toFixed(2)}%\n- avg_loss: ${avgLossPnl.toFixed(2)}%\n- long_bias: ${longBiasPct}%`,
-    });
-    if (!report) {
-      learningErrorMessage = 'Failed to generate report draft.';
-    } else {
-      learningActionMessage = `Report generated: ${report.modelVersion}`;
-      learningErrorMessage = '';
-    }
-    await hydrateLearningPanel();
-    learningActionRunning = false;
-  }
+  const passportLearningPanelController = createPassportLearningPanelController({
+    getState: () => learningPanel,
+    setState: (next) => {
+      learningPanel = next;
+    },
+    getSummary: () => ({
+      closedWinRate,
+      avgWinPnl,
+      avgLossPnl,
+      longBiasPct,
+    }),
+  });
 
   const learningOpsConnected = $derived(Boolean(
     learningStatusRemote || learningDatasetsRemote.length || learningEvalsRemote.length || learningTrainJobsRemote.length || learningReportsRemote.length
@@ -551,7 +472,7 @@
       void hydrateHoldings();
     }
 
-    void hydrateLearningPanel();
+    void passportLearningPanelController.hydrate();
   });
 </script>
 
@@ -951,16 +872,16 @@
               <div class="section-header">AI LEARNING PIPELINE</div>
 
               <div class="ml-action-row">
-                <button class="qa-btn qa-sync" onclick={hydrateLearningPanel} disabled={learningRefreshing}>
+                <button class="qa-btn qa-sync" onclick={() => passportLearningPanelController.hydrate()} disabled={learningRefreshing}>
                   {learningRefreshing ? 'REFRESHING...' : 'REFRESH'}
                 </button>
-                <button class="qa-btn qa-terminal" onclick={runLearningWorkerNow} disabled={learningActionRunning}>
+                <button class="qa-btn qa-terminal" onclick={() => passportLearningPanelController.runWorkerNow()} disabled={learningActionRunning}>
                   RUN WORKER
                 </button>
-                <button class="qa-btn qa-arena" onclick={queueLearningRetrainNow} disabled={learningActionRunning}>
+                <button class="qa-btn qa-arena" onclick={() => passportLearningPanelController.queueRetrainNow()} disabled={learningActionRunning}>
                   QUEUE RETRAIN
                 </button>
-                <button class="qa-btn qa-wallet" onclick={generateLearningReportNow} disabled={learningActionRunning}>
+                <button class="qa-btn qa-wallet" onclick={() => passportLearningPanelController.generateReportNow()} disabled={learningActionRunning}>
                   GENERATE REPORT
                 </button>
               </div>
