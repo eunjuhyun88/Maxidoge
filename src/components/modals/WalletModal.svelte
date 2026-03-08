@@ -13,7 +13,15 @@
     setWalletModalStep,
     type WalletModalStep,
   } from '$lib/stores/walletModalStore';
+  import { hasWalletAuthProof } from '$lib/contracts/auth';
   import { loginAuth, logoutAuth, registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
+  import {
+    getWalletFunnelErrorReason,
+    parseWalletLoginForm,
+    parseWalletSignupForm,
+    resolveWalletAuthStartStep,
+    type AuthMode,
+  } from '$lib/auth/walletModalFlow';
   import {
     WALLET_PROVIDER_LABEL,
     getPreferredEvmChainCode,
@@ -25,7 +33,6 @@
     type WalletProviderKey
   } from '$lib/wallet/providers';
 
-  type AuthMode = 'signup' | 'login';
   type WalletFunnelStep = 'modal_open' | 'connect' | 'sign' | 'auth' | 'disconnect';
   type WalletFunnelStatus = 'view' | 'success' | 'error';
 
@@ -41,7 +48,6 @@
     profile: 'MY PROFILE'
   };
 
-  const WALLET_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
   const preferredEvmChain = getPreferredEvmChainCode();
   const walletConnectReady = isWalletConnectConfigured();
 
@@ -94,18 +100,6 @@
     });
   }
 
-  function toErrorReason(error: unknown): string {
-    const message = error instanceof Error ? error.message.toLowerCase() : '';
-    if (!message) return 'unknown';
-    if (message.includes('reject') || message.includes('denied')) return 'user_rejected';
-    if (message.includes('timeout')) return 'timeout';
-    if (message.includes('network')) return 'network';
-    if (message.includes('wallet')) return 'wallet';
-    if (message.includes('signature') || message.includes('sign')) return 'signature';
-    if (message.includes('email') || message.includes('nickname')) return 'form_validation';
-    return 'unexpected';
-  }
-
   function isWalletProviderKey(value: string): value is WalletProviderKey {
     return value === 'metamask'
       || value === 'coinbase'
@@ -128,7 +122,7 @@
   }
 
   function hasWalletProof(): boolean {
-    return Boolean(signedWalletMessage && WALLET_SIGNATURE_RE.test(signedWalletSignature));
+    return hasWalletAuthProof(signedWalletMessage, signedWalletSignature);
   }
 
   function setAuthMode(mode: AuthMode) {
@@ -141,70 +135,13 @@
 
   function startAuthFlow(mode: AuthMode) {
     setAuthMode(mode);
-
-    if (walletState.connected && walletState.address) {
-      if (hasWalletProof()) {
-        setWalletModalStep(mode);
-      } else {
-        setWalletModalStep('sign-message');
-      }
-      return;
-    }
-
-    setWalletModalStep('wallet-select');
-  }
-
-  function parseEmailOnly(): { email: string } | null {
-    clearErrors();
-    const email = emailInput.trim();
-    if (!email.includes('@')) {
-      emailError = 'Valid email required';
-      return null;
-    }
-    if (email.length > 254) {
-      emailError = 'Email is too long';
-      return null;
-    }
-    return { email };
-  }
-
-  function parseSignupInput(): { email: string; nickname: string } | null {
-    const emailPayload = parseEmailOnly();
-    if (!emailPayload) return null;
-
-    const nickname = nicknameInput.trim();
-    if (nickname.length < 2) {
-      emailError = 'Nickname must be 2+ characters';
-      return null;
-    }
-    if (nickname.length > 32) {
-      emailError = 'Nickname must be 32 characters or less';
-      return null;
-    }
-
-    return {
-      email: emailPayload.email,
-      nickname,
-    };
-  }
-
-  function parseLoginInput(): { email: string; nickname?: string } | null {
-    const emailPayload = parseEmailOnly();
-    if (!emailPayload) return null;
-
-    const nickname = nicknameInput.trim();
-    if (nickname && nickname.length < 2) {
-      emailError = 'Nickname must be 2+ characters if provided';
-      return null;
-    }
-    if (nickname.length > 32) {
-      emailError = 'Nickname must be 32 characters or less';
-      return null;
-    }
-
-    return nickname
-      ? { email: emailPayload.email, nickname }
-      : { email: emailPayload.email };
+    setWalletModalStep(resolveWalletAuthStartStep({
+      mode,
+      walletConnected: walletState.connected,
+      walletAddress: walletState.address,
+      walletMessage: signedWalletMessage,
+      walletSignature: signedWalletSignature,
+    }));
   }
 
   function getSignedWalletProof(): { walletMessage: string; walletSignature: string } | null {
@@ -233,8 +170,15 @@
   }
 
   async function handleSignupSubmit() {
-    const payload = parseSignupInput();
-    if (!payload) return;
+    clearErrors();
+    const parsed = parseWalletSignupForm({
+      emailInput,
+      nicknameInput,
+    });
+    if (!parsed.ok) {
+      emailError = parsed.error;
+      return;
+    }
     if (!ensureWalletReadyForAuth()) return;
 
     const walletProof = getSignedWalletProof();
@@ -243,7 +187,7 @@
     authSubmitting = true;
     try {
       const res = await registerAuth({
-        ...payload,
+        ...parsed.value,
         walletAddress: walletState.address,
         walletMessage: walletProof.walletMessage,
         walletSignature: walletProof.walletSignature,
@@ -257,7 +201,7 @@
       emailError = error instanceof Error ? error.message : 'Failed to create account';
       trackWalletFunnel('auth', 'error', {
         auth_mode: 'signup',
-        reason: toErrorReason(error),
+        reason: getWalletFunnelErrorReason(error),
       });
     } finally {
       authSubmitting = false;
@@ -265,8 +209,15 @@
   }
 
   async function handleLoginSubmit() {
-    const payload = parseLoginInput();
-    if (!payload) return;
+    clearErrors();
+    const parsed = parseWalletLoginForm({
+      emailInput,
+      nicknameInput,
+    });
+    if (!parsed.ok) {
+      emailError = parsed.error;
+      return;
+    }
     if (!ensureWalletReadyForAuth()) return;
 
     const walletProof = getSignedWalletProof();
@@ -275,8 +226,8 @@
     authSubmitting = true;
     try {
       const res = await loginAuth({
-        email: payload.email,
-        nickname: payload.nickname ?? '',
+        email: parsed.value.email,
+        nickname: parsed.value.nickname ?? '',
         walletAddress: walletState.address,
         walletMessage: walletProof.walletMessage,
         walletSignature: walletProof.walletSignature,
@@ -290,7 +241,7 @@
       emailError = error instanceof Error ? error.message : 'Failed to log in';
       trackWalletFunnel('auth', 'error', {
         auth_mode: 'login',
-        reason: toErrorReason(error),
+        reason: getWalletFunnelErrorReason(error),
       });
     } finally {
       authSubmitting = false;
@@ -335,7 +286,7 @@
       actionError = error instanceof Error ? error.message : 'Failed to connect wallet';
       trackWalletFunnel('connect', 'error', {
         provider,
-        reason: toErrorReason(error),
+        reason: getWalletFunnelErrorReason(error),
       });
       setWalletModalStep('wallet-select');
     } finally {
@@ -395,7 +346,7 @@
     } catch (error) {
       clearWalletProof();
       actionError = error instanceof Error ? error.message : 'Failed to sign wallet message';
-      trackWalletFunnel('sign', 'error', { reason: toErrorReason(error) });
+      trackWalletFunnel('sign', 'error', { reason: getWalletFunnelErrorReason(error) });
     } finally {
       signingMessage = false;
     }

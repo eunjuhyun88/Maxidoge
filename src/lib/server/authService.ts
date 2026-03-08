@@ -1,4 +1,9 @@
 import type { Cookies } from '@sveltejs/kit';
+import {
+  EVM_WALLET_SIGNATURE_RE,
+  validateAuthEmail,
+  validateAuthNickname,
+} from '$lib/contracts/auth';
 import { createAuthSession } from './authRepository';
 import {
   buildSessionCookieValue,
@@ -11,8 +16,6 @@ import {
   normalizeEthAddress,
   verifyAndConsumeEvmNonce,
 } from './walletAuthRepository';
-
-const EVM_SIGNATURE_RE = /^0x[0-9a-f]{130}$/i;
 
 export interface AuthIdentityFields {
   email: string;
@@ -88,20 +91,8 @@ export function readWalletProofFields(body: unknown): WalletProofFields {
   };
 }
 
-export function validateEmail(email: string): string | null {
-  if (!email || !email.includes('@')) return 'Valid email required';
-  if (email.length > 254) return 'Email is too long';
-  return null;
-}
-
-export function validateNickname(nickname: string, required = true): string | null {
-  if (!nickname) return required ? 'Nickname must be 2+ characters' : null;
-  if (nickname.length < 2) return required
-    ? 'Nickname must be 2+ characters'
-    : 'Nickname must be 2+ characters if provided';
-  if (nickname.length > 32) return 'Nickname must be 32 characters or less';
-  return null;
-}
+export const validateEmail = validateAuthEmail;
+export const validateNickname = validateAuthNickname;
 
 export function verifyWalletProof(
   args: WalletProofVerifyArgs<true>
@@ -144,7 +135,7 @@ export async function verifyWalletProof(
   if (walletMessage.length > 2048) {
     return { ok: false, status: 400, error: 'Signed wallet message is too long' };
   }
-  if (!EVM_SIGNATURE_RE.test(walletSignature)) {
+  if (!EVM_WALLET_SIGNATURE_RE.test(walletSignature)) {
     return { ok: false, status: 400, error: signatureRequiredMessage };
   }
 

@@ -40,10 +40,11 @@ Already landed in the current monolith:
 9. lifecycle/progression state now lives in [userLifecycleStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userLifecycleStore.ts#L1), and [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) no longer stores `phase`, `hasSeenDemo`, `hasCompletedOnboarding`, `matchesPlayed`, or `totalLP`
 10. wallet modal visibility and step flow now live in [walletModalStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletModalStore.ts#L1), and [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) no longer stores `showWalletModal` or `walletModalStep`
 11. [authService.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/authService.ts#L1) now owns shared auth body parsing, identity validation, wallet-proof verification, and session cookie issuance for [login/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/login/+server.ts#L1) and [register/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/register/+server.ts#L1)
+12. shared auth validation rules now live in [contracts/auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/auth.ts#L1), and browser-side wallet funnel parsing/start-step branching now live in [walletModalFlow.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalFlow.ts#L1) instead of being duplicated inside [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
 
 Still blocking full Phase 2 cutover:
 
-1. [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) still owns most wallet connect/sign/auth funnel orchestration, even though store ownership is now split cleanly
+1. [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) still owns the async wallet connect/sign/auth transport calls, even though validation and start-step branching are now split cleanly
 2. `profile` still exposes a compatibility aggregate surface for deeper screens like [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
 3. core route handlers outside auth still own too much inline SQL and mapping logic
 
