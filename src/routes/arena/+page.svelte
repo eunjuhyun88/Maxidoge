@@ -81,12 +81,6 @@
   import type { CharSpriteState, BattleTurn } from '$lib/engine/arenaCharacters';
   import { juice_shake, juice_flash, juice_confetti } from '$lib/engine/arenaGameJuice';
 
-  type MatchHistoryComponentType = typeof import('../../components/arena/MatchHistory.svelte').default;
-  type ResultPanelComponentType = typeof import('../../components/arena/ResultPanel.svelte').default;
-  type ChartWarViewComponentType = typeof import('../../components/arena/views/ChartWarView.svelte').default;
-  type MissionControlViewComponentType = typeof import('../../components/arena/views/MissionControlView.svelte').default;
-  type CardDuelViewComponentType = typeof import('../../components/arena/views/CardDuelView.svelte').default;
-
   const gs = $derived($gameState);
   const currentBtcPrice = $derived($btcPrice || gs.bases.BTC || 97000);
   const arenaModeDisplay = $derived(buildArenaModeDisplay(gs.arenaMode, gs.tournament, gs.pair));
@@ -97,11 +91,6 @@
   const arenaHypothesisBadge = $derived(buildArenaHypothesisBadge(gs.hypothesis));
   const arenaPhaseTrack = $derived(buildArenaPhaseTrack(gs.phase));
   const arenaPreviewDisplay = $derived(buildArenaPreviewDisplay(gs.hypothesis, gs.squadConfig));
-  let MatchHistoryComponent = $state<MatchHistoryComponentType | null>(null);
-  let ResultPanelComponent = $state<ResultPanelComponentType | null>(null);
-  let ChartWarViewComponent = $state<ChartWarViewComponentType | null>(null);
-  let MissionControlViewComponent = $state<MissionControlViewComponentType | null>(null);
-  let CardDuelViewComponent = $state<CardDuelViewComponentType | null>(null);
   let resultData = $state<ArenaResultState>(buildArenaResultStateSeed());
   const arenaAltViewProps = $derived({
     phase: gs.phase,
@@ -137,45 +126,6 @@
   let resultVisible = $state(false);
   const resultOverlayTitle = $derived(buildArenaResultOverlayTitle(gs.arenaMode, resultData.win));
   let floatingWords = $state<ArenaFloatingWord[]>([]);
-
-  function ensureMatchHistoryComponent() {
-    if (MatchHistoryComponent || typeof window === 'undefined') return;
-    void import('../../components/arena/MatchHistory.svelte').then((module) => {
-      MatchHistoryComponent = module.default;
-    });
-  }
-
-  function ensureResultPanelComponent() {
-    if (ResultPanelComponent || typeof window === 'undefined') return;
-    void import('../../components/arena/ResultPanel.svelte').then((module) => {
-      ResultPanelComponent = module.default;
-    });
-  }
-
-  function ensureAltArenaViewComponent(view: 'chart' | 'mission' | 'card') {
-    if (typeof window === 'undefined') return;
-
-    if (view === 'chart') {
-      if (ChartWarViewComponent) return;
-      void import('../../components/arena/views/ChartWarView.svelte').then((module) => {
-        ChartWarViewComponent = module.default;
-      });
-      return;
-    }
-
-    if (view === 'mission') {
-      if (MissionControlViewComponent) return;
-      void import('../../components/arena/views/MissionControlView.svelte').then((module) => {
-        MissionControlViewComponent = module.default;
-      });
-      return;
-    }
-
-    if (CardDuelViewComponent) return;
-    void import('../../components/arena/views/CardDuelView.svelte').then((module) => {
-      CardDuelViewComponent = module.default;
-    });
-  }
 
   // ═══════ CHARACTER-CENTERED ARENA STATE ═══════
   // Character sprite state per agent
@@ -947,7 +897,6 @@
     losses: gs.losses,
     onConfirmGoLobby: arenaShellController.confirmGoLobby,
     onToggleMatchHistory: arenaShellController.toggleMatchHistory,
-    MatchHistoryComponent,
     matchHistoryOpen,
     onCloseMatchHistory: arenaShellController.closeMatchHistory,
     phase: gs.phase,
@@ -955,31 +904,12 @@
     timeframe: gs.timeframe,
     arenaView: gs.arenaView,
     onSelectArenaView: arenaShellController.selectArenaView,
-    ChartWarViewComponent,
-    MissionControlViewComponent,
-    CardDuelViewComponent,
     altViewProps: arenaAltViewProps,
     resultVisible: gs.phase === 'RESULT' && resultVisible,
-    ResultPanelComponent,
     resultPanelProps: arenaResultPanelProps,
     onPlayAgain: arenaShellController.playAgain,
     onLobby: arenaShellController.goLobby,
     battleLayoutProps: arenaBattleLayoutProps,
-  });
-
-  $effect(() => {
-    if (matchHistoryOpen) {
-      ensureMatchHistoryComponent();
-    }
-  });
-
-  $effect(() => {
-    if (gs.arenaView === 'chart' || gs.arenaView === 'mission' || gs.arenaView === 'card') {
-      ensureAltArenaViewComponent(gs.arenaView);
-      if (gs.phase === 'RESULT' && resultVisible) {
-        ensureResultPanelComponent();
-      }
-    }
   });
 
   onMount(() => {

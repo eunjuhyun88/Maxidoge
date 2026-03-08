@@ -5485,6 +5485,28 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - arena SSR pressure is still dominated by `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
 - Status: DONE
 
+## [2026-03-08 12:19:31 +0900] FINISH arena-scene-lazy-owner-normalization-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep designing while saving progress and move remaining scene-shell lazy ownership out of the route
+- What changed:
+  - Updated `src/components/arena/ArenaMatchScene.svelte`
+    - moved lazy component ownership for `MatchHistory`, `ResultPanel`, `ChartWarView`, `MissionControlView`, and `CardDuelView` into the scene shell
+    - scene shell now resolves its own lazy imports instead of receiving preloaded component constructors from the route
+  - Updated `CLAUDE.md`
+    - locked lazy import ownership under `ArenaMatchScene.svelte`
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ArenaMatchScene.svelte`: `281` lines
+  - `src/routes/arena/+page.svelte`: `1008` lines
+  - server entry `src/routes/arena/+page.svelte`: `173.86 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` is thinner at the scene shell edge, but phase/controller orchestration still dominates the file
+  - `src/components/arena/ArenaBattleStageSurface.svelte` remains the largest pure presentation hotspot
+  - arena SSR pressure is still dominated by `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
+- Status: DONE
+
 ## [2026-03-08 12:16:13 +0900] FINISH phase-0-boundary-freeze-checklist-slice-20260308 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
@@ -5541,6 +5563,33 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - this slice improves initial runtime behavior more than build-size metrics; `drawingManager` remains the heaviest chart-side chunk and still needs deeper code splitting if SSR pressure becomes the next target
   - drawing tool actions that are currently no-op before manager init (`undo`, `redo`, magnet/style actions) may still need first-use lazy activation if those controls become user-visible earlier
   - `ChartPanel` and `chartPanelSupportRuntime` are still major arena-side hotspots even after the eager preload path was removed
+- Status: DONE
+
+## [2026-03-08 15:03:49 +0900] FINISH arena-scene-lazy-ownership-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning arena by moving optional scene lazy-loading out of the route and into the scene shell boundary
+- What changed:
+  - Updated `src/components/arena/ArenaMatchScene.svelte`
+    - moved `MatchHistory`, `ChartWarView`, `MissionControlView`, `CardDuelView`, and alt-view `ResultPanel` dynamic import ownership into the scene shell
+    - added local lazy component state plus scene-owned effects keyed by `matchHistoryOpen`, `arenaView`, and `resultVisible`
+  - Updated `src/routes/arena/+page.svelte`
+    - removed route-local lazy component type aliases, state slots, and `ensure*Component()` helpers
+    - removed route-level lazy-loading effects for match history and alt views
+    - shrank `arenaMatchSceneProps` down to pure scene props instead of component constructor plumbing
+  - Updated `CLAUDE.md`
+    - locked `ArenaMatchScene.svelte` as the owner of optional scene lazy boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - `src/routes/arena/+page.svelte`: `1008` lines
+  - `src/components/arena/ArenaMatchScene.svelte`: `281` lines
+  - server entry `src/routes/arena/+page.svelte`: `171.29 kB`
+- Residual risks:
+  - `arena/+page.svelte` is thinner, but it still owns a large controller/runtime assembly surface
+  - `ArenaMatchScene.svelte` now owns scene lazy loading correctly, but the battle-side view-model bundle still comes from the route and can be reduced further
+  - arena SSR pressure is still dominated by `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
 - Status: DONE
 
 ## [2026-03-08 12:35:41 +0900] FINISH phase-2-identity-settings-bootstrap-cutover-design-slice-20260308 (frontend)

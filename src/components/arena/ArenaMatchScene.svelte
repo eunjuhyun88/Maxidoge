@@ -31,7 +31,6 @@
     losses?: number;
     onConfirmGoLobby?: () => void;
     onToggleMatchHistory?: () => void;
-    MatchHistoryComponent?: MatchHistoryComponentType | null;
     matchHistoryOpen?: boolean;
     onCloseMatchHistory?: () => void;
     phase?: Phase;
@@ -39,12 +38,8 @@
     timeframe?: string;
     arenaView?: ArenaView;
     onSelectArenaView?: (view: ArenaView) => void;
-    ChartWarViewComponent?: ChartWarViewComponentType | null;
-    MissionControlViewComponent?: MissionControlViewComponentType | null;
-    CardDuelViewComponent?: CardDuelViewComponentType | null;
     altViewProps?: Record<string, unknown>;
     resultVisible?: boolean;
-    ResultPanelComponent?: ResultPanelComponentType | null;
     resultPanelProps?: Record<string, unknown>;
     onPlayAgain?: () => void;
     onLobby?: () => void;
@@ -65,7 +60,6 @@
     losses = 0,
     onConfirmGoLobby = () => {},
     onToggleMatchHistory = () => {},
-    MatchHistoryComponent = null,
     matchHistoryOpen = false,
     onCloseMatchHistory = () => {},
     phase = 'ANALYSIS',
@@ -73,12 +67,8 @@
     timeframe = '1h',
     arenaView = 'arena',
     onSelectArenaView = () => {},
-    ChartWarViewComponent = null,
-    MissionControlViewComponent = null,
-    CardDuelViewComponent = null,
     altViewProps = {},
     resultVisible = false,
-    ResultPanelComponent = null,
     resultPanelProps = {},
     onPlayAgain = () => {},
     onLobby = () => {},
@@ -97,6 +87,64 @@
       battleSidebarProps: {},
     },
   }: Props = $props();
+
+  let MatchHistoryComponent = $state<MatchHistoryComponentType | null>(null);
+  let ResultPanelComponent = $state<ResultPanelComponentType | null>(null);
+  let ChartWarViewComponent = $state<ChartWarViewComponentType | null>(null);
+  let MissionControlViewComponent = $state<MissionControlViewComponentType | null>(null);
+  let CardDuelViewComponent = $state<CardDuelViewComponentType | null>(null);
+
+  function ensureMatchHistoryComponent() {
+    if (MatchHistoryComponent || typeof window === 'undefined') return;
+    void import('./MatchHistory.svelte').then((module) => {
+      MatchHistoryComponent = module.default;
+    });
+  }
+
+  function ensureResultPanelComponent() {
+    if (ResultPanelComponent || typeof window === 'undefined') return;
+    void import('./ResultPanel.svelte').then((module) => {
+      ResultPanelComponent = module.default;
+    });
+  }
+
+  function ensureAltArenaViewComponent(view: 'chart' | 'mission' | 'card') {
+    if (typeof window === 'undefined') return;
+
+    if (view === 'chart') {
+      if (ChartWarViewComponent) return;
+      void import('./views/ChartWarView.svelte').then((module) => {
+        ChartWarViewComponent = module.default;
+      });
+      return;
+    }
+
+    if (view === 'mission') {
+      if (MissionControlViewComponent) return;
+      void import('./views/MissionControlView.svelte').then((module) => {
+        MissionControlViewComponent = module.default;
+      });
+      return;
+    }
+
+    if (CardDuelViewComponent) return;
+    void import('./views/CardDuelView.svelte').then((module) => {
+      CardDuelViewComponent = module.default;
+    });
+  }
+
+  $effect(() => {
+    if (!matchHistoryOpen) return;
+    ensureMatchHistoryComponent();
+  });
+
+  $effect(() => {
+    if (arenaView !== 'chart' && arenaView !== 'mission' && arenaView !== 'card') return;
+    ensureAltArenaViewComponent(arenaView);
+    if (resultVisible) {
+      ensureResultPanelComponent();
+    }
+  });
 </script>
 
 <!-- API Sync Status -->
