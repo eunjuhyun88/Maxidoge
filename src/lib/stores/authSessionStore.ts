@@ -1,10 +1,11 @@
 import { derived, writable } from 'svelte/store';
-import { fetchAuthSession, type AuthUserPayload } from '$lib/api/auth';
+import { fetchAuthSession } from '$lib/api/auth';
+import type { AuthUser } from '$lib/contracts/auth';
 
 export interface AuthSessionState {
   authenticated: boolean;
   hydrated: boolean;
-  user: AuthUserPayload | null;
+  user: AuthUser | null;
 }
 
 const defaultAuthSession: AuthSessionState = {
@@ -31,7 +32,7 @@ export const authSessionIdentity = derived(authSessionStore, ($session) => ({
 let _authHydrated = false;
 let _authHydrationPromise: Promise<void> | null = null;
 
-export function applyAuthenticatedUser(user: AuthUserPayload) {
+export function applyAuthenticatedUser(user: AuthUser) {
   authSessionStore.set({
     authenticated: true,
     hydrated: true,

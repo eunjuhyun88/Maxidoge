@@ -42,6 +42,7 @@ Already landed in the current monolith:
 11. [authService.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/authService.ts#L1) now owns shared auth body parsing, identity validation, wallet-proof verification, and session cookie issuance for [login/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/login/+server.ts#L1) and [register/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/register/+server.ts#L1)
 12. shared auth validation rules now live in [contracts/auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/auth.ts#L1), and browser-side wallet funnel parsing/start-step branching now live in [walletModalFlow.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalFlow.ts#L1) instead of being duplicated inside [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
 13. wallet connect/sign/auth/logout transport now lives in [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1), so [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) no longer owns provider-specific account request, nonce/signature verification, or auth submit transport code inline
+14. legacy auth response normalization now lives in [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1), so [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1) is now a thin browser transport wrapper and [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) reads `AuthUser` directly from contracts instead of API-local alias types
 
 Still blocking full Phase 2 cutover:
 
@@ -131,7 +132,7 @@ Reason:
 
 Validated now:
 
-1. [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1) still normalizes legacy `success` envelopes into contract shapes locally
+1. [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) now owns the temporary legacy auth-envelope normalization boundary, and [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1) is reduced to transport-only fetch helpers
 2. [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) now owns authenticated session hydration and cookie-backed identity state
 3. [userLifecycleStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userLifecycleStore.ts#L1) now owns local lifecycle phase and progression tracking that used to be mixed into wallet state
 4. [walletModalStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletModalStore.ts#L1) now owns wallet modal visibility and step flow

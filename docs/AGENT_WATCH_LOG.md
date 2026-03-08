@@ -6225,3 +6225,32 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `arena/+page.svelte` still owns bridge/runtime/controller assembly even though phase-entry side effects are thinner
   - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
 - Status: IN PROGRESS
+
+## [2026-03-09 02:18:00 +0900] FINISH phase-2-auth-api-normalizer-extraction-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal split, continue pushing narrow slices, and make the browser auth wrapper thinner after wallet-modal transport extraction
+- What changed:
+  - Added [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1)
+    - extracted legacy auth envelope parsing and timestamp coercion
+    - extracted fallback auth-user shaping for register/login responses
+    - extracted nonce, wallet-verify, session, and logout response normalization into one canonical browser-side boundary
+  - Updated [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1)
+    - removed inline auth-user/session/nonce/verify parsing helpers
+    - reduced the wrapper to fetch transport plus calls into the shared normalizer
+  - Updated [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1)
+    - stopped depending on API-local auth type aliases
+    - now reads `AuthUser` directly from [contracts/auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/auth.ts#L1)
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1) and [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - recorded `authApiNormalizer.ts` as the canonical browser auth normalization boundary
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `WalletModal.svelte` still owns the higher-level UI flow state machine and profile-step rendering
+  - legacy auth response normalization still exists for old route envelopes, even though it is now isolated in one helper
+  - unrelated untracked arena position-sizer WIP remains outside this slice
+- Status: DONE
