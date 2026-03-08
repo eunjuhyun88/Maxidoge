@@ -36,10 +36,11 @@ Already landed in the current monolith:
 5. authenticated session authority now lives in [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) instead of [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
 6. profile projection and client-derived profile metrics now split across [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1), [userProfileDerivedStatsStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileDerivedStatsStore.ts#L1), and the compatibility aggregate [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
 7. read-only shell consumers such as [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1), [ContextBanner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ContextBanner.svelte#L1), and [LivePanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/live/LivePanel.svelte#L1) no longer depend on the wide compatibility `userProfileStore` surface when they only need projection-level data or no profile data at all
+8. [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) now reads account identity from [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1), and [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) no longer stores `email`, `nickname`, or `tier`
 
 Still blocking full Phase 2 cutover:
 
-1. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) still mirrors some auth-facing fields for compatibility and has not yet fully shed that compatibility layer
+1. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) still owns wallet-modal step routing and lifecycle phase, even though auth identity itself has moved out
 2. `profile` still exposes a compatibility aggregate surface for deeper screens like [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
 3. core route handlers still own too much inline SQL and mapping logic
 
@@ -124,12 +125,12 @@ Validated now:
 
 1. [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1) still normalizes legacy `success` envelopes into contract shapes locally
 2. [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) now owns authenticated session hydration and cookie-backed identity state
-3. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) now behaves as wallet/modal shell state and mirrors auth state only for compatibility
+3. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) now behaves as wallet/modal shell state only, while [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) owns account identity
 
 Implication:
 
-Phase 2 no longer needs to invent a new auth-session store.
-It now needs to finish removing compatibility-only auth fields from wallet consumers over time.
+Phase 2 no longer needs to invent a new auth-session store or keep auth identity duplicated in wallet state.
+It now needs to trim the remaining wallet-shell concerns into narrower modal/runtime boundaries over time.
 
 1. server-derived session mirror
 2. browser-only wallet connection and modal flow

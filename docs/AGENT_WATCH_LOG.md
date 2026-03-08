@@ -5800,6 +5800,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `walletStore.ts` still carries auth-facing compatibility fields for `WalletModal.svelte`
 - Status: DONE
 
+## [2026-03-08 19:02:54 +0900] FINISH phase-2-wallet-auth-identity-cut-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on Phase 2 and remove the remaining auth identity duplication from `walletStore`
+- What changed:
+  - Updated [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1)
+    - added `authSessionIdentity` so wallet consumers can read email, nickname, tier, and phase directly from session authority
+  - Updated [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+    - removed duplicated `email`, `nickname`, and `tier` from wallet state
+    - removed the unused `registerUser` / `userTier` compatibility surface
+    - switched modal step routing to consult `authSessionStore` instead of local mirrored identity
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - switched account/profile rendering and signed-session checks from `walletState.*` identity fields to `authSessionIdentity`
+    - kept wallet transport state (`address`, `provider`, `chain`, `balance`, `signature`) on `walletStore`
+  - Result:
+    - auth identity now has one browser authority path: `authSessionStore`
+    - wallet state is reduced to wallet connection, modal flow, and lifecycle shell state
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `walletStore.ts` still mixes wallet connection UX with modal step orchestration and lifecycle phase tracking
+  - `WalletModal.svelte` remains a large component even though its authority split is now cleaner
+- Status: DONE
+
 ## [2026-03-08 18:36:16 +0900] FINISH arena-stage-surface-host-split-20260308 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

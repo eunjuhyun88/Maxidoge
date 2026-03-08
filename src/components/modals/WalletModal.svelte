@@ -7,7 +7,7 @@
     signMessage,
     disconnectWallet
   } from '$lib/stores/walletStore';
-  import { applyAuthenticatedUser, clearAuthenticatedUser } from '$lib/stores/authSessionStore';
+  import { applyAuthenticatedUser, authSessionIdentity, authSessionStore, clearAuthenticatedUser } from '$lib/stores/authSessionStore';
   import type { WalletState } from '$lib/stores/walletStore';
   import { loginAuth, logoutAuth, registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
   import {
@@ -42,6 +42,8 @@
   const walletConnectReady = isWalletConnectConfigured();
 
   const walletState = $derived($walletStore);
+  const authSession = $derived($authSessionStore);
+  const authIdentity = $derived($authSessionIdentity);
   const step = $derived(walletState.walletModalStep);
 
   let authMode: AuthMode = $state<AuthMode>('signup');
@@ -361,7 +363,7 @@
 
       const signature = await signInjectedEvmMessage(provider, noncePayload.message, walletState.address);
 
-      if (walletState.email) {
+      if (authSession.authenticated) {
         await verifyWalletSignature({
           address: walletState.address,
           message: noncePayload.message,
@@ -377,7 +379,7 @@
 
       trackWalletFunnel('sign', 'success', { provider, chain: walletState.chain });
 
-      if (walletState.email) {
+      if (authSession.authenticated) {
         setWalletModalStep('profile');
       } else {
         setWalletModalStep(authMode);
@@ -402,7 +404,7 @@
     disconnectWallet();
     clearAuthenticatedUser();
     trackWalletFunnel('disconnect', 'success', {
-      had_session: Boolean(walletState.email),
+      had_session: authSession.authenticated,
     });
     closeWalletModal();
   }
@@ -425,7 +427,7 @@
   }
 
   function authStepState(): 'active' | 'done' | 'idle' {
-    if (walletState.email) return 'done';
+    if (authSession.authenticated) return 'done';
     if (step === 'signup' || step === 'login' || step === 'connected') return 'active';
     return 'idle';
   }
@@ -458,7 +460,7 @@
         <span class="wht">{headerTitle}</span>
       </div>
 
-      {#if !walletState.email}
+      {#if !authSession.authenticated}
         <div class="mode-toggle" role="tablist" aria-label="Auth mode">
           <button
             type="button"
@@ -688,26 +690,26 @@
       <div class="wb">
         <div class="step-hero">
           <span class="hero-kicker">ACCOUNT</span>
-          <h3 class="hero-title">{walletState.nickname || 'TRADER'}</h3>
+          <h3 class="hero-title">{authIdentity.nickname || 'TRADER'}</h3>
           <p class="hero-sub">Core profile information only.</p>
         </div>
 
         <div class="info-box">
           <div class="info-row">
             <span class="info-k">EMAIL</span>
-            <span class="info-v">{walletState.email || '-'}</span>
+            <span class="info-v">{authIdentity.email || '-'}</span>
           </div>
           <div class="info-row">
             <span class="info-k">NICKNAME</span>
-            <span class="info-v">{walletState.nickname || '-'}</span>
+            <span class="info-v">{authIdentity.nickname || '-'}</span>
           </div>
           <div class="info-row">
             <span class="info-k">TIER</span>
-            <span class="info-v">{walletState.tier.toUpperCase()}</span>
+            <span class="info-v">{(authIdentity.tier || (walletState.connected ? 'connected' : 'guest')).toUpperCase()}</span>
           </div>
           <div class="info-row">
             <span class="info-k">PHASE</span>
-            <span class="info-v">P{walletState.phase}</span>
+            <span class="info-v">P{authIdentity.phase ?? walletState.phase}</span>
           </div>
           <div class="info-row">
             <span class="info-k">WALLET</span>

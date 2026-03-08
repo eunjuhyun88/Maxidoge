@@ -3,7 +3,7 @@
 // Per UserJourney Lifecycle spec: P0→P5 progression
 // ═══════════════════════════════════════════════════════════════
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
 import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import {
@@ -19,11 +19,6 @@ import { resolveLifecyclePhase } from './progressionRules';
 export type UserTier = 'guest' | 'registered' | 'connected' | 'verified';
 
 export interface WalletState {
-  // User identity
-  tier: UserTier;
-  email: string | null;
-  nickname: string | null;
-
   // Wallet
   connected: boolean;
   address: string | null;
@@ -59,9 +54,6 @@ function normalizeProvider(raw: unknown): string | null {
 }
 
 const defaultWallet: WalletState = {
-  tier: 'guest',
-  email: null,
-  nickname: null,
   connected: false,
   address: null,
   shortAddr: null,
@@ -96,32 +88,20 @@ export const walletStore = writable<WalletState>(loadWallet());
 
 autoSave(walletStore, STORAGE_KEYS.wallet, (w) => {
   const {
-    email,
-    nickname,
-    tier,
     showWalletModal,
     walletModalStep,
     signature,
     ...persistable
   } = w;
-  void email;
-  void nickname;
-  void tier;
+  void showWalletModal;
+  void walletModalStep;
+  void signature;
   return persistable;
 }, 300);
 
 // Derived stores
 export const isWalletConnected = derived(walletStore, $w => $w.connected);
-export const userTier = derived(walletStore, $w => $w.tier);
 export const userPhase = derived(walletStore, $w => $w.phase);
-
-function normalizeTier(value: unknown, fallback: UserTier): UserTier {
-  const tier = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (tier === 'verified' || tier === 'connected' || tier === 'registered' || tier === 'guest') {
-    return tier;
-  }
-  return fallback;
-}
 
 function toShortAddr(address: string | null): string | null {
   if (!address || address.length < 10) return null;
@@ -143,9 +123,6 @@ function applyAuthSessionToWalletState(wallet: WalletState, session: AuthSession
     const phase = Number.isFinite(Number(user.phase)) ? Math.max(1, Number(user.phase)) : Math.max(1, wallet.phase);
     return {
       ...wallet,
-      email: user.email || null,
-      nickname: user.nickname || null,
-      tier: normalizeTier(user.tier, keepLiveConnection ? 'connected' : 'registered'),
       phase,
       hasCompletedOnboarding: true,
       showWalletModal: false,
@@ -161,9 +138,6 @@ function applyAuthSessionToWalletState(wallet: WalletState, session: AuthSession
 
   return {
     ...wallet,
-    email: null,
-    nickname: null,
-    tier: wallet.connected ? 'connected' : 'guest',
     showWalletModal: false,
     walletModalStep: wallet.connected ? 'connected' : 'welcome',
     address: wallet.connected ? wallet.address : null,
@@ -179,13 +153,15 @@ authSessionStore.subscribe((session) => {
 
 export function openWalletModal() {
   walletStore.update(w => {
+    const session = get(authSessionStore);
+    const hasAccount = session.authenticated && !!session.user;
     // Wallet-first flow:
     // connected + account => profile
     // connected only => choose login/signup from connected step
     // account only (session restored) but no wallet => reconnect wallet first
     const step = w.connected
-      ? (w.email ? 'profile' : 'connected')
-      : (w.email ? 'wallet-select' : 'welcome');
+      ? (hasAccount ? 'profile' : 'connected')
+      : (hasAccount ? 'wallet-select' : 'welcome');
     return { ...w, showWalletModal: true, walletModalStep: step };
   });
 }
@@ -196,19 +172,6 @@ export function closeWalletModal() {
 
 export function setWalletModalStep(step: WalletState['walletModalStep']) {
   walletStore.update(w => ({ ...w, walletModalStep: step }));
-}
-
-// Register with email + nickname (now after wallet connect)
-export function registerUser(email: string, nickname: string) {
-  walletStore.update(w => ({
-    ...w,
-    tier: w.connected ? 'connected' : 'registered',
-    email,
-    nickname,
-    phase: Math.max(resolveLifecyclePhase(w.matchesPlayed, w.totalLP), 1),
-    hasCompletedOnboarding: true,
-    walletModalStep: 'profile'
-  }));
 }
 
 // Complete demo viewing
@@ -244,7 +207,6 @@ export function signMessage(signatureOverride?: string) {
 
   walletStore.update(w => ({
     ...w,
-    tier: w.email ? 'connected' : 'guest',
     signature,
     phase: Math.max(resolveLifecyclePhase(w.matchesPlayed, w.totalLP), 2),
     walletModalStep: 'connected'
@@ -269,8 +231,7 @@ export function disconnectWallet() {
     shortAddr: null,
     balance: 0,
     provider: null,
-    signature: null,
-    tier: w.email ? 'registered' : 'guest'
+    signature: null
   }));
 }
 

@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { derived, writable } from 'svelte/store';
 import { fetchAuthSession, type AuthUserPayload } from '$lib/api/auth';
 
 export interface AuthSessionState {
@@ -14,6 +14,19 @@ const defaultAuthSession: AuthSessionState = {
 };
 
 export const authSessionStore = writable<AuthSessionState>(defaultAuthSession);
+
+export const authSessionIdentity = derived(authSessionStore, ($session) => ({
+  authenticated: $session.authenticated,
+  email: $session.user?.email ?? null,
+  nickname: $session.user?.nickname ?? null,
+  tier: typeof $session.user?.tier === 'string' ? $session.user.tier : null,
+  phase: Number.isFinite(Number($session.user?.phase)) ? Math.max(1, Number($session.user?.phase)) : null,
+  walletAddress: typeof $session.user?.walletAddress === 'string'
+    ? $session.user.walletAddress
+    : typeof $session.user?.wallet === 'string'
+      ? $session.user.wallet
+      : null,
+}));
 
 let _authHydrated = false;
 let _authHydrationPromise: Promise<void> | null = null;
