@@ -95,17 +95,17 @@ export PATH="$HOME/.local/bin:$HOME/.local/node-v22.14.0-darwin-arm64/bin:$PATH"
 ### Pages (전체 라우트 맵)
 | Route | Purpose | Key Stores | Lines |
 |-------|---------|------------|-------|
-| `/` (Home) | 랜딩 — 피처 하이라이트, Arena/Terminal 진입 | walletStore, userProfileStore | 262 |
+| `/` (Home) | 랜딩 — 피처 하이라이트, Arena/Terminal 진입 | walletStore, authSessionStore, profileTier | 262 |
 | `/arena` | 전략형 예측 아레나 — 드래프트→분석→가설→배틀→결과 (5 phases) | gameState, matchHistoryStore, pnlStore, battleFeedStore | 4,236 |
 | `/arena-v2` | 아레나 v2 — 간소화 5-phase + 4가지 뷰 전환 (1=arena,2=chart,3=mission,4=card) | arenaV2State, btcPrice | 262 |
 | `/arena-war` | 스피드형 AI 대전 — 8-phase 상태머신 (SETUP→RESULT), v3 배틀엔진(HP+챌린지), PixiJS 렌더링 | arenaWarStore, arenaWarPhase | 54 |
 | `/agents` | 에이전트 컬렉션 (Pokedex 스타일) — 학습레벨, 패턴기억, 레짐적응, 매치업경험, 전적 | agentStats | ~380 |
 | `/terminal` | 마켓 스캐너 터미널 — route shell + extracted desktop/tablet/mobile layouts + terminal/intel view-model + War Room/Chart/Intel orchestration | gameState, livePrices, copyTradeStore, trackedSignalStore | 1,175 |
-| `/passport` | 유저 프로필 허브 — 보유, 트레이드, 시그널, 에이전트, ORPO 학습 | userProfileStore, matchHistoryStore, quickTradeStore, agentStats | 2,688 |
+| `/passport` | 유저 프로필 허브 — 보유, 트레이드, 시그널, 에이전트, ORPO 학습 | userProfileStore, userLifecycleStore, matchHistoryStore, quickTradeStore, agentStats | 2,688 |
 | `/signals` | 트레이딩 시그널 허브 — 커뮤니티/추적/오라클 3뷰 + 필터 | gameState, matchHistoryStore, openTrades, activeSignals | 983 |
 | `/settings` | 유저 환경설정 — TF/SFX/언어/테마/속도/데이터소스 | gameState | 384 |
 | `/holdings` | → `/passport` 리다이렉트 | — | 10 |
-| `/oracle` | → `/signals?view=oracle` 리다이렉트 | — | 37 |
+| `/oracle` | → `/signals?view=ai` 리다이렉트 | — | 37 |
 
 ### Directory Structure
 ```
@@ -150,20 +150,26 @@ docs/
 └── warning-priority-2026-03-06.md        # zero-warning baseline / warning 회귀 방지 기준
 ```
 
-### Stores (22개 — Svelte 4 writable 패턴)
+### Stores (selected authorities — canonical full inventory: `docs/generated/store-authority-map.md`)
 | Store | Purpose | Lines |
 |-------|---------|-------|
 | **gameState** | 핵심 아레나 상태 (phase, view, hypothesis, squad, position) | 262 |
 | **arenaWarStore** | Arena War 7-phase 상태머신 + RAG 검색/저장 통합 | ~830 |
 | **arenaV2State** | Arena v2 상태 (phase, subPhase, currentView) | 326 |
 | **activeGamesStore** | 동시 진행 게임 관리 (최대 3개) | 243 |
-| **walletStore** | 지갑 연결 + 유저 진행 (guest→registered→connected→verified) | 301 |
-| **userProfileStore** | 유저 프로필 cache store (server-authoritative projection hydrate) | 241 |
+| **authSessionStore** | 쿠키 기반 세션 hydrate + 계정 identity projection | 74 |
+| **walletStore** | 지갑 연결 + wallet modal shell state | 204 |
+| **userLifecycleStore** | 로컬 lifecycle phase/progression shell (`phase`, onboarding, LP/match counters) | 100 |
+| **userProfileProjectionStore** | 서버 프로필 projection cache + optimistic profile edits | 201 |
+| **userProfileStore** | projection + derived stats compatibility aggregate | 52 |
 | **priceStore** | 통합 가격 계약 (WS/REST, BTC/ETH/SOL) — Header, Chart, Terminal 공용 | 233 |
 | **quickTradeStore** | 터미널 퀵 트레이드 (LONG/SHORT, PnL 추적) | 343 |
 | **trackedSignalStore** | War Room 시그널 추적 (24h 자동만료, QuickTrade 전환) | 301 |
 | **predictStore** | Polymarket 예측 (마켓, 포지션, 투표) | 313 |
-| **notificationStore** | 알림/토스트/P0(Guardian 하드룰) 3-part 스토어 | 309 |
+| **notificationsStore** | durable notifications + optimistic staging | 119 |
+| **toastStore** | ephemeral toast presentation state | 39 |
+| **p0OverrideStore** | Guardian/P0 shell control flag | 40 |
+| **notificationStore** | split notification stores compatibility barrel | 22 |
 | **matchHistoryStore** | 아레나 매치 기록 (승률, 연승, PnL) | 186 |
 | **copyTradeStore** | Copy Trade 빌더 + canonical publish + `clientMutationId` reconcile | 415 |
 | **pnlStore** | PnL 추적 (Arena + Polymarket) | 95 |
@@ -364,6 +370,9 @@ const records = result.rows.map((r: any) => ({ ... }));
 - `src/lib/arena/battle/arenaBattleResolverRuntime.ts`: arena route의 live resolver tick reaction, VS meter/HP reaction, result feed normalization 계층
 - `src/lib/arena/controllers/arenaAnalysisPresentationRuntime.ts`: arena route의 scout/gather/council stage presentation, findings reveal, council vote/chat/feed orchestration 계층
 - `src/lib/arena/controllers/arenaAgentRuntime.ts`: arena route의 agent state init, typing speech timer, arena chat append, battle sprite sync 전의 UI state canonical runtime 계층
+- `src/lib/arena/controllers/arenaAgentBridge.ts`: arena route의 agent speech/state/energy/chat + `SYSTEM` author 정규화 bridge 계층
+- `src/lib/arena/controllers/arenaBattleStateBridge.ts`: arena route의 battle HUD/turn/vs-meter/narration state bridge 계층
+- `src/lib/arena/controllers/arenaPageStateBridge.ts`: arena route의 overlay visibility/chart bridge/server sync/page timer state bridge 계층
 - `src/lib/arena/controllers/arenaBattleController.ts`: arena route의 battle phase entry, fallback position normalization, live resolver subscribe/cleanup, battle result phase advance canonical controller 계층
 - `src/lib/arena/result/arenaResultRuntime.ts`: arena route의 result 판정, FBS/LP 계산, history/PnL payload 조립, progression persistence/runtime 계층
 - `src/lib/arena/controllers/arenaMatchController.ts`: arena route의 squad deploy server sync, draft payload build, server sync reset canonical controller 계층
@@ -736,6 +745,10 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **Chart TradingView runtime canonical path**: TradingView safe-mode fallback, retry, timeout timer, pair/timeframe re-init debounce는 `src/components/arena/chart/chartTradingViewRuntime.ts`가 단일 진실원이다. `ChartPanel.svelte`에 `_tvInitTimer`, `_tvLoadTimer`, `tvWidget`, `reinitKey`를 다시 인라인하면 chart mode 전환과 cleanup 계약이 다시 분산된다.
 - **Chart TradingView pane canonical path**: trading-mode 전용 iframe shell, loading/error/fallback UI, `#tradingview_widget` DOM ownership은 `src/components/arena/chart/ChartTradingViewPane.svelte`가 단일 진실원이다. `ChartPanel.svelte`에 TradingView mode 전용 마크업과 스타일을 다시 인라인하지 말 것.
 - **Chart indicator strip canonical path**: agent advanced-mode indicator strip, visual mode toggle, indicator toggle chips, legend toggle/hide controls는 `src/components/arena/chart/ChartIndicatorStrip.svelte`가 단일 진실원이다. `ChartPanel.svelte`에 expanded/collapsed strip 마크업과 strip 전용 스타일을 다시 인라인하지 말 것.
+- **Chart market-pulse badge canonical path**: indicator strip 안의 Heat Score / Macro Regime badge UI, pair-change refresh, compact/expanded detail surface는 `src/components/arena/chart/MarketPulseBadge.svelte`가 단일 진실원이다. `ChartIndicatorStrip.svelte`나 `ChartPanel.svelte`에 pulse badge 전용 마크업과 polling 상태를 다시 인라인하지 말 것.
+- **Chart market-pulse lazy boundary 유지**: `src/components/arena/chart/ChartIndicatorStrip.svelte`는 strip이 실제 expanded 상태일 때만 `src/components/arena/chart/MarketPulseBadge.svelte`를 동적 import한다. badge를 strip 상단 정적 import로 되돌리거나 collapsed 상태에서도 미리 로드하면 agent advanced-mode 진입 비용이 다시 커진다.
+- **Market pulse model canonical path**: pair normalization(`BTCUSDT` -> `BTC/USDT`)과 raw transport -> UI model 변환(heat score + macro regime 계산)은 `src/lib/market/marketPulseModel.ts`가 단일 진실원이다. 서버 route, client API, badge 컴포넌트에서 pair parse나 score 계산을 다시 중복하지 말 것.
+- **Market pulse client API canonical path**: browser-side market pulse fetch, TTL cache, inflight dedupe는 `src/lib/api/marketPulse.ts`가 단일 진실원이다. `MarketPulseBadge.svelte`나 다른 chart child가 `/api/market/pulse`를 직접 호출해 중복 polling을 만들지 말 것.
 - **Chart header bar canonical path**: pair summary, 24h stats, token switch, timeframe controls, mode toggle, draw toolbar, scan/publish CTA, collapsed MA meta는 `src/components/arena/chart/ChartHeaderBar.svelte`가 단일 진실원이다. 레이아웃/위치 회귀를 막기 위해 동일 DOM/class 구조를 유지하고, `ChartPanel.svelte`에 이 상단 바 마크업과 스타일을 다시 인라인하지 말 것.
 - **Chart agent overlay chrome canonical path**: agent mode의 scale tools, indicator legend, loading/error badge, first-scan CTA, trade CTA bar, drawing notice, chart notice, position badge, drag indicator는 `src/components/arena/chart/ChartAgentOverlayChrome.svelte`가 단일 진실원이다. `ChartPanel.svelte`에는 canvas/trade-plan/annotation shell만 남기고, overlay chrome 마크업과 전용 absolute-position 스타일을 다시 인라인하지 말 것.
 - **Chart trade-plan overlay canonical path**: trade planner overlay의 SIGNAL/ENTRY/TP/SL/RISK/R:R 표시, ratio track/preset UI, open/cancel CTA, 모바일 위치 보정 스타일은 `src/components/arena/chart/ChartTradePlanOverlay.svelte`가 단일 진실원이다. `ChartPanel.svelte`는 ratio drag wiring과 `pendingTradePlan` 상태만 보유하고, overlay 마크업/스타일을 다시 인라인하지 말 것. 레이아웃 회귀를 막기 위해 기존 class와 absolute positioning 계약을 유지할 것.
@@ -765,6 +778,8 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **Arena chart bridge canonical path**: chart position visibility, entry/TP/SL/dir snapshot, active-agent marker/annotation decoration, hypothesis drag 후 RR 재계산은 `src/lib/arena/adapters/arenaChartBridge.ts`가 단일 진실원이다. `arena/+page.svelte`에 `showChartPosition`, `chartPos*`, `buildChartAnnotations`, `buildAgentMarkers`와 같은 chart bridge state/mutation을 다시 흩뿌리지 말 것.
 - **Arena chart controller canonical path**: `ChartPanel` drag callback에서 hypothesis/chartBridge를 동기 갱신하고, chart marker/position line visibility toggle을 소유하는 브리지는 `src/lib/arena/controllers/arenaChartController.ts`가 단일 진실원이다. `arena/+page.svelte`에 `onDragTP()/onDragSL()/onDragEntry()` 반복 update 로직이나 marker/position visibility inline mutation을 다시 길게 복구하지 말 것.
 - **Arena agent bridge canonical path**: arena route의 agent speech/state/energy/chat bridge와 `SYSTEM` chat author 정규화는 `src/lib/arena/controllers/arenaAgentBridge.ts`가 단일 진실원이다. `arena/+page.svelte`에 `setSpeech()/setAgentState()/setAgentEnergy()/addChatMsg()` local helper나 `SYSTEM` author cast를 다시 복구하지 말고, agent runtime과 battle presentation sync는 이 bridge를 통해서만 묶을 것.
+- **Arena battle state bridge canonical path**: arena route의 `charSprites`, `battleTurns`, `battleNarration`, `battlePhaseLabel`, `vsMeter`, `enemyHP`, `combo/critical/VS splash` setter glue는 `src/lib/arena/controllers/arenaBattleStateBridge.ts`가 단일 진실원이다. `arena/+page.svelte`에서 battle presentation/result/battle controller wiring을 위해 같은 setter 람다 묶음을 다시 반복 생성하지 말 것.
+- **Arena page state bridge canonical path**: arena route의 `serverMatchId/serverAnalysis/apiError`, `chartBridge`, `confirmingExit`, `matchHistoryOpen`, `result/preview/pvp/hypothesis` visibility, `floatDir`, `hypothesisTimer` state bridge는 `src/lib/arena/controllers/arenaPageStateBridge.ts`가 단일 진실원이다. `arena/+page.svelte`에서 shell/match/phase/chart controller마다 page-state setter/getter 람다를 다시 흩뿌리지 말고 이 bridge를 통해 공유할 것.
 - **Arena topbar canonical path**: arena 상단 shell의 lobby/exit-confirm CTA, phase track, mode badge, LP/W-L stat strip, match-history toggle 마크업과 responsive topbar CSS는 `src/components/arena/ArenaTopbar.svelte`가 단일 진실원이다. `arena/+page.svelte`에 topbar DOM/CSS를 다시 되돌리지 말고, 상단 shell 수정은 이 컴포넌트 안에서만 처리할 것.
 - **Arena optional panel lazy policy 유지**: `MatchHistory.svelte`의 optional lazy loading은 `src/components/arena/ArenaMatchScene.svelte`, alt-view 3종(`ChartWarView.svelte`, `MissionControlView.svelte`, `CardDuelView.svelte`)과 alt-view 전용 `ResultPanel.svelte`의 optional lazy loading은 `src/components/arena/ArenaAltViewHost.svelte`가 소유한다. 이 optional surface들을 다시 `arena/+page.svelte` top-level 정적 import나 route-level effect로 되돌리면 scene shell ownership이 깨지고 `arena/_page.svelte.js` 크기가 빠르게 다시 불어난다.
 - **Arena battle layout canonical path**: battle 단계의 상위 배치는 `src/components/arena/ArenaBattleLayout.svelte`가 소유하고, 좌측 chart rail은 `src/components/arena/ArenaChartRail.svelte`, 우측 battle sidebar는 `src/components/arena/ArenaBattleSidebar.svelte`가 단일 진실원이다. host 계약은 `src/components/arena/arenaBattleLayoutTypes.ts`의 `ArenaChartRailProps` / `ArenaBattleSidebarProps` bundle을 사용해 전달하고, `arena/+page.svelte`에서 긴 presentation prop 목록을 다시 직접 펼치지 않는다. chart rail 내부의 가설 sheet/dir float는 `src/components/arena/ArenaHypothesisOverlay.svelte`, preview는 `src/components/arena/ArenaPreviewOverlay.svelte`, score/status bar는 `src/components/arena/ArenaChartScoreBar.svelte`가 소유한다. battle sidebar 내부의 mission/HUD/log는 `src/components/arena/ArenaBattleMissionBar.svelte`, `src/components/arena/ArenaBattleCombatHud.svelte`, `src/components/arena/ArenaBattleNarrationLog.svelte`가 소유하고, 전투 stage surface는 `src/components/arena/ArenaBattleStageSurface.svelte`가 host로 남되 내부 particle/connectors는 `src/components/arena/ArenaBattleParticleField.svelte`, center node는 `src/components/arena/ArenaBattleCenterNode.svelte`, agent sprite presentation은 `src/components/arena/ArenaBattleAgentSprite.svelte`, overlay FX는 `src/components/arena/ArenaBattleStageFx.svelte`가 소유한다. 결과 overlay는 `src/components/arena/ArenaBattleOutcomeOverlay.svelte`가 소유한다. `arena/+page.svelte`나 상위 host에 전투 레이아웃 DOM/CSS를 다시 되돌리지 말고, 해당 child boundary 안에서만 조정할 것.

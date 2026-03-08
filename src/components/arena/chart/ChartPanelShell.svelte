@@ -179,6 +179,7 @@
         {showIndicatorLegend}
         {enableTradeLineEntry}
         {isTvLikePreset}
+        {pair}
         onSetChartVisualMode={onSetChartVisualMode}
         onToggleIndicator={onToggleIndicator}
         onToggleIndicatorLegend={onToggleIndicatorLegend}

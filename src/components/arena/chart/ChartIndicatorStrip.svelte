@@ -19,6 +19,7 @@
     showIndicatorLegend?: boolean;
     enableTradeLineEntry?: boolean;
     isTvLikePreset?: boolean;
+    pair?: string;
     onSetChartVisualMode?: (mode: 'focus' | 'full') => void;
     onToggleIndicator?: (key: IndicatorKey) => void;
     onToggleIndicatorLegend?: () => void;
@@ -41,11 +42,19 @@
     showIndicatorLegend = false,
     enableTradeLineEntry = false,
     isTvLikePreset = false,
+    pair = 'BTC/USDT',
     onSetChartVisualMode = () => {},
     onToggleIndicator = () => {},
     onToggleIndicatorLegend = () => {},
     onSetIndicatorStripState = () => {},
   }: Props = $props();
+
+  let marketPulseBadgeModule = $state<Promise<typeof import('./MarketPulseBadge.svelte')> | null>(null);
+
+  $effect(() => {
+    if (indicatorStripState !== 'expanded' || marketPulseBadgeModule) return;
+    marketPulseBadgeModule = import('./MarketPulseBadge.svelte');
+  });
 </script>
 
 <div
@@ -103,6 +112,13 @@
     <button class="ind-chip" class:on={indicatorEnabled.liq} onclick={() => onToggleIndicator('liq')} style="--ind-color:{chartTheme.liqLong}">
       LIQ
     </button>
+    <span class="deriv-sep">│</span>
+    {#if marketPulseBadgeModule}
+      {#await marketPulseBadgeModule then marketPulseBadgeNs}
+        {@const MarketPulseBadge = marketPulseBadgeNs.default}
+        <MarketPulseBadge {pair} compact={false} />
+      {/await}
+    {/if}
     <button class="legend-chip" class:on={showIndicatorLegend} onclick={onToggleIndicatorLegend}>LABELS</button>
     <button class="legend-chip" onclick={() => onSetIndicatorStripState('collapsed')}>접기</button>
     <button class="legend-chip danger" onclick={() => onSetIndicatorStripState('hidden')}>끄기</button>

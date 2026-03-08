@@ -5888,3 +5888,100 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `arena/+page.svelte` still owns the large controller/runtimes wiring block and remains the next extraction target
   - current build pulled in unrelated `market/pulse` WIP during route-map generation, so generated-doc drift outside this slice should still be treated as separate work
 - Status: DONE
+
+## [2026-03-08 23:28:08 +0900] FINISH arena-state-bridge-bundle-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep refactoring the arena route without changing layout, keep deleting repeated controller glue, and keep the CLAUDE/watch-log trail current before the next push
+- What changed:
+  - Added [arenaBattleStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaBattleStateBridge.ts#L1)
+    - centralized battle presentation/result/battle-controller access to route-level battle HUD and turn state
+    - removed repeated setter lambdas for `charSprites`, `battleTurns`, `battleNarration`, `battlePhaseLabel`, `vsMeter`, `enemyHP`, and combo/critical/VS flags from the runtime wiring surface
+  - Added [arenaPageStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaPageStateBridge.ts#L1)
+    - centralized route-local page state ownership for server sync, chart bridge, hypothesis timer, overlay visibility, match-history/open-exit state, and float direction
+    - gave `arenaMatchController`, `arenaShellController`, `arenaPhaseController`, `arenaResultController`, and `arenaChartController` a shared state bridge instead of repeating ad-hoc getter/setter closures
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - switched battle presentation, battle controller, result controller, phase controller, shell controller, match controller, and chart controller to the shared battle/page state bridges
+    - collapsed boilerplate assignment closures after the bridge cutover so the route dropped from `1002` to `975` lines
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaBattleStateBridge.ts` and `arenaPageStateBridge.ts` as canonical arena bridge ownership paths
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - server entry: `src/routes/arena/+page.svelte` = `165.22 kB`
+  - line counts:
+    - `src/routes/arena/+page.svelte` = `975`
+    - `src/lib/arena/controllers/arenaBattleStateBridge.ts` = `41`
+    - `src/lib/arena/controllers/arenaPageStateBridge.ts` = `55`
+- Residual risks:
+  - `arena/+page.svelte` is smaller again, but the remaining hotspot is still the long controller/runtime bundle assembly block
+  - local validation currently includes unrelated `market-pulse` WIP files in the working tree; those remain a separate slice and should not be mixed back into arena commits by accident
+- Status: DONE
+
+## [2026-03-08 23:32:16 +0900] FINISH chart-market-pulse-lazy-badge-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the ongoing chart/arena refactor, close the current `marketPulse` WIP as a self-contained slice, and keep pushing clean commits without dragging unrelated dirty files into the batch
+- What changed:
+  - Added [marketPulseModel.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/market/marketPulseModel.ts#L1)
+    - made pair normalization and raw transport -> computed UI model projection canonical in one place
+    - normalized compact pair inputs such as `BTCUSDT` into `BTC/USDT` so chart-side pair surfaces and server endpoints stop drifting
+  - Added [MarketPulseBadge.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/MarketPulseBadge.svelte#L1)
+    - isolated Heat Score / Macro Regime badge UI, pair-scoped refresh, compact/expanded detail rendering, and toggle state into an optional chart child
+    - uses request token guards so late responses do not overwrite the latest pair selection
+  - Updated [marketPulse.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/marketPulse.ts#L1)
+    - added browser-side TTL cache and inflight dedupe so expanded indicator strips do not stampede `/api/market/pulse`
+    - switched client projection to the shared `marketPulseModel` path instead of recomputing in the badge
+  - Updated [ChartIndicatorStrip.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartIndicatorStrip.svelte#L1)
+    - kept the strip canonical but lazy-loads `MarketPulseBadge.svelte` only when the advanced indicator strip is actually expanded
+    - reintroduced `pair` as an explicit strip contract because the badge is pair-sensitive
+  - Updated [ChartPanelShell.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartPanelShell.svelte#L1)
+    - passes `pair` through to the lazy indicator strip without re-owning any pulse logic
+  - Added [market/pulse API](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/market/pulse/+server.ts#L1) to the active route surface and refreshed [api-group-map.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/generated/api-group-map.md#L1)
+    - server cache is now keyed by normalized pair instead of a single `any` cache blob
+    - route returns raw market inputs only; UI model calculation stays on the shared client/server model path
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `MarketPulseBadge.svelte`, `marketPulseModel.ts`, and `marketPulse.ts` as canonical chart boundaries so the indicator strip does not regress into direct fetch/compute code
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - server entries:
+    - `src/routes/api/market/pulse/+server.ts` = `4.85 kB`
+    - `src/routes/arena/+page.svelte` = `165.69 kB`
+    - `src/components/arena/ChartPanel.svelte` chunk = `49.08 kB`
+- Residual risks:
+  - `MarketPulseBadge.svelte` is intentionally poll-based with a shared client cache; if this surface becomes always-on later, it should move to a push or shared-store model rather than adding more badge-local timers
+  - unconnected `PositionSizerPanel.svelte` / `positionSizer.ts` WIP remains outside this slice and should not be folded into the market-pulse contract by accident
+- Status: DONE
+
+## [2026-03-08 23:32:10 +0900] FINISH phase-2-wallet-lifecycle-store-split-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal web/server split, continue pushing slices, and keep `CLAUDE.md` plus push/merge records aligned while removing mixed authority from `walletStore`
+- What changed:
+  - Added [userLifecycleStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userLifecycleStore.ts#L1)
+    - extracted local lifecycle/progression ownership for `phase`, `hasSeenDemo`, `hasCompletedOnboarding`, `matchesPlayed`, and `totalLP`
+    - migrates legacy progression fields from the mixed `wallet` localStorage payload on first load
+    - keeps lifecycle phase normalization pinned to [progressionRules.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/progressionRules.ts#L1)
+  - Updated [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+    - reduced the store to wallet connection transport and wallet modal shell state
+    - removed lifecycle fields from `WalletState`
+    - kept compatibility re-exports for `recordMatch`, `completeDemoView`, `skipWalletConnection`, and `userPhase` so existing callers do not need a broad route sweep yet
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - now reads lifecycle phase from `userLifecycleStore`
+    - explicitly marks wallet-signature completion on the lifecycle store after successful verification
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded that auth identity and lifecycle are both split out of `walletStore`
+    - narrowed the next remaining hotspot to wallet modal step orchestration rather than mixed identity/progression ownership
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - refreshed the home/passport route ownership notes and the selected store authority table to reflect `authSessionStore` and `userLifecycleStore`
+  - Updated [refresh-generated-context.mjs](/Users/ej/Downloads/maxidoge-clones/frontend/scripts/dev/refresh-generated-context.mjs#L1)
+    - route/store generated maps now treat `walletStore` as wallet-modal shell only and add `userLifecycleStore` as the local progression shell
+- Validation:
+  - `npm run check`: pending
+  - `npm run build`: pending
+  - `npm run docs:check`: pending
+- Residual risks:
+  - `walletStore.ts` still owns modal-step routing; only authority mixing was removed in this slice
+  - generated docs may still reflect unrelated local `market/pulse` WIP and should stay out of the staged slice
+- Status: DONE
