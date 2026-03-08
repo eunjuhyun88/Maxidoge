@@ -2,8 +2,6 @@
   import ArenaBattleMissionBar from './ArenaBattleMissionBar.svelte';
   import ArenaBattleCombatHud from './ArenaBattleCombatHud.svelte';
   import ArenaBattleNarrationLog from './ArenaBattleNarrationLog.svelte';
-  import ArenaBattleStageSurface from './ArenaBattleStageSurface.svelte';
-  import ArenaBattleOutcomeOverlay from './ArenaBattleOutcomeOverlay.svelte';
   import type {
     ArenaBattleHudDisplay,
     ArenaBattlePhaseDisplay,
@@ -88,6 +86,9 @@
     floatingWords = [],
   }: Props = $props();
 
+  const arenaBattleStageSurfaceModule = import('./ArenaBattleStageSurface.svelte');
+  const arenaBattleOutcomeOverlayModule = import('./ArenaBattleOutcomeOverlay.svelte');
+
 </script>
 
 <div class="arena-sidebar">
@@ -95,39 +96,45 @@
 
   <ArenaBattleCombatHud {vsMeter} {enemyHp} {battleHudDisplay} />
 
-  <ArenaBattleStageSurface
-    {battleHudDisplay}
-    {arenaParticles}
-    {activeAgents}
-    {charSprites}
-    {currentTurnIdx}
-    {battleTurns}
-    {agentStates}
-    {showVsSplash}
-    {showCritical}
-    {criticalText}
-    {showCombo}
-    {comboCount}
-  />
+  {#await arenaBattleStageSurfaceModule then arenaBattleStageSurfaceNs}
+    {@const ArenaBattleStageSurface = arenaBattleStageSurfaceNs.default}
+    <ArenaBattleStageSurface
+      {battleHudDisplay}
+      {arenaParticles}
+      {activeAgents}
+      {charSprites}
+      {currentTurnIdx}
+      {battleTurns}
+      {agentStates}
+      {showVsSplash}
+      {showCritical}
+      {criticalText}
+      {showCombo}
+      {comboCount}
+    />
+  {/await}
 
   <ArenaBattleNarrationLog {battleHudDisplay} {battleLogPreview} {battleLogCount} />
 
-  <ArenaBattleOutcomeOverlay
-    {rewardState}
-    {onCloseReward}
-    {resultVisible}
-    {resultData}
-    {streak}
-    {fbScore}
-    {pvpVisible}
-    {resultOverlayTitle}
-    {arenaModeDisplay}
-    {score}
-    {hypothesis}
-    {onGoLobby}
-    {onPlayAgain}
-    {floatingWords}
-  />
+  {#await arenaBattleOutcomeOverlayModule then arenaBattleOutcomeOverlayNs}
+    {@const ArenaBattleOutcomeOverlay = arenaBattleOutcomeOverlayNs.default}
+    <ArenaBattleOutcomeOverlay
+      {rewardState}
+      {onCloseReward}
+      {resultVisible}
+      {resultData}
+      {streak}
+      {fbScore}
+      {pvpVisible}
+      {resultOverlayTitle}
+      {arenaModeDisplay}
+      {score}
+      {hypothesis}
+      {onGoLobby}
+      {onPlayAgain}
+      {floatingWords}
+    />
+  {/await}
 </div>
 
 <style>

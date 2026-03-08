@@ -5592,6 +5592,30 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - arena SSR pressure is still dominated by `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
 - Status: DONE
 
+## [2026-03-08 15:19:16 +0900] FINISH arena-battle-sidebar-lazy-chunk-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing arena performance cleanup, but only keep slices that materially reduce the SSR route weight
+- What changed:
+  - Updated `src/components/arena/ArenaBattleSidebar.svelte`
+    - removed static imports for `ArenaBattleStageSurface.svelte` and `ArenaBattleOutcomeOverlay.svelte`
+    - switched both to dynamic import boundaries via awaited component modules
+    - kept mission bar, combat HUD, and narration log statically in place since they are small and always visible
+  - Updated `CLAUDE.md`
+    - locked the battle-sidebar child lazy boundary rule so the heavy presentation pair is not pulled back into the main sidebar import chain
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - server entry `src/routes/arena/+page.svelte`: `158.39 kB` (from `174.34 kB` on the rejected prior slice baseline)
+  - server chunk `src/components/arena/ArenaBattleStageSurface.svelte`: `6.97 kB`
+  - server chunk `src/components/arena/ArenaBattleOutcomeOverlay.svelte`: `7.63 kB`
+- Residual risks:
+  - the main arena SSR pressure is now more clearly concentrated in `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
+  - battle sidebar is thinner, but the route still owns a large controller/runtime assembly surface
+  - if the stage or outcome components gain synchronous imports again, the arena route entry can regress quickly
+- Status: DONE
+
 ## [2026-03-08 12:35:41 +0900] FINISH phase-2-identity-settings-bootstrap-cutover-design-slice-20260308 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
