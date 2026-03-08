@@ -14,7 +14,6 @@
     type WalletModalStep,
   } from '$lib/stores/walletModalStore';
   import { hasWalletAuthProof } from '$lib/contracts/auth';
-  import { loginAuth, logoutAuth, registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
   import {
     getWalletFunnelErrorReason,
     parseWalletLoginForm,
@@ -23,13 +22,16 @@
     type AuthMode,
   } from '$lib/auth/walletModalFlow';
   import {
+    connectWalletProvider,
+    isWalletProviderKey,
+    logoutWalletSession,
+    signWalletOwnership,
+    submitWalletLogin,
+    submitWalletSignup,
+  } from '$lib/auth/walletModalTransport';
+  import {
     WALLET_PROVIDER_LABEL,
-    getPreferredEvmChainCode,
-    hasInjectedEvmProvider,
     isWalletConnectConfigured,
-    requestInjectedEvmAccount,
-    requestPhantomSolanaAccount,
-    signInjectedEvmMessage,
     type WalletProviderKey
   } from '$lib/wallet/providers';
 
@@ -48,9 +50,7 @@
     profile: 'MY PROFILE'
   };
 
-  const preferredEvmChain = getPreferredEvmChainCode();
   const walletConnectReady = isWalletConnectConfigured();
-
   const walletState = $derived($walletStore);
   const modalState = $derived($walletModalStore);
   const authSession = $derived($authSessionStore);
@@ -98,17 +98,6 @@
       mode: authMode,
       ...payload,
     });
-  }
-
-  function isWalletProviderKey(value: string): value is WalletProviderKey {
-    return value === 'metamask'
-      || value === 'coinbase'
-      || value === 'walletconnect'
-      || value === 'phantom';
-  }
-
-  function isEvmAddress(address: string): boolean {
-    return address.startsWith('0x');
   }
 
   function clearErrors() {
@@ -186,7 +175,7 @@
 
     authSubmitting = true;
     try {
-      const res = await registerAuth({
+      const res = await submitWalletSignup({
         ...parsed.value,
         walletAddress: walletState.address,
         walletMessage: walletProof.walletMessage,
@@ -225,9 +214,9 @@
 
     authSubmitting = true;
     try {
-      const res = await loginAuth({
+      const res = await submitWalletLogin({
         email: parsed.value.email,
-        nickname: parsed.value.nickname ?? '',
+        nickname: parsed.value.nickname,
         walletAddress: walletState.address,
         walletMessage: walletProof.walletMessage,
         walletSignature: walletProof.walletSignature,
@@ -256,31 +245,17 @@
       actionError = 'Unsupported wallet provider.';
       return;
     }
-    if (provider === 'walletconnect' && !walletConnectReady) {
-      actionError = 'WalletConnect project id is missing. Set PUBLIC_WALLETCONNECT_PROJECT_ID first.';
-      return;
-    }
 
     connectingProvider = WALLET_PROVIDER_LABEL[provider];
     setWalletModalStep('connecting');
 
     try {
-      if (provider === 'phantom') {
-        if (hasInjectedEvmProvider('phantom')) {
-          const walletAddress = await requestInjectedEvmAccount('phantom');
-          connectWallet(provider, walletAddress, preferredEvmChain);
-        } else {
-          const solAddress = await requestPhantomSolanaAccount();
-          connectWallet(provider, solAddress, 'SOL');
-        }
-      } else {
-        const walletAddress = await requestInjectedEvmAccount(provider);
-        connectWallet(provider, walletAddress, preferredEvmChain);
-      }
+      const connectedWallet = await connectWalletProvider(provider);
+      connectWallet(provider, connectedWallet.address, connectedWallet.chain);
       setWalletModalStep('sign-message');
       trackWalletFunnel('connect', 'success', {
         provider,
-        chain: preferredEvmChain,
+        chain: connectedWallet.chain,
       });
     } catch (error) {
       actionError = error instanceof Error ? error.message : 'Failed to connect wallet';
@@ -308,32 +283,16 @@
       }
 
       const provider = walletState.provider;
-
-      if (!isEvmAddress(walletState.address)) {
-        throw new Error('Solana wallet auth is temporarily unavailable. Use an EVM wallet.');
-      }
-
-      const noncePayload = await requestWalletNonce({
+      const proof = await signWalletOwnership({
         address: walletState.address,
         provider,
         chain: walletState.chain,
+        verifyLinkedSession: authSession.authenticated,
       });
 
-      const signature = await signInjectedEvmMessage(provider, noncePayload.message, walletState.address);
-
-      if (authSession.authenticated) {
-        await verifyWalletSignature({
-          address: walletState.address,
-          message: noncePayload.message,
-          signature,
-          provider,
-          chain: walletState.chain,
-        });
-      }
-
-      signedWalletMessage = noncePayload.message;
-      signedWalletSignature = signature;
-      signMessage(signature);
+      signedWalletMessage = proof.message;
+      signedWalletSignature = proof.signature;
+      signMessage(proof.signature);
       markWalletSignatureComplete();
 
       trackWalletFunnel('sign', 'success', { provider, chain: walletState.chain });
@@ -353,12 +312,7 @@
   }
 
   async function handleDisconnect() {
-    try {
-      await logoutAuth();
-    } catch (error) {
-      console.warn('[WalletModal] logout api failed', error);
-    }
-
+    await logoutWalletSession();
     clearWalletProof();
     disconnectWallet();
     clearAuthenticatedUser();

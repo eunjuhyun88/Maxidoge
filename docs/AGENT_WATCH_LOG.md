@@ -6113,6 +6113,34 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - unrelated untracked arena position-sizer WIP remains outside this slice
 - Status: DONE
 
+## [2026-03-09 00:06:46 +0900] FINISH phase-2-wallet-modal-transport-extraction-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal split, continue pushing slices, and move the remaining async wallet auth transport out of `WalletModal.svelte`
+- What changed:
+  - Added [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1)
+    - extracted provider-specific wallet connect transport
+    - extracted nonce/signature verification transport
+    - extracted signup/login transport wrappers
+    - extracted logout API cleanup into a dedicated helper
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - removed inline provider request branches and auth transport calls
+    - kept only modal-local UI state, store mutation, GTM tracking, and step transitions
+    - kept `walletConnectReady` as a UI-only readiness flag for button state
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1) and [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - recorded `walletModalTransport.ts` as the canonical async transport boundary
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `WalletModal.svelte` still owns the higher-level UI flow state machine and profile-step rendering
+  - wallet auth transport is cleaner, but browser/server auth success payload shaping still lives in `src/lib/api/auth.ts`
+  - unrelated untracked arena position-sizer WIP remains outside this slice
+- Status: DONE
+
 ## [2026-03-09 00:24:00 +0900] FINISH arena-game-state-bridge-tracking-20260309 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
@@ -6175,3 +6203,25 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `arena/+page.svelte` still assembles the full controller/runtime bundle even though local state wiring is thinner
   - unrelated auth/position-sizer WIP remains outside this slice
 - Status: DONE
+
+## [2026-03-09 01:56:00 +0900] FINISH arena-phase-effects-runtime-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing arena route controller assembly without changing layout/position and continue pushing safe slices
+- What changed:
+  - Added [arenaPhaseEffectsRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaPhaseEffectsRuntime.ts#L1)
+    - moved `draft/analysis/hypothesis/preview/battle` entry choreography into a dedicated runtime
+    - owns live-event start, deploy/review/battle speech loops, draft reset effects, preview confirm feed, and related audio/juice hooks
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - rewired `arenaPhaseController` and `arenaBattleController` to consume the canonical phase-effects runtime instead of route-local lambdas
+    - removed repeated phase-entry `safeTimeout()` choreography from the route while keeping scene/layout markup unchanged
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaPhaseEffectsRuntime` as the canonical owner for arena phase entry effects
+- Validation:
+  - `npm run check`: pending
+  - `npm run build`: pending
+  - `npm run gate`: pending
+- Residual risks:
+  - `arena/+page.svelte` still owns bridge/runtime/controller assembly even though phase-entry side effects are thinner
+  - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
+- Status: IN PROGRESS
