@@ -5509,3 +5509,66 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - the current direct `/api` bypass in `warRoomStore.ts` still blocks a fully clean seam
   - `terminalApi.ts` and `arenaApi.ts` still need more contract-owned DTO coverage before Phase 0 can be treated as complete
 - Status: DONE
+
+## [2026-03-08 12:21:47 +0900] FINISH chart-drawing-lazy-hydration-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep the drawing stack, but stop waking `drawingManager` on initial chart entry and clean up the code path
+- What changed:
+  - Updated `src/lib/chart/primitives/drawingPersistence.ts`
+    - added `hasDrawings(pair, timeframe)` so runtime code can check persistence cheaply without hydrating the full drawing stack
+  - Updated `src/components/arena/chart/chartDrawingRuntime.ts`
+    - split dynamic imports into separate drawing-manager and drawing-persistence loaders
+    - moved autosaver creation behind actual drawing-manager initialization
+    - changed `syncPairTimeframe()` to lazy-hydrate the manager only when persisted drawings exist for the current pair/timeframe or the manager is already active
+    - updated primitive mode activation to reuse `preload()` so first-use drawing activation also restores persisted drawings
+    - tightened `toggleDrawingsVisible()` so visibility toggles do not force a manager preload when no drawings exist
+  - Updated `src/components/arena/chart/chartPanelSupportRuntime.ts`
+    - removed unconditional `drawingRuntime.preload()` during support-runtime creation
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - kept the initial persistence sync, but it now only hydrates drawings when the current pair/timeframe actually has persisted state
+  - Updated `CLAUDE.md`
+    - locked the new persistence-first / manager-later drawing lazy policy as canonical
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - server chunk `src/components/arena/ChartPanel.svelte`: `49.08 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.70 kB`
+  - server chunk `src/lib/chart/primitives/drawingManager.ts`: `100.39 kB`
+  - server entry `src/routes/arena/+page.svelte`: `173.86 kB`
+- Residual risks:
+  - this slice improves initial runtime behavior more than build-size metrics; `drawingManager` remains the heaviest chart-side chunk and still needs deeper code splitting if SSR pressure becomes the next target
+  - drawing tool actions that are currently no-op before manager init (`undo`, `redo`, magnet/style actions) may still need first-use lazy activation if those controls become user-visible earlier
+  - `ChartPanel` and `chartPanelSupportRuntime` are still major arena-side hotspots even after the eager preload path was removed
+- Status: DONE
+
+## [2026-03-08 12:35:41 +0900] FINISH phase-2-identity-settings-bootstrap-cutover-design-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep the redesign moving, but stay in design mode and turn the abstract Phase 2 line into an actual cutover design
+- What changed:
+  - Added `docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md`
+    - fixed the true Phase 2 scope as `16` core route handlers across `auth`, `profile`, `preferences`, `ui-state`, `notifications`, and `activity`
+    - explicitly excluded `profile/passport/learning/**` and `positions/polymarket/auth` from this cutover
+    - documented the current browser edges: `auth.ts`, `profileApi.ts`, `preferencesApi.ts`, `notificationsApi.ts`, `walletStore.ts`, `userProfileStore.ts`, `notificationStore.ts`, and shell hydration surfaces
+    - captured the key blockers:
+      - `walletStore` still mixes session mirror and wallet-modal UX
+      - `userProfileStore` still mixes server projection, local cache, and client-derived overlays
+      - `notificationsApi.ts` still owns canonical notification DTOs
+      - `notificationStore.ts` still mixes durable notifications, toasts, `p0Override`, and demo seed behavior
+      - `activity` routes exist server-side but still do not have a browser wrapper seam
+    - fixed the target split and cutover sequence for `contracts -> shell bootstrap split -> route thinning -> api cutover`
+  - Updated `docs/exec-plans/active/README.md`
+    - added the dedicated Phase 2 cutover design to the active plan set
+  - Updated `docs/exec-plans/index.md`
+    - added the dedicated Phase 2 cutover design to the active execution-plan index
+- Validation:
+  - `rg --files frontend/src/routes/api | rg '/(auth|profile|preferences|ui-state|notifications|activity)'`: PASS
+  - validated `16` core Phase 2 handlers and separately confirmed deferred `profile/passport/learning/**` plus `positions/polymarket/auth`
+  - `docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md`: added as the new execution-level Phase 2 authority
+- Residual risks:
+  - the core route scan also matches deferred `profile/passport/learning/**`, so future implementation slices must keep exclusion lines explicit
+  - `notifications` and `activity` still lack the full contract/wrapper prep needed before code cutover starts
+  - `notificationStore.ts` remains one of the biggest shell-boundary tangles until it is split
+- Status: DONE
