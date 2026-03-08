@@ -6020,3 +6020,38 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `WalletModal.svelte` still owns the bulk of wallet auth funnel branching even though store ownership is cleaner
   - unrelated arena bridge and position-sizer WIP remain dirty and must stay out of this slice
 - Status: DONE
+
+## [2026-03-08 23:49:43 +0900] FINISH phase-2-auth-route-helper-extraction-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal web/server split, continue pushing slices, and keep `CLAUDE.md` plus push records aligned while thinning auth routes
+- What changed:
+  - Added [authService.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/authService.ts#L1)
+    - centralizes auth request body parsing for identity and wallet proof fields
+    - centralizes reusable email/nickname validation messages
+    - centralizes EVM wallet proof verification and nonce consumption
+    - centralizes session creation plus cookie issuance for auth routes
+  - Updated [login/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/login/+server.ts#L1)
+    - removed duplicated wallet proof validation and session-cookie creation
+    - narrowed the route to abuse guard, login lookup, and response shaping
+    - added an explicit post-verification null guard for wallet address to preserve repository type safety
+  - Updated [register/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/register/+server.ts#L1)
+    - removed duplicated identity validation, optional wallet proof validation, and session issuance
+    - narrowed the route to abuse guard, uniqueness checks, user creation, and response shaping
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - restored explicit setter parameter types for the current bridge wiring so `svelte-check` stays green while this auth slice lands
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded `authService.ts` as the canonical shared auth-route helper boundary
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented that login/register must use `authService.ts` for wallet proof and session issuance
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `WalletModal.svelte` still owns the broader wallet connect/sign/auth funnel, so auth browser-side flow is cleaner at the route boundary but not fully extracted yet
+  - auth routes still call repository functions directly; this slice only removed duplicated validation/session issuance logic, not repository access
+  - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remains outside this slice
+- Status: DONE

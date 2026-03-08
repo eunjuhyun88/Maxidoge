@@ -698,6 +698,7 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **DB 테이블 미존재 대응**: API에서 `errorContains(e, 'does not exist')` 체크 → graceful fallback + warning 반환.
 - **localStorage 사용 금지**: 서버(PostgreSQL)가 있으므로 클라이언트 영속 저장은 서버 API 경유. localStorage는 캐시/임시 용도만.
 - **unknown error 직접 접근 금지**: 서버/API 레이어에서 `error?.code`, `error?.message` 직접 접근하지 말고 `$lib/utils/errorUtils`의 `getErrorCode()` / `getErrorMessage()`를 사용.
+- **auth route helper canonical path**: `/api/auth/login`과 `/api/auth/register`의 body 파싱, email/nickname 검증, wallet proof 검증/nonce 소비, session cookie issuance는 `src/lib/server/authService.ts`가 canonical이다. 두 route에 같은 validation/session 생성 로직을 다시 인라인하지 말고, route는 abuse guard·conflict lookup·response shaping만 소유할 것.
 - **copy-trade publish idempotency**: `clientMutationId`는 `copy_trade_runs.draft.clientMutationId`에 저장되고, 고유 인덱스는 `db/migrations/0007_*` / `supabase/migrations/014_*` migration이 있어야 보장된다.
 - **Svelte 5 `state` 변수명 금지**: Svelte 5 rune `$state`와 충돌하므로 prop/변수명으로 `state`를 절대 사용하지 말 것. 대안: `sheetState`, `drawerState`, `formState` 등 접두사 사용. (MobileChatSheet에서 발견된 함정)
 - **terminal shell CSS 위치**: `/terminal` 레이아웃 스타일은 `src/components/terminal/terminalShell.css`가 canonical. route `<style>`로 되돌리면 `css_unused_selector` 경고가 급증한다.

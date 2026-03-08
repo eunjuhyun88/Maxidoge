@@ -223,10 +223,10 @@
   const arenaVisualEffectsRuntime = createArenaVisualEffectsRuntime({
     scheduleTimeout: arenaTimerRegistry.scheduleTimeout,
     getFloatingWords: () => floatingWords,
-    setFloatingWords: (next) => {
+    setFloatingWords: (next: ArenaFloatingWord[]) => {
       floatingWords = next;
     },
-    setArenaParticles: (next) => {
+    setArenaParticles: (next: ArenaParticle[]) => {
       arenaParticles = next;
     },
   });
@@ -234,11 +234,11 @@
   const arenaAgentRuntime = createArenaAgentRuntime({
     getActiveAgents: () => activeAgents,
     getAgentStates: () => agentStates,
-    setAgentStates: (next) => {
+    setAgentStates: (next: Record<string, ArenaAgentUiState>) => {
       agentStates = next;
     },
     getChatMessages: () => chatMessages,
-    setChatMessages: (next) => {
+    setChatMessages: (next: Array<ArenaBattleChatMessage & { id: number }>) => {
       chatMessages = next;
     },
     safeTimeout,
@@ -246,7 +246,7 @@
   const arenaAgentBridge = createArenaAgentBridge({
     runtime: arenaAgentRuntime,
     getAgentStates: () => agentStates,
-    setAgentStates: (next) => {
+    setAgentStates: (next: Record<string, ArenaAgentUiState>) => {
       agentStates = next;
     },
   });
@@ -254,19 +254,19 @@
     getCharSprites: () => charSprites,
     getVsMeterTarget: () => vsMeterTarget,
     getEnemyHp: () => enemyHP,
-    setCharSprites: (next) => (charSprites = next),
-    setBattleTurns: (next) => (battleTurns = next),
-    setCurrentTurnIdx: (next) => (currentTurnIdx = next),
-    setBattleNarration: (next) => (battleNarration = next),
-    setBattlePhaseLabel: (next) => (battlePhaseLabel = next),
-    setVsMeter: (next) => (vsMeter = next),
-    setVsMeterTarget: (next) => (vsMeterTarget = next),
-    setEnemyHp: (next) => (enemyHP = next),
-    setComboCount: (next) => (comboCount = next),
-    setShowCombo: (next) => (showCombo = next),
-    setShowCritical: (next) => (showCritical = next),
-    setCriticalText: (next) => (criticalText = next),
-    setShowVsSplash: (next) => (showVsSplash = next),
+    setCharSprites: (next: Record<string, CharSpriteState>) => (charSprites = next),
+    setBattleTurns: (next: BattleTurn[]) => (battleTurns = next),
+    setCurrentTurnIdx: (next: number) => (currentTurnIdx = next),
+    setBattleNarration: (next: string) => (battleNarration = next),
+    setBattlePhaseLabel: (next: string) => (battlePhaseLabel = next),
+    setVsMeter: (next: number) => (vsMeter = next),
+    setVsMeterTarget: (next: number) => (vsMeterTarget = next),
+    setEnemyHp: (next: number) => (enemyHP = next),
+    setComboCount: (next: number) => (comboCount = next),
+    setShowCombo: (next: boolean) => (showCombo = next),
+    setShowCritical: (next: boolean) => (showCritical = next),
+    setCriticalText: (next: string) => (criticalText = next),
+    setShowVsSplash: (next: boolean) => (showVsSplash = next),
   });
   const arenaPageStateBridge = createArenaPageStateBridge({
     getApiError: () => apiError,
