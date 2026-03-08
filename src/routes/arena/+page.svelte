@@ -78,6 +78,8 @@
   import {
     createArenaBattleController,
   } from '$lib/arena/controllers/arenaBattleController';
+  import { createArenaBattleStateBridge } from '$lib/arena/controllers/arenaBattleStateBridge';
+  import { createArenaPageStateBridge } from '$lib/arena/controllers/arenaPageStateBridge';
   import {
     createArenaPhaseController,
   } from '$lib/arena/controllers/arenaPhaseController';
@@ -248,59 +250,74 @@
       agentStates = next;
     },
   });
+  const arenaBattleStateBridge = createArenaBattleStateBridge({
+    getCharSprites: () => charSprites,
+    getVsMeterTarget: () => vsMeterTarget,
+    getEnemyHp: () => enemyHP,
+    setCharSprites: (next) => (charSprites = next),
+    setBattleTurns: (next) => (battleTurns = next),
+    setCurrentTurnIdx: (next) => (currentTurnIdx = next),
+    setBattleNarration: (next) => (battleNarration = next),
+    setBattlePhaseLabel: (next) => (battlePhaseLabel = next),
+    setVsMeter: (next) => (vsMeter = next),
+    setVsMeterTarget: (next) => (vsMeterTarget = next),
+    setEnemyHp: (next) => (enemyHP = next),
+    setComboCount: (next) => (comboCount = next),
+    setShowCombo: (next) => (showCombo = next),
+    setShowCritical: (next) => (showCritical = next),
+    setCriticalText: (next) => (criticalText = next),
+    setShowVsSplash: (next) => (showVsSplash = next),
+  });
+  const arenaPageStateBridge = createArenaPageStateBridge({
+    getApiError: () => apiError,
+    getChartBridge: () => chartBridge,
+    getConfirmingExit: () => confirmingExit,
+    getHypothesisTimer: () => hypothesisTimer,
+    getMatchHistoryOpen: () => matchHistoryOpen,
+    getPvpVisible: () => pvpVisible,
+    getResultVisible: () => resultVisible,
+    getServerAnalysis: () => serverAnalysis,
+    getServerMatchId: () => serverMatchId,
+    setApiError: (next) => (apiError = next),
+    setChartBridge: (next) => (chartBridge = next),
+    setConfirmingExit: (next) => (confirmingExit = next),
+    setFloatDir: (next) => (floatDir = next),
+    setHypothesisTimer: (next) => (hypothesisTimer = next),
+    setHypothesisVisible: (next) => (hypothesisVisible = next),
+    setMatchHistoryOpen: (next) => (matchHistoryOpen = next),
+    setPreviewVisible: (next) => (previewVisible = next),
+    setPvpVisible: (next) => (pvpVisible = next),
+    setResultVisible: (next) => (resultVisible = next),
+    setServerAnalysis: (next) => (serverAnalysis = next),
+    setServerMatchId: (next) => (serverMatchId = next),
+  });
 
   const battlePresentationRuntime = createArenaBattlePresentationRuntime({
     getActiveAgents: () => activeAgents,
     getHypothesisDir: () => gs.hypothesis?.dir,
-    getCharSprites: () => charSprites,
-    getVsMeterTarget: () => vsMeterTarget,
-    getEnemyHP: () => enemyHP,
+    getCharSprites: arenaBattleStateBridge.getCharSprites,
+    getVsMeterTarget: arenaBattleStateBridge.getVsMeterTarget,
+    getEnemyHP: arenaBattleStateBridge.getEnemyHp,
     getAgentEnergy: (agentId) => agentStates[agentId]?.energy || 0,
-    setCharSprites: (sprites) => {
-      charSprites = sprites;
-    },
+    setCharSprites: arenaBattleStateBridge.setCharSprites,
     setAgentState: arenaAgentBridge.setAgentState,
     setAgentEnergy: arenaAgentBridge.setAgentEnergy,
-    setBattleTurns: (turns) => {
-      battleTurns = turns;
-    },
-    setCurrentTurnIdx: (idx) => {
-      currentTurnIdx = idx;
-    },
+    setBattleTurns: arenaBattleStateBridge.setBattleTurns,
+    setCurrentTurnIdx: arenaBattleStateBridge.setCurrentTurnIdx,
     clearChatMessages: () => {
       chatMessages = [];
     },
     appendChatMessage: arenaAgentRuntime.appendChatMessage,
-    setBattleNarration: (text) => {
-      battleNarration = text;
-    },
-    setBattlePhaseLabel: (text) => {
-      battlePhaseLabel = text;
-    },
-    setVsMeter: (value) => {
-      vsMeter = value;
-    },
-    setVsMeterTarget: (value) => {
-      vsMeterTarget = value;
-    },
-    setEnemyHP: (value) => {
-      enemyHP = value;
-    },
-    setComboCount: (value) => {
-      comboCount = value;
-    },
-    setShowCombo: (value) => {
-      showCombo = value;
-    },
-    setShowCritical: (value) => {
-      showCritical = value;
-    },
-    setCriticalText: (text) => {
-      criticalText = text;
-    },
-    setShowVsSplash: (value) => {
-      showVsSplash = value;
-    },
+    setBattleNarration: arenaBattleStateBridge.setBattleNarration,
+    setBattlePhaseLabel: arenaBattleStateBridge.setBattlePhaseLabel,
+    setVsMeter: arenaBattleStateBridge.setVsMeter,
+    setVsMeterTarget: arenaBattleStateBridge.setVsMeterTarget,
+    setEnemyHP: arenaBattleStateBridge.setEnemyHp,
+    setComboCount: arenaBattleStateBridge.setComboCount,
+    setShowCombo: arenaBattleStateBridge.setShowCombo,
+    setShowCritical: arenaBattleStateBridge.setShowCritical,
+    setCriticalText: arenaBattleStateBridge.setCriticalText,
+    setShowVsSplash: arenaBattleStateBridge.setShowVsSplash,
     runChargeEffect: () => {
       sfx.charge();
     },
@@ -360,55 +377,33 @@
     },
     clearFeed: arenaBattleFeedRuntime.clear,
     pushSystemFeed: arenaBattleFeedRuntime.pushSystemFeed,
-    setServerMatchId: (matchId) => {
-      serverMatchId = matchId;
-    },
-    clearServerAnalysis: () => {
-      serverAnalysis = null;
-    },
-    setApiError: (message) => {
-      apiError = message;
-    },
+    setServerMatchId: arenaPageStateBridge.setServerMatchId,
+    clearServerAnalysis: arenaPageStateBridge.clearServerAnalysis,
+    setApiError: arenaPageStateBridge.setApiError,
     startAnalysis: startAnalysisFromDraft,
   });
 
   const arenaShellController = createArenaShellController({
     getPhase: () => gs.phase,
     isInLobby: () => gs.inLobby,
-    isPvpVisible: () => pvpVisible,
-    isResultVisible: () => resultVisible,
-    isConfirmingExit: () => confirmingExit,
-    isMatchHistoryOpen: () => matchHistoryOpen,
-    setConfirmingExit: (value) => {
-      confirmingExit = value;
-    },
-    setMatchHistoryOpen: (value) => {
-      matchHistoryOpen = value;
-    },
+    isPvpVisible: arenaPageStateBridge.isPvpVisible,
+    isResultVisible: arenaPageStateBridge.isResultVisible,
+    isConfirmingExit: arenaPageStateBridge.isConfirmingExit,
+    isMatchHistoryOpen: arenaPageStateBridge.isMatchHistoryOpen,
+    setConfirmingExit: arenaPageStateBridge.setConfirmingExit,
+    setMatchHistoryOpen: arenaPageStateBridge.setMatchHistoryOpen,
     safeTimeout,
     clearArenaDynamics,
     clearBattleSession: () => {
       clearBattleSession();
     },
-    getChartBridge: () => chartBridge,
-    setChartBridge: (next) => {
-      chartBridge = next;
-    },
-    setResultVisible: (value) => {
-      resultVisible = value;
-    },
-    setPreviewVisible: (value) => {
-      previewVisible = value;
-    },
-    setPvpVisible: (value) => {
-      pvpVisible = value;
-    },
-    setHypothesisVisible: (value) => {
-      hypothesisVisible = value;
-    },
-    setFloatDir: (value) => {
-      floatDir = value;
-    },
+    getChartBridge: arenaPageStateBridge.getChartBridge,
+    setChartBridge: arenaPageStateBridge.setChartBridge,
+    setResultVisible: arenaPageStateBridge.setResultVisible,
+    setPreviewVisible: arenaPageStateBridge.setPreviewVisible,
+    setPvpVisible: arenaPageStateBridge.setPvpVisible,
+    setHypothesisVisible: arenaPageStateBridge.setHypothesisVisible,
+    setFloatDir: arenaPageStateBridge.setFloatDir,
     clearServerSyncState: arenaMatchController.clearServerSyncState,
     clearHypothesisInterval: arenaPhaseTimerRuntime.clearHypothesisInterval,
     setAgentsIdle: () => {
@@ -452,8 +447,8 @@
       hypothesis: gs.hypothesis,
       orpoOutput: gs.orpoOutput,
       guardianViolations: gs.guardianCheck?.violations || [],
-      serverAnalysis,
-      serverMatchId,
+      serverAnalysis: arenaPageStateBridge.getServerAnalysis(),
+      serverMatchId: arenaPageStateBridge.getServerMatchId(),
     }),
     getRewardState: () => rewardState,
     clearLiveEvents: () => {
@@ -481,12 +476,10 @@
     setRewardState: (next) => {
       rewardState = next;
     },
-    setResultVisible: (value) => {
-      resultVisible = value;
-    },
+    setResultVisible: arenaPageStateBridge.setResultVisible,
     revealPvpResult: () => {
       arenaPhaseTimerRuntime.schedulePvpReveal(() => {
-        pvpVisible = true;
+        arenaPageStateBridge.setPvpVisible(true);
       }, 1500);
     },
     addFeed,
@@ -510,9 +503,7 @@
       juice_shake('light');
       juice_flash('red');
     },
-    setBattleNarration: (text) => {
-      battleNarration = text;
-    },
+    setBattleNarration: arenaBattleStateBridge.setBattleNarration,
     addSystemChat: arenaAgentBridge.addSystemChat,
     setAgentState: arenaAgentBridge.setAgentState,
     setCharState: battlePresentationRuntime.setCharState,
@@ -575,15 +566,9 @@
     },
     setAgentState: arenaAgentBridge.setAgentState,
     setSpeech: arenaAgentBridge.setSpeech,
-    setVsMeter: (value) => {
-      vsMeter = value;
-    },
-    setVsMeterTarget: (value) => {
-      vsMeterTarget = value;
-    },
-    setEnemyHP: (value) => {
-      enemyHP = value;
-    },
+    setVsMeter: arenaBattleStateBridge.setVsMeter,
+    setVsMeterTarget: arenaBattleStateBridge.setVsMeterTarget,
+    setEnemyHP: arenaBattleStateBridge.setEnemyHp,
     addFeed,
     advancePhase,
     safeTimeout,
@@ -591,10 +576,8 @@
 
   const arenaChartController = createArenaChartController({
     getHypothesis: () => gs.hypothesis,
-    getChartBridge: () => chartBridge,
-    setChartBridge: (next) => {
-      chartBridge = next;
-    },
+    getChartBridge: arenaPageStateBridge.getChartBridge,
+    setChartBridge: arenaPageStateBridge.setChartBridge,
     setHypothesis: (next) => {
       gameState.update((state) => ({ ...state, hypothesis: next }));
     },
@@ -611,13 +594,13 @@
   const arenaPhaseController = createArenaPhaseController({
     onDraftEnter: () => {
       clearArenaDynamics();
-      resultVisible = false;
-      pvpVisible = false;
-      hypothesisVisible = false;
+      arenaPageStateBridge.setResultVisible(false);
+      arenaPageStateBridge.setPvpVisible(false);
+      arenaPageStateBridge.setHypothesisVisible(false);
       gameState.update((state) => ({ ...state, arenaView: 'arena' }));
-      previewVisible = false;
-      floatDir = null;
-      chartBridge = createArenaChartBridgeState();
+      arenaPageStateBridge.setPreviewVisible(false);
+      arenaPageStateBridge.setFloatDir(null);
+      arenaPageStateBridge.setChartBridge(createArenaChartBridgeState());
       arenaAgentRuntime.initAgentStates();
       sfx.enter();
       arenaVisualEffectsRuntime.emitDogeFloatBurst();
@@ -631,11 +614,9 @@
     },
     getSpeed: () => gs.speed || 3,
     getCurrentPrice: () => currentBtcPrice,
-    getServerMatchId: () => serverMatchId,
+    getServerMatchId: arenaPageStateBridge.getServerMatchId,
     runAnalysisSync: runArenaAnalysis,
-    setServerAnalysis: (analysis) => {
-      serverAnalysis = analysis;
-    },
+    setServerAnalysis: arenaPageStateBridge.setServerAnalysis,
     applyAnalysisProjection: (analysis) => {
       const c02 = mapAnalysisToC02(analysis);
       gameState.update((state) => ({
@@ -672,16 +653,10 @@
         }, i * 300);
       });
     },
-    setHypothesisVisible: (value) => {
-      hypothesisVisible = value;
-    },
-    setFloatDir: (value) => {
-      floatDir = value;
-    },
-    getHypothesisTimer: () => hypothesisTimer,
-    setHypothesisTimer: (value) => {
-      hypothesisTimer = value;
-    },
+    setHypothesisVisible: arenaPageStateBridge.setHypothesisVisible,
+    setFloatDir: arenaPageStateBridge.setFloatDir,
+    getHypothesisTimer: arenaPageStateBridge.getHypothesisTimer,
+    setHypothesisTimer: arenaPageStateBridge.setHypothesisTimer,
     clearHypothesisInterval: arenaPhaseTimerRuntime.clearHypothesisInterval,
     setHypothesisInterval: arenaPhaseTimerRuntime.setHypothesisInterval,
     applyNeutralTimeoutSelection: (price) => {
@@ -701,8 +676,8 @@
           lev: 0,
         },
       }));
-      chartBridge = {
-        ...chartBridge,
+      const nextChartBridge = {
+        ...arenaPageStateBridge.getChartBridge(),
         position: buildArenaChartPositionFromHypothesis({
           entry: price,
           tp: price * 1.02,
@@ -710,6 +685,7 @@
           dir: 'NEUTRAL',
         }),
       };
+      arenaPageStateBridge.setChartBridge(nextChartBridge);
       addFeed('⏰', 'TIMEOUT', '#93A699', 'Time expired — auto-skip');
     },
     applySubmittedHypothesis: (hypothesis) => {
@@ -737,10 +713,11 @@
           lev: 0,
         },
       }));
-      chartBridge = {
-        ...chartBridge,
+      const nextChartBridge = {
+        ...arenaPageStateBridge.getChartBridge(),
         position: buildArenaChartPositionFromHypothesis(hypothesis),
       };
+      arenaPageStateBridge.setChartBridge(nextChartBridge);
       addFeed(
         '🐕',
         'YOU',
@@ -751,15 +728,13 @@
       sfx.vote();
     },
     submitHypothesisSync: async (dir, conf) => {
-      await submitArenaHypothesis(serverMatchId!, dir, conf);
+      await submitArenaHypothesis(arenaPageStateBridge.getServerMatchId()!, dir, conf);
     },
     onHypothesisSyncError: (error) => {
       console.warn('[Arena] Hypothesis sync failed:', error);
     },
     advancePhase,
-    setPreviewVisible: (value) => {
-      previewVisible = value;
-    },
+    setPreviewVisible: arenaPageStateBridge.setPreviewVisible,
     onPreviewEnter: () => {
       const hypothesis = gs.hypothesis;
       addFeed('👁', 'PREVIEW', '#DCB970', `Position: ${hypothesis?.dir || 'NEUTRAL'} · Entry $${(hypothesis?.entry || 0).toLocaleString()} · R:R 1:${(hypothesis?.rr || 1).toFixed(1)}`);
@@ -789,9 +764,7 @@
     getSpeed: () => gs.speed || 3,
     safeTimeout,
     addFeed,
-    setBattleNarration: (text) => {
-      battleNarration = text;
-    },
+    setBattleNarration: arenaBattleStateBridge.setBattleNarration,
     addChatMessage: arenaAgentBridge.addChatMessage,
     setAgentState: arenaAgentBridge.setAgentState,
     setAgentEnergy: arenaAgentBridge.setAgentEnergy,
@@ -800,10 +773,10 @@
     showCharAction: battlePresentationRuntime.showCharAction,
     moveChar: battlePresentationRuntime.moveChar,
     applyScoutDecorations: () => {
-      chartBridge = {
-        ...chartBridge,
+      arenaPageStateBridge.setChartBridge({
+        ...arenaPageStateBridge.getChartBridge(),
         ...buildArenaChartDecorations(activeAgents),
-      };
+      });
     },
     playScanSound: () => {
       sfx.scan();
