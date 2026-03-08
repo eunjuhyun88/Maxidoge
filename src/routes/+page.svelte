@@ -2,13 +2,13 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
-  import { userProfileStore } from '$lib/stores/userProfileStore';
+  import { profileTier } from '$lib/stores/userProfileProjectionStore';
   import HomeBackground from '../components/home/HomeBackground.svelte';
   import { trackHomeFunnel, FEATURES, SCAN_CATS, SQUAD_DISPLAY, FLOW_STEPS } from '../components/home/homeData';
 
   const connected = $derived($isWalletConnected);
   const wallet = $derived($walletStore);
-  const profile = $derived($userProfileStore);
+  const tier = $derived($profileTier);
 
   function enterArena() { goto('/arena'); }
   function enterTerminal() { goto('/terminal'); }
@@ -460,7 +460,7 @@
         <div class="cta-connected sr sr-r" style="--d:0.15s">
           <span class="wc-dot"></span>
           <span>{wallet.shortAddr}</span>
-          <span class="wc-tier">{profile.tier.toUpperCase()}</span>
+          <span class="wc-tier">{tier.toUpperCase()}</span>
         </div>
       {/if}
     </div>

@@ -6,9 +6,7 @@
   import { openTradeCount, totalQuickPnL } from '$lib/stores/quickTradeStore';
   import { activeSignalCount } from '$lib/stores/trackedSignalStore';
   import { matchHistoryStore, winRate } from '$lib/stores/matchHistoryStore';
-  import { userProfileStore, profileTier, hydrateUserProfile } from '$lib/stores/userProfileStore';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
 
   type PageContext = 'terminal' | 'arena' | 'passport' | 'oracle' | 'signals' | 'live' | 'home';
 
@@ -19,7 +17,6 @@
   const pnl = $derived($totalQuickPnL);
   const records = $derived($matchHistoryStore.records);
   const wr = $derived($winRate);
-  const tier = $derived($profileTier);
 
   interface BannerItem {
     icon: string;
@@ -29,7 +26,7 @@
     show: boolean;
   }
 
-  const items = $derived(getBannerItems(page, openPos, trackedSigs, pnl, records, wr, tier));
+  const items = $derived(getBannerItems(page, openPos, trackedSigs, pnl, records, wr));
 
   function getBannerItems(
     p: string,
@@ -37,8 +34,7 @@
     sigs: number,
     pnlVal: number,
     recs: typeof records,
-    winR: number,
-    t: string
+    winR: number
   ): BannerItem[] {
     const all: BannerItem[] = [];
 
@@ -85,10 +81,6 @@
 
     return all.filter(i => i.show).slice(0, 2);
   }
-
-  onMount(() => {
-    hydrateUserProfile();
-  });
 </script>
 
 {#if items.length > 0}

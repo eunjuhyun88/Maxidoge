@@ -5,7 +5,6 @@
   import { matchHistoryStore } from '$lib/stores/matchHistoryStore';
   import { openTrades } from '$lib/stores/quickTradeStore';
   import { activeSignals } from '$lib/stores/trackedSignalStore';
-  import { userProfileStore } from '$lib/stores/userProfileStore';
   import { livePrices, priceChanges } from '$lib/stores/priceStore';
   import { goto } from '$app/navigation';
   import EmptyState from '../shared/EmptyState.svelte';
@@ -24,7 +23,6 @@
   const records = $derived($matchHistoryStore.records);
   const trades = $derived($openTrades);
   const tracked = $derived($activeSignals);
-  const profile = $derived($userProfileStore);
   const isStream = $derived(embedded && variant === 'stream');
   const liveP = $derived($livePrices);
   const changes = $derived($priceChanges);

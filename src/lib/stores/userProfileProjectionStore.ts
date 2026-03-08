@@ -1,4 +1,4 @@
-import { writable, get } from 'svelte/store';
+import { writable, get, derived } from 'svelte/store';
 import { walletStore } from './walletStore';
 import { STORAGE_KEYS } from './storageKeys';
 import { fetchPassportApi, fetchProfileApi, updateProfileApi } from '$lib/api/profileApi';
@@ -189,3 +189,13 @@ export function adjustBalance(delta: number) {
     balance: { virtual: Math.max(0, profile.balance.virtual + delta) },
   }));
 }
+
+export const earnedBadges = derived(userProfileProjectionStore, ($profile) =>
+  $profile.badges.filter((badge) => badge.earnedAt !== null)
+);
+
+export const lockedBadges = derived(userProfileProjectionStore, ($profile) =>
+  $profile.badges.filter((badge) => badge.earnedAt === null)
+);
+
+export const profileTier = derived(userProfileProjectionStore, ($profile) => $profile.tier);

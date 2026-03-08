@@ -1,8 +1,11 @@
 import { derived } from 'svelte/store';
 import {
   adjustBalance,
+  earnedBadges,
   hydrateUserProfile,
   incrementTrackedSignals,
+  lockedBadges,
+  profileTier,
   setAvatar,
   setUsername,
   syncLP,
@@ -33,24 +36,17 @@ export const userProfileStore = derived(
     },
   }),
 );
-
-export const earnedBadges = derived(userProfileStore, ($profile) =>
-  $profile.badges.filter((badge) => badge.earnedAt !== null)
-);
-
-export const lockedBadges = derived(userProfileStore, ($profile) =>
-  $profile.badges.filter((badge) => badge.earnedAt === null)
-);
-
-export const profileTier = derived(userProfileStore, ($profile) => $profile.tier);
 export const profileStats = derived(userProfileStore, ($profile) => $profile.stats);
 
 export {
   adjustBalance,
   hydrateUserProfile,
   incrementTrackedSignals,
+  earnedBadges,
   setAvatar,
   setUsername,
+  lockedBadges,
+  profileTier,
   syncLP,
   syncPnL,
 };

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { userProfileStore, earnedBadges, lockedBadges, profileTier, profileStats, setAvatar, setUsername, hydrateUserProfile } from '$lib/stores/userProfileStore';
+  import { userProfileStore, profileStats } from '$lib/stores/userProfileStore';
+  import { earnedBadges, lockedBadges, profileTier, setAvatar, setUsername, hydrateUserProfile } from '$lib/stores/userProfileProjectionStore';
   import { activeSignalCount, activeSignals, expiredSignals } from '$lib/stores/trackedSignalStore';
   import { openTradeCount, totalQuickPnL, openTrades, closedTrades } from '$lib/stores/quickTradeStore';
   import { matchHistoryStore, winRate, bestStreak } from '$lib/stores/matchHistoryStore';

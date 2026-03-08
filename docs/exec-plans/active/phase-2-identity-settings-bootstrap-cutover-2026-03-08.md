@@ -35,11 +35,12 @@ Already landed in the current monolith:
 4. [NotificationTray.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/NotificationTray.svelte#L1) no longer seeds demo notifications by default during hydration
 5. authenticated session authority now lives in [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) instead of [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
 6. profile projection and client-derived profile metrics now split across [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1), [userProfileDerivedStatsStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileDerivedStatsStore.ts#L1), and the compatibility aggregate [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
+7. read-only shell consumers such as [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1), [ContextBanner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ContextBanner.svelte#L1), and [LivePanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/live/LivePanel.svelte#L1) no longer depend on the wide compatibility `userProfileStore` surface when they only need projection-level data or no profile data at all
 
 Still blocking full Phase 2 cutover:
 
 1. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) still mirrors some auth-facing fields for compatibility and has not yet fully shed that compatibility layer
-2. `profile` still exposes a compatibility aggregate surface for existing consumers
+2. `profile` still exposes a compatibility aggregate surface for deeper screens like [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
 3. core route handlers still own too much inline SQL and mapping logic
 
 ## 2. Core Decision
@@ -140,6 +141,7 @@ Validated now:
 1. [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1) now owns cached server projection and optimistic profile edits
 2. [userProfileDerivedStatsStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileDerivedStatsStore.ts#L1) now owns client-derived metrics from [matchHistoryStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/matchHistoryStore.ts#L1)
 3. [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1) is now the compatibility aggregate that merges those layers for existing consumers
+4. projection-only reads such as badge/tier access now have direct exports on [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1)
 
 Implication:
 

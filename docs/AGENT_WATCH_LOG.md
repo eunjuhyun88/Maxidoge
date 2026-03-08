@@ -5768,3 +5768,30 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `arenaSceneProps.ts` is intentionally a thin typed wrapper seam today; if scene bundle derivation grows, the next extraction should move real formatting logic there instead of back into `arena/+page.svelte`
   - unrelated WIP remains dirty in `ChartIndicatorStrip.svelte` and `marketPulse`-related files and was intentionally excluded from this slice
 - Status: DONE
+
+## [2026-03-08 18:39:12 +0900] FINISH phase-2-profile-consumer-narrowing-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going after the auth/profile store split and trim direct compatibility-store consumers before the next backend cutover slice
+- What changed:
+  - Updated [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1)
+    - added direct projection-level exports for `profileTier`, `earnedBadges`, and `lockedBadges`
+  - Updated [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
+    - re-exported the projection-owned badge/tier selectors while keeping merged `profileStats` on the compatibility aggregate
+  - Updated [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1)
+    - switched the home hero badge from full `userProfileStore` to narrow `profileTier`
+  - Updated [ContextBanner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ContextBanner.svelte#L1)
+    - removed unused profile hydration and compatibility-store dependency entirely
+  - Updated [LivePanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/live/LivePanel.svelte#L1)
+    - removed an unused `userProfileStore` subscription
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - now reads badge/tier mutation helpers from `userProfileProjectionStore` and leaves only merged profile/stat reads on `userProfileStore`
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded the narrower projection-consumer seam and reduced the remaining compatibility hotspot list
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `passport/+page.svelte` still depends on the merged compatibility aggregate for combined profile + derived stats
+  - `walletStore.ts` still carries auth-facing compatibility fields for `WalletModal.svelte`
+- Status: DONE
