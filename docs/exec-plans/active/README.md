@@ -4,6 +4,7 @@ Purpose:
 - Keep actively steering plans in one discoverable place.
 
 Current active plan set:
+- `full-system-redesign-blueprint-2026-03-08.md`
 - `phase-1-terminal-market-contract-extraction-2026-03-07.md`
 - `phase-1-positions-portfolio-contract-extraction-2026-03-07.md`
 - `phase-1-trading-community-contract-extraction-2026-03-07.md`

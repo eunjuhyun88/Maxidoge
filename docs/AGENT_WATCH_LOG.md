@@ -5318,3 +5318,103 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `src/components/arena/ChartPanel.svelte` and chart support/runtime chunks still dominate arena SSR weight
   - `src/routes/arena/+page.svelte` is much smaller, but phase/controller ownership is not fully finished yet
 - Status: DONE
+
+## [2026-03-08 04:18:42 +0900] FINISH arena-battle-child-boundary-normalization-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning arena, resolve presentation conflicts, and continue deleting/reorganizing dead layout-preserving code until the battle host is normalized
+- What changed:
+  - Added `src/components/arena/ArenaBattleStageSurface.svelte`
+    - moved battle stage particles, center node, connections, char sprites, VS splash, critical/combo overlays out of `ArenaBattleSidebar`
+  - Added `src/components/arena/ArenaBattleOutcomeOverlay.svelte`
+    - moved reward modal, result overlay, PvP overlay, and floating doge words out of `ArenaBattleSidebar`
+  - Added `src/components/arena/ArenaBattleMissionBar.svelte`
+    - moved mission phase/status bar out of `ArenaBattleSidebar`
+  - Added `src/components/arena/ArenaBattleCombatHud.svelte`
+    - moved LONG/SHORT meter and market HP HUD out of `ArenaBattleSidebar`
+  - Added `src/components/arena/ArenaBattleNarrationLog.svelte`
+    - moved narration strip and battle log out of `ArenaBattleSidebar`
+  - Updated `src/components/arena/ArenaBattleSidebar.svelte`
+    - reduced to a thin sidebar coordinator that composes mission/HUD/stage/log/outcome child boundaries
+  - Added `src/components/arena/ArenaHypothesisOverlay.svelte`
+    - moved hypothesis sheet and direction float bar out of `ArenaChartRail`
+  - Added `src/components/arena/ArenaPreviewOverlay.svelte`
+    - moved preview card overlay out of `ArenaChartRail`
+  - Added `src/components/arena/ArenaChartScoreBar.svelte`
+    - moved score ring, stats, mode badge, marker toggles, and lobby CTA out of `ArenaChartRail`
+  - Updated `src/components/arena/ArenaChartRail.svelte`
+    - reduced to a thin chart-side coordinator that composes chart panel + hypothesis/preview/score children
+  - Updated `CLAUDE.md`
+    - locked `ArenaBattleLayout -> ArenaChartRail/ArenaBattleSidebar -> child boundaries` as the canonical arena battle presentation rule
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `1088` lines
+  - `src/components/arena/ArenaBattleLayout.svelte`: `218` lines
+  - `src/components/arena/ArenaChartRail.svelte`: `124` lines
+  - `src/components/arena/ArenaHypothesisOverlay.svelte`: `122` lines
+  - `src/components/arena/ArenaPreviewOverlay.svelte`: `180` lines
+  - `src/components/arena/ArenaChartScoreBar.svelte`: `178` lines
+  - `src/components/arena/ArenaBattleSidebar.svelte`: `142` lines
+  - `src/components/arena/ArenaBattleMissionBar.svelte`: `60` lines
+  - `src/components/arena/ArenaBattleCombatHud.svelte`: `93` lines
+  - `src/components/arena/ArenaBattleNarrationLog.svelte`: `76` lines
+  - `src/components/arena/ArenaBattleStageSurface.svelte`: `457` lines
+  - `src/components/arena/ArenaBattleOutcomeOverlay.svelte`: `228` lines
+  - server entry `src/routes/arena/+page.svelte`: `212.95 kB`
+- Residual risks:
+  - `src/components/arena/ArenaBattleStageSurface.svelte` is now the largest pure battle presentation hotspot
+  - total arena SSR pressure is still dominated by `ChartPanel`/chart support runtimes more than host presentation components
+  - `src/routes/arena/+page.svelte` is now structurally smaller at the presentation edge, but phase/controller ownership still needs more trimming
+- Status: DONE
+
+## [2026-03-08 04:31:27 +0900] FINISH arena-battle-layout-prop-bundle-normalization-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue cleaning arena without moving layout positions and reduce route-level battle host wiring
+- What changed:
+  - Updated `src/components/arena/arenaBattleLayoutTypes.ts`
+    - added canonical `ArenaChartRailProps` and `ArenaBattleSidebarProps` bundle contracts
+  - Updated `src/components/arena/ArenaBattleLayout.svelte`
+    - reduced battle host to a thin `chartRailProps` / `battleSidebarProps` coordinator
+    - removed the large flattened prop list from the host layer
+  - Updated `src/routes/arena/+page.svelte`
+    - introduced derived `arenaBattleLayoutProps`
+    - route now passes one bundled battle-layout contract instead of manually wiring dozens of presentation props inline
+  - Updated `CLAUDE.md`
+    - locked `arenaBattleLayoutTypes.ts` bundle contracts as the canonical battle-host wiring rule
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `1098` lines
+  - `src/components/arena/ArenaBattleLayout.svelte`: `51` lines
+  - `src/components/arena/arenaBattleLayoutTypes.ts`: `91` lines
+  - server entry `src/routes/arena/+page.svelte`: `210.61 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns substantial phase/controller state even though the battle presentation edge is now much thinner
+  - `src/components/arena/ArenaBattleStageSurface.svelte` remains the largest pure presentation hotspot on the battle side
+  - total arena SSR pressure is still dominated by `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
+- Status: DONE
+
+## [2026-03-08 11:45:29 +0900] FINISH full-system-redesign-blueprint-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: stop working piecemeal and consolidate the entire frontend/backend redesign into one top-level blueprint
+- What changed:
+  - Added `docs/exec-plans/active/full-system-redesign-blueprint-2026-03-08.md`
+    - consolidated the current redesign authority into one blueprint
+    - fixed the final target topology as `apps/web`, `apps/api`, `apps/worker`, `packages/contracts`, `packages/domain`, `packages/platform`
+    - defined runtime ownership, non-negotiable boundary rules, domain ownership matrix, migration phases, validation gates, and anti-goals
+    - linked the existing migration map, validation, contract catalog, folder map, and boundary inventories as supporting references instead of competing top-level plans
+  - Updated `docs/exec-plans/active/README.md`
+    - added the new blueprint at the top of the active plan set
+  - Updated `docs/exec-plans/index.md`
+    - added the new blueprint as the first active execution-plan entry
+- Validation:
+  - `npm run docs:check`: PASS
+  - `docs/exec-plans/active/full-system-redesign-blueprint-2026-03-08.md`: `436` lines
+- Residual risks:
+  - the blueprint is now the top-level design authority, but execution still depends on the detailed boundary inventory and contract extraction documents being kept aligned
+  - the codebase still contains unrelated arena WIP in the worktree, so future execution slices must keep commit scope narrow
+  - the next design-to-implementation bridge should be a domain-by-domain execution checklist derived from this blueprint, not another competing top-level architecture doc
+- Status: DONE
