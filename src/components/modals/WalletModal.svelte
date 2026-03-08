@@ -1,15 +1,18 @@
 <script lang="ts">
   import {
     walletStore,
-    closeWalletModal,
-    setWalletModalStep,
     connectWallet,
     signMessage,
     disconnectWallet
   } from '$lib/stores/walletStore';
   import { applyAuthenticatedUser, authSessionIdentity, authSessionStore, clearAuthenticatedUser } from '$lib/stores/authSessionStore';
   import { markWalletSignatureComplete, userLifecycleStore } from '$lib/stores/userLifecycleStore';
-  import type { WalletState } from '$lib/stores/walletStore';
+  import {
+    walletModalStore,
+    closeWalletModal,
+    setWalletModalStep,
+    type WalletModalStep,
+  } from '$lib/stores/walletModalStore';
   import { loginAuth, logoutAuth, registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
   import {
     WALLET_PROVIDER_LABEL,
@@ -26,7 +29,7 @@
   type WalletFunnelStep = 'modal_open' | 'connect' | 'sign' | 'auth' | 'disconnect';
   type WalletFunnelStatus = 'view' | 'success' | 'error';
 
-  const STEP_TITLE: Record<WalletState['walletModalStep'], string> = {
+  const STEP_TITLE: Record<WalletModalStep, string> = {
     welcome: 'WALLET ACCESS',
     'wallet-select': 'CONNECT WALLET',
     connecting: 'CONNECTING',
@@ -43,10 +46,11 @@
   const walletConnectReady = isWalletConnectConfigured();
 
   const walletState = $derived($walletStore);
+  const modalState = $derived($walletModalStore);
   const authSession = $derived($authSessionStore);
   const authIdentity = $derived($authSessionIdentity);
   const lifecycle = $derived($userLifecycleStore);
-  const step = $derived(walletState.walletModalStep);
+  const step = $derived(modalState.step);
 
   let authMode: AuthMode = $state<AuthMode>('signup');
   let emailInput = $state('');
@@ -322,6 +326,7 @@
         const walletAddress = await requestInjectedEvmAccount(provider);
         connectWallet(provider, walletAddress, preferredEvmChain);
       }
+      setWalletModalStep('sign-message');
       trackWalletFunnel('connect', 'success', {
         provider,
         chain: preferredEvmChain,
@@ -436,14 +441,14 @@
   }
 
   $effect(() => {
-    if (walletState.showWalletModal && !trackedModalOpen) {
+    if (modalState.open && !trackedModalOpen) {
       trackWalletFunnel('modal_open', 'view', { entry_step: step });
       trackedModalOpen = true;
     }
   });
 
   $effect(() => {
-    if (!walletState.showWalletModal) {
+    if (!modalState.open) {
       authSubmitting = false;
       signingMessage = false;
       connectingProvider = '';
@@ -452,7 +457,7 @@
   });
 </script>
 
-{#if walletState.showWalletModal}
+{#if modalState.open}
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="modal-overlay" onclick={handleClose}>

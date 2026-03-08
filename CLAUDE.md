@@ -158,7 +158,8 @@ docs/
 | **arenaV2State** | Arena v2 상태 (phase, subPhase, currentView) | 326 |
 | **activeGamesStore** | 동시 진행 게임 관리 (최대 3개) | 243 |
 | **authSessionStore** | 쿠키 기반 세션 hydrate + 계정 identity projection | 74 |
-| **walletStore** | 지갑 연결 + wallet modal shell state | 204 |
+| **walletStore** | 지갑 연결 transport + signed-wallet shell state | 160 |
+| **walletModalStore** | wallet modal open/step flow state | 49 |
 | **userLifecycleStore** | 로컬 lifecycle phase/progression shell (`phase`, onboarding, LP/match counters) | 100 |
 | **userProfileProjectionStore** | 서버 프로필 projection cache + optimistic profile edits | 201 |
 | **userProfileStore** | projection + derived stats compatibility aggregate | 52 |

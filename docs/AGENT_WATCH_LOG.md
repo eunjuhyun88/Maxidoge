@@ -5987,3 +5987,36 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `walletStore.ts` still owns modal-step routing; only authority mixing was removed in this slice
   - generated docs may still reflect unrelated local `market/pulse` WIP and should stay out of the staged slice
 - Status: DONE
+
+## [2026-03-09 00:03:00 +0900] FINISH phase-2-wallet-modal-store-split-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal split and remove the remaining wallet modal state ownership from `walletStore`
+- What changed:
+  - Added [walletModalStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletModalStore.ts#L1)
+    - moved wallet modal visibility and `walletModalStep` flow into a dedicated route/session store
+    - keeps `openWalletModal()`, `closeWalletModal()`, and `setWalletModalStep()` separate from wallet connection transport
+  - Updated [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+    - removed `showWalletModal` and `walletModalStep` from `WalletState`
+    - reduced the store to wallet connection transport plus signed-wallet shell data
+    - stopped wallet connect/sign actions from mutating modal step state directly
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - switched modal visibility and step reads to `walletModalStore`
+    - keeps wallet connect/sign actions explicit by setting modal step in the component after transport mutations
+  - Updated [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1), [Header.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/Header.svelte#L1), and [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - moved `openWalletModal` imports to `walletModalStore`
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded that modal visibility/step flow is now split away from `walletStore`
+    - narrowed the remaining hotspot to `WalletModal.svelte` funnel logic instead of store authority mixing
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1) and [refresh-generated-context.mjs](/Users/ej/Downloads/maxidoge-clones/frontend/scripts/dev/refresh-generated-context.mjs#L1)
+    - documented `walletModalStore` as the canonical modal flow owner
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `WalletModal.svelte` still owns the bulk of wallet auth funnel branching even though store ownership is cleaner
+  - unrelated arena bridge and position-sizer WIP remain dirty and must stay out of this slice
+- Status: DONE

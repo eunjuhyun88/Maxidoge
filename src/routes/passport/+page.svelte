@@ -5,7 +5,8 @@
   import { activeSignalCount, activeSignals, expiredSignals } from '$lib/stores/trackedSignalStore';
   import { openTradeCount, totalQuickPnL, openTrades, closedTrades } from '$lib/stores/quickTradeStore';
   import { matchHistoryStore, winRate, bestStreak } from '$lib/stores/matchHistoryStore';
-  import { walletStore, openWalletModal } from '$lib/stores/walletStore';
+  import { walletStore } from '$lib/stores/walletStore';
+  import { openWalletModal } from '$lib/stores/walletModalStore';
   import { agentStats, hydrateAgentStats } from '$lib/stores/agentData';
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
   import { HOLDINGS_DATA, calcPnL, type HoldingAsset } from '$lib/data/holdings';

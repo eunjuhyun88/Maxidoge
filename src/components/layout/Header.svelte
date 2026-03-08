@@ -3,7 +3,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { gameState } from '$lib/stores/gameState';
-  import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
+  import { walletStore, isWalletConnected } from '$lib/stores/walletStore';
+  import { openWalletModal } from '$lib/stores/walletModalStore';
   import { hydrateAuthSession } from '$lib/stores/authSessionStore';
   import { hydrateDomainStores } from '$lib/stores/hydration';
   import { livePrices } from '$lib/stores/priceStore';

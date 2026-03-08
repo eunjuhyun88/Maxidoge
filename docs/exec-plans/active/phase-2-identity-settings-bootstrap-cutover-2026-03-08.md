@@ -38,10 +38,11 @@ Already landed in the current monolith:
 7. read-only shell consumers such as [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1), [ContextBanner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ContextBanner.svelte#L1), and [LivePanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/live/LivePanel.svelte#L1) no longer depend on the wide compatibility `userProfileStore` surface when they only need projection-level data or no profile data at all
 8. [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) now reads account identity from [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1), and [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) no longer stores `email`, `nickname`, or `tier`
 9. lifecycle/progression state now lives in [userLifecycleStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userLifecycleStore.ts#L1), and [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) no longer stores `phase`, `hasSeenDemo`, `hasCompletedOnboarding`, `matchesPlayed`, or `totalLP`
+10. wallet modal visibility and step flow now live in [walletModalStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletModalStore.ts#L1), and [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) no longer stores `showWalletModal` or `walletModalStep`
 
 Still blocking full Phase 2 cutover:
 
-1. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) still owns wallet-modal step routing, so modal flow orchestration is not yet narrowed into a dedicated runtime
+1. [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) still owns most wallet connect/sign/auth funnel orchestration, even though store ownership is now split cleanly
 2. `profile` still exposes a compatibility aggregate surface for deeper screens like [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
 3. core route handlers still own too much inline SQL and mapping logic
 
@@ -99,14 +100,15 @@ Primary stores and shell consumers:
 
 1. [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1)
 2. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
-3. [userLifecycleStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userLifecycleStore.ts#L1)
-4. [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
-5. [notificationStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/notificationStore.ts#L1)
-6. [Header.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/Header.svelte#L1)
-7. [NotificationTray.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/NotificationTray.svelte#L1)
-8. [ContextBanner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ContextBanner.svelte#L1)
-9. [settings/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/settings/+page.svelte#L1)
-10. [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+3. [walletModalStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletModalStore.ts#L1)
+4. [userLifecycleStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userLifecycleStore.ts#L1)
+5. [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
+6. [notificationStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/notificationStore.ts#L1)
+7. [Header.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/Header.svelte#L1)
+8. [NotificationTray.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/NotificationTray.svelte#L1)
+9. [ContextBanner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ContextBanner.svelte#L1)
+10. [settings/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/settings/+page.svelte#L1)
+11. [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
 
 ## 3.3 Explicitly excluded from Phase 2
 
@@ -122,23 +124,25 @@ Reason:
 
 ## 4. Current Problems That Block Clean Cutover
 
-## 4.1 Auth and lifecycle are now split at the store layer, but the wallet modal shell remains wide
+## 4.1 Auth, lifecycle, and modal visibility are split at the store layer, but the wallet funnel logic remains component-heavy
 
 Validated now:
 
 1. [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1) still normalizes legacy `success` envelopes into contract shapes locally
 2. [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) now owns authenticated session hydration and cookie-backed identity state
 3. [userLifecycleStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userLifecycleStore.ts#L1) now owns local lifecycle phase and progression tracking that used to be mixed into wallet state
-4. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) now behaves as wallet/modal shell state only, while [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) owns account identity
+4. [walletModalStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletModalStore.ts#L1) now owns wallet modal visibility and step flow
+5. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) now behaves as wallet connection transport only, while [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) owns account identity
 
 Implication:
 
-Phase 2 no longer needs to invent a new auth-session store or keep auth identity or lifecycle duplicated in wallet state.
-It now needs to trim the remaining wallet-shell concerns into narrower modal/runtime boundaries over time.
+Phase 2 no longer needs to invent a new auth-session store or keep auth identity, lifecycle, or modal visibility duplicated in wallet state.
+It now needs to trim the remaining wallet funnel logic out of the component into narrower modal/runtime boundaries over time.
 
 1. server-derived session mirror
-2. browser-only wallet connection and modal flow
-3. browser-only lifecycle/progression shell until server progression authority is explicitly designed
+2. browser-only wallet connection transport
+3. browser-only wallet modal flow
+4. browser-only lifecycle/progression shell until server progression authority is explicitly designed
 
 ## 4.2 Profile projection and derived metrics are now split, but the compatibility aggregate remains
 
@@ -265,15 +269,18 @@ And these browser layers should be the only consumers:
 Current store -> target split:
 
 1. `walletStore`
-   - keep wallet connection UX and modal state only
-   - auth identity and lifecycle authority should not move back in
-2. `userLifecycleStore`
+   - keep wallet connection transport and signed-wallet shell only
+   - auth identity, lifecycle, and modal visibility should not move back in
+2. `walletModalStore`
+   - keep wallet modal visibility and step flow separate from connection transport
+   - do not let route or header code rebuild modal-step policy ad hoc
+3. `userLifecycleStore`
    - keep local lifecycle/progression shell separate from wallet transport
    - do not let route or modal code rebuild progression state ad hoc
-3. `userProfileStore`
+4. `userProfileStore`
    - keep cache and client-derived overlay
    - move canonical server projection shaping to profile/passport view-model helpers
-4. `notificationStore`
+5. `notificationStore`
    - split into `notificationsStore`
    - split into `toastStore`
    - split `p0OverrideStore`
@@ -329,7 +336,7 @@ Phase 2 is ready only when all of these are true.
 1. the core route set above stays at `16` routes and does not silently re-expand
 2. `notifications` durable data and `toasts` ephemeral data no longer share one store
 3. `activity` has a wrapper seam and contract ownership
-4. `walletStore` is no longer the mixed owner of session mirror, lifecycle progression, and modal UX state
+4. `walletStore` and `walletModalStore` keep wallet connection, lifecycle, and modal UX state explicitly separated
 5. `profile` and `passport` hydration stay server-authoritative, with client-derived overlays named explicitly as secondary
 6. `passport/learning/**` and `positions/polymarket/auth` remain out of this cutover
 
@@ -356,7 +363,7 @@ Do not do these in Phase 2:
 
 The next concrete slice after this document should be:
 
-1. narrow wallet modal step orchestration out of `walletStore` into a smaller runtime or controller seam
+1. extract wallet connect/sign/auth funnel policy out of [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) into a smaller modal runtime or controller seam
 2. keep moving direct consumers from compatibility stores toward the narrower auth/profile stores
 3. extract shared auth/notification/activity server mappers and services
 4. keep `passport/learning/**` and venue auth out of that slice

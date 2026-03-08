@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { walletStore, isWalletConnected, openWalletModal } from '$lib/stores/walletStore';
+  import { walletStore, isWalletConnected } from '$lib/stores/walletStore';
+  import { openWalletModal } from '$lib/stores/walletModalStore';
   import { profileTier } from '$lib/stores/userProfileProjectionStore';
   import HomeBackground from '../components/home/HomeBackground.svelte';
   import { trackHomeFunnel, FEATURES, SCAN_CATS, SQUAD_DISPLAY, FLOW_STEPS } from '../components/home/homeData';

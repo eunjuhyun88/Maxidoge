@@ -3,7 +3,7 @@
 // Owns wallet connection transport and wallet modal shell state only.
 // ═══════════════════════════════════════════════════════════════
 
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
 import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import {
@@ -29,10 +29,6 @@ export interface WalletState {
   balance: number;
   chain: string;
   provider: string | null;
-
-  // UI state
-  showWalletModal: boolean;
-  walletModalStep: 'welcome' | 'wallet-select' | 'connecting' | 'sign-message' | 'connected' | 'signup' | 'login' | 'demo-intro' | 'profile';
   signature: string | null;
 }
 
@@ -56,8 +52,6 @@ const defaultWallet: WalletState = {
   balance: 0,
   chain: 'ARB',
   provider: null,
-  showWalletModal: false,
-  walletModalStep: 'welcome',
   signature: null
 };
 
@@ -77,14 +71,7 @@ function loadWallet(): WalletState {
 export const walletStore = writable<WalletState>(loadWallet());
 
 autoSave(walletStore, STORAGE_KEYS.wallet, (w) => {
-  const {
-    showWalletModal,
-    walletModalStep,
-    signature,
-    ...persistable
-  } = w;
-  void showWalletModal;
-  void walletModalStep;
+  const { signature, ...persistable } = w;
   void signature;
   return persistable;
 }, 300);
@@ -111,8 +98,6 @@ function applyAuthSessionToWalletState(wallet: WalletState, session: AuthSession
   if (user && session.authenticated) {
     return {
       ...wallet,
-      showWalletModal: false,
-      walletModalStep: 'profile',
       address,
       shortAddr,
     };
@@ -124,8 +109,6 @@ function applyAuthSessionToWalletState(wallet: WalletState, session: AuthSession
 
   return {
     ...wallet,
-    showWalletModal: false,
-    walletModalStep: wallet.connected ? 'connected' : 'welcome',
     address: wallet.connected ? wallet.address : null,
     shortAddr: wallet.connected ? wallet.shortAddr : null,
   };
@@ -136,29 +119,6 @@ authSessionStore.subscribe((session) => {
 });
 
 // ═══ Actions ═══
-
-export function openWalletModal() {
-  walletStore.update(w => {
-    const session = get(authSessionStore);
-    const hasAccount = session.authenticated && !!session.user;
-    // Wallet-first flow:
-    // connected + account => profile
-    // connected only => choose login/signup from connected step
-    // account only (session restored) but no wallet => reconnect wallet first
-    const step = w.connected
-      ? (hasAccount ? 'profile' : 'connected')
-      : (hasAccount ? 'wallet-select' : 'welcome');
-    return { ...w, showWalletModal: true, walletModalStep: step };
-  });
-}
-
-export function closeWalletModal() {
-  walletStore.update(w => ({ ...w, showWalletModal: false }));
-}
-
-export function setWalletModalStep(step: WalletState['walletModalStep']) {
-  walletStore.update(w => ({ ...w, walletModalStep: step }));
-}
 
 // Wallet connection (now first step before email)
 export function connectWallet(provider: string = 'metamask', addressOverride?: string, chain: string = 'ARB') {
@@ -172,8 +132,7 @@ export function connectWallet(provider: string = 'metamask', addressOverride?: s
     balance: connection.balance,
     chain: connection.chain,
     provider: connection.provider,
-    signature: null,
-    walletModalStep: 'sign-message' // New: go to sign step
+    signature: null
   }));
 }
 
@@ -183,8 +142,7 @@ export function signMessage(signatureOverride?: string) {
 
   walletStore.update(w => ({
     ...w,
-    signature,
-    walletModalStep: 'connected'
+    signature
   }));
 }
 
