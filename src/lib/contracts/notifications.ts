@@ -1,6 +1,8 @@
 import type { PaginationMeta } from './http';
 
-export type NotificationType = 'alert' | 'critical' | 'info' | 'success';
+export const NOTIFICATION_TYPES = ['alert', 'critical', 'info', 'success'] as const;
+
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 export interface NotificationRecord {
   id: string;

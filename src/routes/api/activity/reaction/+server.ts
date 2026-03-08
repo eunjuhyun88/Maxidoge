@@ -1,20 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { ACTIVITY_SOURCE_PAGES } from '$lib/contracts/activity';
+import { mapActivityRow } from '$lib/server/activityRecord';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { errorContains } from '$lib/utils/errorUtils';
 
-const SOURCE_PAGES = new Set([
-  'arena',
-  'terminal',
-  'signals',
-  'live',
-  'oracle',
-  'passport',
-  'settings',
-  'wallet',
-  'system',
-]);
+const SOURCE_PAGES = new Set(ACTIVITY_SOURCE_PAGES);
 
 export const POST: RequestHandler = async ({ cookies, request }) => {
   try {
@@ -51,15 +43,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
 
     return json({
       success: true,
-      reaction: {
-        id: event.rows[0].id,
-        userId: event.rows[0].user_id,
-        eventType: event.rows[0].event_type,
-        sourcePage: event.rows[0].source_page,
-        sourceId: event.rows[0].source_id,
-        payload: event.rows[0].payload,
-        createdAt: new Date(event.rows[0].created_at).getTime(),
-      },
+      reaction: mapActivityRow(event.rows[0]),
     });
   } catch (error: unknown) {
     if (errorContains(error, 'DATABASE_URL is not set')) {

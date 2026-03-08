@@ -2,16 +2,19 @@ import type { PaginationMeta } from './http';
 
 export type ActivitySeverity = 'info' | 'warning' | 'critical';
 
-export type ActivitySourcePage =
-  | 'arena'
-  | 'terminal'
-  | 'signals'
-  | 'live'
-  | 'oracle'
-  | 'passport'
-  | 'settings'
-  | 'wallet'
-  | 'system';
+export const ACTIVITY_SOURCE_PAGES = [
+  'arena',
+  'terminal',
+  'signals',
+  'live',
+  'oracle',
+  'passport',
+  'settings',
+  'wallet',
+  'system',
+] as const;
+
+export type ActivitySourcePage = (typeof ACTIVITY_SOURCE_PAGES)[number];
 
 export interface ActivityRecord {
   id: string;

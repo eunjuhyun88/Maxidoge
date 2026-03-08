@@ -1,23 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query } from '$lib/server/db';
+import { mapActivityRow } from '$lib/server/activityRecord';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt } from '$lib/server/apiValidation';
 import { errorContains } from '$lib/utils/errorUtils';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRow(row: Record<string, any>) {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    eventType: row.event_type,
-    sourcePage: row.source_page,
-    sourceId: row.source_id,
-    severity: row.severity,
-    payload: row.payload ?? {},
-    createdAt: new Date(row.created_at).getTime(),
-  };
-}
 
 export const GET: RequestHandler = async ({ cookies, url }) => {
   try {
@@ -64,7 +51,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
     return json({
       success: true,
       total: Number(count.rows[0]?.total ?? '0'),
-      records: rows.rows.map(mapRow),
+      records: rows.rows.map(mapActivityRow),
       pagination: { limit, offset },
     });
   } catch (error: unknown) {

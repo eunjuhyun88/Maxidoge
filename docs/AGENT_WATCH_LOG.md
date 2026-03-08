@@ -5679,3 +5679,29 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - route handlers under `api/notifications` and `api/activity` still own row mapping and SQL shaping
   - `walletStore.ts` and `userProfileStore.ts` remain the next real Phase 2 boundary hotspots
 - Status: DONE
+
+## [2026-03-08 15:31:42 +0900] FINISH phase-2-notifications-activity-route-thinning-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going after the browser boundary split and thin the notifications/activity routes so the Phase 2 backend edge is less route-local
+- What changed:
+  - Updated [notifications.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/notifications.ts#L1)
+    - added `NOTIFICATION_TYPES` so route validation and transport contracts share the same allowed type set
+  - Updated [activity.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/activity.ts#L1)
+    - added `ACTIVITY_SOURCE_PAGES` so the reaction route no longer owns its own source-page enum copy
+  - Added [notificationRecord.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/notificationRecord.ts#L1)
+    - extracted notification row-to-contract mapping out of `api/notifications/+server.ts`
+  - Added [activityRecord.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/activityRecord.ts#L1)
+    - extracted activity row-to-contract mapping out of `api/activity/+server.ts` and `api/activity/reaction/+server.ts`
+  - Updated [notifications/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/notifications/+server.ts#L1)
+    - now reuses contract-owned notification type validation and shared row mapping
+  - Updated [activity/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/activity/+server.ts#L1) and [activity/reaction/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/activity/reaction/+server.ts#L1)
+    - now reuse contract-owned source-page validation and shared row mapping
+- Validation:
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - route handlers still own inline SQL and have not yet been moved behind dedicated service/repository modules
+  - `walletStore.ts` and `userProfileStore.ts` remain the larger unresolved Phase 2 boundary hotspots
+- Status: DONE
