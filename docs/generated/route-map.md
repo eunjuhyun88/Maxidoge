@@ -7,7 +7,7 @@ Source of truth remains `src/routes/` plus canonical docs under `docs/`.
 
 | Route | Role | Primary concern | Key stores / state | Deep docs |
 | --- | --- | --- | --- | --- |
-| `/` | product entry | positioning, navigation, onboarding | `walletStore`, `userProfileStore` | `docs/PRODUCT_SENSE.md` |
+| `/` | product entry | positioning, navigation, onboarding | `walletStore`, `authSessionStore`, `profileTier` | `docs/PRODUCT_SENSE.md` |
 | `/agents` | agent collection surface | stats, memory, roster legibility | `agentData` | `docs/PRODUCT_SENSE.md` |
 | `/arena` | main strategic arena | structured human-vs-agent decision loop | `gameState`, `matchHistoryStore`, `pnlStore`, `battleFeedStore` | `docs/product-specs/arena.md` |
 | `/arena-v2` | simplified arena variant | alternate arena flow and views | `arenaV2State`, live price context | `docs/product-specs/arena.md` |
@@ -15,7 +15,7 @@ Source of truth remains `src/routes/` plus canonical docs under `docs/`.
 | `/holdings` | redirect route | redirect to canonical profile/holdings experience | none | `docs/product-specs/passport.md` |
 | `/live` | auxiliary live route/data hook | limited runtime support surface | route-level data | `docs/PRODUCT_SENSE.md` |
 | `/oracle` | redirect route | redirect into signals ai leaderboard view | none | `docs/product-specs/signals.md` |
-| `/passport` | profile/progression surface | identity, stats, learning, history | `userProfileStore`, `matchHistoryStore`, `quickTradeStore` | `docs/product-specs/passport.md` |
+| `/passport` | profile/progression surface | identity, stats, learning, history | `userProfileStore`, `userLifecycleStore`, `matchHistoryStore`, `quickTradeStore` | `docs/product-specs/passport.md` |
 | `/settings` | preferences surface | local settings and user controls | `gameState` and preference state | `docs/FRONTEND.md` |
 | `/signals` | signal discovery surface | community, track, convert flows | `gameState`, `matchHistoryStore`, signal state | `docs/product-specs/signals.md` |
 | `/terminal` | intel/action surface | scan, intel, action orchestration | route shell + `copyTradeStore`, `trackedSignalStore`, live prices | `docs/product-specs/terminal.md` |

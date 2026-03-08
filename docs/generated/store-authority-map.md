@@ -22,7 +22,8 @@ Source of truth remains store implementations plus canonical state-authority doc
 | `arenaWarStore` | route/session transient | arena-war state machine and local orchestration | Durable record still belongs to server persistence. |
 | `activeGamesStore` | route/session transient | local multi-game runtime tracking | Coordination state, not durable truth. |
 | `authSessionStore` | server-authoritative projection | authenticated session mirror and cookie-backed identity | Auth session authority now lives here, not in wallet UI state. |
-| `walletStore` | route/session transient | wallet connection, modal state, and local progression shell | Consumes auth session projection but should not own it. |
+| `walletStore` | route/session transient | wallet connection and wallet modal shell | Consumes session and lifecycle projections but should not own either authority. |
+| `userLifecycleStore` | route/session transient | local lifecycle phase and progression tracking | Progression shell is split from wallet transport while backend authority is still being designed. |
 | `userProfileProjectionStore` | server-authoritative projection | profile projection cache and optimistic profile edits | Durable profile projection authority lives here. |
 | `userProfileDerivedStatsStore` | derived/support | client-derived profile metrics from match history | Secondary metrics only; not server truth. |
 | `userProfileStore` | derived/support | compatibility aggregate over projection and derived profile stats | Merged read model for existing consumers. |

@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
-// STOCKCLAW — Wallet & User State Store
-// Per UserJourney Lifecycle spec: P0→P5 progression
+// STOCKCLAW — Wallet Shell Store
+// Owns wallet connection transport and wallet modal shell state only.
 // ═══════════════════════════════════════════════════════════════
 
 import { writable, derived, get } from 'svelte/store';
@@ -10,13 +10,16 @@ import {
   authSessionStore,
   type AuthSessionState,
 } from './authSessionStore';
+export {
+  completeDemoView,
+  recordMatch,
+  skipWalletConnection,
+  userPhase,
+} from './userLifecycleStore';
 import {
   createSimulatedSignature,
   createSimulatedWalletConnection
 } from '$lib/wallet/simulatedWallet';
-import { resolveLifecyclePhase } from './progressionRules';
-
-export type UserTier = 'guest' | 'registered' | 'connected' | 'verified';
 
 export interface WalletState {
   // Wallet
@@ -26,13 +29,6 @@ export interface WalletState {
   balance: number;
   chain: string;
   provider: string | null;
-
-  // Progression (P0-P5)
-  phase: number;         // 0-5
-  hasSeenDemo: boolean;
-  hasCompletedOnboarding: boolean;
-  matchesPlayed: number;
-  totalLP: number;
 
   // UI state
   showWalletModal: boolean;
@@ -60,11 +56,6 @@ const defaultWallet: WalletState = {
   balance: 0,
   chain: 'ARB',
   provider: null,
-  phase: 0,
-  hasSeenDemo: false,
-  hasCompletedOnboarding: false,
-  matchesPlayed: 0,
-  totalLP: 0,
   showWalletModal: false,
   walletModalStep: 'welcome',
   signature: null
@@ -80,7 +71,6 @@ function loadWallet(): WalletState {
     ...merged,
     provider,
     chain: typeof merged.chain === 'string' && merged.chain.trim() ? merged.chain.toUpperCase() : defaultWallet.chain,
-    phase: resolveLifecyclePhase(merged.matchesPlayed, merged.totalLP)
   };
 }
 
@@ -101,7 +91,6 @@ autoSave(walletStore, STORAGE_KEYS.wallet, (w) => {
 
 // Derived stores
 export const isWalletConnected = derived(walletStore, $w => $w.connected);
-export const userPhase = derived(walletStore, $w => $w.phase);
 
 function toShortAddr(address: string | null): string | null {
   if (!address || address.length < 10) return null;
@@ -120,11 +109,8 @@ function applyAuthSessionToWalletState(wallet: WalletState, session: AuthSession
   const shortAddr = keepLiveConnection ? wallet.shortAddr : toShortAddr(address);
 
   if (user && session.authenticated) {
-    const phase = Number.isFinite(Number(user.phase)) ? Math.max(1, Number(user.phase)) : Math.max(1, wallet.phase);
     return {
       ...wallet,
-      phase,
-      hasCompletedOnboarding: true,
       showWalletModal: false,
       walletModalStep: 'profile',
       address,
@@ -174,16 +160,6 @@ export function setWalletModalStep(step: WalletState['walletModalStep']) {
   walletStore.update(w => ({ ...w, walletModalStep: step }));
 }
 
-// Complete demo viewing
-export function completeDemoView() {
-  walletStore.update(w => ({
-    ...w,
-    hasSeenDemo: true,
-    phase: Math.max(resolveLifecyclePhase(w.matchesPlayed, w.totalLP), 1),
-    walletModalStep: 'wallet-select'
-  }));
-}
-
 // Wallet connection (now first step before email)
 export function connectWallet(provider: string = 'metamask', addressOverride?: string, chain: string = 'ARB') {
   const connection = createSimulatedWalletConnection(provider, addressOverride, chain);
@@ -208,17 +184,7 @@ export function signMessage(signatureOverride?: string) {
   walletStore.update(w => ({
     ...w,
     signature,
-    phase: Math.max(resolveLifecyclePhase(w.matchesPlayed, w.totalLP), 2),
     walletModalStep: 'connected'
-  }));
-}
-
-// Skip wallet connection (stay at registered, still usable!)
-export function skipWalletConnection() {
-  walletStore.update(w => ({
-    ...w,
-    hasCompletedOnboarding: true,
-    showWalletModal: false
   }));
 }
 
@@ -233,14 +199,4 @@ export function disconnectWallet() {
     provider: null,
     signature: null
   }));
-}
-
-// Track match completion (for P2→P3 progression)
-export function recordMatch(_won: boolean, lpDelta: number) {
-  walletStore.update(w => {
-    const matches = w.matchesPlayed + 1;
-    const lp = w.totalLP + lpDelta;
-    const phase = resolveLifecyclePhase(matches, lp);
-    return { ...w, matchesPlayed: matches, totalLP: lp, phase };
-  });
 }

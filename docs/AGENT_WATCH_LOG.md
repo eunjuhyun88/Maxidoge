@@ -5978,9 +5978,11 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - Updated [refresh-generated-context.mjs](/Users/ej/Downloads/maxidoge-clones/frontend/scripts/dev/refresh-generated-context.mjs#L1)
     - route/store generated maps now treat `walletStore` as wallet-modal shell only and add `userLifecycleStore` as the local progression shell
 - Validation:
-  - `npm run check`: pending
-  - `npm run build`: pending
-  - `npm run docs:check`: pending
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
 - Residual risks:
   - `walletStore.ts` still owns modal-step routing; only authority mixing was removed in this slice
   - generated docs may still reflect unrelated local `market/pulse` WIP and should stay out of the staged slice

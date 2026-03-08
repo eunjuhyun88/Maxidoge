@@ -8,6 +8,7 @@
     disconnectWallet
   } from '$lib/stores/walletStore';
   import { applyAuthenticatedUser, authSessionIdentity, authSessionStore, clearAuthenticatedUser } from '$lib/stores/authSessionStore';
+  import { markWalletSignatureComplete, userLifecycleStore } from '$lib/stores/userLifecycleStore';
   import type { WalletState } from '$lib/stores/walletStore';
   import { loginAuth, logoutAuth, registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
   import {
@@ -44,6 +45,7 @@
   const walletState = $derived($walletStore);
   const authSession = $derived($authSessionStore);
   const authIdentity = $derived($authSessionIdentity);
+  const lifecycle = $derived($userLifecycleStore);
   const step = $derived(walletState.walletModalStep);
 
   let authMode: AuthMode = $state<AuthMode>('signup');
@@ -376,6 +378,7 @@
       signedWalletMessage = noncePayload.message;
       signedWalletSignature = signature;
       signMessage(signature);
+      markWalletSignatureComplete();
 
       trackWalletFunnel('sign', 'success', { provider, chain: walletState.chain });
 
@@ -709,7 +712,7 @@
           </div>
           <div class="info-row">
             <span class="info-k">PHASE</span>
-            <span class="info-v">P{authIdentity.phase ?? walletState.phase}</span>
+            <span class="info-v">P{authIdentity.phase ?? lifecycle.phase}</span>
           </div>
           <div class="info-row">
             <span class="info-k">WALLET</span>
