@@ -30,7 +30,6 @@
     buildArenaResultPanelProps,
   } from '$lib/arena/selectors/arenaSceneProps';
   import Lobby from '../../components/arena/Lobby.svelte';
-  import ArenaMatchScene from '../../components/arena/ArenaMatchScene.svelte';
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
   import { addMatchRecord } from '$lib/stores/matchHistoryStore';
   import { addPnLEntry } from '$lib/stores/pnlStore';
@@ -81,6 +80,7 @@
   import { createArenaBattleStateBridge } from '$lib/arena/controllers/arenaBattleStateBridge';
   import { createArenaPageStateBridge } from '$lib/arena/controllers/arenaPageStateBridge';
   import { createArenaGameStateBridge } from '$lib/arena/controllers/arenaGameStateBridge';
+  import { createArenaUiStateBridge } from '$lib/arena/controllers/arenaUiStateBridge';
   import {
     createArenaPhaseController,
   } from '$lib/arena/controllers/arenaPhaseController';
@@ -90,6 +90,8 @@
   } from '$lib/arena/controllers/arenaResultController';
   import type { CharSpriteState, BattleTurn } from '$lib/engine/arenaCharacters';
   import { juice_shake, juice_flash, juice_confetti } from '$lib/engine/arenaGameJuice';
+
+  type ArenaMatchSceneComponentType = typeof import('../../components/arena/ArenaMatchScene.svelte').default;
 
   const gs = $derived($gameState);
   const currentBtcPrice = $derived($btcPrice || gs.bases.BTC || 97000);
@@ -136,6 +138,7 @@
   let resultVisible = $state(false);
   const resultOverlayTitle = $derived(buildArenaResultOverlayTitle(gs.arenaMode, resultData.win));
   let floatingWords = $state<ArenaFloatingWord[]>([]);
+  let ArenaMatchSceneComponent = $state<ArenaMatchSceneComponentType | null>(null);
 
   // ═══════ CHARACTER-CENTERED ARENA STATE ═══════
   // Character sprite state per agent
@@ -220,9 +223,7 @@
     getPhase: () => gs.phase,
   });
   const addFeed = arenaBattleFeedRuntime.addFeed;
-
-  const arenaVisualEffectsRuntime = createArenaVisualEffectsRuntime({
-    scheduleTimeout: arenaTimerRegistry.scheduleTimeout,
+  const arenaUiStateBridge = createArenaUiStateBridge({
     getFloatingWords: () => floatingWords,
     setFloatingWords: (next: ArenaFloatingWord[]) => {
       floatingWords = next;
@@ -230,6 +231,25 @@
     setArenaParticles: (next: ArenaParticle[]) => {
       arenaParticles = next;
     },
+    getRewardState: () => rewardState,
+    setRewardState: (next) => {
+      rewardState = next;
+    },
+    setResultData: (next) => {
+      resultData = next;
+    },
+    getShowMarkers: () => showMarkers,
+    setShowMarkers: (value) => {
+      showMarkers = value;
+    },
+    createRewardState: createArenaRewardState,
+  });
+
+  const arenaVisualEffectsRuntime = createArenaVisualEffectsRuntime({
+    scheduleTimeout: arenaTimerRegistry.scheduleTimeout,
+    getFloatingWords: arenaUiStateBridge.getFloatingWords,
+    setFloatingWords: arenaUiStateBridge.setFloatingWords,
+    setArenaParticles: arenaUiStateBridge.setArenaParticles,
   });
 
   const arenaAgentRuntime = createArenaAgentRuntime({
@@ -362,7 +382,7 @@
 
   function clearArenaDynamics() {
     liveEventRuntime.clear();
-    rewardState = createArenaRewardState();
+    arenaUiStateBridge.resetRewardState();
   }
 
   let confirmingExit = $state(false);
@@ -440,7 +460,7 @@
       serverAnalysis: arenaPageStateBridge.getServerAnalysis(),
       serverMatchId: arenaPageStateBridge.getServerMatchId(),
     }),
-    getRewardState: () => rewardState,
+    getRewardState: arenaUiStateBridge.getRewardState,
     clearLiveEvents: () => {
       liveEventRuntime.clear();
     },
@@ -448,12 +468,8 @@
       battlePresentationRuntime.clearTurnTimers();
     },
     applyResolvedGameState: arenaGameStateBridge.applyResolvedGameState,
-    setResultData: (next) => {
-      resultData = next;
-    },
-    setRewardState: (next) => {
-      rewardState = next;
-    },
+    setResultData: arenaUiStateBridge.setResultData,
+    setRewardState: arenaUiStateBridge.setRewardState,
     setResultVisible: arenaPageStateBridge.setResultVisible,
     revealPvpResult: () => {
       arenaPhaseTimerRuntime.schedulePvpReveal(() => {
@@ -537,10 +553,8 @@
     getChartBridge: arenaPageStateBridge.getChartBridge,
     setChartBridge: arenaPageStateBridge.setChartBridge,
     setHypothesis: arenaGameStateBridge.setHypothesis,
-    getShowMarkers: () => showMarkers,
-    setShowMarkers: (value) => {
-      showMarkers = value;
-    },
+    getShowMarkers: arenaUiStateBridge.getShowMarkers,
+    setShowMarkers: arenaUiStateBridge.setShowMarkers,
   });
   clearBattleSession = () => {
     arenaBattleController.clearBattleSession();
@@ -791,6 +805,18 @@
     battleLayoutProps: arenaBattleLayoutProps,
   }));
 
+  function ensureArenaMatchSceneComponent() {
+    if (ArenaMatchSceneComponent || typeof window === 'undefined') return;
+    void import('../../components/arena/ArenaMatchScene.svelte').then((module) => {
+      ArenaMatchSceneComponent = module.default;
+    });
+  }
+
+  $effect(() => {
+    if (gs.inLobby || gs.phase === 'DRAFT') return;
+    ensureArenaMatchSceneComponent();
+  });
+
   onMount(() => {
     setPhaseInitCallback((phase) => {
       arenaPhaseController.onPhaseInit(phase);
@@ -819,14 +845,20 @@
     <Lobby />
   {:else if gs.phase === 'DRAFT'}
     <SquadConfig selectedAgents={gs.selectedAgents} ondeploy={onSquadDeploy} onback={onSquadBack} />
+  {:else if ArenaMatchSceneComponent}
+    <ArenaMatchSceneComponent {...arenaMatchSceneProps} />
   {:else}
-    <ArenaMatchScene {...arenaMatchSceneProps} />
+    <div class="arena-scene-loading" aria-hidden="true"></div>
   {/if}
 </div>
 
 <style>
   /* ═══ View Switching + New Components ═══ */
   .arena-page { width: 100%; height: 100%; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+  .arena-scene-loading {
+    flex: 1;
+    min-height: 0;
+  }
   .arena-space-theme {
     --space-line: rgba(232, 150, 125, 0.25);
     --space-line-strong: rgba(232, 150, 125, 0.45);

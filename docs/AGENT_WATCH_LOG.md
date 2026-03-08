@@ -6078,3 +6078,100 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - auth routes still call repository functions directly; this slice only removed duplicated validation/session issuance logic, not repository access
   - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remains outside this slice
 - Status: DONE
+
+## [2026-03-08 23:56:42 +0900] FINISH phase-2-wallet-modal-flow-helper-extraction-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal split after auth-route thinning, keep pushing narrow slices, and continue aligning `CLAUDE.md` plus push records
+- What changed:
+  - Added [walletModalFlow.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalFlow.ts#L1)
+    - extracted browser-side auth form parsing for signup/login
+    - extracted wallet-auth start-step resolution from modal-local branching
+    - extracted funnel error-reason normalization for GTM payloads
+  - Updated [contracts/auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/auth.ts#L1)
+    - moved email/nickname validation rules and wallet-signature shape check into a shared contract-safe module
+    - browser and server now share the same validation messages
+  - Updated [authService.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/authService.ts#L1)
+    - now reuses shared auth validation rules and shared signature regex instead of defining local duplicates
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - removed duplicated email/nickname parsing rules
+    - removed duplicated start-step branching logic for wallet-connected vs signed states
+    - switched funnel error tracking to the extracted helper
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - replaced deprecated `<svelte:component>` usage with direct dynamic component syntax so warning budget stays at zero
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1) and [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - recorded `walletModalFlow.ts` and shared auth validation as canonical boundaries
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `WalletModal.svelte` still owns the actual async wallet connect/sign/auth transport calls and profile-step rendering
+  - shared auth validation is now centralized, but wallet auth browser/server response envelopes are still route-wrapper-specific rather than fully lifted into a richer shared flow contract
+  - unrelated untracked arena position-sizer WIP remains outside this slice
+- Status: DONE
+
+## [2026-03-09 00:24:00 +0900] FINISH arena-game-state-bridge-tracking-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing self-contained refactor slices while preserving the arena performance path and avoid mixing unrelated WIP
+- What changed:
+  - Added [arenaGameStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaGameStateBridge.ts#L1)
+    - centralizes repeated `gameState.update(...)` patches used by arena shell, phase, battle, result, and match wiring
+    - owns shared `squadConfig`, `arenaView`, analysis projection, hypothesis/position sync, battle bootstrap/tick/result, and resolved progression writes
+    - makes the current arena route self-contained again by tracking the bridge file that the controller wiring already expects
+- Validation:
+  - `npm run check`: PASS
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+- Residual risks:
+  - `arena/+page.svelte` still owns controller/runtime assembly even though repeated `gameState` patches are now bridged
+  - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
+- Status: DONE
+
+## [2026-03-09 00:39:00 +0900] FINISH arena-scene-host-lazy-entry-cut-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing self-contained performance refactor slices without mixing the unrelated wallet/auth WIP
+- What changed:
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - removed the eager route-level import of [ArenaMatchScene.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaMatchScene.svelte#L1)
+    - now lazily loads the scene shell only after the app leaves the guaranteed `lobby/draft` bootstrap state
+    - keeps lobby and squad-config phases on the cheap initial route path while preserving the existing scene contract once the match actually starts
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the route-level lazy policy for `ArenaMatchScene.svelte` and the bootstrap assumption it depends on
+- Validation:
+  - `npm run check`: PASS
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+- Performance:
+  - `arena/_page.svelte.js`: `165.22 kB -> 71.32 kB`
+  - heavy scene shell moved behind a lazy server chunk (`server/chunks/_page.js`: `235.41 kB`)
+- Residual risks:
+  - the lazy policy assumes `gameState.loadState()` always resets initial arena render to `inLobby=true` and `phase='DRAFT'`
+  - unrelated dirty `WalletModal/auth` WIP and untracked `PositionSizerPanel.svelte` / `positionSizer.ts` remain outside this slice
+- Status: DONE
+
+## [2026-03-09 01:42:00 +0900] FINISH arena-ui-state-bridge-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep shrinking arena route assembly after the game-state bridge while preserving layout and push each safe slice
+- What changed:
+  - Added [arenaUiStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaUiStateBridge.ts#L1)
+    - centralized route-local UI shell state for `rewardState`, `resultData`, `floatingWords`, `arenaParticles`, and `showMarkers`
+    - gives visual-effects runtime, result controller, and chart controller a shared mutation surface instead of repeated local setter lambdas
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - moved visual-effects wiring, reward reset, result-state wiring, and marker visibility wiring onto the canonical UI-state bridge
+    - kept scene/layout markup untouched while reducing route-local state mutation glue further
+- Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaUiStateBridge` as the canonical owner for arena route local UI shell state
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `arena/+page.svelte` still assembles the full controller/runtime bundle even though local state wiring is thinner
+  - unrelated auth/position-sizer WIP remains outside this slice
+- Status: DONE
