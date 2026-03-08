@@ -5799,3 +5799,42 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `passport/+page.svelte` still depends on the merged compatibility aggregate for combined profile + derived stats
   - `walletStore.ts` still carries auth-facing compatibility fields for `WalletModal.svelte`
 - Status: DONE
+
+## [2026-03-08 18:36:16 +0900] FINISH arena-stage-surface-host-split-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep refactoring the arena scene without changing layout, keep deleting repetitive structure, and stabilize the remaining battle/scene presentation hotspots
+- What changed:
+  - Added [ArenaAltViewHost.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaAltViewHost.svelte#L1)
+    - moved `chart/mission/card` lazy loading and alt-view-only `ResultPanel` overlay ownership out of `ArenaMatchScene.svelte`
+    - kept the scene shell focused on topbar, phase guide, match-history host, view switch, and battle/alt-view switching
+  - Added [arenaBattleStageTypes.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/arenaBattleStageTypes.ts#L1)
+    - introduced the canonical prop contract for the battle stage surface host
+  - Added [ArenaBattleParticleField.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaBattleParticleField.svelte#L1)
+    - extracted grid, particle, and connector rendering from the battle stage surface
+  - Added [ArenaBattleCenterNode.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaBattleCenterNode.svelte#L1)
+    - extracted the center price node without changing placement or styling
+  - Added [ArenaBattleAgentSprite.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaBattleAgentSprite.svelte#L1)
+    - extracted agent sprite presentation, hit popup, HP/energy bars, vote badge, and sprite animation CSS into a dedicated child boundary
+  - Added [ArenaBattleStageFx.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaBattleStageFx.svelte#L1)
+    - extracted VS splash, critical popup, and combo overlay FX from the host surface
+  - Updated [ArenaBattleStageSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaBattleStageSurface.svelte#L1)
+    - converted it into a thin stage host that only coordinates particle field, center node, agent sprites, and FX overlays
+  - Updated [ArenaMatchScene.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaMatchScene.svelte#L1)
+    - removed inline alt-view/result lazy-loader state and handed that responsibility to `ArenaAltViewHost.svelte`
+  - Updated [arenaBattleLayoutTypes.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/arenaBattleLayoutTypes.ts#L1)
+    - aligned sidebar prop contracts with shared `ArenaParticle` and `ArenaFloatingWord` types instead of inline object shapes
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the new `ArenaAltViewHost` and battle-stage child boundaries as canonical ownership paths
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - server entry: `src/routes/arena/+page.svelte` = `159.67 kB`
+  - line counts:
+    - `src/components/arena/ArenaMatchScene.svelte` = `157`
+    - `src/components/arena/ArenaAltViewHost.svelte` = `172`
+    - `src/components/arena/ArenaBattleStageSurface.svelte` = `62`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` is still controller-heavy at `1015` lines and remains the next structural hotspot
+  - `ArenaBattleAgentSprite.svelte` now owns most battle-sprite CSS, so future visual changes should stay there instead of leaking back into the host or route
+- Status: DONE

@@ -2,6 +2,7 @@ import type { ArenaAgentUiState } from '$lib/arena/controllers/arenaAgentRuntime
 import type { ArenaHypothesisSubmitInput } from '$lib/arena/controllers/arenaPhaseController';
 import type { ArenaBattleChatMessage } from '$lib/arena/battle/arenaBattlePresentationRuntime';
 import type { ArenaRewardState } from '$lib/arena/reward/arenaRewardRuntime';
+import type { ArenaFloatingWord, ArenaParticle } from '$lib/arena/state/arenaVisualEffectsRuntime';
 import type {
   ArenaBattleHudDisplay,
   ArenaBattlePhaseDisplay,
@@ -61,7 +62,7 @@ export interface ArenaBattleSidebarProps {
   vsMeter?: number;
   enemyHp?: number;
   battleHudDisplay?: ArenaBattleHudDisplay;
-  arenaParticles?: Array<{ id: number; x: number; y: number; size: number; speed: number; opacity: number }>;
+  arenaParticles?: ArenaParticle[];
   activeAgents?: AgentDef[];
   charSprites?: Record<string, CharSpriteState>;
   currentTurnIdx?: number;
@@ -87,5 +88,5 @@ export interface ArenaBattleSidebarProps {
   hypothesis?: Hypothesis | null;
   onGoLobby?: () => void;
   onPlayAgain?: () => void;
-  floatingWords?: Array<{ id: number; text: string; color: string; x: number; dur: number }>;
+  floatingWords?: ArenaFloatingWord[];
 }
