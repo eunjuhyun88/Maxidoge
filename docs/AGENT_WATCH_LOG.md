@@ -5742,6 +5742,9 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Branch: codex/terminal-uiux-gtm-wip
 - Request: keep going on the arena refactor, close the uncommitted scene-shell contract slice, and make the new boundary explicit before pushing
 - What changed:
+  - Added [ArenaAltViewHost.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaAltViewHost.svelte#L1)
+    - extracted the optional alt-view lazy imports and alt-view-only result overlay out of `ArenaMatchScene.svelte`
+    - kept `ArenaMatchScene.svelte` focused on scene-shell ownership while the host owns `chart/mission/card` swapping and result overlay loading
   - Added [arenaMatchSceneTypes.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/arenaMatchSceneTypes.ts#L1)
     - fixed the canonical typed contract for `ArenaMatchScene` alt-view props, result-panel props, and battle-layout bundle props
     - replaced the old loose `Record<string, unknown>` contract with explicit `ArenaAltViewProps`, `ArenaResultPanelProps`, and `ArenaBattleLayoutSceneProps`
@@ -5752,18 +5755,19 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
     - switched the component to the shared `ArenaMatchSceneProps` contract
     - replaced ambiguous empty-object defaults with shape-safe defaults for alt-view and result-panel props
     - removed the now-unused local prop-interface type imports after the shared contract cutover
+    - handed alt-view/result overlay loading off to `ArenaAltViewHost.svelte` so the scene shell stays thinner
   - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
     - routed scene/result/chart/layout bundle creation through the typed `arenaSceneProps.ts` helpers
     - kept the route focused on controller/state ownership while the scene shell remains in `ArenaMatchScene.svelte`
   - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
-    - documented `arenaMatchSceneTypes.ts` and `arenaSceneProps.ts` as the canonical scene-contract path so future refactors do not regress to untyped bundle props
+    - documented `ArenaAltViewHost.svelte`, `arenaMatchSceneTypes.ts`, and `arenaSceneProps.ts` as the canonical scene-shell/contract path so future refactors do not regress to route-local lazy state or untyped bundle props
 - Validation:
   - `npm run check`: PASS
   - `npm run check:budget`: PASS
   - `node node_modules/.bin/vite build`: PASS
   - `npm run gate`: PASS
   - server entry: `src/routes/arena/+page.svelte` = `159.42 kB`
-  - line counts: `src/routes/arena/+page.svelte` = `1015`, `src/components/arena/ArenaMatchScene.svelte` = `279`
+  - line counts: `src/routes/arena/+page.svelte` = `1015`, `src/components/arena/ArenaMatchScene.svelte` = `151`
 - Residual risks:
   - `arenaSceneProps.ts` is intentionally a thin typed wrapper seam today; if scene bundle derivation grows, the next extraction should move real formatting logic there instead of back into `arena/+page.svelte`
   - unrelated WIP remains dirty in `ChartIndicatorStrip.svelte` and `marketPulse`-related files and was intentionally excluded from this slice

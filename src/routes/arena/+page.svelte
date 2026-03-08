@@ -22,6 +22,13 @@
     buildArenaScoreSummary,
     buildArenaViewAgentSummaries,
   } from '$lib/arena/selectors/arenaViewModel';
+  import {
+    buildArenaAltViewProps,
+    buildArenaBattleLayoutProps,
+    buildArenaChartPanelProps,
+    buildArenaMatchSceneProps,
+    buildArenaResultPanelProps,
+  } from '$lib/arena/selectors/arenaSceneProps';
   import Lobby from '../../components/arena/Lobby.svelte';
   import ArenaMatchScene from '../../components/arena/ArenaMatchScene.svelte';
   import SquadConfig from '../../components/arena/SquadConfig.svelte';
@@ -92,7 +99,7 @@
   const arenaPhaseTrack = $derived(buildArenaPhaseTrack(gs.phase));
   const arenaPreviewDisplay = $derived(buildArenaPreviewDisplay(gs.hypothesis, gs.squadConfig));
   let resultData = $state<ArenaResultState>(buildArenaResultStateSeed());
-  const arenaAltViewProps = $derived({
+  const arenaAltViewProps = $derived(buildArenaAltViewProps({
     phase: gs.phase,
     battleTick: gs.battleTick,
     hypothesis: gs.hypothesis,
@@ -100,8 +107,8 @@
     battleResult: gs.battleResult,
     battlePriceHistory: gs.battlePriceHistory,
     activeAgents: arenaViewAgents,
-  });
-  const arenaResultPanelProps = $derived({
+  }));
+  const arenaResultPanelProps = $derived(buildArenaResultPanelProps({
     win: resultData.win,
     battleResult: gs.battleResult || '',
     entryPrice: gs.hypothesis?.entry || gs.bases.BTC,
@@ -119,7 +126,7 @@
     streak: gs.streak,
     agents: arenaViewAgents,
     actualDirection: determineActualDirection(currentBtcPrice > (gs.hypothesis?.entry || 0) ? 0.01 : -0.01),
-  });
+  }));
 
   // UI state
   let agentStates = $state<Record<string, ArenaAgentUiState>>({});
@@ -187,7 +194,7 @@
   // Keep chart interaction state in one adapter-shaped object so the page shell
   // only coordinates phases and server sync.
   let chartBridge = $state(createArenaChartBridgeState());
-  const arenaChartPanelProps = $derived({
+  const arenaChartPanelProps = $derived(buildArenaChartPanelProps({
     showPosition: chartBridge.position.visible,
     posEntry: chartBridge.position.entry,
     posTp: chartBridge.position.tp,
@@ -195,7 +202,7 @@
     posDir: chartBridge.position.dir,
     agentAnnotations: showMarkers ? chartBridge.annotations : [],
     agentMarkers: showMarkers ? chartBridge.markers : [],
-  });
+  }));
 
   let _arenaDestroyed = false; // guard for fire-and-forget timers after unmount
   const arenaTimerRegistry = createArenaTimerRegistry({
@@ -822,7 +829,7 @@
     },
   });
 
-  const arenaBattleLayoutProps = $derived({
+  const arenaBattleLayoutProps = $derived(buildArenaBattleLayoutProps({
     chartRailProps: {
       chartPanelProps: arenaChartPanelProps,
       onDragTP: arenaChartController.onDragTP,
@@ -885,8 +892,8 @@
       onPlayAgain: arenaShellController.playAgain,
       floatingWords,
     },
-  });
-  const arenaMatchSceneProps = $derived({
+  }));
+  const arenaMatchSceneProps = $derived(buildArenaMatchSceneProps({
     arenaSyncStatus,
     confirmingExit,
     phaseTrack: arenaPhaseTrack,
@@ -910,7 +917,7 @@
     onPlayAgain: arenaShellController.playAgain,
     onLobby: arenaShellController.goLobby,
     battleLayoutProps: arenaBattleLayoutProps,
-  });
+  }));
 
   onMount(() => {
     setPhaseInitCallback((phase) => {
