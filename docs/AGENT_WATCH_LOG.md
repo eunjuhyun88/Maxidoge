@@ -6251,6 +6251,29 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
 - Status: DONE
 
+## [2026-03-09 03:02:00 +0900] FINISH phase-2-profile-projection-direct-imports-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing compatibility-layer usage for the internal web/server split and keep pushing narrow slices
+- What changed:
+  - Updated [signals/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/signals/+page.svelte#L1), [WarRoom.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/WarRoom.svelte#L1), and [terminalCommunityRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/terminal/terminalCommunityRuntime.ts#L1)
+    - moved `incrementTrackedSignals()` imports off the wide compatibility aggregate and onto [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1)
+  - Updated [hydration.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/hydration.ts#L1) and [copyTradeStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/copyTradeStore.ts#L1)
+    - moved `hydrateUserProfile()` imports onto the projection authority store directly
+  - Updated [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
+    - removed projection re-exports so the file is once again just the compatibility aggregate plus `profileStats`
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1) and [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - recorded that projection mutations and hydration must come from `userProfileProjectionStore.ts`, not the aggregate barrel
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1) still uses the aggregate because it needs combined projection + derived stats
+  - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
+- Status: DONE
+
 ## [2026-03-09 02:18:00 +0900] FINISH phase-2-auth-api-normalizer-extraction-20260309 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

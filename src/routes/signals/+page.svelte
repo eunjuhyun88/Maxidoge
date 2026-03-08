@@ -4,7 +4,7 @@
   import { livePrices } from '$lib/stores/priceStore';
   import { openTrades } from '$lib/stores/quickTradeStore';
   import { activeSignals, trackSignal } from '$lib/stores/trackedSignalStore';
-  import { incrementTrackedSignals } from '$lib/stores/userProfileStore';
+  import { incrementTrackedSignals } from '$lib/stores/userProfileProjectionStore';
   import {
     communityPosts,
     hydrateCommunityPosts,

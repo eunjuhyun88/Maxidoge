@@ -1,15 +1,5 @@
 import { derived } from 'svelte/store';
 import {
-  adjustBalance,
-  earnedBadges,
-  hydrateUserProfile,
-  incrementTrackedSignals,
-  lockedBadges,
-  profileTier,
-  setAvatar,
-  setUsername,
-  syncLP,
-  syncPnL,
   type Badge,
   type ProfileTier,
   type UserProfileProjection,
@@ -37,16 +27,3 @@ export const userProfileStore = derived(
   }),
 );
 export const profileStats = derived(userProfileStore, ($profile) => $profile.stats);
-
-export {
-  adjustBalance,
-  hydrateUserProfile,
-  incrementTrackedSignals,
-  earnedBadges,
-  setAvatar,
-  setUsername,
-  lockedBadges,
-  profileTier,
-  syncLP,
-  syncPnL,
-};

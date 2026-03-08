@@ -8,7 +8,7 @@ import type { AgentSignal } from '$lib/data/warroom';
 import { getConsensus } from '$lib/data/warroom';
 import { openQuickTrade, removeQuickTrade, replaceQuickTradeId } from './quickTradeStore';
 import { removeTracked, replaceTrackedSignalId, trackSignal } from './trackedSignalStore';
-import { hydrateUserProfile } from './userProfileStore';
+import { hydrateUserProfile } from './userProfileProjectionStore';
 import { notifications } from './notificationsStore';
 import { publishCopyTradeApi } from '$lib/api/tradingApi';
 import type { CopyTradeEvidenceItem, PublishCopyTradeDraft, TradeDirection } from '$lib/contracts/trading';
