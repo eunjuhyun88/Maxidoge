@@ -6564,3 +6564,27 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1) still owns holdings orchestration, tab state, and the remaining tab-body content blocks
   - unrelated arena chart and arena-v2 WIP remains outside this slice and should stay out of the commit
 - Status: DONE
+
+## [2026-03-10 01:47:00 +0900] FINISH chart-position-sizer-contract-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep closing the active chart WIP in narrow slices, preserve the existing market-pulse/header work, and lock the position sizer to a clean engine/panel boundary
+- What changed:
+  - Updated [positionSizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/engine/positionSizer.ts#L1)
+    - added `takeProfit` input so risk-reward is computed in the engine instead of mutating results in the panel
+    - replaced free-form warning strings with structured warning codes plus a single formatter path
+    - normalized final position/risk outputs after caps so the engine owns the complete sizing result
+  - Updated [PositionSizerPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/PositionSizerPanel.svelte#L1)
+    - removed the inline `res.rr` mutation and delegated all sizing math to the engine
+    - kept the panel focused on input controls, quantity handoff, and warning display only
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `positionSizer.ts` as the canonical sizing math/RR/warning-code boundary
+    - documented `PositionSizerPanel.svelte` as the canonical presentation boundary for the chart size panel
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+- Residual risks:
+  - unrelated dirty chart WIP in [ChartHeaderBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderBar.svelte#L1), [ChartIndicatorStrip.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartIndicatorStrip.svelte#L1), [MarketPulseBadge.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/MarketPulseBadge.svelte#L1), and [chartActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartActionRuntime.ts#L1) remains intentionally outside this slice
+  - unrelated untracked WIP in [docs/usability-redesign-spec-2026-03-09.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/usability-redesign-spec-2026-03-09.md#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains outside this slice
+- Status: DONE
