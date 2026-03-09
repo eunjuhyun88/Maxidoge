@@ -6198,3 +6198,30 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `passport/+page.svelte` is still a large shell and continues to own holdings orchestration plus all tab markup/CSS
   - this slice was validated in an isolated worktree because the main worktree had unrelated staged wallet/auth changes
 - Status: DONE
+
+## [2026-03-09 11:05:00 +0900] FINISH passport-learning-panel-view-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/passport-learning-panel
+- Request: continue the isolated passport refactor by removing learning-panel markup and display glue from the route shell
+- What changed:
+  - Added [PassportLearningPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportLearningPanel.svelte#L1)
+    - moved the entire `AI LEARNING PIPELINE` section into a dedicated presentational boundary
+    - keeps button wiring, report/dataset/job/eval rendering, and responsive layout local to the component instead of the route shell
+  - Added [passportLearningPanelViewModel.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/passport/passportLearningPanelViewModel.ts#L1)
+    - centralizes pure pipeline display calculations (`pipeline state`, `status line`, `ops connected`)
+    - gives the component a canonical pure helper instead of rebuilding those strings in the route
+  - Updated [passportLearningPanelController.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/passport/passportLearningPanelController.ts#L1)
+    - exported a controller interface so the route/component contract is typed and reusable
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - removed learning-panel markup, detail lists, and learning-only derived aliases from the route
+    - kept only panel state ownership, controller construction, and mount hydration in the page shell
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the new passport learning panel view/model boundary as canonical
+- Validation:
+  - `npm run check`: PASS
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+- Residual risks:
+  - `passport/+page.svelte` still owns holdings orchestration, tab state, and large amounts of layout/CSS outside the learning section
+  - this slice is intentionally isolated from the unrelated auth/community/chart WIP present in the main worktree
+- Status: DONE
