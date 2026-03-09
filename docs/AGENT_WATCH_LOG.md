@@ -6302,3 +6302,23 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - legacy auth response normalization still exists for old route envelopes, even though it is now isolated in one helper
   - unrelated untracked arena position-sizer WIP remains outside this slice
 - Status: DONE
+
+## [2026-03-09 16:58:00 +0900] FINISH arena-route-lifecycle-extraction-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: wrap arena toward a finishable state without changing layout/position and keep narrowing route responsibilities
+- What changed:
+  - Added [arenaRouteLifecycle.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaRouteLifecycle.ts#L1)
+    - extracted scene lazy import warmup, `setPhaseInitCallback()` mount, and `keydown` listener mount/destroy into one canonical route lifecycle runtime
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - removed route-local `ensureArenaMatchSceneComponent()` and direct phase-init/key listener lifecycle wiring
+    - kept the arena page as a state/props coordinator while preserving layout and scene lazy policy
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaRouteLifecycle.ts` as the canonical owner for arena route lazy/lifecycle wiring
+- Validation:
+  - `npm run check`: 0 errors, 5 warnings from unrelated local WIP in [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) and [CommentSection.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/community/CommentSection.svelte#L1)
+  - `npm run build`: PASS (same unrelated local warnings surfaced by Vite)
+- Residual risks:
+  - [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1) still owns large state declaration blocks and controller construction, even though route lifecycle is now externalized
+  - unrelated dirty wallet/community WIP remains outside this slice and blocks a clean global warning budget locally
+- Status: DONE

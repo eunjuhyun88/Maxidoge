@@ -5,7 +5,7 @@
   import { AGDEFS } from '$lib/data/agents';
   import { sfx } from '$lib/audio/sfx';
   import { PHASE_LABELS, DOGE_WIN, DOGE_LOSE, WIN_MOTTOS, LOSE_MOTTOS } from '$lib/engine/phases';
-  import { startMatch as engineStartMatch, advancePhase, setPhaseInitCallback, resetPhaseInit, startAnalysisFromDraft } from '$lib/engine/gameLoop';
+  import { startMatch as engineStartMatch, advancePhase, resetPhaseInit, startAnalysisFromDraft } from '$lib/engine/gameLoop';
   import { determineActualDirection } from '$lib/engine/scoring';
   import {
     buildArenaApiSyncStatus,
@@ -74,6 +74,7 @@
   import { createArenaGameStateBridge } from '$lib/arena/controllers/arenaGameStateBridge';
   import { createArenaUiStateBridge } from '$lib/arena/controllers/arenaUiStateBridge';
   import { createArenaPhaseRuntimeBundle } from '$lib/arena/controllers/arenaPhaseRuntimeBundle';
+  import { createArenaRouteLifecycle } from '$lib/arena/controllers/arenaRouteLifecycle';
   import {
     createArenaResultController,
   } from '$lib/arena/controllers/arenaResultController';
@@ -588,31 +589,25 @@
     battleLayoutProps: arenaBattleLayoutProps,
   }));
 
-  function ensureArenaMatchSceneComponent() {
-    if (ArenaMatchSceneComponent || typeof window === 'undefined') return;
-    void import('../../components/arena/ArenaMatchScene.svelte').then((module) => {
-      ArenaMatchSceneComponent = module.default;
-    });
-  }
+  const arenaRouteLifecycle = createArenaRouteLifecycle({
+    getSceneComponent: () => ArenaMatchSceneComponent,
+    setSceneComponent: (component) => {
+      ArenaMatchSceneComponent = component;
+    },
+    onPhaseInit: arenaPhaseController.onPhaseInit,
+    onKeydown: arenaShellController.handleKeydown,
+  });
 
   $effect(() => {
-    if (gs.inLobby || gs.phase === 'DRAFT') return;
-    ensureArenaMatchSceneComponent();
+    arenaRouteLifecycle.warmScene(gs.inLobby, gs.phase);
   });
 
   onMount(() => {
-    setPhaseInitCallback((phase) => {
-      arenaPhaseController.onPhaseInit(phase);
-    });
-    if (typeof window !== 'undefined') {
-      window.addEventListener('keydown', arenaShellController.handleKeydown);
-    }
+    arenaRouteLifecycle.mount();
   });
 
   onDestroy(() => {
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', arenaShellController.handleKeydown);
-    }
+    arenaRouteLifecycle.destroy();
     _arenaDestroyed = true;
     liveEventRuntime.destroy();
     arenaAgentRuntime.destroy();
