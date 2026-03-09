@@ -28,6 +28,13 @@ export interface PassportLearningPanelState {
   errorMessage: string;
 }
 
+export interface PassportLearningPanelController {
+  generateReportNow: () => Promise<void>;
+  hydrate: () => Promise<void>;
+  queueRetrainNow: () => Promise<void>;
+  runWorkerNow: () => Promise<void>;
+}
+
 interface PassportLearningSummary {
   closedWinRate: number;
   avgWinPnl: number;
@@ -58,7 +65,7 @@ export function createPassportLearningPanelState(): PassportLearningPanelState {
 
 export function createPassportLearningPanelController(
   options: CreatePassportLearningPanelControllerOptions
-) {
+): PassportLearningPanelController {
   function updateState(
     updater: Partial<PassportLearningPanelState> | ((state: PassportLearningPanelState) => PassportLearningPanelState)
   ) {
