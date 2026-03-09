@@ -17,7 +17,6 @@ export {
   userPhase,
 } from './userLifecycleStore';
 import {
-  createSimulatedSignature,
   createSimulatedWalletConnection
 } from '$lib/wallet/simulatedWallet';
 
@@ -29,7 +28,6 @@ export interface WalletState {
   balance: number;
   chain: string;
   provider: string | null;
-  signature: string | null;
 }
 
 function normalizeProvider(raw: unknown): string | null {
@@ -51,8 +49,7 @@ const defaultWallet: WalletState = {
   shortAddr: null,
   balance: 0,
   chain: 'ARB',
-  provider: null,
-  signature: null
+  provider: null
 };
 
 // Load from localStorage
@@ -71,9 +68,7 @@ function loadWallet(): WalletState {
 export const walletStore = writable<WalletState>(loadWallet());
 
 autoSave(walletStore, STORAGE_KEYS.wallet, (w) => {
-  const { signature, ...persistable } = w;
-  void signature;
-  return persistable;
+  return w;
 }, 300);
 
 // Derived stores
@@ -131,18 +126,7 @@ export function connectWallet(provider: string = 'metamask', addressOverride?: s
     shortAddr: connection.shortAddr,
     balance: connection.balance,
     chain: connection.chain,
-    provider: connection.provider,
-    signature: null
-  }));
-}
-
-// Sign message to verify ownership
-export function signMessage(signatureOverride?: string) {
-  const signature = createSimulatedSignature(signatureOverride);
-
-  walletStore.update(w => ({
-    ...w,
-    signature
+    provider: connection.provider
   }));
 }
 
@@ -155,6 +139,6 @@ export function disconnectWallet() {
     shortAddr: null,
     balance: 0,
     provider: null,
-    signature: null
+    chain: defaultWallet.chain
   }));
 }

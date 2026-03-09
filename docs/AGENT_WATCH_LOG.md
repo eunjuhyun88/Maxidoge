@@ -20,6 +20,32 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ## Entries
 
+## [2026-03-09 18:01:52 +0900] FINISH wallet-store-proof-removal-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep moving on the current Phase 2 path, remove more mixed authority from the wallet layer, and keep narrow pushable slices with canonical logs
+- What changed:
+  - Updated [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+    - removed persisted `signature` from `WalletState`
+    - deleted the store-level `signMessage(...)` helper
+    - kept the store scoped to wallet connection transport only
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - stopped mirroring signed wallet proof into the general wallet store
+    - kept wallet proof fully local to the modal/auth funnel
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded that wallet proof is now transient UI state rather than wallet transport state
+- Validation:
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) still owns most of the wallet auth state machine even though proof no longer leaks into `walletStore`
+  - unrelated arena/CLAUDE WIP remains outside this slice
+- Commit / Push:
+  - `refactor: remove wallet proof from wallet store`
+  - pushed to `origin/codex/terminal-uiux-gtm-wip`
+- Status: DONE
+
 ## [2026-03-09 17:55:57 +0900] FINISH auth-wallet-resolve-header-20260309 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

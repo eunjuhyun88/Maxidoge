@@ -2,7 +2,6 @@
   import {
     walletStore,
     connectWallet,
-    signMessage,
     disconnectWallet
   } from '$lib/stores/walletStore';
   import { applyAuthenticatedUser, authSessionIdentity, authSessionStore, clearAuthenticatedUser } from '$lib/stores/authSessionStore';
@@ -218,7 +217,6 @@
 
       signedWalletMessage = proof.message;
       signedWalletSignature = proof.signature;
-      signMessage(proof.signature);
       markWalletSignatureComplete();
 
       trackWalletFunnel('sign', 'success', { provider, chain: walletState.chain });
