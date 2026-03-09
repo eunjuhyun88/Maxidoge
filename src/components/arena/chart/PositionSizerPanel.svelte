@@ -21,6 +21,7 @@
     dir = 'LONG' as 'LONG' | 'SHORT',
     onQuantityChange = () => {},
   }: Props = $props();
+  const directionClass = $derived(dir === 'SHORT' ? 'short' : 'long');
 
   let accountSize = $state(10000);
   let riskPct = $state(1);
@@ -53,9 +54,12 @@
 </script>
 
 {#if expanded}
-  <div class="sizer-panel">
+  <div class={`sizer-panel ${directionClass}`}>
     <div class="sizer-header">
-      <span class="sizer-title">POSITION SIZER</span>
+      <div class="sizer-title-row">
+        <span class="sizer-title">POSITION SIZER</span>
+        <span class={`sizer-side ${directionClass}`}>{dir}</span>
+      </div>
       <button class="sizer-close" onclick={() => expanded = false}>×</button>
     </div>
 
@@ -123,7 +127,7 @@
     {/if}
   </div>
 {:else}
-  <button class="sizer-toggle" onclick={() => expanded = true} title="Position Sizer">
+  <button class={`sizer-toggle ${directionClass}`} onclick={() => expanded = true} title="Position Sizer">
     <span class="sizer-icon">📐</span>
     {#if result && result.quantity > 0}
       <span class="sizer-mini">{formatQuantity(result.quantity, entry)}</span>
@@ -142,11 +146,25 @@
     backdrop-filter: blur(12px);
   }
 
+  .sizer-panel.long {
+    border-color: rgba(0, 255, 136, .22);
+  }
+
+  .sizer-panel.short {
+    border-color: rgba(255, 64, 96, .22);
+  }
+
   .sizer-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 6px;
+  }
+
+  .sizer-title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .sizer-title {
@@ -155,6 +173,28 @@
     font-weight: 900;
     letter-spacing: .8px;
     color: rgba(255,255,255,.85);
+  }
+
+  .sizer-side {
+    border-radius: 999px;
+    padding: 1px 5px;
+    font-family: var(--fd, sans-serif);
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: .6px;
+    line-height: 1.2;
+  }
+
+  .sizer-side.long {
+    color: #00ff88;
+    background: rgba(0, 255, 136, .14);
+    border: 1px solid rgba(0, 255, 136, .24);
+  }
+
+  .sizer-side.short {
+    color: #ff4060;
+    background: rgba(255, 64, 96, .14);
+    border: 1px solid rgba(255, 64, 96, .24);
   }
 
   .sizer-close {
@@ -302,6 +342,14 @@
     padding: 2px 7px;
     cursor: pointer;
     transition: all .15s;
+  }
+
+  .sizer-toggle.long {
+    border-color: rgba(0, 255, 136, .24);
+  }
+
+  .sizer-toggle.short {
+    border-color: rgba(255, 64, 96, .24);
   }
 
   .sizer-toggle:hover {

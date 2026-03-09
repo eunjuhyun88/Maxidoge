@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PositionSizerPanel from './PositionSizerPanel.svelte';
   import type { DrawingMode, AgentTradeSetup, IndicatorKey } from '$lib/chart/chartTypes';
   import { formatCompact, formatPrice } from '$lib/chart/chartCoordinates';
   import type { ChartTheme } from '../ChartTheme';
@@ -84,6 +85,19 @@
     onPublishTradeSignal = () => {},
     onCancelDrawing = () => {},
   }: Props = $props();
+
+  const sizingEntry = $derived(activeTradeSetup?.entry ?? posEntry ?? 0);
+  const sizingStop = $derived(activeTradeSetup?.sl ?? posSl ?? 0);
+  const sizingTakeProfit = $derived(activeTradeSetup?.tp ?? posTp ?? 0);
+  const sizingDirection = $derived(
+    activeTradeSetup?.dir ?? (posDir === 'SHORT' ? 'SHORT' : 'LONG')
+  );
+  const showPositionSizer = $derived(
+    Boolean(
+      (activeTradeSetup && activeTradeSetup.entry > 0 && activeTradeSetup.sl > 0) ||
+      (showPosition && posEntry !== null && posSl !== null)
+    )
+  );
 </script>
 
 {#if isLoading}
@@ -180,6 +194,17 @@
 
 {#if chartNotice}
   <div class="chart-notice">{chartNotice}</div>
+{/if}
+
+{#if showPositionSizer}
+  <div class="position-sizer-dock">
+    <PositionSizerPanel
+      entry={sizingEntry}
+      stop={sizingStop}
+      tp={sizingTakeProfit}
+      dir={sizingDirection}
+    />
+  </div>
 {/if}
 
 {#if showPosition && posEntry !== null && posTp !== null && posSl !== null}
@@ -342,6 +367,15 @@
     box-shadow: 0 8px 24px rgba(0,0,0,.4);
     pointer-events: none;
     white-space: nowrap;
+  }
+
+  .position-sizer-dock {
+    position: absolute;
+    right: 8px;
+    bottom: 10px;
+    z-index: 14;
+    display: inline-flex;
+    justify-content: flex-end;
   }
 
   .overlay-close-btn {
@@ -545,6 +579,7 @@
 
     .scale-btn.wide { min-width: 40px; }
     .chart-notice { bottom: 36px; }
+    .position-sizer-dock { right: 6px; bottom: 8px; }
     .drag-indicator { bottom: 30px; }
   }
 
