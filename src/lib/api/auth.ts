@@ -1,6 +1,8 @@
 import type {
   LoginAuthRequest,
   RegisterAuthRequest,
+  ResolveWalletData,
+  ResolveWalletRequest,
   VerifyWalletRequest,
   WalletNonceRequest,
 } from '$lib/contracts/auth';
@@ -82,6 +84,26 @@ export function verifyWalletSignature(payload: VerifyWalletRequest) {
   return postJson<VerifyWalletApiResult>('/api/auth/verify-wallet', payload).then(
     normalizeVerifyWalletData
   );
+}
+
+export async function resolveWalletAuth(payload: ResolveWalletRequest): Promise<ResolveWalletData> {
+  const result = await postJson<{
+    success: boolean;
+    action: 'logged_in' | 'needs_signup';
+    user?: Record<string, unknown>;
+    walletAddress?: string;
+  }>('/api/auth/resolve', payload);
+
+  if (result.action === 'logged_in' && result.user) {
+    const { normalizeAuthUser } = await import('$lib/auth/authApiNormalizer');
+    const user = normalizeAuthUser(result.user);
+    if (user) return { action: 'logged_in', user };
+  }
+
+  return {
+    action: 'needs_signup',
+    walletAddress: payload.walletAddress,
+  };
 }
 
 export function logoutAuth() {

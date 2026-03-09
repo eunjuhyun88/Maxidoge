@@ -77,6 +77,16 @@ export interface VerifyWalletData {
   wallet: VerifiedWallet | null;
 }
 
+export interface ResolveWalletRequest {
+  walletAddress: string;
+  walletMessage: string;
+  walletSignature: string;
+}
+
+export type ResolveWalletData =
+  | { action: 'logged_in'; user: AuthUser }
+  | { action: 'needs_signup'; walletAddress: string };
+
 export interface LogoutData {
   loggedOut: boolean;
 }

@@ -20,6 +20,40 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ## Entries
 
+## [2026-03-09 17:55:57 +0900] FINISH auth-wallet-resolve-header-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the current refactor/design path, land the auth/header wallet-first slice correctly, keep pushing narrow slices, and keep canonical docs/logs aligned with the CLAUDE boundary rules
+- What changed:
+  - Added [auth/resolve/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/resolve/+server.ts#L1) and updated [authRepository.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/authRepository.ts#L1), [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1), and [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/auth.ts#L1)
+    - landed the wallet-first auth resolve endpoint and browser contract so signed wallets now resolve to `logged_in` or `needs_signup` before signup UI
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1), [walletModalStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletModalStore.ts#L1), [walletModalFlow.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalFlow.ts#L1), and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1)
+    - removed the dead login helper path
+    - made `resolving` a transient in-modal step instead of an open-step destination
+    - sent missing-proof and resolve-error fallbacks back to `sign-message` or `wallet-select` instead of dropping users into signup
+    - cleared stale proof/error state on modal close so reopen state is deterministic
+  - Updated [Header.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/Header.svelte#L1)
+    - kept the connected profile dropdown flow
+    - switched logout to the canonical wallet modal transport
+    - auto-closes the dropdown on route changes and disconnect
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1) and regenerated [api-group-map.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/generated/api-group-map.md#L1)
+    - Phase 2 now counts `17` in-scope handlers including `/api/auth/resolve`
+    - the generated API inventory now reflects `Auth & Session = 8`
+- Validation:
+  - `npm run docs:refresh`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - Vite still reports the expected dynamic-import note for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1); runtime behavior is unchanged, but the transport/helper chunk split is still not ideal
+  - unrelated dirty arena/CLAUDE WIP remains outside this auth slice and must stay out of the commit
+- Commit / Push:
+  - `refactor: add wallet auth resolve flow`
+  - pushed to `origin/codex/terminal-uiux-gtm-wip`
+- Status: DONE
+
 ## [2026-03-09 17:18:06 +0900] FINISH passport-summary-holdings-runtime-20260309 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

@@ -1,4 +1,11 @@
-import { loginAuth, logoutAuth, registerAuth, requestWalletNonce, verifyWalletSignature } from '$lib/api/auth';
+import {
+  logoutAuth,
+  registerAuth,
+  requestWalletNonce,
+  resolveWalletAuth as resolveWalletAuthApi,
+  verifyWalletSignature
+} from '$lib/api/auth';
+import type { ResolveWalletData } from '$lib/contracts/auth';
 import {
   getPreferredEvmChainCode,
   hasInjectedEvmProvider,
@@ -94,16 +101,12 @@ export function submitWalletSignup(args: {
   return registerAuth(args);
 }
 
-export function submitWalletLogin(args: {
-  email: string;
-  nickname?: string;
+export async function resolveWalletAuth(args: {
   walletAddress: string;
   walletMessage: string;
   walletSignature: string;
-}) {
-  return loginAuth({
-    email: args.email,
-    nickname: args.nickname ?? '',
+}): Promise<ResolveWalletData> {
+  return resolveWalletAuthApi({
     walletAddress: args.walletAddress,
     walletMessage: args.walletMessage,
     walletSignature: args.walletSignature,

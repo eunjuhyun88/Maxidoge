@@ -23,6 +23,7 @@
     { path: '/arena', label: 'ARENA', mobileLabel: 'ARENA', icon: '>', desc: '드래프트와 배틀' },
     { path: '/arena-war', label: 'WAR', mobileLabel: 'WAR', icon: '!', desc: 'AI와 1:1 분석 대결', accent: true },
     { path: '/signals', label: 'COMMUNITY', mobileLabel: 'SIGNAL', icon: '#', desc: '시그널, 오라클 리더보드, 라이브 피드' },
+    { path: '/agents', label: 'AGENTS', mobileLabel: 'AGENT', icon: '%', desc: 'AI 에이전트 대시보드' },
     { path: '/passport', label: 'PASSPORT', mobileLabel: 'MY', icon: '@', desc: '내 기록과 포트폴리오' },
   ];
 
@@ -81,6 +82,45 @@
     if (path === '/arena') return activePath === '/arena' || activePath.startsWith('/arena-v2');
     if (path === '/arena-war') return activePath.startsWith('/arena-war');
     return activePath.startsWith(path);
+  }
+
+  let profileDropdownOpen = $state(false);
+
+  function toggleProfileDropdown() {
+    profileDropdownOpen = !profileDropdownOpen;
+  }
+
+  function closeProfileDropdown() {
+    profileDropdownOpen = false;
+  }
+
+  function handleProfileNav(path: string) {
+    closeProfileDropdown();
+    goto(path);
+  }
+
+  $effect(() => {
+    activePath;
+    if (profileDropdownOpen) {
+      closeProfileDropdown();
+    }
+  });
+
+  $effect(() => {
+    connected;
+    if (!connected && profileDropdownOpen) {
+      closeProfileDropdown();
+    }
+  });
+
+  async function handleLogout() {
+    closeProfileDropdown();
+    const { logoutWalletSession } = await import('$lib/auth/walletModalTransport');
+    const { clearAuthenticatedUser } = await import('$lib/stores/authSessionStore');
+    const { disconnectWallet } = await import('$lib/stores/walletStore');
+    await logoutWalletSession();
+    clearAuthenticatedUser();
+    disconnectWallet();
   }
 
   const selectedToken = $derived(gState.pair.split('/')[0] || 'BTC');
@@ -143,10 +183,24 @@
     </button>
 
     {#if connected}
-      <button class="wallet-btn connected" onclick={openWalletModal}>
-        <span class="wallet-dot"></span>
-        {wallet.shortAddr}
-      </button>
+      <div class="profile-dropdown-wrap">
+        <button class="wallet-btn connected" onclick={toggleProfileDropdown}>
+          <span class="wallet-dot"></span>
+          {wallet.shortAddr}
+        </button>
+        {#if profileDropdownOpen}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="dropdown-backdrop" onclick={closeProfileDropdown}></div>
+          <div class="profile-dropdown">
+            <button class="dropdown-item" onclick={() => handleProfileNav('/passport')}>Profile</button>
+            <button class="dropdown-item" onclick={() => handleProfileNav('/settings')}>Settings</button>
+            <button class="dropdown-item" onclick={() => { closeProfileDropdown(); openWalletModal(); }}>Wallet</button>
+            <div class="dropdown-sep"></div>
+            <button class="dropdown-item dropdown-item-danger" onclick={handleLogout}>Disconnect</button>
+          </div>
+        {/if}
+      </div>
     {:else}
       <button class="wallet-btn" onclick={openWalletModal}>
         CONNECT
@@ -369,6 +423,55 @@
     border-radius: 50%;
     background: var(--sc-good);
     box-shadow: 0 0 6px var(--sc-good);
+  }
+
+  /* ── Profile Dropdown ── */
+  .profile-dropdown-wrap {
+    position: relative;
+  }
+  .dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+  }
+  .profile-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 100;
+    min-width: 150px;
+    background: var(--sc-bg-1);
+    border: 1px solid var(--sc-line-hard);
+    border-radius: var(--sc-radius-md);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    padding: var(--sc-sp-1) 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .dropdown-item {
+    font-family: var(--sc-font-pixel);
+    font-size: var(--sc-fs-2xs);
+    letter-spacing: 0.8px;
+    color: var(--sc-text-1);
+    background: none;
+    border: none;
+    padding: var(--sc-sp-2) var(--sc-sp-3);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--sc-duration-fast), color var(--sc-duration-fast);
+  }
+  .dropdown-item:hover {
+    background: var(--sc-accent-bg-subtle);
+    color: var(--sc-text-0);
+  }
+  .dropdown-item-danger:hover {
+    background: rgba(255, 89, 89, 0.1);
+    color: #ff6b6b;
+  }
+  .dropdown-sep {
+    height: 1px;
+    background: var(--sc-line-soft);
+    margin: var(--sc-sp-1) 0;
   }
 
   /* ── Active States (Apple-tier touch feedback) ── */

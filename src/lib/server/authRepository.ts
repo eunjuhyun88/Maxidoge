@@ -180,6 +180,19 @@ export async function getAuthenticatedUser(token: string, userId: string): Promi
   }
 }
 
+export async function findAuthUserByWallet(walletAddress: string): Promise<AuthUserRow | null> {
+  const result = await query<AuthUserRow>(
+    `
+      SELECT id, email, nickname, tier, phase, wallet_address
+      FROM users
+      WHERE lower(wallet_address) = lower($1)
+      LIMIT 1
+    `,
+    [walletAddress]
+  );
+  return result.rows[0] || null;
+}
+
 export async function findAuthUserForLogin(
   email: string,
   nickname: string,

@@ -44,6 +44,7 @@ Already landed in the current monolith:
 13. wallet connect/sign/auth/logout transport now lives in [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1), so [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) no longer owns provider-specific account request, nonce/signature verification, or auth submit transport code inline
 14. legacy auth response normalization now lives in [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1), so [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1) is now a thin browser transport wrapper and [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) reads `AuthUser` directly from contracts instead of API-local alias types
 15. projection-only profile consumers such as [signals/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/signals/+page.svelte#L1), [WarRoom.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/WarRoom.svelte#L1), [terminalCommunityRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/terminal/terminalCommunityRuntime.ts#L1), [hydration.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/hydration.ts#L1), and [copyTradeStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/copyTradeStore.ts#L1) now read projection authority directly from [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1), and [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1) is reduced to the compatibility aggregate plus `profileStats`
+16. wallet-first auth resolve now lands through [auth/resolve/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/resolve/+server.ts#L1), [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1), and [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1), so signed wallets now auto-resolve to `logged_in` or `needs_signup` before showing signup and the `resolving` step is treated as transient UI state rather than a modal reopen destination
 
 Still blocking full Phase 2 cutover:
 
@@ -71,7 +72,7 @@ Phase 2 is:
 
 ## 3.1 Core route handlers in scope now
 
-Validated core Phase 2 handler count: `16`
+Validated core Phase 2 handler count: `17`
 
 Included handlers:
 
@@ -81,16 +82,17 @@ Included handlers:
 4. [auth/logout/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/logout/+server.ts#L1)
 5. [auth/nonce/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/nonce/+server.ts#L1)
 6. [auth/register/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/register/+server.ts#L1)
-7. [auth/session/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/session/+server.ts#L1)
-8. [auth/verify-wallet/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/verify-wallet/+server.ts#L1)
-9. [auth/wallet/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/wallet/+server.ts#L1)
-10. [notifications/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/notifications/+server.ts#L1)
-11. [notifications/[id]/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/notifications/[id]/+server.ts#L1)
-12. [notifications/read/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/notifications/read/+server.ts#L1)
-13. [preferences/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/preferences/+server.ts#L1)
-14. [profile/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/profile/+server.ts#L1)
-15. [profile/passport/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/profile/passport/+server.ts#L1)
-16. [ui-state/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/ui-state/+server.ts#L1)
+7. [auth/resolve/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/resolve/+server.ts#L1)
+8. [auth/session/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/session/+server.ts#L1)
+9. [auth/verify-wallet/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/verify-wallet/+server.ts#L1)
+10. [auth/wallet/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/wallet/+server.ts#L1)
+11. [notifications/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/notifications/+server.ts#L1)
+12. [notifications/[id]/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/notifications/[id]/+server.ts#L1)
+13. [notifications/read/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/notifications/read/+server.ts#L1)
+14. [preferences/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/preferences/+server.ts#L1)
+15. [profile/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/profile/+server.ts#L1)
+16. [profile/passport/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/profile/passport/+server.ts#L1)
+17. [ui-state/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/ui-state/+server.ts#L1)
 
 ## 3.2 Browser edges in scope now
 
@@ -138,6 +140,7 @@ Validated now:
 3. [userLifecycleStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userLifecycleStore.ts#L1) now owns local lifecycle phase and progression tracking that used to be mixed into wallet state
 4. [walletModalStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletModalStore.ts#L1) now owns wallet modal visibility and step flow
 5. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) now behaves as wallet connection transport only, while [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) owns account identity
+6. [auth/resolve/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/resolve/+server.ts#L1) now owns wallet-first lookup and auto-login issuance for already-linked wallets, while [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) treats `resolving` as an in-flight step instead of a persisted reopen destination
 
 Implication:
 

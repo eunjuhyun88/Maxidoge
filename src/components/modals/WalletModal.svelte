@@ -16,17 +16,14 @@
   import { hasWalletAuthProof } from '$lib/contracts/auth';
   import {
     getWalletFunnelErrorReason,
-    parseWalletLoginForm,
     parseWalletSignupForm,
-    resolveWalletAuthStartStep,
-    type AuthMode,
   } from '$lib/auth/walletModalFlow';
   import {
     connectWalletProvider,
     isWalletProviderKey,
     logoutWalletSession,
+    resolveWalletAuth,
     signWalletOwnership,
-    submitWalletLogin,
     submitWalletSignup,
   } from '$lib/auth/walletModalTransport';
   import {
@@ -35,19 +32,21 @@
     type WalletProviderKey
   } from '$lib/wallet/providers';
 
-  type WalletFunnelStep = 'modal_open' | 'connect' | 'sign' | 'auth' | 'disconnect';
+  type WalletFunnelStep = 'modal_open' | 'connect' | 'sign' | 'resolve' | 'auth' | 'disconnect';
   type WalletFunnelStatus = 'view' | 'success' | 'error';
 
-  const STEP_TITLE: Record<WalletModalStep, string> = {
-    welcome: 'WALLET ACCESS',
+  const STEP_TITLE: Record<string, string> = {
     'wallet-select': 'CONNECT WALLET',
     connecting: 'CONNECTING',
     'sign-message': 'VERIFY OWNERSHIP',
-    connected: 'WALLET READY',
+    resolving: 'CHECKING WALLET',
     signup: 'CREATE ACCOUNT',
+    profile: 'MY PROFILE',
+    // Legacy fallbacks
+    welcome: 'WALLET ACCESS',
+    connected: 'WALLET READY',
     login: 'LOG IN',
     'demo-intro': 'DEMO',
-    profile: 'MY PROFILE'
   };
 
   const walletConnectReady = isWalletConnectConfigured();
@@ -58,13 +57,13 @@
   const lifecycle = $derived($userLifecycleStore);
   const step = $derived(modalState.step);
 
-  let authMode: AuthMode = $state<AuthMode>('signup');
   let emailInput = $state('');
   let nicknameInput = $state('');
   let emailError = $state('');
   let actionError = $state('');
   let connectingProvider = $state('');
   let signingMessage = $state(false);
+  let resolvingWallet = $state(false);
   let authSubmitting = $state(false);
   let signedWalletMessage = $state('');
   let signedWalletSignature = $state('');
@@ -95,7 +94,6 @@
     gtmEvent('wallet_funnel', {
       step: stepName,
       status,
-      mode: authMode,
       ...payload,
     });
   }
@@ -114,48 +112,12 @@
     return hasWalletAuthProof(signedWalletMessage, signedWalletSignature);
   }
 
-  function setAuthMode(mode: AuthMode) {
-    authMode = mode;
-    clearErrors();
-    if (step === 'signup' || step === 'login') {
-      setWalletModalStep(mode);
-    }
-  }
-
-  function startAuthFlow(mode: AuthMode) {
-    setAuthMode(mode);
-    setWalletModalStep(resolveWalletAuthStartStep({
-      mode,
-      walletConnected: walletState.connected,
-      walletAddress: walletState.address,
-      walletMessage: signedWalletMessage,
-      walletSignature: signedWalletSignature,
-    }));
-  }
-
   function getSignedWalletProof(): { walletMessage: string; walletSignature: string } | null {
     if (!hasWalletProof()) return null;
     return {
       walletMessage: signedWalletMessage,
       walletSignature: signedWalletSignature,
     };
-  }
-
-  function ensureWalletReadyForAuth(): boolean {
-    if (!walletState.connected || !walletState.address) {
-      actionError = 'Connect wallet first.';
-      setWalletModalStep('wallet-select');
-      return false;
-    }
-
-    const walletProof = getSignedWalletProof();
-    if (!walletProof) {
-      actionError = 'Sign wallet message first.';
-      setWalletModalStep('sign-message');
-      return false;
-    }
-
-    return true;
   }
 
   async function handleSignupSubmit() {
@@ -168,10 +130,13 @@
       emailError = parsed.error;
       return;
     }
-    if (!ensureWalletReadyForAuth()) return;
 
     const walletProof = getSignedWalletProof();
-    if (!walletProof || !walletState.address) return;
+    if (!walletProof || !walletState.address) {
+      actionError = 'Sign wallet message first.';
+      setWalletModalStep(walletState.connected ? 'sign-message' : 'wallet-select');
+      return;
+    }
 
     authSubmitting = true;
     try {
@@ -186,50 +151,11 @@
         auth_mode: 'signup',
         chain: walletState.chain,
       });
+      closeWalletModal();
     } catch (error) {
       emailError = error instanceof Error ? error.message : 'Failed to create account';
       trackWalletFunnel('auth', 'error', {
         auth_mode: 'signup',
-        reason: getWalletFunnelErrorReason(error),
-      });
-    } finally {
-      authSubmitting = false;
-    }
-  }
-
-  async function handleLoginSubmit() {
-    clearErrors();
-    const parsed = parseWalletLoginForm({
-      emailInput,
-      nicknameInput,
-    });
-    if (!parsed.ok) {
-      emailError = parsed.error;
-      return;
-    }
-    if (!ensureWalletReadyForAuth()) return;
-
-    const walletProof = getSignedWalletProof();
-    if (!walletProof || !walletState.address) return;
-
-    authSubmitting = true;
-    try {
-      const res = await submitWalletLogin({
-        email: parsed.value.email,
-        nickname: parsed.value.nickname,
-        walletAddress: walletState.address,
-        walletMessage: walletProof.walletMessage,
-        walletSignature: walletProof.walletSignature,
-      });
-      applyAuthenticatedUser(res.user);
-      trackWalletFunnel('auth', 'success', {
-        auth_mode: 'login',
-        chain: walletState.chain,
-      });
-    } catch (error) {
-      emailError = error instanceof Error ? error.message : 'Failed to log in';
-      trackWalletFunnel('auth', 'error', {
-        auth_mode: 'login',
         reason: getWalletFunnelErrorReason(error),
       });
     } finally {
@@ -300,7 +226,8 @@
       if (authSession.authenticated) {
         setWalletModalStep('profile');
       } else {
-        setWalletModalStep(authMode);
+        // Wallet-first flow: auto-resolve after signature
+        await handleResolveWallet();
       }
     } catch (error) {
       clearWalletProof();
@@ -308,6 +235,41 @@
       trackWalletFunnel('sign', 'error', { reason: getWalletFunnelErrorReason(error) });
     } finally {
       signingMessage = false;
+    }
+  }
+
+  async function handleResolveWallet() {
+    if (!walletState.address || !signedWalletMessage || !signedWalletSignature) {
+      actionError = 'Missing wallet proof for resolution.';
+      setWalletModalStep(walletState.connected ? 'sign-message' : 'wallet-select');
+      return;
+    }
+
+    resolvingWallet = true;
+    setWalletModalStep('resolving');
+
+    try {
+      const result = await resolveWalletAuth({
+        walletAddress: walletState.address,
+        walletMessage: signedWalletMessage,
+        walletSignature: signedWalletSignature,
+      });
+
+      if (result.action === 'logged_in') {
+        applyAuthenticatedUser(result.user);
+        trackWalletFunnel('resolve', 'success', { outcome: 'logged_in' });
+        closeWalletModal();
+      } else {
+        // New wallet — show signup form
+        trackWalletFunnel('resolve', 'success', { outcome: 'needs_signup' });
+        setWalletModalStep('signup');
+      }
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : 'Failed to check wallet';
+      trackWalletFunnel('resolve', 'error', { reason: getWalletFunnelErrorReason(error) });
+      setWalletModalStep(walletState.connected ? 'sign-message' : 'wallet-select');
+    } finally {
+      resolvingWallet = false;
     }
   }
 
@@ -328,22 +290,34 @@
 
   function connectStepState(): 'active' | 'done' | 'idle' {
     if (walletState.connected) return 'done';
-    if (step === 'welcome' || step === 'wallet-select' || step === 'connecting') return 'active';
+    if (step === 'wallet-select' || step === 'connecting') return 'active';
     return 'idle';
   }
 
-  function signStepState(): 'active' | 'done' | 'idle' {
+  function verifyStepState(): 'active' | 'done' | 'idle' {
     if (hasWalletProof()) return 'done';
-    if (step === 'sign-message') return 'active';
+    if (step === 'sign-message' || step === 'resolving') return 'active';
     if (!walletState.connected) return 'idle';
     return 'idle';
   }
 
-  function authStepState(): 'active' | 'done' | 'idle' {
+  function doneStepState(): 'active' | 'done' | 'idle' {
     if (authSession.authenticated) return 'done';
-    if (step === 'signup' || step === 'login' || step === 'connected') return 'active';
+    if (step === 'signup' || step === 'profile') return 'active';
     return 'idle';
   }
+
+  // Redirect legacy steps to new flow
+  $effect(() => {
+    if (!modalState.open) return;
+    if (step === 'welcome' || step === 'demo-intro') {
+      setWalletModalStep('wallet-select');
+    } else if (step === 'connected') {
+      setWalletModalStep(walletState.connected ? 'sign-message' : 'wallet-select');
+    } else if (step === 'login') {
+      setWalletModalStep('signup');
+    }
+  });
 
   $effect(() => {
     if (modalState.open && !trackedModalOpen) {
@@ -356,8 +330,11 @@
     if (!modalState.open) {
       authSubmitting = false;
       signingMessage = false;
+      resolvingWallet = false;
       connectingProvider = '';
       trackedModalOpen = false;
+      clearErrors();
+      clearWalletProof();
     }
   });
 </script>
@@ -373,32 +350,7 @@
         <span class="wht">{headerTitle}</span>
       </div>
 
-      {#if !authSession.authenticated}
-        <div class="mode-toggle" role="tablist" aria-label="Auth mode">
-          <button
-            type="button"
-            class="mode-btn"
-            class:active={authMode === 'login'}
-            role="tab"
-            aria-selected={authMode === 'login'}
-            onclick={() => setAuthMode('login')}
-          >
-            LOG IN
-          </button>
-          <button
-            type="button"
-            class="mode-btn"
-            class:active={authMode === 'signup'}
-            role="tab"
-            aria-selected={authMode === 'signup'}
-            onclick={() => setAuthMode('signup')}
-          >
-            SIGN UP
-          </button>
-        </div>
-      {/if}
-
-      <button class="whc" type="button" aria-label="Close wallet modal" onclick={handleClose}>✕</button>
+      <button class="whc" type="button" aria-label="Close wallet modal" onclick={handleClose}>&#x2715;</button>
     </div>
 
     {#if actionError}
@@ -407,43 +359,21 @@
 
     <div class="progress-row" aria-hidden="true">
       <div class="pstep" class:active={connectStepState() === 'active'} class:done={connectStepState() === 'done'}>1 CONNECT</div>
-      <div class="pstep" class:active={signStepState() === 'active'} class:done={signStepState() === 'done'}>2 SIGN</div>
-      <div class="pstep" class:active={authStepState() === 'active'} class:done={authStepState() === 'done'}>3 AUTH</div>
+      <div class="pstep" class:active={verifyStepState() === 'active'} class:done={verifyStepState() === 'done'}>2 VERIFY</div>
+      <div class="pstep" class:active={doneStepState() === 'active'} class:done={doneStepState() === 'done'}>3 DONE</div>
     </div>
 
-    {#if step === 'welcome'}
-      <div class="wb">
-        <div class="step-hero">
-          <span class="hero-kicker">SECURE WEB3 ACCESS</span>
-          <h3 class="hero-title">Wallet-first auth with one signature.</h3>
-          <p class="hero-sub">Use wallet ownership as base identity. Then continue with login or account creation.</p>
-        </div>
-
-        <div class="flow-card">
-          <div class="flow-item">CONNECT WALLET</div>
-          <div class="flow-item">SIGN MESSAGE</div>
-          <div class="flow-item">{authMode === 'login' ? 'LOG IN ACCOUNT' : 'CREATE ACCOUNT'}</div>
-        </div>
-
-        <button class="btn-primary" type="button" onclick={() => startAuthFlow('signup')}>
-          CONTINUE WITH SIGN UP
-        </button>
-        <button class="btn-secondary" type="button" onclick={() => startAuthFlow('login')}>
-          CONTINUE WITH LOG IN
-        </button>
-      </div>
-
-    {:else if step === 'wallet-select'}
+    {#if step === 'wallet-select'}
       <div class="wb">
         <div class="step-hero">
           <span class="hero-kicker">STEP 1</span>
           <h3 class="hero-title">Connect your wallet</h3>
-          <p class="hero-sub">{authMode === 'login' ? 'Login requires wallet ownership verification.' : 'Signup requires wallet ownership verification.'}</p>
+          <p class="hero-sub">Select a wallet to verify ownership. If you already have an account, you'll be logged in automatically.</p>
         </div>
 
         <div class="wallet-list">
           <button class="wopt" type="button" onclick={() => handleConnect('metamask')}>
-            <span class="wo-icon">🦊</span>
+            <span class="wo-icon">&#x1F98A;</span>
             <span class="wo-name">MetaMask</span>
             <span class="wo-chain">EVM</span>
           </button>
@@ -454,17 +384,17 @@
             disabled={!walletConnectReady}
             title={!walletConnectReady ? 'Set PUBLIC_WALLETCONNECT_PROJECT_ID in env first.' : undefined}
           >
-            <span class="wo-icon">🔵</span>
+            <span class="wo-icon">&#x1F535;</span>
             <span class="wo-name">WalletConnect</span>
             <span class="wo-chain">{walletConnectReady ? 'EVM' : 'SETUP REQUIRED'}</span>
           </button>
           <button class="wopt" type="button" onclick={() => handleConnect('coinbase')}>
-            <span class="wo-icon">🔷</span>
+            <span class="wo-icon">&#x1F537;</span>
             <span class="wo-name">Coinbase Wallet</span>
             <span class="wo-chain">EVM</span>
           </button>
           <button class="wopt" type="button" onclick={() => handleConnect('phantom')}>
-            <span class="wo-icon">👻</span>
+            <span class="wo-icon">&#x1F47B;</span>
             <span class="wo-name">Phantom</span>
             <span class="wo-chain">SOL/EVM</span>
           </button>
@@ -497,10 +427,6 @@
             <span class="info-k">CHAIN</span>
             <span class="info-v">{walletState.chain}</span>
           </div>
-          <div class="info-row">
-            <span class="info-k">MODE</span>
-            <span class="info-v">{authMode === 'login' ? 'LOG IN' : 'SIGN UP'}</span>
-          </div>
         </div>
 
         <button class="btn-primary" type="button" onclick={handleSignMessage} disabled={signingMessage}>
@@ -511,36 +437,13 @@
         </button>
       </div>
 
-    {:else if step === 'connected'}
+    {:else if step === 'resolving'}
       <div class="wb">
-        <div class="step-hero">
-          <span class="hero-kicker">WALLET READY</span>
-          <h3 class="hero-title">{walletState.shortAddr}</h3>
-          <p class="hero-sub">{hasWalletProof() ? 'Wallet challenge completed.' : 'Sign challenge is required before authentication.'}</p>
+        <div class="connecting-anim">
+          <div class="conn-spinner"></div>
+          <div class="conn-text">Checking wallet...</div>
+          <div class="conn-sub">Looking up your account</div>
         </div>
-
-        <div class="info-box">
-          <div class="info-row">
-            <span class="info-k">CHAIN</span>
-            <span class="info-v">{walletState.chain}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-k">BALANCE</span>
-            <span class="info-v">{walletState.balance.toLocaleString()} USDT</span>
-          </div>
-        </div>
-
-        {#if hasWalletProof()}
-          <button class="btn-primary" type="button" onclick={() => setWalletModalStep(authMode)}>
-            CONTINUE TO {authMode === 'login' ? 'LOG IN' : 'SIGN UP'}
-          </button>
-        {:else}
-          <button class="btn-primary" type="button" onclick={() => setWalletModalStep('sign-message')}>
-            SIGN TO CONTINUE
-          </button>
-        {/if}
-
-        <button class="btn-ghost" type="button" onclick={handleDisconnect}>DISCONNECT WALLET</button>
       </div>
 
     {:else if step === 'signup'}
@@ -548,7 +451,14 @@
         <div class="step-hero">
           <span class="hero-kicker">STEP 3</span>
           <h3 class="hero-title">Create account</h3>
-          <p class="hero-sub">Use only required identity fields.</p>
+          <p class="hero-sub">New wallet detected. Complete registration below.</p>
+        </div>
+
+        <div class="info-box">
+          <div class="info-row">
+            <span class="info-k">WALLET</span>
+            <span class="info-v">{walletState.shortAddr || '-'}</span>
+          </div>
         </div>
 
         <div class="form-group">
@@ -568,35 +478,7 @@
         <button class="btn-primary" type="button" onclick={handleSignupSubmit} disabled={authSubmitting}>
           {#if authSubmitting}CREATING...{:else}CREATE ACCOUNT{/if}
         </button>
-        <button class="btn-ghost" type="button" onclick={() => setWalletModalStep('sign-message')}>BACK TO SIGN</button>
-      </div>
-
-    {:else if step === 'login'}
-      <div class="wb">
-        <div class="step-hero">
-          <span class="hero-kicker">STEP 3</span>
-          <h3 class="hero-title">Log in account</h3>
-          <p class="hero-sub">Email + wallet signature is the primary login path.</p>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="login-email">EMAIL</label>
-          <input id="login-email" class="form-input" type="email" bind:value={emailInput} placeholder="you@example.com" />
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="login-nickname">NICKNAME (OPTIONAL)</label>
-          <input id="login-nickname" class="form-input" type="text" bind:value={nicknameInput} maxlength="32" placeholder="Only if duplicate email history" />
-        </div>
-
-        {#if emailError}
-          <div class="form-error">{emailError}</div>
-        {/if}
-
-        <button class="btn-primary" type="button" onclick={handleLoginSubmit} disabled={authSubmitting}>
-          {#if authSubmitting}LOGGING IN...{:else}LOG IN{/if}
-        </button>
-        <button class="btn-ghost" type="button" onclick={() => setWalletModalStep('sign-message')}>BACK TO SIGN</button>
+        <button class="btn-ghost" type="button" onclick={() => setWalletModalStep('wallet-select')}>USE DIFFERENT WALLET</button>
       </div>
 
     {:else}
@@ -687,6 +569,7 @@
 
   .wh-left {
     min-width: 0;
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -705,31 +588,6 @@
     letter-spacing: 1.8px;
     color: var(--wm-text);
     text-shadow: 0 0 8px rgba(232, 150, 125, 0.2);
-  }
-
-  .mode-toggle {
-    margin-left: auto;
-    display: inline-flex;
-    border: 1px solid rgba(232, 150, 125, 0.35);
-    border-radius: 999px;
-    overflow: hidden;
-  }
-
-  .mode-btn {
-    border: none;
-    background: transparent;
-    color: var(--wm-muted);
-    font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 1.2px;
-    padding: 7px 10px;
-    cursor: pointer;
-    transition: background 0.16s ease, color 0.16s ease;
-  }
-
-  .mode-btn.active {
-    background: rgba(232, 150, 125, 0.18);
-    color: var(--wm-text);
   }
 
   .whc {
@@ -838,25 +696,11 @@
     line-height: 1.32;
   }
 
-  .flow-card,
   .info-box {
     border: 1px solid rgba(232, 150, 125, 0.2);
     border-radius: 10px;
     background: rgba(232, 150, 125, 0.05);
     padding: 10px;
-  }
-
-  .flow-item {
-    font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 1.3px;
-    color: rgba(240, 237, 228, 0.82);
-    padding: 7px 8px;
-    border-bottom: 1px solid rgba(232, 150, 125, 0.15);
-  }
-
-  .flow-item:last-child {
-    border-bottom: none;
   }
 
   .wallet-list {
@@ -1006,7 +850,6 @@
   }
 
   .btn-primary,
-  .btn-secondary,
   .btn-ghost {
     width: 100%;
     border-radius: 10px;
@@ -1033,16 +876,6 @@
   .btn-primary:disabled {
     opacity: 0.65;
     cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    border: 1px solid rgba(232, 150, 125, 0.34);
-    background: rgba(232, 150, 125, 0.08);
-    color: var(--wm-text);
-  }
-
-  .btn-secondary:hover {
-    background: rgba(232, 150, 125, 0.16);
   }
 
   .btn-ghost {
@@ -1078,10 +911,6 @@
       flex-wrap: wrap;
     }
 
-    .mode-toggle {
-      margin-left: 0;
-    }
-
     .whc {
       margin-left: auto;
     }
@@ -1092,7 +921,6 @@
     }
 
     .btn-primary,
-    .btn-secondary,
     .btn-ghost {
       font-size: 9px;
       letter-spacing: 1.1px;

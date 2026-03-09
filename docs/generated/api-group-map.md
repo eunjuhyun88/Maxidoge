@@ -7,7 +7,7 @@ Source of truth remains `src/routes/api/**` and `docs/API_CONTRACT.md`.
 
 | Group | Purpose | Representative routes | Count |
 | --- | --- | --- | --- |
-| Auth & Session | login, wallet auth, session lifecycle | `/api/auth/login`, `/api/auth/logout`, `/api/auth/nonce`, `/api/auth/register` | 7 |
+| Auth & Session | login, wallet auth, session lifecycle | `/api/auth/login`, `/api/auth/logout`, `/api/auth/nonce`, `/api/auth/register` | 8 |
 | Market Data | market snapshot, flow, news, and dex data | `/api/market/derivatives/[pair]`, `/api/market/dex/ads`, `/api/market/dex/community-takeovers`, `/api/market/dex/orders/[chainId]/[tokenAddress]` | 16 |
 | Terminal Scanner | scan and intel orchestration | `/api/terminal/compare`, `/api/terminal/intel-agent-shadow`, `/api/terminal/intel-agent-shadow/execute`, `/api/terminal/intel-policy` | 9 |
 | Signals | signal objects and action conversion | `/api/signal-actions`, `/api/signals`, `/api/signals/[id]`, `/api/signals/[id]/convert` | 5 |
@@ -34,6 +34,7 @@ Source of truth remains `src/routes/api/**` and `docs/API_CONTRACT.md`.
 - `/api/auth/logout`
 - `/api/auth/nonce`
 - `/api/auth/register`
+- `/api/auth/resolve`
 - `/api/auth/session`
 - `/api/auth/verify-wallet`
 - `/api/auth/wallet`
