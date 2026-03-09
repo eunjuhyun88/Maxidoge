@@ -4,6 +4,7 @@ Purpose:
 - Keep actively steering plans in one discoverable place.
 
 Current active plan set:
+- `usability-foundation-sprint-0-2026-03-10.md`
 - `full-system-redesign-blueprint-2026-03-08.md`
 - `phase-0-boundary-freeze-checklist-2026-03-08.md`
 - `phase-2-identity-settings-bootstrap-cutover-2026-03-08.md`

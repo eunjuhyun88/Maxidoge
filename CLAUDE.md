@@ -134,7 +134,7 @@ src/
 │   ├── terminal/     # 터미널 shell/layouts + 패널 프리미티브 (13 root + warroom + intel/)
 │   ├── ui/           # 공통 UI 프리미티브 (ModalShell)
 │   ├── modals/       # 모달 (5: CopyTrade, Oracle, Passport, Settings, Wallet)
-│   ├── shared/       # 공용 (11: ContextBanner, EmptyState, Toast, P0Banner, TokenDropdown, NotificationTray, PokemonFrame, TypewriterBox, HPBar, PhaseTransition, PartyTray)
+│   ├── shared/       # 공용 (18: ContextBanner, EmptyState, Toast, P0Banner, TokenDropdown, NotificationTray, PokemonFrame, TypewriterBox, HPBar, PhaseTransition, PartyTray, SkeletonLoader, FreshnessIndicator, InlineBanner, CriticalModal, OnboardingHint, ZeroState, PositionRiskBar)
 │   ├── layout/       # 레이아웃 (2: Header, BottomBar)
 │   ├── home/         # 홈 (1: HomeBackground)
 │   ├── community/    # 커뮤니티 (1: OracleLeaderboard)
@@ -697,7 +697,9 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 ### 공통 유틸리티 (Phase 1 리팩토링에서 추출)
 - **`$lib/utils/pnl.ts`**: PnL 계산 단일 소스. `calcPnlPercent(dir, entry, current, decimals)`. quickTradeStore, close/+server.ts에서 사용.
 - **`$lib/utils/storage.ts`**: localStorage 헬퍼. `loadFromStorage<T>()`, `saveToStorage()`, `autoSave()`. 12개 스토어의 보일러플레이트 교체용.
+- **`$lib/utils/freshness.ts`**: 데이터 신선도 단일 소스. `normalizeTimestamp()`, `getFreshnessMeta()`, `getFreshnessLevel()`로 `fresh / aging / stale / unknown` 계약을 통일한다. Terminal, Passport, Signals에서 route-local staleness ternary를 다시 만들지 말 것.
 - **`$components/ui/ModalShell.svelte`**: 공통 모달 오버레이 (overlay + close + stopPropagation + a11y). 5개 모달에서 래핑 사용.
+- **`shared usability foundation canonical path`**: `src/components/shared/{SkeletonLoader,FreshnessIndicator,InlineBanner,CriticalModal,OnboardingHint,ZeroState,PositionRiskBar}.svelte`가 Sprint 0 usability foundation의 단일 진실원이다. later sprint route shells에서 zero-state, freshness chip, destructive confirm, onboarding hint, risk bar를 다시 각자 인라인하지 말 것.
 
 ### 서버 API 패턴
 - **DB 테이블 미존재 대응**: API에서 `errorContains(e, 'does not exist')` 체크 → graceful fallback + warning 반환.

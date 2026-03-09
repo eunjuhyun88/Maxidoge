@@ -6565,6 +6565,42 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - unrelated arena chart and arena-v2 WIP remains outside this slice and should stay out of the commit
 - Status: DONE
 
+## [2026-03-10 00:32:00 +0900] FINISH usability-foundation-sprint-0-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue from the usability redesign spec and implementation plan by landing Sprint 0 as an additive shared foundation slice without touching unrelated arena/passport WIP
+- What changed:
+  - Added [usability-foundation-sprint-0-2026-03-10.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/usability-foundation-sprint-0-2026-03-10.md#L1)
+    - fixed Sprint 0 as the implementation authority that bridges [usability-redesign-spec-2026-03-09.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/usability-redesign-spec-2026-03-09.md#L1) to actual shared component files
+    - constrained the slice to additive shared primitives only so existing arena chart and passport WIP stayed out of scope
+  - Added [freshness.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/utils/freshness.ts#L1)
+    - introduced the canonical freshness contract (`fresh / aging / stale / unknown`)
+    - centralized timestamp normalization and age labeling so route shells do not have to rebuild data-age heuristics inline
+  - Added shared usability primitives under [src/components/shared](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared#L1)
+    - [SkeletonLoader.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/SkeletonLoader.svelte#L1)
+    - [FreshnessIndicator.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/FreshnessIndicator.svelte#L1)
+    - [InlineBanner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/InlineBanner.svelte#L1)
+    - [CriticalModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/CriticalModal.svelte#L1)
+    - [OnboardingHint.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/OnboardingHint.svelte#L1)
+    - [ZeroState.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ZeroState.svelte#L1)
+    - [PositionRiskBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/PositionRiskBar.svelte#L1)
+    - established reusable presentation-first boundaries for loading, freshness, important banners, destructive confirmation, progressive hints, page zero states, and position risk display
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - recorded the new Sprint 0 shared usability foundation as canonical
+    - updated the shared component inventory and freshness utility guidance
+  - Updated [docs/exec-plans/active/README.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/README.md#L1) and [docs/exec-plans/index.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/index.md#L1)
+    - registered the new active Sprint 0 plan so later usability sprints can link to it instead of re-describing the same foundation layer
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - the new shared primitives are landed but not yet wired into any route shell; Sprint 1 and Sprint 2 still need to consume them in navigation and home
+  - unrelated local arena chart and `arena-v2` WIP remains outside this slice and should stay out of the commit
+- Status: DONE
+
 ## [2026-03-10 01:47:00 +0900] FINISH chart-position-sizer-contract-20260310 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
