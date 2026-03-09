@@ -352,6 +352,7 @@
       onChartScanRequest={terminalActionRuntime.handleChartScanRequest}
       onChartChatRequest={terminalActionRuntime.handleChartChatRequest}
       onChartCommunitySignal={terminalCommunityRuntime.handleChartCommunitySignal}
+      onChartScanStale={() => terminalSessionRuntime.setScanStale(true)}
       onClearTradeSetup={terminalScanRuntime.clearActiveTradeSetup}
       onSendChat={terminalChatRuntime.handleSendChat}
       onGoToTrade={handleIntelGoTrade}
@@ -379,6 +380,7 @@
       onChartScanRequest={terminalActionRuntime.handleChartScanRequest}
       onChartChatRequest={terminalActionRuntime.handleChartChatRequest}
       onChartCommunitySignal={terminalCommunityRuntime.handleChartCommunitySignal}
+      onChartScanStale={() => terminalSessionRuntime.setScanStale(true)}
       onClearTradeSetup={terminalScanRuntime.clearActiveTradeSetup}
       onSendChat={terminalChatRuntime.handleSendChat}
       onGoToTrade={handleIntelGoTrade}
@@ -414,6 +416,7 @@
       onChartScanRequest={terminalActionRuntime.handleChartScanRequest}
       onChartChatRequest={terminalActionRuntime.handleChartChatRequest}
       onChartCommunitySignal={terminalCommunityRuntime.handleChartCommunitySignal}
+      onChartScanStale={() => terminalSessionRuntime.setScanStale(true)}
       onClearTradeSetup={terminalScanRuntime.clearActiveTradeSetup}
       onSendChat={terminalChatRuntime.handleSendChat}
       onGoToTrade={handleIntelGoTrade}

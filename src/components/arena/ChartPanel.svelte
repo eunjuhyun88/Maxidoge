@@ -95,6 +95,7 @@
     onDragEntry?: (detail: { price: number }) => void;
     onClearTradeSetup?: () => void;
     onConnectionStatusChange?: (status: 'live' | 'offline') => void;
+    onMarkScanStale?: () => void;
   }
   interface ChartPanelEvents {
     scanrequest: { source: string; pair: string; timeframe: string };
@@ -143,6 +144,7 @@
     onDragEntry = () => {},
     onClearTradeSetup = () => {},
     onConnectionStatusChange = () => {},
+    onMarkScanStale = () => {},
   }: Props = $props();
   const dispatch = createEventDispatcher<ChartPanelEvents>();
 
@@ -574,6 +576,7 @@
         })),
         emitGtm: gtmEvent,
         pushChartNotice,
+        markScanStale: onMarkScanStale,
       },
       price: {
         getCurrentPair: () => storeState.pair,

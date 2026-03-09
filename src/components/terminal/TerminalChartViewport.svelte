@@ -23,6 +23,7 @@
     onChartScanRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartChatRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartCommunitySignal?: (detail: ChartCommunitySignal) => void;
+    onChartScanStale?: () => void;
     onClearTradeSetup?: () => void;
     onConnectionStatusChange?: (status: 'live' | 'offline') => void;
   }
@@ -41,6 +42,7 @@
     onChartScanRequest = () => {},
     onChartChatRequest = () => {},
     onChartCommunitySignal = () => {},
+    onChartScanStale = () => {},
     onClearTradeSetup = () => {},
     onConnectionStatusChange = () => {},
   }: Props = $props();
@@ -55,6 +57,7 @@
         onScanRequest={(detail) => onChartScanRequest(detail)}
         onChatRequest={(detail) => onChartChatRequest(detail)}
         onCommunitySignal={(detail) => onChartCommunitySignal(detail)}
+        onMarkScanStale={() => onChartScanStale()}
         onClearTradeSetup={() => onClearTradeSetup()}
         onConnectionStatusChange={(s) => onConnectionStatusChange(s)}
       />
@@ -66,6 +69,7 @@
       onScanRequest={(detail) => onChartScanRequest(detail)}
       onChatRequest={(detail) => onChartChatRequest(detail)}
       onCommunitySignal={(detail) => onChartCommunitySignal(detail)}
+      onMarkScanStale={() => onChartScanStale()}
       onClearTradeSetup={() => onClearTradeSetup()}
       onConnectionStatusChange={(s) => onConnectionStatusChange(s)}
     />

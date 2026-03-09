@@ -37,6 +37,7 @@
     onChartScanRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartChatRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartCommunitySignal?: (detail: ChartCommunitySignal) => void;
+    onChartScanStale?: () => void;
     onClearTradeSetup?: () => void;
     onCopyTrade?: () => void;
     onSendChat?: (detail: { text: string }) => void | Promise<void>;
@@ -65,6 +66,7 @@
     onChartScanRequest = () => {},
     onChartChatRequest = () => {},
     onChartCommunitySignal = () => {},
+    onChartScanStale = () => {},
     onClearTradeSetup = () => {},
     onCopyTrade,
     onSendChat = () => {},
@@ -113,6 +115,7 @@
       onChartScanRequest={onChartScanRequest}
       onChartChatRequest={onChartChatRequest}
       onChartCommunitySignal={onChartCommunitySignal}
+      onChartScanStale={onChartScanStale}
       onClearTradeSetup={onClearTradeSetup}
     />
 

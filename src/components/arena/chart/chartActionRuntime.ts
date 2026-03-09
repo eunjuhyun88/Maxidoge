@@ -51,6 +51,8 @@ export interface CreateChartActionRuntimeOptions {
   getOverlayPatterns?: () => PatternDetection[];
   emitGtm: (event: string, payload?: Record<string, unknown>) => void;
   pushChartNotice: (message: string) => void;
+  /** Mark scan result as stale when TF/pair changes after a scan */
+  markScanStale?: () => void;
 }
 
 export function createChartActionRuntime(
@@ -102,6 +104,7 @@ export function createChartActionRuntime(
   function changePair(pair: string) {
     options.emitGtm('terminal_pair_change', { pair });
     options.clearPendingTradePlan();
+    options.markScanStale?.();
     options.updateGameState({ pair });
     void options.reloadChartData({
       symbol: pairToSymbol(pair),
@@ -114,6 +117,7 @@ export function createChartActionRuntime(
     const normalized = normalizeTimeframe(timeframe);
     options.emitGtm('terminal_timeframe_change', { timeframe: normalized });
     options.clearPendingTradePlan();
+    options.markScanStale?.();
     options.updateGameState({ timeframe: normalized });
     void options.reloadChartData({
       symbol: pairToSymbol(options.getPair()),

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { fetchMarketPulse, type MarketPulseData } from '$lib/api/marketPulse';
   import { heatScoreColor } from '$lib/engine/marketHeatScore';
   import { regimeColor, regimeIcon, actionBiasLabel } from '$lib/engine/macroRegime';
@@ -16,11 +17,11 @@
   let fetchTimer: ReturnType<typeof setInterval> | null = null;
   let refreshToken = 0;
 
-  async function refresh(force = false) {
+  async function doRefresh(currentPair: string, force = false) {
     const token = ++refreshToken;
     loading = true;
     try {
-      const next = await fetchMarketPulse(pair, force);
+      const next = await fetchMarketPulse(currentPair, force);
       if (token !== refreshToken) return;
       pulseData = next;
     } catch {
@@ -33,15 +34,19 @@
   }
 
   $effect(() => {
-    // Re-fetch when pair changes
-    void pair;
-    expanded = false;
-    void refresh();
-    // Auto-refresh every 3 min
-    if (fetchTimer) clearInterval(fetchTimer);
-    fetchTimer = setInterval(() => {
-      void refresh(true);
-    }, 3 * 60 * 1000);
+    // Only track pair — nothing else
+    const currentPair = pair;
+
+    // All state writes inside untrack to avoid cascading re-renders
+    untrack(() => {
+      expanded = false;
+      void doRefresh(currentPair);
+      if (fetchTimer) clearInterval(fetchTimer);
+      fetchTimer = setInterval(() => {
+        void doRefresh(currentPair, true);
+      }, 3 * 60 * 1000);
+    });
+
     return () => {
       refreshToken += 1;
       if (fetchTimer) clearInterval(fetchTimer);
@@ -144,7 +149,7 @@
       </div>
     {/if}
   </div>
-{:else if loading}
+{:else if loading && !pulseData}
   <div class="pulse-badge loading">
     <span class="pulse-loading">PULSE...</span>
   </div>

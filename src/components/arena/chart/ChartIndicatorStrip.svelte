@@ -103,6 +103,7 @@
       VOL <span>{formatCompact(latestVolume)}</span>
     </button>
     <span class="deriv-sep">│</span>
+    <span class="source-tag drv">DRV</span>
     <button class="ind-chip" class:on={indicatorEnabled.oi} onclick={() => onToggleIndicator('oi')} style="--ind-color:{chartTheme.oiLine}">
       OI
     </button>
@@ -285,6 +286,23 @@
   .ind-chip:hover {
     color: #fff;
     border-color: rgba(255,255,255,.24);
+  }
+
+  .source-tag {
+    font-family: var(--fd);
+    font-size: 6px;
+    font-weight: 900;
+    letter-spacing: .5px;
+    line-height: 1;
+    padding: 1px 3px;
+    border-radius: 2px;
+    vertical-align: middle;
+    user-select: none;
+  }
+  .source-tag.drv {
+    color: #5b9cf6;
+    background: rgba(91, 156, 246, .14);
+    border: 1px solid rgba(91, 156, 246, .25);
   }
 
   .deriv-sep {

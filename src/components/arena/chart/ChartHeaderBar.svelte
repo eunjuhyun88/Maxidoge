@@ -94,6 +94,7 @@
       {/if}
 
       <div class="price-inline" role="group" aria-label="Price summary">
+        <span class="source-tag mkt">MKT</span>
         <span class="price-val">${formatPrice(livePrice)}</span>
         <span class="price-chg" class:up={priceChange24h >= 0} class:down={priceChange24h < 0}>
           {priceChange24h >= 0 ? '+' : '-'}{Math.abs(priceChange24h).toFixed(2)}%
@@ -265,6 +266,23 @@
     padding: 0 0 0 8px;
     border-left: 1px solid #363a45;
     margin-left: 4px;
+  }
+
+  .source-tag {
+    font-family: var(--fd);
+    font-size: 6px;
+    font-weight: 900;
+    letter-spacing: .5px;
+    line-height: 1;
+    padding: 1px 3px;
+    border-radius: 2px;
+    vertical-align: middle;
+    user-select: none;
+  }
+  .source-tag.mkt {
+    color: #787b86;
+    background: rgba(120, 123, 134, .14);
+    border: 1px solid rgba(120, 123, 134, .25);
   }
 
   .price-val {
