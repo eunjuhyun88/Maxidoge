@@ -47,7 +47,8 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `passport/+page.svelte` still owns large tab markup/CSS and should be split by tab host next
   - unrelated auth/chart wallet WIP remains dirty in the worktree and must stay out of the passport commit
 - Commit / Push:
-  - pending
+  - `5ac9db7` `refactor(passport): extract summary and holdings runtime`
+  - pushed to `origin/codex/terminal-uiux-gtm-wip`
 - Status: DONE
 
 ## [2026-03-07 22:32:27 +0900] FINISH frontend-arena-view-props-dedupe-slice-20260307 (frontend)
