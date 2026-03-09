@@ -47,7 +47,8 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `passport/+page.svelte` still owns page-level state/runtime wiring for ui-state, avatar/name editing, holdings hydrate, and learning panel state
   - unrelated auth/chart/wallet WIP remains in the worktree and must stay out of the passport commit
 - Commit / Push:
-  - pending
+  - `a19f0a2` `refactor(passport): split remaining tab hosts`
+  - pushed to `origin/codex/terminal-uiux-gtm-wip`
 - Status: DONE
 
 ## [2026-03-09 18:01:52 +0900] FINISH wallet-store-proof-removal-20260309 (frontend)
