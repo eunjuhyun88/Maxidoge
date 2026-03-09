@@ -20,6 +20,32 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ## Entries
 
+## [2026-03-09 21:34:55 +0900] FINISH passport-header-nav-chrome-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing the passport refactor toward the design goal, preserve layout, and continue with push-safe narrow slices
+- What changed:
+  - Added [PassportHeaderSection.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportHeaderSection.svelte#L1)
+    - moved the editable avatar/profile header, portfolio hero, and verified stamp into a dedicated host component
+    - kept avatar picker/name edit interactions but removed the header/picker markup and CSS from the route shell
+  - Added [PassportNavChrome.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportNavChrome.svelte#L1)
+    - moved the tab bar, quick-action rail, and focus strip into a dedicated chrome boundary
+    - preserved tab order, button placement, sticky behavior, and focus-strip layout while removing the route-local chrome markup/CSS
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - rewired the route to use the new header/nav host components
+    - removed dead CSS selectors left behind by the extraction
+    - reduced the route shell from `2514` to `1694` lines without changing tab content layout
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `PassportHeaderSection.svelte` and `PassportNavChrome.svelte` as canonical passport chrome boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+- Residual risks:
+  - `passport/+page.svelte` still owns the large per-tab markup blocks and should be split by tab host next
+  - unrelated auth/chart/wallet WIP remains in the worktree and must stay out of the passport commit
+- Commit / Push:
+  - pending
+- Status: DONE
+
 ## [2026-03-09 18:01:52 +0900] FINISH wallet-store-proof-removal-20260309 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
@@ -6484,4 +6510,29 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Residual risks:
   - `passport/+page.svelte` still owns holdings orchestration, tab state, and large amounts of layout/CSS outside the learning section
   - this slice is intentionally isolated from the unrelated auth/community/chart WIP present in the main worktree
+- Status: DONE
+
+## [2026-03-09 21:34:47 +0900] FINISH wallet-modal-runtime-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing narrow slices toward the web/server split, close the active wallet modal slice correctly, and keep the canonical redesign record up to date
+- What changed:
+  - Added [walletModalRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalRuntime.ts#L1)
+    - moved wallet modal async handlers for connect, sign, resolve, signup, and disconnect into a dedicated browser runtime boundary
+    - centralized GTM wallet funnel tracking, header-title lookup, progress-step derivation, and legacy-step redirects so the component no longer owns those rules inline
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - reduced the component to modal-local input state, runtime wiring, and presentational markup
+    - removed inline auth funnel handlers and delegated step-state calculations to the runtime helpers
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - marked the wallet modal runtime boundary as landed in Phase 2
+    - narrowed the remaining blocker from “wallet auth UI state machine” to “profile-step rendering and modal-local input atoms”
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) still owns the profile-step markup and modal-local input atoms, so the wallet auth browser seam is cleaner but not fully presentational yet
+  - unrelated local `CLAUDE.md`, arena chart, passport, and arena-v2 WIP was stashed out of this slice to keep the push clean
 - Status: DONE

@@ -14,39 +14,17 @@
   } from '$lib/stores/walletModalStore';
   import { hasWalletAuthProof } from '$lib/contracts/auth';
   import {
-    getWalletFunnelErrorReason,
-    parseWalletSignupForm,
-  } from '$lib/auth/walletModalFlow';
+    createWalletModalGtmTracker,
+    createWalletModalRuntime,
+    getWalletModalConnectStepState,
+    getWalletModalDoneStepState,
+    getWalletModalHeaderTitle,
+    getWalletModalVerifyStepState,
+    resolveLegacyWalletModalStep,
+  } from '$lib/auth/walletModalRuntime';
   import {
-    connectWalletProvider,
-    isWalletProviderKey,
-    logoutWalletSession,
-    resolveWalletAuth,
-    signWalletOwnership,
-    submitWalletSignup,
-  } from '$lib/auth/walletModalTransport';
-  import {
-    WALLET_PROVIDER_LABEL,
     isWalletConnectConfigured,
-    type WalletProviderKey
   } from '$lib/wallet/providers';
-
-  type WalletFunnelStep = 'modal_open' | 'connect' | 'sign' | 'resolve' | 'auth' | 'disconnect';
-  type WalletFunnelStatus = 'view' | 'success' | 'error';
-
-  const STEP_TITLE: Record<string, string> = {
-    'wallet-select': 'CONNECT WALLET',
-    connecting: 'CONNECTING',
-    'sign-message': 'VERIFY OWNERSHIP',
-    resolving: 'CHECKING WALLET',
-    signup: 'CREATE ACCOUNT',
-    profile: 'MY PROFILE',
-    // Legacy fallbacks
-    welcome: 'WALLET ACCESS',
-    connected: 'WALLET READY',
-    login: 'LOG IN',
-    'demo-intro': 'DEMO',
-  };
 
   const walletConnectReady = isWalletConnectConfigured();
   const walletState = $derived($walletStore);
@@ -68,34 +46,8 @@
   let signedWalletSignature = $state('');
   let trackedModalOpen = $state(false);
 
-  const headerTitle = $derived(STEP_TITLE[step] ?? 'WALLET ACCESS');
-
-  interface GTMWindow extends Window {
-    dataLayer?: Array<Record<string, unknown>>;
-  }
-
-  function gtmEvent(event: string, payload: Record<string, unknown> = {}) {
-    if (typeof window === 'undefined') return;
-    const w = window as GTMWindow;
-    if (!Array.isArray(w.dataLayer)) return;
-    w.dataLayer.push({
-      event,
-      area: 'wallet_modal',
-      ...payload,
-    });
-  }
-
-  function trackWalletFunnel(
-    stepName: WalletFunnelStep,
-    status: WalletFunnelStatus,
-    payload: Record<string, unknown> = {}
-  ) {
-    gtmEvent('wallet_funnel', {
-      step: stepName,
-      status,
-      ...payload,
-    });
-  }
+  const headerTitle = $derived(getWalletModalHeaderTitle(step));
+  const trackWalletFunnel = createWalletModalGtmTracker();
 
   function clearErrors() {
     emailError = '';
@@ -118,202 +70,75 @@
       walletSignature: signedWalletSignature,
     };
   }
-
-  async function handleSignupSubmit() {
-    clearErrors();
-    const parsed = parseWalletSignupForm({
+  const walletModalRuntime = createWalletModalRuntime({
+    getWalletState: () => walletState,
+    getAuthSession: () => authSession,
+    getSignupInput: () => ({
       emailInput,
       nicknameInput,
-    });
-    if (!parsed.ok) {
-      emailError = parsed.error;
-      return;
-    }
-
-    const walletProof = getSignedWalletProof();
-    if (!walletProof || !walletState.address) {
-      actionError = 'Sign wallet message first.';
-      setWalletModalStep(walletState.connected ? 'sign-message' : 'wallet-select');
-      return;
-    }
-
-    authSubmitting = true;
-    try {
-      const res = await submitWalletSignup({
-        ...parsed.value,
-        walletAddress: walletState.address,
-        walletMessage: walletProof.walletMessage,
-        walletSignature: walletProof.walletSignature,
-      });
-      applyAuthenticatedUser(res.user);
-      trackWalletFunnel('auth', 'success', {
-        auth_mode: 'signup',
-        chain: walletState.chain,
-      });
-      closeWalletModal();
-    } catch (error) {
-      emailError = error instanceof Error ? error.message : 'Failed to create account';
-      trackWalletFunnel('auth', 'error', {
-        auth_mode: 'signup',
-        reason: getWalletFunnelErrorReason(error),
-      });
-    } finally {
-      authSubmitting = false;
-    }
-  }
-
-  async function handleConnect(provider: string) {
-    clearErrors();
-    clearWalletProof();
-
-    if (!isWalletProviderKey(provider)) {
-      actionError = 'Unsupported wallet provider.';
-      return;
-    }
-
-    connectingProvider = WALLET_PROVIDER_LABEL[provider];
-    setWalletModalStep('connecting');
-
-    try {
-      const connectedWallet = await connectWalletProvider(provider);
-      connectWallet(provider, connectedWallet.address, connectedWallet.chain);
-      setWalletModalStep('sign-message');
-      trackWalletFunnel('connect', 'success', {
-        provider,
-        chain: connectedWallet.chain,
-      });
-    } catch (error) {
-      actionError = error instanceof Error ? error.message : 'Failed to connect wallet';
-      trackWalletFunnel('connect', 'error', {
-        provider,
-        reason: getWalletFunnelErrorReason(error),
-      });
-      setWalletModalStep('wallet-select');
-    } finally {
-      connectingProvider = '';
-    }
-  }
-
-  async function handleSignMessage() {
-    signingMessage = true;
-    actionError = '';
-
-    try {
-      if (!walletState.address) {
-        throw new Error('Wallet address is missing');
-      }
-
-      if (!walletState.provider || !isWalletProviderKey(walletState.provider)) {
-        throw new Error('Wallet provider is missing');
-      }
-
-      const provider = walletState.provider;
-      const proof = await signWalletOwnership({
-        address: walletState.address,
-        provider,
-        chain: walletState.chain,
-        verifyLinkedSession: authSession.authenticated,
-      });
-
-      signedWalletMessage = proof.message;
-      signedWalletSignature = proof.signature;
-      markWalletSignatureComplete();
-
-      trackWalletFunnel('sign', 'success', { provider, chain: walletState.chain });
-
-      if (authSession.authenticated) {
-        setWalletModalStep('profile');
-      } else {
-        // Wallet-first flow: auto-resolve after signature
-        await handleResolveWallet();
-      }
-    } catch (error) {
-      clearWalletProof();
-      actionError = error instanceof Error ? error.message : 'Failed to sign wallet message';
-      trackWalletFunnel('sign', 'error', { reason: getWalletFunnelErrorReason(error) });
-    } finally {
-      signingMessage = false;
-    }
-  }
-
-  async function handleResolveWallet() {
-    if (!walletState.address || !signedWalletMessage || !signedWalletSignature) {
-      actionError = 'Missing wallet proof for resolution.';
-      setWalletModalStep(walletState.connected ? 'sign-message' : 'wallet-select');
-      return;
-    }
-
-    resolvingWallet = true;
-    setWalletModalStep('resolving');
-
-    try {
-      const result = await resolveWalletAuth({
-        walletAddress: walletState.address,
-        walletMessage: signedWalletMessage,
-        walletSignature: signedWalletSignature,
-      });
-
-      if (result.action === 'logged_in') {
-        applyAuthenticatedUser(result.user);
-        trackWalletFunnel('resolve', 'success', { outcome: 'logged_in' });
-        closeWalletModal();
-      } else {
-        // New wallet — show signup form
-        trackWalletFunnel('resolve', 'success', { outcome: 'needs_signup' });
-        setWalletModalStep('signup');
-      }
-    } catch (error) {
-      actionError = error instanceof Error ? error.message : 'Failed to check wallet';
-      trackWalletFunnel('resolve', 'error', { reason: getWalletFunnelErrorReason(error) });
-      setWalletModalStep(walletState.connected ? 'sign-message' : 'wallet-select');
-    } finally {
-      resolvingWallet = false;
-    }
-  }
-
-  async function handleDisconnect() {
-    await logoutWalletSession();
-    clearWalletProof();
-    disconnectWallet();
-    clearAuthenticatedUser();
-    trackWalletFunnel('disconnect', 'success', {
-      had_session: authSession.authenticated,
-    });
-    closeWalletModal();
-  }
+    }),
+    getWalletProof: () => getSignedWalletProof(),
+    setWalletProof: (proof) => {
+      signedWalletMessage = proof?.walletMessage ?? '';
+      signedWalletSignature = proof?.walletSignature ?? '';
+    },
+    clearErrors,
+    setEmailError: (message) => {
+      emailError = message;
+    },
+    setActionError: (message) => {
+      actionError = message;
+    },
+    setConnectingProvider: (provider) => {
+      connectingProvider = provider;
+    },
+    setSigningMessage: (value) => {
+      signingMessage = value;
+    },
+    setResolvingWallet: (value) => {
+      resolvingWallet = value;
+    },
+    setAuthSubmitting: (value) => {
+      authSubmitting = value;
+    },
+    setModalStep: setWalletModalStep,
+    closeModal: closeWalletModal,
+    applyAuthenticatedUser,
+    clearAuthenticatedUser,
+    connectWallet,
+    disconnectWallet,
+    markWalletSignatureComplete,
+    trackWalletFunnel,
+  });
+  const {
+    handleConnect,
+    handleDisconnect,
+    handleSignMessage,
+    handleSignupSubmit,
+  } = walletModalRuntime;
 
   function handleClose() {
     closeWalletModal();
   }
 
   function connectStepState(): 'active' | 'done' | 'idle' {
-    if (walletState.connected) return 'done';
-    if (step === 'wallet-select' || step === 'connecting') return 'active';
-    return 'idle';
+    return getWalletModalConnectStepState(walletState.connected, step);
   }
 
   function verifyStepState(): 'active' | 'done' | 'idle' {
-    if (hasWalletProof()) return 'done';
-    if (step === 'sign-message' || step === 'resolving') return 'active';
-    if (!walletState.connected) return 'idle';
-    return 'idle';
+    return getWalletModalVerifyStepState(getSignedWalletProof(), walletState.connected, step);
   }
 
   function doneStepState(): 'active' | 'done' | 'idle' {
-    if (authSession.authenticated) return 'done';
-    if (step === 'signup' || step === 'profile') return 'active';
-    return 'idle';
+    return getWalletModalDoneStepState(authSession.authenticated, step);
   }
 
   // Redirect legacy steps to new flow
   $effect(() => {
     if (!modalState.open) return;
-    if (step === 'welcome' || step === 'demo-intro') {
-      setWalletModalStep('wallet-select');
-    } else if (step === 'connected') {
-      setWalletModalStep(walletState.connected ? 'sign-message' : 'wallet-select');
-    } else if (step === 'login') {
-      setWalletModalStep('signup');
+    const nextStep = resolveLegacyWalletModalStep(step, walletState.connected);
+    if (nextStep) {
+      setWalletModalStep(nextStep);
     }
   });
 

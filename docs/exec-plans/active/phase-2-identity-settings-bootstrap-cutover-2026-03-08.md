@@ -46,10 +46,11 @@ Already landed in the current monolith:
 15. projection-only profile consumers such as [signals/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/signals/+page.svelte#L1), [WarRoom.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/WarRoom.svelte#L1), [terminalCommunityRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/terminal/terminalCommunityRuntime.ts#L1), [hydration.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/hydration.ts#L1), and [copyTradeStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/copyTradeStore.ts#L1) now read projection authority directly from [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1), and [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1) is reduced to the compatibility aggregate plus `profileStats`
 16. wallet-first auth resolve now lands through [auth/resolve/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/resolve/+server.ts#L1), [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1), and [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1), so signed wallets now auto-resolve to `logged_in` or `needs_signup` before showing signup and the `resolving` step is treated as transient UI state rather than a modal reopen destination
 17. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) no longer stores wallet signatures, so wallet proof is now fully transient to [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) and no longer leaks into the general wallet transport state
+18. wallet modal async state transitions, GTM funnel tracking, legacy-step redirects, and progress-step derivation now live in [walletModalRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalRuntime.ts#L1), so [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) is reduced to modal-local input state plus view markup
 
 Still blocking full Phase 2 cutover:
 
-1. [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) still owns the wallet auth UI state machine and profile-step rendering, even though validation, start-step branching, and async transport are now split cleanly
+1. [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) still owns the profile-step rendering and modal-local input atoms, even though the wallet auth UI state machine, validation, start-step branching, and async transport are now split cleanly
 2. `profile` still exposes a compatibility aggregate surface for deeper screens like [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
 3. core route handlers outside auth still own too much inline SQL and mapping logic
 
@@ -132,7 +133,7 @@ Reason:
 
 ## 4. Current Problems That Block Clean Cutover
 
-## 4.1 Auth, lifecycle, and modal visibility are split at the store layer, but the wallet funnel logic remains component-heavy
+## 4.1 Auth, lifecycle, and modal visibility are split at the store layer, and the wallet funnel runtime is now externalized
 
 Validated now:
 
@@ -143,11 +144,12 @@ Validated now:
 5. [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1) now behaves as wallet connection transport only, while [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1) owns account identity
 6. [auth/resolve/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/resolve/+server.ts#L1) now owns wallet-first lookup and auto-login issuance for already-linked wallets, while [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) treats `resolving` as an in-flight step instead of a persisted reopen destination
 7. wallet proof is now transient to [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) and is no longer mirrored into [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+8. [walletModalRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalRuntime.ts#L1) now owns wallet modal async handlers, GTM funnel tracking, legacy-step resolution, and progress-step derivation instead of leaving that logic inline in [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
 
 Implication:
 
 Phase 2 no longer needs to invent a new auth-session store or keep auth identity, lifecycle, or modal visibility duplicated in wallet state.
-It now needs to trim the remaining wallet funnel logic out of the component into narrower modal/runtime boundaries over time.
+It now needs to trim the remaining profile-step rendering and modal-only input atoms out of the component into narrower modal/runtime boundaries over time.
 
 1. server-derived session mirror
 2. browser-only wallet connection transport
