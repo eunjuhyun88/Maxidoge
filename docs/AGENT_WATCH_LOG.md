@@ -6536,3 +6536,26 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) still owns the profile-step markup and modal-local input atoms, so the wallet auth browser seam is cleaner but not fully presentational yet
   - unrelated local `CLAUDE.md`, arena chart, passport, and arena-v2 WIP was stashed out of this slice to keep the push clean
 - Status: DONE
+
+## [2026-03-09 21:39:25 +0900] FINISH passport-header-nav-chrome-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep closing narrow refactor slices while preserving the larger web/server redesign direction and record the canonical boundary changes
+- What changed:
+  - Added [PassportHeaderSection.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportHeaderSection.svelte#L1)
+    - moved passport profile header, avatar picker, portfolio hero, and verified-stamp markup/CSS out of the route shell
+  - Added [PassportNavChrome.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportNavChrome.svelte#L1)
+    - moved passport tab bar, quick-action rail, and focus-strip markup/CSS out of the route shell
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - reduced the route shell from `2514 -> 1694` lines by delegating header/nav chrome to dedicated components
+    - kept tab state, holdings runtime, learning controller, and tab-body authority in the route
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - promoted `PassportHeaderSection.svelte` and `PassportNavChrome.svelte` to canonical passport chrome boundaries
+    - refreshed the `/passport` route size and structure notes to match the current split
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1) still owns holdings orchestration, tab state, and the remaining tab-body content blocks
+  - unrelated arena chart and arena-v2 WIP remains outside this slice and should stay out of the commit
+- Status: DONE

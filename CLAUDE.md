@@ -101,7 +101,7 @@ export PATH="$HOME/.local/bin:$HOME/.local/node-v22.14.0-darwin-arm64/bin:$PATH"
 | `/arena-war` | 스피드형 AI 대전 — 8-phase 상태머신 (SETUP→RESULT), v3 배틀엔진(HP+챌린지), PixiJS 렌더링 | arenaWarStore, arenaWarPhase | 54 |
 | `/agents` | 에이전트 컬렉션 (Pokedex 스타일) — 학습레벨, 패턴기억, 레짐적응, 매치업경험, 전적 | agentStats | ~380 |
 | `/terminal` | 마켓 스캐너 터미널 — route shell + extracted desktop/tablet/mobile layouts + terminal/intel view-model + War Room/Chart/Intel orchestration | gameState, livePrices, copyTradeStore, trackedSignalStore | 1,175 |
-| `/passport` | 유저 프로필 허브 — 보유, 트레이드, 시그널, 에이전트, ORPO 학습 | userProfileStore, userLifecycleStore, matchHistoryStore, quickTradeStore, agentStats | 2,514 |
+| `/passport` | 유저 프로필 허브 — 보유, 트레이드, 시그널, 에이전트, ORPO 학습 | userProfileStore, userLifecycleStore, matchHistoryStore, quickTradeStore, agentStats | 1,694 |
 | `/signals` | 트레이딩 시그널 허브 — 커뮤니티/추적/오라클 3뷰 + 필터 | gameState, matchHistoryStore, openTrades, activeSignals | 983 |
 | `/settings` | 유저 환경설정 — TF/SFX/언어/테마/속도/데이터소스 | gameState | 384 |
 | `/holdings` | → `/passport` 리다이렉트 | — | 10 |
@@ -627,12 +627,12 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - Opportunity Scan: 멀티자산 기회 스캔 (`/api/terminal/opportunity-scan`)
 - 핵심 파일: `terminal/+page.svelte`, `quickTradeStore`, `copyTradeStore`, `scanEngine`(서버), `intelShadowAgent`, `intelPolicyRuntime`
 
-### 5. Passport (유저 프로필 — `/passport`, 2,514줄)
+### 5. Passport (유저 프로필 — `/passport`, 1,694줄)
 - 탭 기반: Holdings | Trades | Signals | Agents | Learning
 - Holdings: 지갑 자산 + 실시간 가격
 - Learning: ORPO 데이터셋 빌드, 트레이닝 잡, 평가 리포트
 - 진행 시스템: LP → Tier (BRONZE→SILVER→GOLD→DIAMOND→MASTER)
-- 핵심 파일: `passport/+page.svelte`, `components/passport/PassportLearningPanel.svelte`, `lib/passport/passportSummaryViewModel.ts`, `lib/passport/passportHoldingsRuntime.ts`, `userProfileStore`, `progressionRules`
+- 핵심 파일: `passport/+page.svelte`, `components/passport/PassportHeaderSection.svelte`, `components/passport/PassportNavChrome.svelte`, `components/passport/PassportLearningPanel.svelte`, `lib/passport/passportSummaryViewModel.ts`, `lib/passport/passportHoldingsRuntime.ts`, `userProfileStore`, `progressionRules`
 
 ### 6. Signals (시그널 허브 — `/signals`, 983줄)
 - 3가지 뷰: Community | Signals | Oracle
@@ -671,7 +671,7 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 | Arena War (`/arena-war`) | ✅ 완료 | 7-phase 전체, 다크 포레스트 테마 |
 | Arena (`/arena`) | 🔶 부분 적용 | C02 다크 아레나 일부, UIUX 리뷰 필요 |
 | Home (`/`) | 🔶 부분 적용 | ORPO GTM 구조, UIUX 리뷰 필요 |
-| Passport (`/passport`) | 🔶 구조 분해 진행중 | 2,514줄 — learning panel 분리 완료, summary/holdings runtime 추출 진행 |
+| Passport (`/passport`) | 🔶 구조 분해 진행중 | 1,694줄 — learning panel + header/nav chrome 분리, summary/holdings runtime 추출 완료 |
 | Settings (`/settings`) | ⬚ 미착수 | |
 | Arena v2 (`/arena-v2`) | 🔶 Sprint 1 완료 | Pokemon UI: BattleScreen arena view + 5 shared components |
 
@@ -714,6 +714,8 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **passport learning panel view canonical path**: passport arena 탭의 `AI LEARNING PIPELINE` UI는 `src/components/passport/PassportLearningPanel.svelte`가 canonical이다. pipeline status 문구/ops 연결 여부 같은 순수 표시 계산은 `src/lib/passport/passportLearningPanelViewModel.ts`에 두고, `src/routes/passport/+page.svelte`에는 panel state ownership과 mount hydrate만 남길 것.
 - **passport summary view-model canonical path**: passport header stat/focus strip 판단 로직은 `src/lib/passport/passportSummaryViewModel.ts`가 canonical이다. route에서 승률/리스크/learning readiness 해석을 다시 `derived.by()` 묶음으로 인라인하지 말고, shell은 input 숫자와 렌더만 소유할 것.
 - **passport holdings runtime canonical path**: wallet holdings hydrate, sync button busy-state, wallet address change sync, disconnect fallback reset은 `src/lib/passport/passportHoldingsRuntime.ts`가 canonical이다. `src/routes/passport/+page.svelte`에서 같은 fetch/effect/reset 분기를 다시 직접 들지 말 것.
+- **passport header chrome canonical path**: avatar picker, editable profile header, portfolio hero, verified stamp UI는 `src/components/passport/PassportHeaderSection.svelte`가 canonical이다. route에서 header markup/CSS와 avatar picker interaction surface를 다시 인라인하지 말 것.
+- **passport nav chrome canonical path**: tab bar, quick-action rail, focus strip은 `src/components/passport/PassportNavChrome.svelte`가 canonical이다. route에서 tab badge/CTA/focus strip markup를 다시 길게 복제하지 말 것.
 - **copy-trade publish idempotency**: `clientMutationId`는 `copy_trade_runs.draft.clientMutationId`에 저장되고, 고유 인덱스는 `db/migrations/0007_*` / `supabase/migrations/014_*` migration이 있어야 보장된다.
 - **Svelte 5 `state` 변수명 금지**: Svelte 5 rune `$state`와 충돌하므로 prop/변수명으로 `state`를 절대 사용하지 말 것. 대안: `sheetState`, `drawerState`, `formState` 등 접두사 사용. (MobileChatSheet에서 발견된 함정)
 - **terminal shell CSS 위치**: `/terminal` 레이아웃 스타일은 `src/components/terminal/terminalShell.css`가 canonical. route `<style>`로 되돌리면 `css_unused_selector` 경고가 급증한다.

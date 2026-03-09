@@ -29,13 +29,14 @@
   } from '$lib/passport/passportSummaryViewModel';
   import { livePrices } from '$lib/stores/priceStore';
   import EmptyState from '../../components/shared/EmptyState.svelte';
+  import PassportHeaderSection from '../../components/passport/PassportHeaderSection.svelte';
   import PassportLearningPanel from '../../components/passport/PassportLearningPanel.svelte';
+  import PassportNavChrome from '../../components/passport/PassportNavChrome.svelte';
   import {
     withLivePrices,
     toHoldingAsset,
     summarizeClosedTrades,
     countLongTrades,
-    focusToneClass,
     tierColor,
     tierEmoji,
     tierLabel,
@@ -78,6 +79,7 @@
   const totalCost = $derived(effectiveHoldings.reduce((s: number, h: HoldingAsset) => s + h.amount * h.avgPrice, 0));
   const totalPnl = $derived(total - totalCost);
   const totalPnlPct = $derived(totalCost > 0 ? ((totalPnl / totalCost) * 100) : 0);
+  const portfolioValue = $derived((profile.balance.virtual + total).toLocaleString('en-US', { maximumFractionDigits: 0 }));
   const unrealizedPnl = $derived(opens.reduce((s: number, t: { pnlPercent: number }) => s + t.pnlPercent, 0));
 
   // Tab state
@@ -180,6 +182,7 @@
   function pickAvatar(path: string) { setAvatar(path); showAvatarPicker = false; }
   function startEditName() { nameInput = profile.username; editingName = true; }
   function saveName() { if (nameInput.trim().length >= 2) setUsername(nameInput.trim()); editingName = false; }
+  function setNameInput(value: string) { nameInput = value; }
 
   function setActiveTab(tab: TabType) {
     if (tab === activeTab) return;
@@ -236,128 +239,43 @@
         <span class="ribbon-text">Stockclaw TRADER PASSPORT</span>
       </div>
 
-      <!-- ═══ UNIFIED HEADER: PROFILE + PORTFOLIO ═══ -->
-      <div class="unified-header">
-        <div class="uh-left">
-          <button class="doge-avatar" onclick={() => showAvatarPicker = !showAvatarPicker}>
-            <img src={profile.avatar} alt="avatar" class="doge-img" />
-            <span class="avatar-edit">✏️</span>
-          </button>
+      <PassportHeaderSection
+        avatar={profile.avatar}
+        username={profile.username}
+        tierColor={tierColor(tier)}
+        tierLabel={tierLabel(tier)}
+        tierEmoji={tierEmoji(tier)}
+        walletConnected={wallet.connected}
+        walletShortAddr={wallet.shortAddr}
+        walletChain={wallet.chain}
+        portfolioValue={portfolioValue}
+        totalPnlPct={totalPnlPct}
+        headerStats={headerStats}
+        showAvatarPicker={showAvatarPicker}
+        avatarOptions={AVATAR_OPTIONS}
+        editingName={editingName}
+        nameInput={nameInput}
+        onToggleAvatarPicker={() => showAvatarPicker = !showAvatarPicker}
+        onPickAvatar={pickAvatar}
+        onStartEditName={startEditName}
+        onSaveName={saveName}
+        onNameInput={setNameInput}
+        onOpenWalletModal={openWalletModal}
+      />
 
-          <div class="player-info">
-            {#if editingName}
-              <div class="name-edit">
-                <input class="name-input" type="text" bind:value={nameInput} maxlength="16" onkeydown={(e) => e.key === 'Enter' && saveName()} />
-                <button class="name-save" onclick={saveName}>✓</button>
-              </div>
-            {:else}
-              <button class="player-name" onclick={startEditName}>
-                {profile.username} <span class="name-pen">✏️</span>
-              </button>
-            {/if}
-            <div class="player-tier" style="color:{tierColor(tier)}">
-              {tierEmoji(tier)} {tierLabel(tier)}
-            </div>
-            {#if wallet.connected}
-              <div class="player-addr">{wallet.shortAddr} · {wallet.chain}</div>
-            {:else}
-              <button class="connect-mini" onclick={openWalletModal}>CONNECT WALLET</button>
-            {/if}
-          </div>
-        </div>
-
-        <div class="uh-right">
-          <div class="port-val">
-            <div class="pv-label">PORTFOLIO</div>
-            <div class="pv-amount">${(profile.balance.virtual + total).toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
-            <div class="pv-pnl" class:up={totalPnl >= 0} class:down={totalPnl < 0}>
-              {totalPnl >= 0 ? '▲' : '▼'} {pnlPrefix(totalPnlPct)}{totalPnlPct.toFixed(2)}%
-            </div>
-          </div>
-          <div class="uh-stats">
-            {#each headerStats as stat (stat.label)}
-              <div class="uhs">
-                <span class="uhs-val" style:color={stat.color}>{stat.value}</span>
-                <span class="uhs-lbl">{stat.label}</span>
-              </div>
-            {/each}
-          </div>
-        </div>
-
-        <div class="passport-stamp">
-          <span class="stamp-text">{wallet.connected ? 'VERIFIED' : 'UNVERIFIED'}</span>
-          <span class="stamp-icon">●</span>
-        </div>
-      </div>
-
-      <!-- Avatar Picker -->
-      {#if showAvatarPicker}
-        <div class="avatar-picker">
-          <div class="ap-title">SELECT AVATAR</div>
-          <div class="ap-grid">
-            {#each AVATAR_OPTIONS as opt}
-              <button class="ap-opt" class:selected={profile.avatar === opt} onclick={() => pickAvatar(opt)}>
-                <img src={opt} alt="avatar option" loading="lazy" />
-              </button>
-            {/each}
-          </div>
-        </div>
-      {/if}
-
-      <!-- ═══ TAB BAR ═══ -->
-      <div class="tab-bar">
-        {#each TABS as tab}
-          <button
-            class="tab-btn"
-            class:active={activeTab === tab.id}
-            onclick={() => setActiveTab(tab.id)}
-          >
-            <span class="tab-icon">{tab.icon}</span>
-            <span class="tab-label">{tab.label}</span>
-            {#if tab.id === 'positions' && openPos > 0}
-              <span class="tab-badge">{openPos}</span>
-            {/if}
-            {#if tab.id === 'arena' && records.length > 0}
-              <span class="tab-badge">{records.length}</span>
-            {/if}
-          </button>
-        {/each}
-      </div>
-
-      <div class="control-rail">
-        <div class="quick-actions">
-          <a class="qa-btn qa-terminal" href="/terminal" data-gtm-area="passport" data-gtm-action="open_terminal">
-            QUICK TRADE
-          </a>
-          {#if activeTab !== 'arena'}
-            <a class="qa-btn qa-arena" href="/arena" data-gtm-area="passport" data-gtm-action="open_arena">
-              START ARENA
-            </a>
-          {/if}
-          {#if activeTab === 'wallet' && wallet.connected}
-            <button class="qa-btn qa-sync" onclick={syncHoldingsNow} disabled={holdingsPanel.syncing} data-gtm-area="passport" data-gtm-action="sync_holdings">
-              {holdingsPanel.syncing ? 'SYNCING...' : 'SYNC HOLDINGS'}
-            </button>
-          {/if}
-          {#if !wallet.connected}
-            <button class="qa-btn qa-wallet" onclick={openWalletModal} data-gtm-area="passport" data-gtm-action="connect_wallet">
-              CONNECT WALLET
-            </button>
-          {/if}
-        </div>
-      </div>
-
-      {#if showFocusInsights}
-        <div class="focus-strip">
-          {#each focusCards as card, index (card.key)}
-            <div class={`focus-item ${card.primary || index === 0 ? 'focus-item-primary' : ''} ${focusToneClass(card.tone)}`}>
-              <span class="focus-k">{card.key}</span>
-              <span class="focus-v">{card.value}</span>
-              <span class="focus-sub">{card.sub}</span>
-            </div>
-          {/each}
-        </div>
-      {/if}
+      <PassportNavChrome
+        tabs={TABS}
+        activeTab={activeTab}
+        openPos={openPos}
+        recordCount={records.length}
+        walletConnected={wallet.connected}
+        holdingsSyncing={holdingsPanel.syncing}
+        showFocusInsights={showFocusInsights}
+        focusCards={focusCards}
+        onSelectTab={setActiveTab}
+        onSyncHoldings={syncHoldingsNow}
+        onOpenWalletModal={openWalletModal}
+      />
 
       <!-- ═══ TAB CONTENT ═══ -->
       <div class="tab-content">
@@ -853,519 +771,6 @@
     font-weight: 700;
     letter-spacing: 0.32px;
     color: var(--sp-pk-l);
-  }
-
-  .unified-header {
-    position: relative;
-    z-index: 2;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--sp-space-3);
-    padding: var(--sp-space-5);
-    border-bottom: 1px solid var(--sp-line);
-    background: rgba(8, 22, 14, 0.72);
-  }
-
-  .uh-left {
-    display: flex;
-    gap: var(--sp-space-2);
-    min-width: 0;
-    align-items: center;
-  }
-
-  .uh-right {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-space-2);
-    width: min(430px, 100%);
-    min-width: min(320px, 100%);
-    align-items: stretch;
-  }
-
-  .doge-avatar {
-    position: relative;
-    width: 72px;
-    height: 72px;
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid var(--sp-line);
-    background: rgba(255, 255, 255, 0.04);
-    cursor: pointer;
-    padding: 0;
-    transition: transform 0.15s ease;
-  }
-
-  .doge-avatar:hover {
-    transform: translateY(-1px);
-  }
-
-  .doge-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-
-  .avatar-edit {
-    position: absolute;
-    right: 4px;
-    bottom: 4px;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    font-size: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--sp-pk);
-    color: #111;
-  }
-
-  .player-info {
-    min-width: 0;
-  }
-
-  .player-name {
-    border: none;
-    background: none;
-    padding: 0;
-    text-align: left;
-    cursor: pointer;
-    color: var(--sp-w);
-    font-family: var(--fm);
-    font-size: clamp(17px, 2vw, 22px);
-    font-weight: 700;
-    letter-spacing: 0.06px;
-  }
-
-  .name-pen {
-    font-size: 11px;
-    opacity: 0.55;
-  }
-
-  .name-edit {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .name-input {
-    width: 160px;
-    border-radius: 7px;
-    border: 1px solid var(--sp-line);
-    background: rgba(0, 0, 0, 0.35);
-    color: var(--sp-w);
-    font-family: var(--fm);
-    font-size: 11px;
-    padding: 6px 8px;
-    outline: none;
-  }
-
-  .name-save {
-    border: 1px solid var(--sp-pk);
-    background: rgba(255, 140, 121, 0.15);
-    color: var(--sp-pk-l);
-    border-radius: 7px;
-    padding: 5px 8px;
-    font-family: var(--fp);
-    font-size: 10px;
-    cursor: pointer;
-  }
-
-  .player-tier {
-    margin-top: 2px;
-    font-family: var(--fp);
-    font-size: 10px;
-    letter-spacing: 0.12px;
-  }
-
-  .player-addr {
-    margin-top: 5px;
-    color: var(--sp-dim);
-    font-family: var(--fm);
-    font-size: 11px;
-  }
-
-  .connect-mini {
-    margin-top: 5px;
-    border: 1px solid var(--sp-pk);
-    background: rgba(255, 140, 121, 0.12);
-    color: var(--sp-pk-l);
-    border-radius: 7px;
-    padding: 5px 10px;
-    font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 0.12px;
-    cursor: pointer;
-  }
-
-  .port-val {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    text-align: right;
-  }
-
-  .pv-label {
-    color: var(--sp-dim);
-    font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 0.12px;
-  }
-
-  .pv-amount {
-    margin-top: 2px;
-    color: var(--sp-w);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(22px, 2.8vw, 32px);
-    font-weight: 700;
-    line-height: 1.02;
-    letter-spacing: 0;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .pv-pnl {
-    margin-top: 2px;
-    font-family: var(--fp);
-    font-size: 10px;
-    letter-spacing: 0.08px;
-  }
-
-  .pv-pnl.up {
-    color: var(--sp-green);
-  }
-
-  .pv-pnl.down {
-    color: var(--sp-red);
-  }
-
-  .uh-stats {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: var(--sp-space-2);
-    width: 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .uh-stats::-webkit-scrollbar {
-    display: none;
-  }
-
-  .uhs {
-    flex: 1 0 0;
-    min-width: 72px;
-    padding: var(--sp-space-2) 7px;
-    border-radius: 8px;
-    border: 1px solid var(--sp-soft);
-    background: rgba(0, 0, 0, 0.25);
-    text-align: center;
-  }
-
-  .uhs-val {
-    display: block;
-    color: var(--sp-w);
-    font-family: var(--fm);
-    font-size: 15px;
-    font-weight: 700;
-    line-height: 1.05;
-  }
-
-  .uhs-lbl {
-    display: block;
-    margin-top: 4px;
-    color: var(--sp-dim);
-    font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 0.18px;
-  }
-
-  .passport-stamp {
-    position: absolute;
-    top: 10px;
-    right: 12px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border: 1px solid rgba(255, 140, 121, 0.42);
-    border-radius: 8px;
-    color: var(--sp-pk-l);
-    background: rgba(255, 140, 121, 0.08);
-    transform: rotate(8deg);
-    font-family: var(--fp);
-  }
-
-  .stamp-text {
-    font-size: 9px;
-    letter-spacing: 1px;
-  }
-
-  .stamp-icon {
-    font-size: 9px;
-    opacity: 0.8;
-  }
-
-  .avatar-picker {
-    margin: var(--sp-space-2) var(--sp-space-4) var(--sp-space-3);
-    padding: var(--sp-space-2);
-    border-radius: 10px;
-    border: 1px solid var(--sp-line);
-    background: rgba(0, 0, 0, 0.22);
-  }
-
-  .ap-title {
-    margin-bottom: 8px;
-    color: var(--sp-dim);
-    font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 1px;
-  }
-
-  .ap-grid {
-    display: grid;
-    grid-template-columns: repeat(8, minmax(0, 1fr));
-    gap: 6px;
-  }
-
-  .ap-opt {
-    border: 1px solid transparent;
-    border-radius: 8px;
-    overflow: hidden;
-    padding: 0;
-    background: none;
-    cursor: pointer;
-    aspect-ratio: 1;
-  }
-
-  .ap-opt:hover,
-  .ap-opt.selected {
-    border-color: var(--sp-pk);
-  }
-
-  .ap-opt img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-
-  .tab-bar {
-    display: flex;
-    position: sticky;
-    top: 0;
-    z-index: 9;
-    background: rgba(0, 0, 0, 0.26);
-    backdrop-filter: blur(8px);
-    border-top: 1px solid var(--sp-line);
-    border-bottom: 1px solid var(--sp-line);
-  }
-
-  .tab-btn {
-    position: relative;
-    flex: 1;
-    min-height: 48px;
-    border: none;
-    border-bottom: 2px solid transparent;
-    background: transparent;
-    color: var(--sp-dim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--sp-space-2);
-    font-family: var(--fp);
-    font-size: 10px;
-    letter-spacing: 0.12px;
-    cursor: pointer;
-  }
-
-  .tab-btn:hover {
-    color: var(--sp-w);
-    background: rgba(255, 140, 121, 0.06);
-  }
-
-  .tab-btn.active {
-    color: var(--sp-pk-l);
-    border-bottom-color: var(--sp-pk);
-    background: rgba(255, 140, 121, 0.08);
-    box-shadow: inset 0 -2px 0 rgba(255, 140, 121, 0.6);
-  }
-
-  .tab-icon {
-    font-size: 16px;
-    line-height: 1;
-  }
-
-  .tab-label {
-    font-size: 10px;
-    letter-spacing: 0.1px;
-  }
-
-  .tab-badge {
-    position: absolute;
-    top: 5px;
-    right: 8px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: var(--sp-pk);
-    color: #111;
-    font-family: var(--fp);
-    font-size: 9px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .control-rail {
-    position: sticky;
-    top: 48px;
-    z-index: 8;
-    padding: var(--sp-space-2) var(--sp-space-3);
-    border-bottom: 1px solid var(--sp-soft);
-    background: rgba(0, 0, 0, 0.22);
-    backdrop-filter: blur(8px);
-  }
-
-  .quick-actions {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: var(--sp-space-2);
-    overflow-x: auto;
-    padding-bottom: var(--sp-space-1);
-  }
-
-  .qa-btn {
-    min-height: 32px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    padding: 0 12px;
-    text-decoration: none;
-    white-space: nowrap;
-    font-family: var(--fp);
-    font-size: 10px;
-    letter-spacing: 0.08px;
-  }
-
-  .qa-btn {
-    border: 1px solid var(--sp-line);
-    color: var(--sp-w);
-    background: rgba(0, 0, 0, 0.25);
-    cursor: pointer;
-  }
-
-  .qa-btn:hover {
-    background: rgba(255, 140, 121, 0.12);
-    border-color: rgba(255, 140, 121, 0.42);
-  }
-
-  .qa-terminal {
-    color: var(--sp-pk-l);
-  }
-
-  .qa-arena {
-    color: var(--sp-green);
-  }
-
-  .qa-sync {
-    color: #8bd8ff;
-  }
-
-  .qa-sync:disabled {
-    opacity: 0.65;
-    cursor: default;
-  }
-
-  .qa-btn:disabled {
-    opacity: 0.62;
-    cursor: default;
-  }
-
-  .qa-wallet {
-    color: #cbefff;
-  }
-
-  .focus-strip {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--sp-space-2);
-    padding: var(--sp-space-3) var(--sp-space-3) var(--sp-space-4);
-    border-bottom: 1px solid var(--sp-soft);
-    background: linear-gradient(180deg, rgba(8, 23, 16, 0.72), rgba(6, 18, 13, 0.62));
-  }
-
-  .focus-item {
-    border: 1px solid var(--sp-soft);
-    border-radius: 10px;
-    background: rgba(0, 0, 0, 0.24);
-    padding: var(--sp-space-2) var(--sp-space-3);
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-space-2);
-    min-height: 78px;
-  }
-
-  .focus-item-primary {
-    border-color: rgba(255, 140, 121, 0.42);
-    background: rgba(255, 140, 121, 0.1);
-  }
-
-  .focus-k {
-    color: var(--sp-dim);
-    font-family: var(--fp);
-    font-size: 9px;
-    letter-spacing: 0.08px;
-  }
-
-  .focus-v {
-    color: var(--sp-w);
-    font-family: var(--fd);
-    font-size: clamp(14px, 1.8vw, 18px);
-    line-height: 1.05;
-  }
-
-  .focus-sub {
-    color: var(--sp-dim);
-    font-family: var(--fm);
-    font-size: 11px;
-    line-height: 1.32;
-  }
-
-  .focus-good {
-    border-color: rgba(157, 205, 185, 0.34);
-    background: rgba(157, 205, 185, 0.08);
-  }
-
-  .focus-good .focus-v {
-    color: var(--sp-green);
-  }
-
-  .focus-warn {
-    border-color: rgba(255, 208, 96, 0.34);
-    background: rgba(255, 208, 96, 0.08);
-  }
-
-  .focus-warn .focus-v {
-    color: #ffd060;
-  }
-
-  .focus-bad {
-    border-color: rgba(255, 114, 93, 0.42);
-    background: rgba(255, 114, 93, 0.1);
-  }
-
-  .focus-bad .focus-v {
-    color: var(--sp-red);
-  }
-
-  .focus-neutral {
-    border-color: var(--sp-soft);
-    background: rgba(255, 255, 255, 0.02);
   }
 
   .tab-content {
@@ -2056,39 +1461,11 @@
       padding: var(--sp-space-2);
     }
 
-    .unified-header {
-      grid-template-columns: 1fr;
-    }
-
-    .uh-right {
-      min-width: 0;
-      width: 100%;
-      gap: var(--sp-space-2);
-      align-items: stretch;
-    }
-
-    .port-val {
-      text-align: left;
-    }
-
-    .focus-strip,
     .metrics-grid,
     .pos-summary,
     .arena-stats,
     .wallet-kpis {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .control-rail {
-      position: relative;
-      top: auto;
-      z-index: 1;
-      padding: var(--sp-space-2) var(--sp-space-3);
-      backdrop-filter: none;
-    }
-
-    .ap-grid {
-      grid-template-columns: repeat(6, minmax(0, 1fr));
     }
 
     .tab-content {
@@ -2110,69 +1487,9 @@
       border-radius: 10px;
     }
 
-    .unified-header {
-      padding: var(--sp-space-3);
-      gap: var(--sp-space-2);
-    }
-
-    .doge-avatar {
-      width: 56px;
-      height: 56px;
-      border-radius: 10px;
-    }
-
     .agent-perf-grid,
     .badges-grid {
       grid-template-columns: 1fr;
-    }
-
-    .uh-right {
-      gap: var(--sp-space-2);
-      min-width: 0;
-      width: 100%;
-    }
-
-    .uh-stats {
-      width: 100%;
-      gap: 5px;
-      justify-content: flex-start;
-    }
-
-    .pv-amount {
-      font-size: clamp(20px, 7.8vw, 28px);
-    }
-
-    .uhs {
-      min-width: 62px;
-      padding: 6px 4px;
-      border-radius: 7px;
-    }
-
-    .uhs-val {
-      font-size: 13px;
-    }
-
-    .uhs-lbl {
-      font-size: 9px;
-      margin-top: 3px;
-    }
-
-    .quick-actions {
-      justify-content: flex-start;
-    }
-
-    .qa-btn {
-      min-height: var(--sc-touch-sm, 36px);
-    }
-
-    .focus-strip {
-      grid-template-columns: 1fr;
-      padding: var(--sp-space-2);
-    }
-
-    .focus-item {
-      min-height: 60px;
-      padding: var(--sp-space-2);
     }
 
     .holdings-body {
@@ -2182,36 +1499,6 @@
     .donut-section {
       border-right: none;
       border-bottom: 1px solid var(--sp-soft);
-    }
-
-    .ap-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
-    .tab-bar {
-      overflow-x: auto;
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .tab-bar::-webkit-scrollbar {
-      display: none;
-    }
-
-    .tab-btn {
-      flex: 0 0 auto;
-      min-width: 80px;
-      min-height: 42px;
-      padding: 0 10px;
-    }
-
-    .tab-icon {
-      font-size: 14px;
-    }
-
-    .tab-label {
-      font-size: 9px;
     }
 
     .pos-row,
@@ -2225,14 +1512,6 @@
     .mr-right {
       width: 100%;
       justify-content: space-between;
-    }
-
-    .passport-stamp {
-      position: absolute;
-      top: 8px;
-      right: 10px;
-      transform: rotate(0deg);
-      margin-top: 0;
     }
 
     .tab-content {
@@ -2279,41 +1558,6 @@
       font-size: 9px;
     }
 
-    .unified-header {
-      padding: var(--sp-space-2);
-      gap: var(--sp-space-1);
-    }
-
-    .doge-avatar {
-      width: 44px;
-      height: 44px;
-      border-radius: 8px;
-    }
-
-    .avatar-edit {
-      width: 14px;
-      height: 14px;
-      font-size: 8px;
-    }
-
-    .player-name {
-      font-size: clamp(14px, 4vw, 17px);
-    }
-
-    .pv-amount {
-      font-size: clamp(18px, 6vw, 24px);
-    }
-
-    .uhs {
-      min-width: 56px;
-      padding: 5px 3px;
-      border-radius: 6px;
-    }
-
-    .uhs-val {
-      font-size: 12px;
-    }
-
     .metrics-grid,
     .pos-summary,
     .arena-stats {
@@ -2350,45 +1594,6 @@
     .asi-label,
     .wk-k {
       font-size: var(--sc-fs-2xs, 9px);
-    }
-
-    .focus-strip {
-      padding: var(--sp-space-1);
-      gap: var(--sp-space-1);
-    }
-
-    .focus-item {
-      min-height: auto;
-      padding: var(--sp-space-1) var(--sp-space-2);
-      gap: var(--sp-space-1);
-    }
-
-    .focus-v {
-      font-size: clamp(13px, 3.5vw, 16px);
-    }
-
-    .focus-sub {
-      font-size: 10px;
-    }
-
-    .tab-btn {
-      min-width: 72px;
-      min-height: 40px;
-      padding: 0 8px;
-      gap: 3px;
-    }
-
-    .tab-icon {
-      font-size: 12px;
-    }
-
-    .tab-label {
-      font-size: var(--sc-fs-2xs, 9px);
-    }
-
-    .ap-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 4px;
     }
 
     .badges-grid {
@@ -2483,31 +1688,6 @@
 
     .vb-amount {
       font-size: clamp(16px, 5vw, 22px);
-    }
-
-    .passport-stamp {
-      top: 4px;
-      right: 6px;
-      padding: 3px 6px;
-    }
-
-    .stamp-text {
-      font-size: var(--sc-fs-2xs, 9px);
-      letter-spacing: 0.5px;
-    }
-
-    .control-rail {
-      padding: var(--sp-space-1) var(--sp-space-2);
-    }
-
-    .quick-actions {
-      gap: var(--sp-space-1);
-    }
-
-    .qa-btn {
-      min-height: var(--sc-touch-sm, 36px);
-      padding: 0 8px;
-      font-size: 9px;
     }
 
   }
