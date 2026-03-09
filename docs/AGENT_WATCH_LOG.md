@@ -20,27 +20,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ## Entries
 
-## [2026-03-09 21:34:55 +0900] FINISH passport-header-nav-chrome-20260309 (frontend)
+## [2026-03-09 21:52:33 +0900] FINISH passport-shell-host-split-20260309 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
 - Request: keep pushing the passport refactor toward the design goal, preserve layout, and continue with push-safe narrow slices
 - What changed:
   - Added [PassportHeaderSection.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportHeaderSection.svelte#L1)
     - moved the editable avatar/profile header, portfolio hero, and verified stamp into a dedicated host component
-    - kept avatar picker/name edit interactions but removed the header/picker markup and CSS from the route shell
   - Added [PassportNavChrome.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportNavChrome.svelte#L1)
     - moved the tab bar, quick-action rail, and focus strip into a dedicated chrome boundary
-    - preserved tab order, button placement, sticky behavior, and focus-strip layout while removing the route-local chrome markup/CSS
+  - Added [passportTabShared.css](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/passportTabShared.css#L1)
+    - defined the shared passport tab panel/detail styles outside the route shell
+  - Added [PassportProfileTab.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportProfileTab.svelte#L1), [PassportWalletTab.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportWalletTab.svelte#L1), [PassportPositionsTab.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportPositionsTab.svelte#L1), [PassportArenaTab.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportArenaTab.svelte#L1)
+    - split the remaining tab bodies into dedicated hosts without changing the layout order or tab flow
+    - localized the tab-specific markup and CSS so the route now acts as a shell/controller instead of a tab renderer
   - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
-    - rewired the route to use the new header/nav host components
-    - removed dead CSS selectors left behind by the extraction
-    - reduced the route shell from `2514` to `1694` lines without changing tab content layout
+    - rewired the route to use the header/nav host components and all four tab hosts
+    - removed route-local tab markup and tab-specific CSS
+    - reduced the route shell from `2514` to `520` lines without changing tab content layout
   - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
-    - documented `PassportHeaderSection.svelte` and `PassportNavChrome.svelte` as canonical passport chrome boundaries
+    - documented the passport shell boundary and the new tab host canonical paths
 - Validation:
   - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
 - Residual risks:
-  - `passport/+page.svelte` still owns the large per-tab markup blocks and should be split by tab host next
+  - `passport/+page.svelte` still owns page-level state/runtime wiring for ui-state, avatar/name editing, holdings hydrate, and learning panel state
   - unrelated auth/chart/wallet WIP remains in the worktree and must stay out of the passport commit
 - Commit / Push:
   - pending
