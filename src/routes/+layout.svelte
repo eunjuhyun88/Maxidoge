@@ -2,6 +2,7 @@
   import '../app.css';
   import Header from '../components/layout/Header.svelte';
   import BottomBar from '../components/layout/BottomBar.svelte';
+  import MobileBottomNav from '../components/layout/MobileBottomNav.svelte';
   import WalletModal from '../components/modals/WalletModal.svelte';
   import NotificationTray from '../components/shared/NotificationTray.svelte';
   import ToastStack from '../components/shared/ToastStack.svelte';
@@ -21,8 +22,9 @@
   // - Terminal routes ≤1024px: terminal has its own bottom nav
   // - All routes ≤768px: status bar adds no value on phones
   let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1200);
-  const hideBottomBar = $derived(
-    ($isTerminal && windowWidth <= 1024) || windowWidth <= 768
+  const showMobileBottomNav = $derived(windowWidth <= 768);
+  const showBottomBar = $derived(
+    windowWidth > 768 && !($isTerminal && windowWidth <= 1024)
   );
 
   // Sync currentView store from URL via effect
@@ -169,8 +171,10 @@
   <div id="main-content" class:terminal-route={$isTerminal}>
     {@render children()}
   </div>
-  {#if !hideBottomBar}
+  {#if showBottomBar}
     <BottomBar />
+  {:else if showMobileBottomNav}
+    <MobileBottomNav />
   {/if}
 </div>
 
@@ -209,8 +213,8 @@
   /* ≤768px: header (40px) + tab strip (34px) = 74px top */
   @media (max-width: 768px) {
     #app {
-      padding-top: calc(var(--sc-header-h-mobile, 40px) + var(--sc-tab-strip-h, 34px));
-      padding-bottom: 0;
+      padding-top: var(--sc-header-h-mobile, 40px);
+      padding-bottom: calc(var(--sc-mobile-nav-h, 64px) + env(safe-area-inset-bottom, 0px));
     }
     #main-content {
       overflow: auto;
@@ -224,8 +228,7 @@
   }
   @media (max-width: 480px) {
     #app {
-      /* 36px header + tab strip = 70px */
-      padding-top: calc(var(--sc-touch-sm, 36px) + var(--sc-tab-strip-h, 34px));
+      padding-top: var(--sc-touch-sm, 36px);
     }
   }
 </style>

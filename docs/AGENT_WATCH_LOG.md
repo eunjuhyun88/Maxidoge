@@ -6601,6 +6601,42 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - unrelated local arena chart and `arena-v2` WIP remains outside this slice and should stay out of the commit
 - Status: DONE
 
+## [2026-03-10 03:28:00 +0900] FINISH usability-navigation-sprint-1-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the usability redesign by landing the Sprint 1 navigation slice, keep the commit narrow, and preserve unrelated arena/terminal WIP outside the staged scope
+- What changed:
+  - Added [usability-navigation-sprint-1-2026-03-10.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/usability-navigation-sprint-1-2026-03-10.md#L1)
+    - fixed Sprint 1 as the navigation authority between the usability redesign spec and actual layout/header code
+    - defined the new responsibility split: desktop/tablet header chrome vs mobile bottom navigation
+  - Added [deepLinks.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/utils/deepLinks.ts#L1)
+    - introduced canonical builders for terminal, signals, passport, and arena links
+    - established a shared copy-trade terminal handoff URL builder so later route slices do not rebuild querystrings ad hoc
+  - Added [MobileBottomNav.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/MobileBottomNav.svelte#L1)
+    - moved mobile primary navigation into a fixed 4-tab bottom bar (`Terminal | Arena | Signals | Passport`)
+    - mapped badge counts to tracked signals and open positions without reusing the old status-bar layout
+  - Updated [Header.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/Header.svelte#L1)
+    - reduced the primary nav set to `Terminal | Arena | Signals | Passport`, with home kept at the logo
+    - removed the old mobile tab strip and collapsed the header back to compact top chrome on phones
+    - mapped secondary route highlighting so `/arena-war` and `/arena-v2` resolve to `Arena`, and `/settings` / `/agents` resolve to `Passport`
+  - Updated [routes/+layout.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+layout.svelte#L1)
+    - mounted [MobileBottomNav.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/MobileBottomNav.svelte#L1) for `<768px`
+    - kept [BottomBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/BottomBar.svelte#L1) as the non-mobile status bar
+    - corrected mobile app shell padding so the removed header tab strip no longer reserves dead top space and the new bottom nav gets dedicated bottom space
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1), [docs/exec-plans/active/README.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/README.md#L1), and [docs/exec-plans/index.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/index.md#L1)
+    - registered the new navigation sprint authority
+    - recorded `deepLinks.ts` and `MobileBottomNav.svelte` as canonical boundaries
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - signals/detail/creator pages still build copy-trade handoff URLs inline and should migrate to [deepLinks.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/utils/deepLinks.ts#L1) in a follow-up slice
+  - unrelated local terminal and arena chart WIP remains outside this sprint and should stay out of the commit
+- Status: DONE
+
 ## [2026-03-10 01:47:00 +0900] FINISH chart-position-sizer-contract-20260310 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

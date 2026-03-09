@@ -5,6 +5,7 @@ Purpose:
 
 ## Active
 
+- `docs/exec-plans/active/usability-navigation-sprint-1-2026-03-10.md`
 - `docs/exec-plans/active/usability-foundation-sprint-0-2026-03-10.md`
 - `docs/exec-plans/active/full-system-redesign-blueprint-2026-03-08.md`
 - `docs/exec-plans/active/phase-0-boundary-freeze-checklist-2026-03-08.md`

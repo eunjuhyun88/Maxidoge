@@ -135,7 +135,7 @@ src/
 │   ├── ui/           # 공통 UI 프리미티브 (ModalShell)
 │   ├── modals/       # 모달 (5: CopyTrade, Oracle, Passport, Settings, Wallet)
 │   ├── shared/       # 공용 (18: ContextBanner, EmptyState, Toast, P0Banner, TokenDropdown, NotificationTray, PokemonFrame, TypewriterBox, HPBar, PhaseTransition, PartyTray, SkeletonLoader, FreshnessIndicator, InlineBanner, CriticalModal, OnboardingHint, ZeroState, PositionRiskBar)
-│   ├── layout/       # 레이아웃 (2: Header, BottomBar)
+│   ├── layout/       # 레이아웃 (3: Header, BottomBar, MobileBottomNav)
 │   ├── home/         # 홈 (1: HomeBackground)
 │   ├── community/    # 커뮤니티 (1: OracleLeaderboard)
 │   └── live/         # 라이브 (1: LivePanel)
@@ -698,8 +698,11 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **`$lib/utils/pnl.ts`**: PnL 계산 단일 소스. `calcPnlPercent(dir, entry, current, decimals)`. quickTradeStore, close/+server.ts에서 사용.
 - **`$lib/utils/storage.ts`**: localStorage 헬퍼. `loadFromStorage<T>()`, `saveToStorage()`, `autoSave()`. 12개 스토어의 보일러플레이트 교체용.
 - **`$lib/utils/freshness.ts`**: 데이터 신선도 단일 소스. `normalizeTimestamp()`, `getFreshnessMeta()`, `getFreshnessLevel()`로 `fresh / aging / stale / unknown` 계약을 통일한다. Terminal, Passport, Signals에서 route-local staleness ternary를 다시 만들지 말 것.
+- **`$lib/utils/deepLinks.ts`**: 딥링크 단일 소스. `buildDeepLink()`, `buildTerminalCopyTradeLink()`, `buildSignalsLink()`, `buildPassportLink()`, `buildArenaLink()`로 URL 상태를 통일한다. Signals/Creator/Terminal/Passport에서 querystring을 손으로 다시 이어붙이지 말 것.
 - **`$components/ui/ModalShell.svelte`**: 공통 모달 오버레이 (overlay + close + stopPropagation + a11y). 5개 모달에서 래핑 사용.
 - **`shared usability foundation canonical path`**: `src/components/shared/{SkeletonLoader,FreshnessIndicator,InlineBanner,CriticalModal,OnboardingHint,ZeroState,PositionRiskBar}.svelte`가 Sprint 0 usability foundation의 단일 진실원이다. later sprint route shells에서 zero-state, freshness chip, destructive confirm, onboarding hint, risk bar를 다시 각자 인라인하지 말 것.
+- **`mobile primary navigation canonical path`**: mobile 1차 네비게이션은 `src/components/layout/MobileBottomNav.svelte`가 단일 진실원이다. `Header.svelte`나 각 route shell에 모바일 탭 스트립/바텀탭을 다시 따로 만들지 말 것.
+- **`header primary-nav boundary`**: `src/components/layout/Header.svelte`는 desktop/tablet 1차 네비와 account chrome만 소유한다. mobile primary nav까지 다시 품거나 `Agents`, `Settings`, `Arena War`를 primary tab으로 되돌리지 말 것.
 
 ### 서버 API 패턴
 - **DB 테이블 미존재 대응**: API에서 `errorContains(e, 'does not exist')` 체크 → graceful fallback + warning 반환.
