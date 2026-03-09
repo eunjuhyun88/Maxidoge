@@ -12,11 +12,21 @@
   import { HOLDINGS_DATA, calcPnL, type HoldingAsset } from '$lib/data/holdings';
   import { gameState } from '$lib/stores/gameState';
   import { fetchUiStateApi, updateUiStateApi } from '$lib/api/preferencesApi';
-  import { fetchHoldings } from '$lib/api/portfolioApi';
+  import {
+    createPassportHoldingsRuntime,
+    createPassportHoldingsState,
+  } from '$lib/passport/passportHoldingsRuntime';
   import {
     createPassportLearningPanelController,
     createPassportLearningPanelState,
   } from '$lib/passport/passportLearningPanelController';
+  import {
+    buildPassportFocusCards,
+    buildPassportHeaderStats,
+    shouldShowPassportFocusInsights,
+    type PassportFocusCard,
+    type PassportHeaderStat,
+  } from '$lib/passport/passportSummaryViewModel';
   import { livePrices } from '$lib/stores/priceStore';
   import EmptyState from '../../components/shared/EmptyState.svelte';
   import PassportLearningPanel from '../../components/passport/PassportLearningPanel.svelte';
@@ -33,7 +43,6 @@
     pnlPrefix,
     timeSince,
     isPassportTab,
-    type FocusTone,
     type PassportTabType,
   } from '../../components/passport/passportHelpers';
 
@@ -57,40 +66,11 @@
   const bStreak = $derived($bestStreak);
 
   // Holdings: live API data with static fallback
-  let liveHoldings: HoldingAsset[] = $state([]);
-  let holdingsLoaded = $state(false);
-  let holdingsState: 'loading' | 'live' | 'fallback' = $state<'loading' | 'live' | 'fallback'>('loading');
-  let holdingsStatusMessage = $state('Syncing wallet holdings...');
-  let holdingsSyncAddress: string | null = $state(null);
+  let holdingsPanel = $state(createPassportHoldingsState());
   const liveP = $derived($livePrices);
 
-  async function hydrateHoldings() {
-    holdingsState = 'loading';
-    holdingsStatusMessage = 'Syncing wallet holdings...';
-
-    try {
-      const res = await fetchHoldings();
-      if (res?.ok && res.data.holdings.length > 0) {
-        liveHoldings = res.data.holdings.map(toHoldingAsset);
-        holdingsLoaded = true;
-        holdingsState = 'live';
-        holdingsStatusMessage = `Live holdings synced (${liveHoldings.length} assets)`;
-        return;
-      }
-    } catch {
-      // handled below with fallback state
-    }
-
-    liveHoldings = [];
-    holdingsLoaded = false;
-    holdingsState = 'fallback';
-    holdingsStatusMessage = wallet.connected
-      ? 'Live holdings unavailable. Showing demo holdings.'
-      : 'Connect wallet to load live holdings.';
-  }
-
   // Build effective holdings array: live API → static fallback + live price overlay
-  const baseHoldings = $derived(holdingsLoaded && liveHoldings.length > 0 ? liveHoldings : HOLDINGS_DATA);
+  const baseHoldings = $derived(holdingsPanel.loaded && holdingsPanel.liveHoldings.length > 0 ? holdingsPanel.liveHoldings : HOLDINGS_DATA);
   const effectiveHoldings = $derived(withLivePrices(baseHoldings, liveP));
 
   // Holdings calculations
@@ -120,25 +100,6 @@
   const holdingsOverflow = $derived(effectiveHoldings.slice(HOLDINGS_PREVIEW_LIMIT));
   const matchPreview = $derived(records.slice(0, MATCH_PREVIEW_LIMIT));
 
-  interface FocusInsight {
-    key: string;
-    value: string;
-    sub: string;
-    tone: FocusTone;
-  }
-
-  interface HeaderStat {
-    label: string;
-    value: string | number;
-    color?: string;
-  }
-
-  interface FocusCard extends FocusInsight {
-    primary?: boolean;
-  }
-
-  // headerStats and focusCards are derived below
-
   const closedStats = $derived(summarizeClosedTrades(closed));
   const closedWins = $derived(closedStats.wins);
   const closedLosses = $derived(closedStats.losses);
@@ -150,200 +111,31 @@
   const avgLossPnl = $derived(closedStats.avgLossPnl);
   const resolvedSamples = $derived(closed.length + records.length);
   const learningSamples = $derived(closed.length + records.length + tracked.length + expired.length);
-  const learningReadinessPct = $derived(Math.min(100, Math.round((learningSamples / 40) * 100)));
-  const showFocusInsights = $derived(resolvedSamples >= 8 || learningSamples >= 20);
-
-  const headerStats: HeaderStat[] = $derived([
-    { label: 'OPEN', value: openPos },
-    { label: 'ASSETS', value: wallet.connected ? effectiveHoldings.length : 0, color: '#8bd8ff' },
-    { label: 'WIN RATE', value: `${wr}%`, color: wr >= 50 ? '#9dffcf' : '#ff8f7e' },
-    { label: 'TRACKED', value: trackedCount, color: '#ff8c3b' }
-  ]);
-
-  const performanceInsight: FocusInsight = $derived.by(() => {
-    const sampleCount = closed.length + records.length;
-    if (sampleCount < 8) {
-      return {
-        key: 'PERFORMANCE STATUS',
-        value: 'BOOTSTRAP',
-        sub: 'Need 8+ resolved samples for reliable fit',
-        tone: 'neutral'
-      } satisfies FocusInsight;
-    }
-
-    const riskBalance = avgLossPnl <= 0 ? 1.2 : avgWinPnl / avgLossPnl;
-    if (closedWinRate >= 55 && riskBalance >= 1 && wr >= 50) {
-      return {
-        key: 'PERFORMANCE STATUS',
-        value: 'ON TRACK',
-        sub: 'Win quality and risk control are aligned',
-        tone: 'good'
-      } satisfies FocusInsight;
-    }
-
-    if (riskBalance < 0.9 || closedWinRate < 45) {
-      return {
-        key: 'PERFORMANCE STATUS',
-        value: 'TUNE RISK',
-        sub: 'Loss size is dominating your wins',
-        tone: 'bad'
-      } satisfies FocusInsight;
-    }
-
-    return {
-      key: 'PERFORMANCE STATUS',
-      value: 'MIXED',
-      sub: 'Edge exists but consistency is not stable',
-      tone: 'warn'
-    } satisfies FocusInsight;
-  });
-
-  const winRateInsight: FocusInsight = $derived.by(() => {
-    if (records.length < 5) {
-      return {
-        key: 'WHY WIN RATE',
-        value: `${wr}%`,
-        sub: 'Arena sample is still small',
-        tone: 'neutral'
-      } satisfies FocusInsight;
-    }
-
-    if (avgLossPnl > avgWinPnl && closedLosses >= 3) {
-      return {
-        key: 'WHY WIN RATE',
-        value: `${wr}%`,
-        sub: 'Average loss is larger than average win',
-        tone: 'bad'
-      } satisfies FocusInsight;
-    }
-
-    if (longBiasPct >= 70 || longBiasPct <= 30) {
-      return {
-        key: 'WHY WIN RATE',
-        value: `${wr}%`,
-        sub: `Directional bias is high (${longBiasPct}% LONG)`,
-        tone: 'warn'
-      } satisfies FocusInsight;
-    }
-
-    return {
-      key: 'WHY WIN RATE',
-      value: `${wr}%`,
-      sub: 'Direction and execution are mostly balanced',
-      tone: 'good'
-    } satisfies FocusInsight;
-  });
-
-  const actionInsight: FocusInsight = $derived.by(() => {
-    if (closed.length < 6) {
-      return {
-        key: 'NEXT IMPROVEMENT',
-        value: 'BUILD SAMPLE',
-        sub: 'Close at least 6 trades before tuning rules',
-        tone: 'neutral'
-      } satisfies FocusInsight;
-    }
-
-    if (avgLossPnl > avgWinPnl && closedLosses > 0) {
-      return {
-        key: 'NEXT IMPROVEMENT',
-        value: 'CUT LOSS FASTER',
-        sub: `Target avg loss below ${avgWinPnl.toFixed(2)}%`,
-        tone: 'bad'
-      } satisfies FocusInsight;
-    }
-
-    if (longBiasPct >= 70 || longBiasPct <= 30) {
-      return {
-        key: 'NEXT IMPROVEMENT',
-        value: 'REBALANCE BIAS',
-        sub: 'Keep LONG/SHORT split near 50:50',
-        tone: 'warn'
-      } satisfies FocusInsight;
-    }
-
-    if (openPos > 4) {
-      return {
-        key: 'NEXT IMPROVEMENT',
-        value: 'REDUCE OPEN RISK',
-        sub: 'Keep concurrent positions at 3 or less',
-        tone: 'warn'
-      } satisfies FocusInsight;
-    }
-
-    return {
-      key: 'NEXT IMPROVEMENT',
-      value: 'SCALE GRADUALLY',
-      sub: 'Increase size only if current rules stay consistent',
-      tone: 'good'
-    } satisfies FocusInsight;
-  });
-
-  const learningInsight: FocusInsight = $derived.by(() => {
-    if (learningStatusRemote) {
-      if (learningStatusRemote.outbox.failed > 0 || learningStatusRemote.trainJobs.failed > 0) {
-        return {
-          key: 'AI LEARNING READINESS',
-          value: 'ATTENTION',
-          sub: `Outbox failed ${learningStatusRemote.outbox.failed} · Jobs failed ${learningStatusRemote.trainJobs.failed}`,
-          tone: 'bad'
-        } satisfies FocusInsight;
-      }
-
-      if (learningStatusRemote.outbox.processing > 0 || learningStatusRemote.trainJobs.running > 0) {
-        return {
-          key: 'AI LEARNING READINESS',
-          value: 'PIPELINE RUNNING',
-          sub: `Processing ${learningStatusRemote.outbox.processing} events · Running ${learningStatusRemote.trainJobs.running} jobs`,
-          tone: 'warn'
-        } satisfies FocusInsight;
-      }
-
-      if (learningStatusRemote.latestDataset) {
-        return {
-          key: 'AI LEARNING READINESS',
-          value: 'PIPELINE SYNCED',
-          sub: `Latest dataset ${learningStatusRemote.latestDataset.versionLabel} (${learningStatusRemote.latestDataset.sampleCount} samples)`,
-          tone: 'good'
-        } satisfies FocusInsight;
-      }
-    }
-
-    if (learningSamples >= 40) {
-      return {
-        key: 'AI LEARNING READINESS',
-        value: `READY ${learningReadinessPct}%`,
-        sub: `Trades ${closed.length} · Arena ${records.length} · Signals ${tracked.length + expired.length}`,
-        tone: 'good'
-      } satisfies FocusInsight;
-    }
-
-    if (learningSamples >= 20) {
-      return {
-        key: 'AI LEARNING READINESS',
-        value: `WARMING ${learningReadinessPct}%`,
-        sub: `Need ${Math.max(0, 40 - learningSamples)} more samples for stable training`,
-        tone: 'warn'
-      } satisfies FocusInsight;
-    }
-
-    return {
-      key: 'AI LEARNING READINESS',
-      value: `COLLECTING ${learningReadinessPct}%`,
-      sub: `Need ${Math.max(0, 40 - learningSamples)} more samples to start model tuning`,
-      tone: 'neutral'
-    } satisfies FocusInsight;
-  });
-
-  const focusCards: FocusCard[] = $derived.by(() => [
-    { ...performanceInsight, primary: true },
-    winRateInsight,
-    actionInsight,
-    learningInsight
-  ]);
+  const showFocusInsights = $derived(shouldShowPassportFocusInsights(resolvedSamples, learningSamples));
+  const headerStats: PassportHeaderStat[] = $derived(buildPassportHeaderStats({
+    openPos,
+    effectiveHoldingCount: effectiveHoldings.length,
+    walletConnected: wallet.connected,
+    winRate: wr,
+    trackedCount,
+  }));
 
   let learningPanel = $state(createPassportLearningPanelState());
   const learningStatusRemote = $derived(learningPanel.statusRemote);
+  const focusCards: PassportFocusCard[] = $derived(buildPassportFocusCards({
+    closedCount: closed.length,
+    recordCount: records.length,
+    trackedCount: tracked.length,
+    expiredCount: expired.length,
+    openPos,
+    winRate: wr,
+    closedWinRate,
+    closedLosses,
+    avgWinPnl,
+    avgLossPnl,
+    longBiasPct,
+    learningStatusRemote,
+  }));
 
   const passportLearningPanelController = createPassportLearningPanelController({
     getState: () => learningPanel,
@@ -357,6 +149,20 @@
       longBiasPct,
     }),
   });
+  const passportHoldingsRuntime = createPassportHoldingsRuntime({
+    getState: () => holdingsPanel,
+    setState: (next) => {
+      holdingsPanel = next;
+    },
+    toHoldingAsset,
+  });
+
+  function syncHoldingsNow() {
+    void passportHoldingsRuntime.syncNow({
+      connected: wallet.connected,
+      address: wallet.address ?? null,
+    });
+  }
 
   // Avatar options
   const AVATAR_OPTIONS = [
@@ -381,43 +187,16 @@
     void updateUiStateApi({ passportActiveTab: tab });
   }
 
-  let holdingsSyncing = $state(false);
-  async function syncHoldingsNow() {
-    if (holdingsSyncing) return;
-    holdingsSyncing = true;
-    try {
-      await hydrateHoldings();
-    } finally {
-      holdingsSyncing = false;
-    }
-  }
-
   $effect(() => {
-    if (wallet.connected && wallet.address && wallet.address !== holdingsSyncAddress) {
-      holdingsSyncAddress = wallet.address;
-      void hydrateHoldings();
-    }
+    const connected = wallet.connected;
+    const address = wallet.address ?? null;
+    void passportHoldingsRuntime.syncForWallet({ connected, address });
   });
 
   $effect(() => {
-    if (!wallet.connected && holdingsSyncAddress !== null) {
-      holdingsSyncAddress = null;
-    }
-  });
-
-  // If wallet is disconnected after a live sync, clear cached live holdings
-  // to avoid showing stale wallet data from a previous connection.
-  $effect(() => {
-    if (
-      (!wallet.connected || !wallet.address) &&
-      (holdingsLoaded || liveHoldings.length > 0 || holdingsState === 'live')
-    ) {
-      holdingsSyncAddress = null;
-      liveHoldings = [];
-      holdingsLoaded = false;
-      holdingsState = 'fallback';
-      holdingsStatusMessage = 'Connect wallet to load live holdings.';
-    }
+    const connected = wallet.connected;
+    const address = wallet.address ?? null;
+    passportHoldingsRuntime.resetIfDisconnected({ connected, address });
   });
 
   onMount(() => {
@@ -436,7 +215,10 @@
     })();
 
     if (!wallet.connected || !wallet.address) {
-      void hydrateHoldings();
+      void passportHoldingsRuntime.hydrate({
+        connected: wallet.connected,
+        address: wallet.address ?? null,
+      });
     }
 
     void passportLearningPanelController.hydrate();
@@ -553,8 +335,8 @@
             </a>
           {/if}
           {#if activeTab === 'wallet' && wallet.connected}
-            <button class="qa-btn qa-sync" onclick={syncHoldingsNow} disabled={holdingsSyncing} data-gtm-area="passport" data-gtm-action="sync_holdings">
-              {holdingsSyncing ? 'SYNCING...' : 'SYNC HOLDINGS'}
+            <button class="qa-btn qa-sync" onclick={syncHoldingsNow} disabled={holdingsPanel.syncing} data-gtm-area="passport" data-gtm-action="sync_holdings">
+              {holdingsPanel.syncing ? 'SYNCING...' : 'SYNC HOLDINGS'}
             </button>
           {/if}
           {#if !wallet.connected}
@@ -648,9 +430,9 @@
             </section>
 
             <section class="content-panel">
-              <div class="holdings-status" class:live={holdingsState === 'live'}>
+              <div class="holdings-status" class:live={holdingsPanel.state === 'live'}>
                 <span class="hs-dot"></span>
-                <span>{holdingsStatusMessage}</span>
+                <span>{holdingsPanel.statusMessage}</span>
               </div>
 
               <div class="wallet-kpis">

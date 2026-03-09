@@ -20,6 +20,36 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ## Entries
 
+## [2026-03-09 17:18:06 +0900] FINISH passport-summary-holdings-runtime-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the canonical passport refactor correctly after syncing the branch, keep layout/position unchanged, and keep canonical docs/logs updated
+- What changed:
+  - Synced the local branch to origin with `git pull --ff-only` before continuing because remote already had two `passport` learning-panel commits on the same branch
+  - Added [passportSummaryViewModel.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/passport/passportSummaryViewModel.ts#L1)
+    - moved passport header stat and focus-strip interpretation out of the route
+    - centralized win-rate/risk/readiness judgment so `passport/+page.svelte` stops owning large `derived.by()` insight blocks
+  - Added [passportHoldingsRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/passport/passportHoldingsRuntime.ts#L1)
+    - moved wallet-holdings hydrate/sync/disconnect fallback lifecycle out of the route
+    - made route-owned holdings state a single runtime-backed object instead of multiple local atoms/effects
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - replaced inline focus/header derivation with summary view-model helpers
+    - replaced direct holdings fetch/effect logic with the holdings runtime
+    - kept existing tab order, layout, and visual positioning unchanged
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `passportSummaryViewModel.ts` and `passportHoldingsRuntime.ts` as canonical boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors, 4 warnings`)
+  - `npm run gate`: PASS
+  - warnings remain unrelated local WIP in [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L851)
+  - [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1): `2732` -> `2514` lines
+- Residual risks:
+  - `passport/+page.svelte` still owns large tab markup/CSS and should be split by tab host next
+  - unrelated auth/chart wallet WIP remains dirty in the worktree and must stay out of the passport commit
+- Commit / Push:
+  - pending
+- Status: DONE
+
 ## [2026-03-07 22:32:27 +0900] FINISH frontend-arena-view-props-dedupe-slice-20260307 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
