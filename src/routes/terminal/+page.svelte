@@ -42,7 +42,7 @@
 
   import { gameState } from '$lib/stores/gameState';
   import { livePrice, livePrices } from '$lib/stores/priceStore';
-  import { isCopyTradeOpen, copyTradeStore } from '$lib/stores/copyTradeStore';
+  import { isCopyTradeOpen, copyTradeStore, prefillFromScan } from '$lib/stores/copyTradeStore';
   import { formatTimeframeLabel } from '$lib/utils/timeframe';
   import { alertEngine } from '$lib/services/alertEngine';
   import { onMount, onDestroy, tick } from 'svelte';
@@ -177,6 +177,7 @@
     isTyping,
     latestScan,
     terminalScanning,
+    scanStale,
     chatTradeReady,
     chatSuggestedDir,
     activeTradeSetup,
@@ -196,7 +197,31 @@
     latestScan: terminalSessionRuntime.getLatestScan(),
     chatTradeReady: terminalSessionRuntime.getChatTradeReady(),
     chatSuggestedDir: terminalSessionRuntime.getChatSuggestedDir(),
+    scanStale: terminalSessionRuntime.getScanStale(),
   }));
+
+  // Mark scan as stale when pair or timeframe changes after a scan
+  let lastScanPair = $state('');
+  let lastScanTf = $state('');
+  $effect(() => {
+    const scan = $latestScan;
+    if (scan) {
+      lastScanPair = scan.pair;
+      lastScanTf = scan.timeframe ?? '';
+    }
+  });
+  $effect(() => {
+    const currentPair = $gameState.pair;
+    const currentTf = $gameState.timeframe;
+    if (lastScanPair && lastScanTf) {
+      const pairChanged = currentPair !== lastScanPair;
+      const tfChanged = currentTf !== lastScanTf;
+      if (pairChanged || tfChanged) {
+        terminalSessionRuntime.setScanStale(true);
+      }
+    }
+  });
+
   $effect(() => {
     $chatMessages;
     terminalMessageRuntime.trimChatMessages();
@@ -295,6 +320,12 @@
   const handleIntelGoTrade = () => {
     void terminalActionRuntime.triggerTradePlanFromChat('intel-panel');
   };
+
+  const handleCopyTradeFromVerdict = () => {
+    const scan = terminalSessionRuntime.getLatestScan();
+    if (!scan) return;
+    prefillFromScan(scan);
+  };
 </script>
 
 <div class="terminal-shell">
@@ -312,6 +343,8 @@
       mobileTab={$mobileTab}
       latestScan={$latestScan}
       terminalScanning={$terminalScanning}
+      scanStale={$scanStale}
+      onCopyTrade={handleCopyTradeFromVerdict}
       onSetMobileTab={setMobileTab}
       onScanStart={terminalScanRuntime.handleScanStart}
       onScanComplete={terminalScanRuntime.handleScanComplete}
@@ -336,6 +369,8 @@
       {sharedIntelPanelProps}
       latestScan={$latestScan}
       terminalScanning={$terminalScanning}
+      scanStale={$scanStale}
+      onCopyTrade={handleCopyTradeFromVerdict}
       {tickerSegments}
       {tickerSegmentClass}
       onScanStart={terminalScanRuntime.handleScanStart}
@@ -367,6 +402,8 @@
       {sharedIntelPanelProps}
       latestScan={$latestScan}
       terminalScanning={$terminalScanning}
+      scanStale={$scanStale}
+      onCopyTrade={handleCopyTradeFromVerdict}
       {tickerSegments}
       {tickerSegmentClass}
       onToggleLeft={toggleLeft}

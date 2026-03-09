@@ -32,6 +32,7 @@
     sharedIntelPanelProps: SharedIntelPanelProps;
     latestScan?: ScanIntelDetail | null;
     terminalScanning?: boolean;
+    scanStale?: boolean;
     tickerSegments?: string[];
     tickerSegmentClass?: (segment: string) => string;
     warRoomRef?: WarRoomHandle | null;
@@ -45,6 +46,7 @@
     onChartChatRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartCommunitySignal?: (detail: ChartCommunitySignal) => void;
     onClearTradeSetup?: () => void;
+    onCopyTrade?: () => void;
     onSendChat?: (detail: { text: string }) => void | Promise<void>;
     onGoToTrade?: () => void | Promise<void>;
     onStartDrag?: (target: DragTarget, event: MouseEvent) => void;
@@ -63,6 +65,7 @@
     sharedIntelPanelProps,
     latestScan = null,
     terminalScanning = false,
+    scanStale = false,
     tickerSegments = [],
     tickerSegmentClass = () => 'ticker-chip',
     warRoomRef = $bindable(null),
@@ -76,6 +79,7 @@
     onChartChatRequest = () => {},
     onChartCommunitySignal = () => {},
     onClearTradeSetup = () => {},
+    onCopyTrade,
     onSendChat = () => {},
     onGoToTrade = () => {},
     onStartDrag = () => {},
@@ -151,6 +155,7 @@
           bind:chartRef
           shellClass="chart-area chart-area-full"
           {sharedChartPanelProps}
+          {onCopyTrade}
           onChartScanRequest={onChartScanRequest}
           onChartChatRequest={onChartChatRequest}
           onChartCommunitySignal={onChartCommunitySignal}

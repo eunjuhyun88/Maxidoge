@@ -26,6 +26,7 @@
     sharedIntelPanelProps: SharedIntelPanelProps;
     latestScan?: ScanIntelDetail | null;
     terminalScanning?: boolean;
+    scanStale?: boolean;
     tickerSegments?: string[];
     tickerSegmentClass?: (segment: string) => string;
     warRoomRef?: WarRoomHandle | null;
@@ -37,6 +38,7 @@
     onChartChatRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartCommunitySignal?: (detail: ChartCommunitySignal) => void;
     onClearTradeSetup?: () => void;
+    onCopyTrade?: () => void;
     onSendChat?: (detail: { text: string }) => void | Promise<void>;
     onGoToTrade?: () => void | Promise<void>;
     onResizeIntelByWheel?: (event: WheelEvent) => void;
@@ -52,6 +54,7 @@
     sharedIntelPanelProps,
     latestScan = null,
     terminalScanning = false,
+    scanStale = false,
     tickerSegments = [],
     tickerSegmentClass = () => 'ticker-chip',
     warRoomRef = $bindable(null),
@@ -63,6 +66,7 @@
     onChartChatRequest = () => {},
     onChartCommunitySignal = () => {},
     onClearTradeSetup = () => {},
+    onCopyTrade,
     onSendChat = () => {},
     onGoToTrade = () => {},
     onResizeIntelByWheel = () => {},
@@ -103,6 +107,8 @@
       showVerdictOverlay
       {latestScan}
       {terminalScanning}
+      {scanStale}
+      {onCopyTrade}
       onVerdictTap={() => { warRoomDrawerOpen = true; }}
       onChartScanRequest={onChartScanRequest}
       onChartChatRequest={onChartChatRequest}

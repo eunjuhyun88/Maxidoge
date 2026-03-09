@@ -26,6 +26,7 @@
     mobileTab?: MobileTab;
     latestScan?: ScanIntelDetail | null;
     terminalScanning?: boolean;
+    scanStale?: boolean;
     warRoomRef?: WarRoomHandle | null;
     chartRef?: ChartPanelHandle | null;
     onSetMobileTab?: (tab: MobileTab) => void;
@@ -36,6 +37,7 @@
     onChartChatRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartCommunitySignal?: (detail: ChartCommunitySignal) => void;
     onClearTradeSetup?: () => void;
+    onCopyTrade?: () => void;
     onSendChat?: (detail: { text: string }) => void | Promise<void>;
     onGoToTrade?: () => void | Promise<void>;
     chatMessages?: ChatMsg[];
@@ -48,6 +50,7 @@
     mobileTab = 'chart',
     latestScan = null,
     terminalScanning = false,
+    scanStale = false,
     warRoomRef = $bindable(null),
     chartRef = $bindable(null),
     onSetMobileTab = () => {},
@@ -58,6 +61,7 @@
     onChartChatRequest = () => {},
     onChartCommunitySignal = () => {},
     onClearTradeSetup = () => {},
+    onCopyTrade,
     onSendChat = () => {},
     onGoToTrade = () => {},
     chatMessages = [],
@@ -93,6 +97,8 @@
           showVerdictOverlay
           {latestScan}
           {terminalScanning}
+          {scanStale}
+          {onCopyTrade}
           onVerdictTap={() => onSetMobileTab('warroom')}
           onChartScanRequest={onChartScanRequest}
           onChartChatRequest={onChartChatRequest}

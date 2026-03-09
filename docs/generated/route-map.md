@@ -18,7 +18,9 @@ Source of truth remains `src/routes/` plus canonical docs under `docs/`.
 | `/passport` | profile/progression surface | identity, stats, learning, history | `userProfileStore`, `userLifecycleStore`, `matchHistoryStore`, `quickTradeStore` | `docs/product-specs/passport.md` |
 | `/settings` | preferences surface | local settings and user controls | `gameState` and preference state | `docs/FRONTEND.md` |
 | `/signals` | signal discovery surface | community, track, convert flows | `gameState`, `matchHistoryStore`, signal state | `docs/product-specs/signals.md` |
+| `/signals/[postId]` | community signal detail route | single-post evidence, comments, and trade handoff | route-local post loader + `communityStore` reaction state | `docs/page-specs/signals-detail-page.md` |
 | `/terminal` | intel/action surface | scan, intel, action orchestration | route shell + `copyTradeStore`, `trackedSignalStore`, live prices | `docs/product-specs/terminal.md` |
+| `/creator/[userId]` | public creator profile route | creator context and recent community signals | route-local creator loader + community signal cards | `docs/page-specs/creator-page.md` |
 
 ## Route Shells and Global Entry
 

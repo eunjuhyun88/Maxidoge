@@ -68,5 +68,5 @@ Purpose:
 - Need Home/first-run semantics: open `docs/product-specs/home.md`, then `docs/page-specs/home-onboarding.md`
 - Need Terminal scan/intel behavior: open `docs/product-specs/terminal.md`
 - Need Agent roster semantics: open `docs/product-specs/agents.md`, then `docs/page-specs/agents-page.md`
-- Need secondary route behavior: open `docs/page-specs/settings-page.md`, `docs/page-specs/arena-war-page.md`, `docs/page-specs/arena-v2-page.md`, or `docs/page-specs/oracle-page.md`
+- Need secondary route behavior: open `docs/page-specs/settings-page.md`, `docs/page-specs/arena-war-page.md`, `docs/page-specs/arena-v2-page.md`, `docs/page-specs/oracle-page.md`, `docs/page-specs/signals-detail-page.md`, or `docs/page-specs/creator-page.md`
 - Need plan status: open `docs/PLANS.md` and `docs/exec-plans/index.md`

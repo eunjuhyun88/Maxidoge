@@ -12,6 +12,12 @@ import type {
   ReactCommunityPostRequest,
   CommunitySignalAttachment,
 } from '$lib/contracts/community';
+import type {
+  CommunityComment,
+  CommunityCommentListData,
+  CreateCommentData,
+  DeleteCommentData,
+} from '$lib/contracts/comment';
 import type { LegacySuccessEnvelope } from '$lib/contracts/http';
 
 export type SignalAttachment = CommunitySignalAttachment;
@@ -200,6 +206,89 @@ export async function unreactCommunityPostApi(
       }
     );
     return Number(result.likes ?? 0);
+  } catch {
+    return null;
+  }
+}
+
+// ─── Single Post (Detail) ───────────────────────────────────
+
+export async function fetchCommunityPostApi(
+  postId: string
+): Promise<ApiCommunityPost | null> {
+  if (!canUseBrowserFetch()) return null;
+  try {
+    const result = await requestJson<LegacySuccessEnvelope<'post', LegacyCommunityPostPayload>>(
+      `/api/community/posts/${postId}`,
+      { method: 'GET' }
+    );
+    return normalizeCommunityPost(result.post);
+  } catch {
+    return null;
+  }
+}
+
+// ─── Comments ───────────────────────────────────────────────
+
+export type ApiComment = CommunityComment;
+
+export async function fetchCommentsApi(
+  postId: string,
+  params?: { limit?: number; offset?: number }
+): Promise<CommunityCommentListData | null> {
+  if (!canUseBrowserFetch()) return null;
+  try {
+    const search = new URLSearchParams();
+    if (params?.limit != null) search.set('limit', String(params.limit));
+    if (params?.offset != null) search.set('offset', String(params.offset));
+    const qs = search.toString();
+    const url = qs
+      ? `/api/community/posts/${postId}/comments?${qs}`
+      : `/api/community/posts/${postId}/comments`;
+
+    const result = await requestJson<CommunityCommentListData>(
+      url,
+      { method: 'GET' }
+    );
+    return {
+      comments: Array.isArray(result.comments) ? result.comments : [],
+      total: Number(result.total ?? 0),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function createCommentApi(
+  postId: string,
+  body: string
+): Promise<CreateCommentData | null> {
+  if (!canUseBrowserFetch()) return null;
+  try {
+    const result = await requestJson<CreateCommentData>(
+      `/api/community/posts/${postId}/comments`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      }
+    );
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteCommentApi(
+  postId: string,
+  commentId: string
+): Promise<Pick<DeleteCommentData, 'commentCount'> | null> {
+  if (!canUseBrowserFetch()) return null;
+  try {
+    const result = await requestJson<DeleteCommentData>(
+      `/api/community/posts/${postId}/comments/${commentId}`,
+      { method: 'DELETE' }
+    );
+    return { commentCount: result.commentCount };
   } catch {
     return null;
   }

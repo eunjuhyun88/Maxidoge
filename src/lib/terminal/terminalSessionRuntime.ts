@@ -10,6 +10,7 @@ export function createTerminalSessionRuntime() {
   const isTypingStore = writable(false);
   const latestScanStore = writable<ScanIntelDetail | null>(null);
   const terminalScanningStore = writable(false);
+  const scanStaleStore = writable(false);
   const chatTradeReadyStore = writable(false);
   const chatSuggestedDirStore = writable<ChatTradeDirection>('LONG');
   const chatConnectionStatusStore = writable<TerminalChatConnectionStatus>('connected');
@@ -29,6 +30,7 @@ export function createTerminalSessionRuntime() {
 
   function setLatestScan(detail: ScanIntelDetail | null) {
     latestScanStore.set(detail);
+    if (detail) scanStaleStore.set(false);
   }
 
   function getTerminalScanning() {
@@ -37,6 +39,14 @@ export function createTerminalSessionRuntime() {
 
   function setTerminalScanning(scanning: boolean) {
     terminalScanningStore.set(scanning);
+  }
+
+  function getScanStale() {
+    return get(scanStaleStore);
+  }
+
+  function setScanStale(stale: boolean) {
+    scanStaleStore.set(stale);
   }
 
   function getChatTradeReady() {
@@ -86,16 +96,19 @@ export function createTerminalSessionRuntime() {
     getChatTradeReady,
     getIsTyping,
     getLatestScan,
+    getScanStale,
     getTerminalScanning,
     hasLatestScan,
     isTyping: readonly(isTypingStore),
     latestScan: readonly(latestScanStore),
+    scanStale: readonly(scanStaleStore),
     setActiveTradeSetup,
     setChatConnectionStatus,
     setChatSuggestedDir,
     setChatTradeReady,
     setIsTyping,
     setLatestScan,
+    setScanStale,
     setTerminalScanning,
     terminalScanning: readonly(terminalScanningStore),
   };

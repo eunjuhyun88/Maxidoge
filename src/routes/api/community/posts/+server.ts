@@ -5,52 +5,7 @@ import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt } from '$lib/server/apiValidation';
 import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
 import { errorContains } from '$lib/utils/errorUtils';
-
-interface PostRow {
-  id: string;
-  user_id: string | null;
-  author: string;
-  avatar: string;
-  avatar_color: string;
-  body: string;
-  signal: 'long' | 'short' | null;
-  likes: number;
-  created_at: string;
-  signal_attachment: Record<string, unknown> | null;
-  comment_count: number;
-  copy_count: number;
-  allow_copy_trade: boolean;
-  user_reacted: boolean;
-}
-
-function mapRow(row: PostRow) {
-  const att = row.signal_attachment;
-  return {
-    id: row.id,
-    userId: row.user_id,
-    author: row.author,
-    avatar: row.avatar,
-    avatarColor: row.avatar_color,
-    body: row.body,
-    signal: row.signal,
-    likes: Number(row.likes ?? 0),
-    createdAt: new Date(row.created_at).getTime(),
-    signalAttachment: att ? {
-      pair: String(att.pair ?? ''),
-      dir: String(att.dir ?? 'LONG') as 'LONG' | 'SHORT',
-      entry: Number(att.entry ?? 0),
-      tp: Number(att.tp ?? 0),
-      sl: Number(att.sl ?? 0),
-      conf: Number(att.conf ?? 50),
-      timeframe: att.timeframe ? String(att.timeframe) : undefined,
-      reason: att.reason ? String(att.reason) : undefined,
-    } : null,
-    userReacted: Boolean(row.user_reacted),
-    commentCount: Number(row.comment_count ?? 0),
-    copyCount: Number(row.copy_count ?? 0),
-    allowCopyTrade: Boolean(row.allow_copy_trade),
-  };
-}
+import { type PostRow, mapPostRow, POST_SELECT_COLUMNS } from '$lib/server/communityMapping';
 
 export const GET: RequestHandler = async ({ url, cookies }) => {
   try {
@@ -94,9 +49,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     const rows = await query<PostRow>(
       `
         SELECT
-          p.id, p.user_id, p.author, p.avatar, p.avatar_color, p.body,
-          p.signal, p.likes, p.created_at,
-          p.signal_attachment, p.comment_count, p.copy_count, p.allow_copy_trade,
+          ${POST_SELECT_COLUMNS},
           CASE WHEN r.id IS NOT NULL THEN true ELSE false END AS user_reacted
         FROM community_posts p
         LEFT JOIN community_post_reactions r
@@ -112,7 +65,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     return json({
       success: true,
       total: Number(total.rows[0]?.total ?? '0'),
-      records: rows.rows.map(mapRow),
+      records: rows.rows.map(mapPostRow),
       pagination: { limit, offset },
     });
   } catch (error: unknown) {
@@ -220,7 +173,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       [user.id, insert.rows[0].id, JSON.stringify({ signal, hasAttachment: !!signalAttachment })]
     ).catch(() => undefined);
 
-    return json({ success: true, post: mapRow(insert.rows[0]) });
+    return json({ success: true, post: mapPostRow(insert.rows[0]) });
   } catch (error: unknown) {
     if (isRequestBodyTooLargeError(error)) {
       return json({ error: 'Request body too large' }, { status: 413 });

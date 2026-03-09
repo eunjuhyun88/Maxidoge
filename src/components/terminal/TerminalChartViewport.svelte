@@ -16,8 +16,10 @@
     areaClass?: string;
     latestScan?: ScanIntelDetail | null;
     terminalScanning?: boolean;
+    scanStale?: boolean;
     showVerdictOverlay?: boolean;
     onVerdictTap?: () => void;
+    onCopyTrade?: () => void;
     onChartScanRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartChatRequest?: (detail: TerminalChartRequestDetail) => void;
     onChartCommunitySignal?: (detail: ChartCommunitySignal) => void;
@@ -32,8 +34,10 @@
     areaClass = '',
     latestScan = null,
     terminalScanning = false,
+    scanStale = false,
     showVerdictOverlay = false,
     onVerdictTap = () => {},
+    onCopyTrade,
     onChartScanRequest = () => {},
     onChartChatRequest = () => {},
     onChartCommunitySignal = () => {},
@@ -71,7 +75,9 @@
     <ChartVerdictOverlay
       verdict={latestScan}
       scanning={terminalScanning}
+      stale={scanStale}
       onTap={onVerdictTap}
+      {onCopyTrade}
     />
   {/if}
 </div>

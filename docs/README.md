@@ -76,7 +76,8 @@ Purpose:
 | Terminal / Intel / Scan | `docs/product-specs/terminal.md`, `docs/FRONTEND.md`, `docs/terminal-refactor-master-plan-2026-03-06.md`, `docs/TERMINAL_SCAN_E2E_SPEC.md` | Surface spec first, then implementation plan and API flow. |
 | Arena / Arena War / ORPO | `docs/product-specs/arena.md`, `docs/design-docs/arena-domain-model.md`, `docs/design-docs/learning-loop.md`, `docs/generated/game-record-schema.md` | Use upstream unified design only when local docs are insufficient. |
 | Passport / profile / learning | `docs/product-specs/passport.md`, `docs/FRONTEND.md`, `docs/PASSPORT_BACKEND_ARCHITECTURE_v1_2026-02-25.md`, `docs/API_CONTRACT.md` | Use when touching profile authority or learning pipeline flows. |
-| Signals / copy trade / community | `docs/product-specs/signals.md`, `docs/API_CONTRACT.md`, `docs/community-chart-signal-copytrade-flow-2026-03-06.md` | Object-model and conversion flow first. |
+| Signals / copy trade / community | `docs/product-specs/signals.md`, `docs/page-specs/signals-page.md`, `docs/API_CONTRACT.md`, `docs/community-chart-signal-copytrade-flow-2026-03-06.md` | Object-model and conversion flow first. |
+| Signal detail / comments / creator drilldown | `docs/page-specs/signals-detail-page.md`, `docs/page-specs/creator-page.md`, `docs/product-specs/signals.md`, `docs/API_CONTRACT.md` | Use this before opening the new social detail routes in code. |
 | Agent roster / oracle split | `docs/page-specs/agents-page.md`, `docs/page-specs/oracle-page.md`, `docs/page-specs/signals-page.md` | `/agents` is the collection route; `/oracle` is a redirect shim; the embedded oracle leaderboard lives under `/signals?view=ai`. |
 | API / data / providers | `docs/API_CONTRACT.md`, `docs/generated/db-schema.md`, `docs/database-design.md`, `docs/BACKEND_SECURITY_REVIEW_2026-02-25.md` | Contract first, then data/security constraints. |
 | Routes / stores / API surface inventory | `docs/generated/route-map.md`, `docs/generated/store-authority-map.md`, `docs/generated/api-group-map.md` | Fast repo-local inventory for navigation and authority checks. |
@@ -95,6 +96,7 @@ Purpose:
 | Arena v2 route shell | `docs/page-specs/arena-v2-page.md`, `docs/product-specs/arena.md`, `docs/page-specs/arena-page.md` |
 | Profile, badges, quick trade authority | `docs/product-specs/passport.md`, `docs/page-specs/passport-page.md`, `docs/PASSPORT_BACKEND_ARCHITECTURE_v1_2026-02-25.md`, `docs/API_CONTRACT.md` |
 | Signals, copy-trade, community actions | `docs/product-specs/signals.md`, `docs/page-specs/signals-page.md`, `docs/API_CONTRACT.md`, `docs/community-chart-signal-copytrade-flow-2026-03-06.md` |
+| Signal detail, comments, creator profile | `docs/page-specs/signals-detail-page.md`, `docs/page-specs/creator-page.md`, `docs/product-specs/signals.md`, `docs/API_CONTRACT.md` |
 | Agent collection, roster stats, or oracle confusion | `docs/page-specs/agents-page.md`, `docs/page-specs/signals-page.md`, `docs/generated/store-authority-map.md` |
 | Legacy `/oracle` links or redirect behavior | `docs/page-specs/oracle-page.md`, `docs/page-specs/signals-page.md`, `docs/product-specs/signals.md` |
 | Agent collection and learning-memory surface | `docs/product-specs/agents.md`, `docs/page-specs/agents-page.md`, `docs/page-specs/signals-page.md` |

@@ -8,6 +8,7 @@
     onCopyTrade?: (attachment: SignalAttachment) => void;
     onTrack?: (attachment: SignalAttachment) => void;
     onClick?: (postId: string) => void;
+    onAuthorClick?: (userId: string) => void;
     compact?: boolean;
   }
 
@@ -17,6 +18,7 @@
     onCopyTrade,
     onTrack,
     onClick,
+    onAuthorClick,
     compact = false,
   }: Props = $props();
 
@@ -74,7 +76,14 @@
         {post.avatar}
       </div>
       <div class="author-col">
-        <span class="author">{post.author}</span>
+        {#if onAuthorClick && post.userId}
+          <button class="author clickable" onclick={(event) => {
+            event.stopPropagation();
+            onAuthorClick(post.userId!);
+          }}>{post.author}</button>
+        {:else}
+          <span class="author">{post.author}</span>
+        {/if}
         {#if post.signal}
           <span class="dir-pill" class:long={post.signal === 'long'} class:short={post.signal === 'short'}>
             {post.signal === 'long' ? '▲' : '▼'} {post.signal.toUpperCase()}
@@ -251,7 +260,17 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: default;
+    text-align: left;
   }
+  .author.clickable {
+    cursor: pointer;
+    transition: color var(--sc-duration-fast);
+  }
+  .author.clickable:hover { color: var(--sc-accent); }
   .dir-pill {
     font-family: var(--sc-font-mono);
     font-size: var(--sc-fs-2xs);

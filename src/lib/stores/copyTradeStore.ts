@@ -404,6 +404,45 @@ function createCopyTradeStore() {
 
 export const copyTradeStore = createCopyTradeStore();
 
+/**
+ * Prefill CopyTrade draft from a ScanIntelDetail.
+ * Called when user clicks "COPY" on ChartVerdictOverlay after a scan.
+ */
+export function prefillFromScan(scan: {
+  pair: string;
+  consensus: 'long' | 'short' | 'neutral';
+  avgConfidence: number;
+  signals: Array<{ vote: string; conf: number; entry: number; tp: number; sl: number; name: string; pair: string }>;
+  highlights?: Array<{ agent: string; vote: string; conf: number }>;
+}): void {
+  const dir = scan.consensus === 'short' ? 'SHORT' : 'LONG';
+  const aligned = scan.signals.filter((s) => s.vote === scan.consensus);
+  const pool = aligned.length > 0 ? aligned : scan.signals;
+
+  const avgEntry = pool.reduce((sum, s) => sum + s.entry, 0) / pool.length;
+  const avgTp = pool.reduce((sum, s) => sum + s.tp, 0) / pool.length;
+  const avgSl = pool.reduce((sum, s) => sum + s.sl, 0) / pool.length;
+
+  const evidence: CopyTradeEvidenceItem[] = pool.map((s) => ({
+    icon: '🤖',
+    name: s.name,
+    text: `${s.vote.toUpperCase()} ${s.conf}%`,
+    conf: s.conf,
+    color: s.vote === 'long' ? '#00ff88' : s.vote === 'short' ? '#ff4060' : '#787b86',
+  }));
+
+  copyTradeStore.openFromSignal({
+    pair: scan.pair,
+    dir,
+    entry: normalizeSignalPrice(avgEntry),
+    tp: normalizeSignalPrice(avgTp),
+    sl: normalizeSignalPrice(avgSl),
+    conf: Math.round(scan.avgConfidence),
+    source: 'AI SCAN',
+    reason: `${dir} consensus from ${pool.length} agent${pool.length > 1 ? 's' : ''}`,
+  });
+}
+
 export const isCopyTradeOpen = derived({ subscribe: copyTradeStore.subscribe }, ($state) => $state.isOpen);
 export const copyTradeStep = derived({ subscribe: copyTradeStore.subscribe }, ($state) => $state.step);
 export const copyTradeDraft = derived({ subscribe: copyTradeStore.subscribe }, ($state) => $state.draft);

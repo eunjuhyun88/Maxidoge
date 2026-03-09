@@ -20,7 +20,7 @@ Source of truth remains `src/routes/api/**` and `docs/API_CONTRACT.md`.
 | Passport Learning | learning datasets, evals, and jobs | `/api/profile/passport/learning/datasets`, `/api/profile/passport/learning/datasets/build`, `/api/profile/passport/learning/evals`, `/api/profile/passport/learning/reports` | 8 |
 | User Profile | profile, progression, preferences, and agent stats | `/api/agents/stats`, `/api/agents/stats/[agentId]`, `/api/portfolio/holdings`, `/api/preferences` | 7 |
 | Predictions | prediction positions and voting | `/api/predictions`, `/api/predictions/positions/[id]/close`, `/api/predictions/positions/open`, `/api/predictions/vote` | 4 |
-| Community | activity, posts, and reactions | `/api/activity`, `/api/activity/reaction`, `/api/community/posts`, `/api/community/posts/[id]/react` | 4 |
+| Community | activity, posts, and reactions | `/api/activity`, `/api/activity/reaction`, `/api/community/posts`, `/api/community/posts/[id]` | 8 |
 | Copy Trading | publish and run tracking | `/api/copy-trades/publish`, `/api/copy-trades/runs`, `/api/copy-trades/runs/[id]` | 3 |
 | Tournaments | tournament lifecycle and bracket access | `/api/tournaments/[id]/bracket`, `/api/tournaments/[id]/register`, `/api/tournaments/active` | 3 |
 | Notifications | notification lifecycle | `/api/notifications`, `/api/notifications/[id]`, `/api/notifications/read` | 3 |
@@ -144,7 +144,11 @@ Source of truth remains `src/routes/api/**` and `docs/API_CONTRACT.md`.
 - `/api/activity`
 - `/api/activity/reaction`
 - `/api/community/posts`
+- `/api/community/posts/[id]`
+- `/api/community/posts/[id]/comments`
+- `/api/community/posts/[id]/comments/[commentId]`
 - `/api/community/posts/[id]/react`
+- `/api/creator/[userId]`
 
 ### Copy Trading
 - `/api/copy-trades/publish`

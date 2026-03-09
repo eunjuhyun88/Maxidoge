@@ -18,6 +18,7 @@ export type { SignalAttachment } from '$lib/api/communityApi';
 
 export interface CommunityPost {
   id: string;
+  userId: string | null;
   author: string;
   avatar: string;
   avatarColor: string;
@@ -48,6 +49,7 @@ export const communityPosts = derived(communityStore, $s => $s.posts);
 function mapApiPost(post: ApiCommunityPost): CommunityPost {
   return {
     id: post.id,
+    userId: post.userId ?? null,
     author: post.author,
     avatar: post.avatar || '🐕',
     avatarColor: post.avatarColor || '#E8967D',
@@ -144,6 +146,7 @@ export async function addCommunityPost(
   const tempId = `tmp-${crypto.randomUUID()}`;
   const post: CommunityPost = {
     id: tempId,
+    userId: null,
     author: 'You',
     avatar: '🐕',
     avatarColor: '#E8967D',

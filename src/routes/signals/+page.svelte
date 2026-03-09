@@ -1,9 +1,7 @@
 <script lang="ts">
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
-  import { matchHistoryStore } from '$lib/stores/matchHistoryStore';
   import { livePrices } from '$lib/stores/priceStore';
-  import { openTrades } from '$lib/stores/quickTradeStore';
-  import { activeSignals, trackSignal } from '$lib/stores/trackedSignalStore';
+  import { trackSignal } from '$lib/stores/trackedSignalStore';
   import { incrementTrackedSignals } from '$lib/stores/userProfileProjectionStore';
   import {
     communityPosts,
@@ -17,19 +15,12 @@
   import { notifySignalTracked } from '$lib/stores/notificationEvents';
   import {
     buildAgentSignals,
-    buildArenaSignals,
-    buildTrackedSignals,
-    buildTradeSignals,
   } from '$lib/signals/communitySignals';
   import EmptyState from '../../components/shared/EmptyState.svelte';
   import ContextBanner from '../../components/shared/ContextBanner.svelte';
   import OracleLeaderboard from '../../components/community/OracleLeaderboard.svelte';
   import SignalPostCard from '../../components/community/SignalPostCard.svelte';
   // SignalPostForm removed — signal creation happens from terminal only
-
-  const records = $derived($matchHistoryStore.records);
-  const opens = $derived($openTrades);
-  const tracked = $derived($activeSignals);
 
   // Signal counts (used only for header stats)
   const agentSignals = $derived(buildAgentSignals(AGDEFS, { livePrices: $livePrices }));
@@ -105,15 +96,6 @@
     { key: 'ai', icon: '🤖', label: 'AI 시그널', count: agentSignals.length },
   ]);
 
-  /** render shared card list (DRY) */
-  function renderCardProps(post: (typeof $communityPosts)[number]) {
-    return {
-      post,
-      onReact: (id: string) => toggleReaction(id),
-      onCopyTrade: (att: SignalAttachment) => handleCopyTrade(att),
-      onTrack: (att: SignalAttachment) => handleTrack(att),
-    };
-  }
 </script>
 
 <div class="page">
@@ -192,6 +174,8 @@
                 onReact={(id) => toggleReaction(id)}
                 onCopyTrade={(att) => handleCopyTrade(att)}
                 onTrack={(att) => handleTrack(att)}
+                onClick={(id) => goto(`/signals/${id}`)}
+                onAuthorClick={(uid) => goto(`/creator/${uid}`)}
               />
             {/each}
           </div>
@@ -220,6 +204,8 @@
                 onReact={(id) => toggleReaction(id)}
                 onCopyTrade={(att) => handleCopyTrade(att)}
                 onTrack={(att) => handleTrack(att)}
+                onClick={(id) => goto(`/signals/${id}`)}
+                onAuthorClick={(uid) => goto(`/creator/${uid}`)}
               />
             {/each}
           </div>

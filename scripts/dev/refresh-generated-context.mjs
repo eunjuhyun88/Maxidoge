@@ -94,11 +94,25 @@ const routeMeta = [
     deepDocs: '`docs/product-specs/signals.md`'
   },
   {
+    route: '/signals/[postId]',
+    role: 'community signal detail route',
+    primaryConcern: 'single-post evidence, comments, and trade handoff',
+    keyState: 'route-local post loader + `communityStore` reaction state',
+    deepDocs: '`docs/page-specs/signals-detail-page.md`'
+  },
+  {
     route: '/terminal',
     role: 'intel/action surface',
     primaryConcern: 'scan, intel, action orchestration',
     keyState: 'route shell + `copyTradeStore`, `trackedSignalStore`, live prices',
     deepDocs: '`docs/product-specs/terminal.md`'
+  },
+  {
+    route: '/creator/[userId]',
+    role: 'public creator profile route',
+    primaryConcern: 'creator context and recent community signals',
+    keyState: 'route-local creator loader + community signal cards',
+    deepDocs: '`docs/page-specs/creator-page.md`'
   }
 ];
 
@@ -260,7 +274,8 @@ function groupApiRoute(route) {
   if (route === '/api/predictions' || route.startsWith('/api/predictions/')) return 'Predictions';
   if (
     route.startsWith('/api/activity') ||
-    route.startsWith('/api/community/')
+    route.startsWith('/api/community/') ||
+    route.startsWith('/api/creator/')
   ) return 'Community';
   if (route.startsWith('/api/copy-trades/')) return 'Copy Trading';
   if (route.startsWith('/api/tournaments/')) return 'Tournaments';

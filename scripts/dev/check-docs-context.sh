@@ -113,6 +113,8 @@ REQUIRED_FILES=(
 	"docs/page-specs/terminal-page.md"
 	"docs/page-specs/arena-page.md"
 	"docs/page-specs/signals-page.md"
+	"docs/page-specs/signals-detail-page.md"
+	"docs/page-specs/creator-page.md"
 	"docs/page-specs/passport-page.md"
 	"docs/page-specs/agents-page.md"
 	"docs/page-specs/oracle-page.md"

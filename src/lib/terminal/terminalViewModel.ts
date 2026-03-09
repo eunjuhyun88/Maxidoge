@@ -64,8 +64,9 @@ export function deriveTerminalDecisionState(params: {
   latestScan: ScanIntelDetail | null;
   chatTradeReady: boolean;
   chatSuggestedDir: ChatTradeDirection;
+  scanStale?: boolean;
 }): TerminalDecisionState {
-  const { terminalScanning, latestScan, chatTradeReady, chatSuggestedDir } = params;
+  const { terminalScanning, latestScan, chatTradeReady, chatSuggestedDir, scanStale } = params;
 
   if (terminalScanning) {
     return {
@@ -85,6 +86,17 @@ export function deriveTerminalDecisionState(params: {
       confidenceLabel: '--',
       primaryLabel: 'RUN FIRST SCAN',
       primaryHint: 'Scan current pair to generate agent consensus',
+      tradeReady: false,
+    };
+  }
+
+  if (scanStale) {
+    return {
+      directionLabel: latestScan.consensus.toUpperCase(),
+      directionClass: latestScan.consensus,
+      confidenceLabel: `${Math.round(latestScan.avgConfidence)}%`,
+      primaryLabel: 'RESCAN',
+      primaryHint: 'Scan result is stale — timeframe or pair changed since last scan',
       tradeReady: false,
     };
   }
