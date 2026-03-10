@@ -61,7 +61,7 @@ export function createChartActionRuntime(
   let signalAssemblyModulePromise:
     | Promise<
         [
-          typeof import('$lib/chart/chartTradePlanner'),
+          typeof import('$lib/chart/chartCommunitySignalDraft'),
           typeof import('$lib/terminal/signalEvidence'),
         ]
       >
@@ -70,7 +70,7 @@ export function createChartActionRuntime(
   function loadSignalAssemblyModules() {
     if (!signalAssemblyModulePromise) {
       signalAssemblyModulePromise = Promise.all([
-        import('$lib/chart/chartTradePlanner'),
+        import('$lib/chart/chartCommunitySignalDraft'),
         import('$lib/terminal/signalEvidence'),
       ]);
     }

@@ -6948,3 +6948,35 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - Vite still reports the expected dynamic-import note for [chartTradePlanner.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartTradePlanner.ts#L1) because it is dynamically imported by [chartActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartActionRuntime.ts#L1) and also statically imported by other chart runtimes
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE
+
+## [2026-03-10 23:56:00 +0900] FINISH chart-signal-draft-lazy-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing chart runtime weight, preserve behavior, and turn the chart-origin community signal draft path into a real lazy boundary without touching unrelated route WIP
+- What changed:
+  - Added [chartTradePlannerMath.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartTradePlannerMath.ts#L1)
+    - extracted shared reward-ratio and risk-percent math out of the larger planner file
+    - kept the math layer pure so static trade-plan code and lazy signal-draft code can share it without re-coupling the bigger planner module
+  - Added [chartCommunitySignalDraft.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartCommunitySignalDraft.ts#L1)
+    - moved `buildCommunitySignalDraft(...)` into a dedicated chart-origin signal payload module
+    - kept the draft assembly behind the publish action path instead of the base support runtime import chain
+  - Updated [chartTradePlanner.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartTradePlanner.ts#L1)
+    - removed the community signal draft export
+    - narrowed the file to line-entry/trade-plan math and planned-order assembly only
+  - Updated [chartActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartActionRuntime.ts#L1)
+    - rewired the lazy publish path to import `chartCommunitySignalDraft.ts` instead of the larger `chartTradePlanner.ts`
+    - preserved the existing evidence assembly and community signal emit contract
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the new trade-planner math boundary and the chart signal-draft lazy path as canonical chart rules
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [chartCommunitySignalDraft.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartCommunitySignalDraft.js) `1.94 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `65.95 kB`
+    - [ChartAgentSurface.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartAgentSurface.js) `39.72 kB`
+- Residual risks:
+  - the chart-side dynamic import note for [chartTradePlanner.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartTradePlanner.ts#L1) is gone, but auth-side reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
+  - `chartPanelSupportRuntime.js` is lighter, but it is still the larger remaining chart runtime hotspot
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
