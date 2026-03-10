@@ -41,7 +41,9 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1) still owns the large runtime-bundle option builder and controller option wiring
   - this slice moved mount-state responsibility out of the component, but it did not yet reduce the runtime-bundle builder surface
 - Commit / Push:
-  - pending
+  - `610e376` `refactor(chart): split mount state apply`
+  - `799d5e4` `docs: record chart mount state push`
+  - pushed to `origin/codex/terminal-uiux-gtm-wip`
 - Status: DONE
 
 ## [2026-03-10 20:15:27 +0900] FINISH chart-client-runtime-assembly-20260310 (frontend)
