@@ -18,20 +18,9 @@ import {
   type TradePreviewDraft,
   type TrendlineDraft,
 } from './chartDrawingSession';
-import type {
-  DrawingManager,
-  DrawingManagerCallbacks,
-  DrawingData,
-} from '$lib/chart/primitives/drawingManager';
+import type { DrawingData } from '$lib/chart/primitives/drawingManager';
 import type { DrawingStyleOptions } from '$lib/chart/primitives/drawingPrimitiveTypes';
-
-type DrawingManagerModule = typeof import('$lib/chart/primitives/drawingManager');
-type DrawingPersistenceModule = typeof import('$lib/chart/primitives/drawingPersistence');
-type DrawingAutoSaver = {
-  trigger: () => void;
-  flush: () => void;
-  dispose: () => void;
-};
+import { createChartDrawingPersistenceRuntime } from './chartDrawingPersistenceRuntime';
 
 const PRIMITIVE_DRAWING_MODES: Set<DrawingMode> = new Set([
   'none',
@@ -149,53 +138,17 @@ export function createChartDrawingRuntime(
 ): ChartDrawingRuntimeController {
   let globalDrawingMouseUpBound = false;
   let drawRaf: number | null = null;
-  let drawingManagerModulePromise: Promise<DrawingManagerModule> | null = null;
-  let drawingPersistenceModulePromise: Promise<DrawingPersistenceModule> | null = null;
-  let preloadPromise: Promise<void> | null = null;
-
-  // ── Persistence: auto-save on mutation, load on pair/timeframe change ──
-  let lastPair = '';
-  let lastTimeframe = '';
-  let autoSaver: DrawingAutoSaver | null = null;
-
-  // ── DrawingManager (lazy-initialized) ──
-  let drawingManager: DrawingManager | null = null;
-
-  async function loadDrawingManagerModule() {
-    if (!drawingManagerModulePromise) {
-      drawingManagerModulePromise = import('$lib/chart/primitives/drawingManager');
-    }
-
-    return await drawingManagerModulePromise;
-  }
-
-  async function loadDrawingPersistenceModule() {
-    if (!drawingPersistenceModulePromise) {
-      drawingPersistenceModulePromise = import('$lib/chart/primitives/drawingPersistence');
-    }
-
-    return await drawingPersistenceModulePromise;
-  }
-
-  function ensureDrawingManager(): DrawingManager | null {
-    return drawingManager;
-  }
-
-  async function ensureDrawingManagerReady(): Promise<DrawingManager | null> {
-    if (drawingManager) return drawingManager;
-    const managerModule = await loadDrawingManagerModule();
-    const chart = options.getChart();
-    const series = options.getSeries();
-    if (!chart || !series) return null;
-
-    const callbacks: DrawingManagerCallbacks = {
+  const persistenceRuntime = createChartDrawingPersistenceRuntime({
+    getPair: () => options.getPair(),
+    getTimeframe: () => options.getTimeframe(),
+    getChart: () => options.getChart(),
+    getSeries: () => options.getSeries(),
+    createDrawingManagerCallbacks: () => ({
       onDrawingModeChanged: (mode) => {
         options.setDrawingModeState(mode);
       },
       onDrawingsChanged: (count) => {
         options.setPrimitiveDrawingCount(count);
-        // Trigger debounced auto-save on every mutation
-        autoSaver?.trigger();
       },
       onSelectedChanged: (id) => {
         options.setSelectedDrawingId(id);
@@ -203,59 +156,19 @@ export function createChartDrawingRuntime(
       getDrawingColor: () => options.getChartTheme().draw,
       getKlines: () => options.getKlines(),
       onContextMenu: options.onContextMenu,
-    };
+    }),
+  });
 
-    drawingManager = new managerModule.DrawingManager(chart, series, callbacks);
-
-    if (!autoSaver) {
-      const persistenceModule = await loadDrawingPersistenceModule();
-      autoSaver = persistenceModule.createDrawingAutoSaver(
-        () => options.getPair(),
-        () => options.getTimeframe(),
-        () => drawingManager?.exportDrawings() ?? [],
-        500,
-      );
-    }
-
-    return drawingManager;
+  function ensureDrawingManager() {
+    return persistenceRuntime.getDrawingManager();
   }
 
   async function preload() {
-    if (!preloadPromise) {
-      preloadPromise = (async () => {
-        await ensureDrawingManagerReady();
-        await syncPairTimeframe();
-      })();
-    }
-    await preloadPromise;
+    await persistenceRuntime.preload();
   }
 
-  /** Load saved drawings when pair or timeframe changes */
   async function syncPairTimeframe(): Promise<void> {
-    const pair = options.getPair();
-    const timeframe = options.getTimeframe();
-    if (pair === lastPair && timeframe === lastTimeframe) return;
-
-    // Flush pending saves for the old pair/timeframe
-    if (lastPair && lastTimeframe && drawingManager) {
-      autoSaver?.flush();
-    }
-
-    lastPair = pair;
-    lastTimeframe = timeframe;
-
-    const persistenceModule = await loadDrawingPersistenceModule();
-    const hasPersistedDrawings = persistenceModule.hasDrawings(pair, timeframe);
-    const dm = drawingManager ?? (hasPersistedDrawings ? await ensureDrawingManagerReady() : null);
-    if (!dm) return;
-
-    dm.clearAllDrawings();
-    if (hasPersistedDrawings) {
-      const saved = persistenceModule.loadDrawings(pair, timeframe);
-      if (saved.length > 0) {
-        dm.importDrawings(saved);
-      }
-    }
+    await persistenceRuntime.syncPairTimeframe();
   }
 
   function getCanvasRect() {
@@ -578,19 +491,12 @@ export function createChartDrawingRuntime(
   }
 
   function dispose() {
-    // Flush any pending auto-save before teardown
-    autoSaver?.flush();
-    autoSaver?.dispose();
-    autoSaver = null;
     if (drawRaf) {
       cancelAnimationFrame(drawRaf);
       drawRaf = null;
     }
     unbindGlobalDrawingMouseUp();
-    if (drawingManager) {
-      drawingManager.dispose();
-      drawingManager = null;
-    }
+    persistenceRuntime.dispose();
   }
 
   function toggleMagnet() {
@@ -601,7 +507,7 @@ export function createChartDrawingRuntime(
   }
 
   function getMagnetEnabled(): boolean {
-    return drawingManager?.magnetEnabled ?? true;
+    return persistenceRuntime.getDrawingManager()?.magnetEnabled ?? true;
   }
 
   function undo() {
@@ -630,15 +536,15 @@ export function createChartDrawingRuntime(
   }
 
   function isSelectedLocked(): boolean {
-    return drawingManager?.isSelectedLocked() ?? false;
+    return persistenceRuntime.getDrawingManager()?.isSelectedLocked() ?? false;
   }
 
   function getSelectedDrawingData() {
-    return drawingManager?.getSelectedDrawingData() ?? null;
+    return persistenceRuntime.getDrawingManager()?.getSelectedDrawingData() ?? null;
   }
 
   function exportDrawings() {
-    return drawingManager?.exportDrawings() ?? [];
+    return persistenceRuntime.getDrawingManager()?.exportDrawings() ?? [];
   }
 
   function importDrawings(drawings: DrawingData[]) {
@@ -647,7 +553,7 @@ export function createChartDrawingRuntime(
       dm.importDrawings(drawings);
       return;
     }
-    void ensureDrawingManagerReady().then((loadedDrawingManager) => {
+    void persistenceRuntime.ensureDrawingManagerReady().then((loadedDrawingManager) => {
       loadedDrawingManager?.importDrawings(drawings);
     });
   }

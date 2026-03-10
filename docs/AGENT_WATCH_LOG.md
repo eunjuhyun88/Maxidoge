@@ -7007,3 +7007,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - auth-side dynamic-import reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE
+
+## [2026-03-11 00:45:00 +0900] FINISH chart-drawing-persistence-runtime-split-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep planning the next chart hotspot, preserve drawing behavior, and narrow `chartDrawingRuntime.ts` by extracting persistence/bootstrap ownership without touching unrelated route WIP
+- What changed:
+  - Added [chartDrawingPersistenceRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingPersistenceRuntime.ts#L1)
+    - moved primitive drawing manager lazy module loading, debounced autosave wiring, and pair/timeframe persistence sync into a dedicated helper runtime
+    - kept `drawingManager` and `drawingPersistence` behind the existing chart drawing lazy boundary instead of lifting them into support-runtime imports
+  - Updated [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1)
+    - narrowed the file to drawing-mode transitions, mouse lifecycle, trade-preview finalize side effects, and wrapper commands
+    - removed inline manager module promise state, autosave timer ownership, and pair/timeframe sync bookkeeping
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartDrawingPersistenceRuntime.ts` as the canonical drawing persistence/bootstrap boundary
+    - clarified that the drawing-stack lazy boundary now flows through `chartDrawingRuntime.ts` into `chartDrawingPersistenceRuntime.ts`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `58.29 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `65.25 kB`
+    - [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1) `585` lines
+    - [chartDrawingPersistenceRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingPersistenceRuntime.ts#L1) `153` lines
+- Residual risks:
+  - this slice materially improved ownership, but it did not reduce the support-runtime server chunk; `chartPanelSupportRuntime.js` rose from the previous `64.05 kB` to `65.25 kB`
+  - the remaining chart hotspot is still the drawing stack itself, especially [drawingManager.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingManager.ts#L1), so the next slice should target real lazy/runtime narrowing instead of more helper-only extraction
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
