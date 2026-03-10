@@ -6857,3 +6857,35 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1) still owns the larger chart-surface presentation shell
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE
+
+## [2026-03-10 23:55:00 +0900] FINISH chart-toolbar-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart presentation hotspot, preserve toolbar behavior, and split `ChartToolbar.svelte` into smaller presentational boundaries without touching unrelated route WIP
+- What changed:
+  - Added [chartToolbarCatalog.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartToolbarCatalog.ts#L1)
+    - centralized drawing tool categories, labels, and icon mappings
+    - removed repeated category metadata from the toolbar render path
+  - Added [ChartToolbarIcon.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartToolbarIcon.svelte#L1)
+    - centralized the shared SVG icon switch used by the toolbar rail and category popover
+    - removed duplicated icon markup between the main toolbar button surface and the popover list surface
+  - Added [ChartToolbarPopover.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartToolbarPopover.svelte#L1)
+    - moved category popover markup, styles, and selection affordance into a dedicated child boundary
+    - kept the toolbar component focused on state ownership and button composition
+  - Updated [ChartToolbar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartToolbar.svelte#L1)
+    - reduced the component from `513` lines to `280` lines by delegating icon rendering and popover markup
+    - kept `openCategory` and `activeModes` in the toolbar so behavior and last-selected tool memory stay unchanged
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ChartToolbar.svelte`, `ChartToolbarPopover.svelte`, `ChartToolbarIcon.svelte`, and `chartToolbarCatalog.ts` as canonical chart toolbar paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartAgentSurface.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartAgentSurface.js) `46.28 kB`
+    - [arena/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/arena/_page.svelte.js) `141.96 kB`
+    - [terminal/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/terminal/_page.svelte.js) `185.21 kB`
+- Residual risks:
+  - [ChartHeaderBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderBar.svelte#L1) is now the larger remaining chart presentation hotspot
+  - [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1) still owns the chart-container shell and overlay child ordering
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
