@@ -6803,3 +6803,29 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1) still owns a wide runtime-bundle option assembly and controller wiring path
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE
+
+## [2026-03-10 22:45:00 +0900] FINISH chart-panel-runtime-options-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing ChartPanel runtime wiring drift, preserve layout/interaction, and move the remaining runtime-bundle option assembly out of the panel
+- What changed:
+  - Added [chartPanelRuntimeOptions.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartPanelRuntimeOptions.ts#L1)
+    - centralized `position`, `tradingView`, `data`, and `bindings` runtime-bundle option shaping
+    - centralized TradingView state-patch apply semantics and drag target mapping so `ChartPanel.svelte` no longer repeats those branchy object shapes inline
+  - Updated [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1)
+    - replaced the inline runtime option assembly with helper builders
+    - kept the runtime ownership in the panel while shrinking direct option-shape duplication
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartPanelRuntimeOptions.ts` as the canonical ChartPanel runtime option boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - build snapshot:
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `58.29 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `63.76 kB`
+    - [arena/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/arena/_page.svelte.js) `141.96 kB`
+- Residual risks:
+  - [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1) still owns controller assembly and client-runtime bootstrap wiring
+  - this slice improved ownership but increased `ChartPanel.js` from `55.05 kB` to `58.29 kB`, so the next slice should bias toward real lazy boundaries or moving orchestration out of the panel rather than adding more helper modules
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE

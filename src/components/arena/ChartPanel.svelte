@@ -68,6 +68,12 @@
     buildChartIndicatorSeriesRefs,
     readChartIndicatorState,
   } from './chart/chartPanelStateContext';
+  import {
+    buildChartDataRuntimeOptions,
+    buildChartPositionRuntimeOptions,
+    buildChartRuntimeBindingOptions,
+    buildChartTradingViewRuntimeOptions,
+  } from './chart/chartPanelRuntimeOptions';
 
   type ChartPanelControllerModule = typeof import('./chart/chartPanelController');
   type ChartPanelSupportRuntimeModule = typeof import('./chart/chartPanelSupportRuntime');
@@ -831,119 +837,124 @@
         },
         renderDrawings,
       },
-      position: {
-        getSeries: () => series,
-        getChartContainer: () => chartContainer,
-        getTheme: () => chartTheme,
-        getShowPosition: () => showPosition,
-        getPositionLevels: () => ({
-          entry: posEntry,
-          tp: posTp,
-          sl: posSl,
-          dir: posDir,
-        }),
-        getLivePrice: () => livePrice,
-        getDragState: () => isDragging,
-        setDragState: (target) => {
-          isDragging = target;
-        },
-        getHoverState: () => hoverLine,
-        setHoverState: (target) => {
-          hoverLine = target;
-        },
-        emitDrag: (target, detail) => {
-          emitDrag(
-            target === 'tp' ? 'dragTP' : target === 'sl' ? 'dragSL' : 'dragEntry',
-            detail,
-          );
-        },
-      },
-      tradingView: {
-        getContainer: () => tvContainer,
-        getThemeTarget: () => tvContainer || chartContainer,
-        getPair: () => storeState.pair,
-        getTimeframe: () => storeState.timeframe,
-        setTheme: (theme) => {
-          chartTheme = theme;
-        },
-        setState: (patch) => {
-          if (patch.loading !== undefined) tvLoading = patch.loading;
-          if (patch.error !== undefined) tvError = patch.error;
-          if (patch.safeMode !== undefined) tvSafeMode = patch.safeMode;
-          if (patch.fallbackTried !== undefined) _tvFallbackTried = patch.fallbackTried;
-        },
-      },
-      data: {
-        getSeriesContext: () =>
-          buildChartDataSeriesContext({
-            chart,
-            series,
-            volumeSeries,
-            rsiSeries,
-            bbUpperSeries,
-            bbMiddleSeries,
-            bbLowerSeries,
-            macdLineSeries,
-            macdSignalSeries,
-            macdHistSeries,
-            stochKSeries,
-            stochDSeries,
-            maPeriods: _maPeriods,
-            chartTheme,
+      position:
+        buildChartPositionRuntimeOptions({
+          getSeries: () => series,
+          getChartContainer: () => chartContainer,
+          getTheme: () => chartTheme,
+          getShowPosition: () => showPosition,
+          getPositionLevels: () => ({
+            entry: posEntry,
+            tp: posTp,
+            sl: posSl,
+            dir: posDir,
           }),
-        getKlineCache: () => klineCache,
-        setKlineCache: (next) => {
-          klineCache = next;
-        },
-        getIndicatorState,
-        setIndicatorState,
-        setRsiValue: (value) => {
-          rsiVal = value;
-        },
-        setLatestVolume: (value) => {
-          latestVolume = value;
-        },
-        setLivePrice: (value) => {
-          livePrice = value;
-        },
-        set24hStats: (next) => chartSupportRuntime?.update24hStats(next),
-        setLoading: (value) => {
-          isLoading = value;
-        },
-        setError: (value) => {
-          error = value;
-          onConnectionStatusChange(value ? 'offline' : 'live');
-        },
-        clearDetectedPatterns: () => {
-          chartPatternRuntime?.clearDetectedPatterns();
-        },
-        onPatternRefresh: () => {
-          chartPatternRuntime?.runPatternDetection('visible', { fallbackToFull: true });
-        },
-        onFlushPriceUpdate: (price, pairBase) =>
-          chartSupportRuntime?.flushPriceUpdate(price, pairBase),
-        onThrottledPriceUpdate: (price, pairBase) =>
-          chartSupportRuntime?.throttledPriceUpdate(price, pairBase),
-        onEmitPriceUpdate: emitPriceUpdate,
-        getFallbackPrice: getFallbackLivePrice,
-        onError: (context, err) => {
-          console.error(`[ChartPanel] ${context} error:`, err);
-        },
-      },
-      bindings: {
-        chart: chart!,
-        chartContainer,
-        isAgentMode: () => chartMode === 'agent',
-        isTradeLineEntryEnabled: () => enableTradeLineEntry,
-        onScheduleVisiblePatternScan: scheduleVisiblePatternScan,
-        onRenderDrawings: renderDrawings,
-        onResizeDrawingCanvas: resizeDrawingCanvas,
-        onSetDrawingMode: (mode) => chartSupportRuntime?.setDrawingMode(mode),
-        onZoomChart: zoomChart,
-        onResetChartScale: resetChartScale,
-        onFitChartRange: fitChartRange,
-        onToggleDrawingsVisible: () => chartSupportRuntime?.toggleDrawingsVisible(),
-      },
+          getLivePrice: () => livePrice,
+          getDragState: () => isDragging,
+          setDragState: (target) => {
+            isDragging = target;
+          },
+          getHoverState: () => hoverLine,
+          setHoverState: (target) => {
+            hoverLine = target;
+          },
+          emitChartDrag: emitDrag,
+        }),
+      tradingView:
+        buildChartTradingViewRuntimeOptions({
+          getContainer: () => tvContainer,
+          getThemeTarget: () => tvContainer || chartContainer,
+          getPair: () => storeState.pair,
+          getTimeframe: () => storeState.timeframe,
+          setTheme: (theme) => {
+            chartTheme = theme;
+          },
+          setLoading: (value) => {
+            tvLoading = value;
+          },
+          setError: (value) => {
+            tvError = value;
+          },
+          setSafeMode: (value) => {
+            tvSafeMode = value;
+          },
+          setFallbackTried: (value) => {
+            _tvFallbackTried = value;
+          },
+        }),
+      data:
+        buildChartDataRuntimeOptions({
+          getSeriesContext: () =>
+            buildChartDataSeriesContext({
+              chart,
+              series,
+              volumeSeries,
+              rsiSeries,
+              bbUpperSeries,
+              bbMiddleSeries,
+              bbLowerSeries,
+              macdLineSeries,
+              macdSignalSeries,
+              macdHistSeries,
+              stochKSeries,
+              stochDSeries,
+              maPeriods: _maPeriods,
+              chartTheme,
+            }),
+          getKlineCache: () => klineCache,
+          setKlineCache: (next) => {
+            klineCache = next;
+          },
+          getIndicatorState,
+          setIndicatorState,
+          setRsiValue: (value) => {
+            rsiVal = value;
+          },
+          setLatestVolume: (value) => {
+            latestVolume = value;
+          },
+          setLivePrice: (value) => {
+            livePrice = value;
+          },
+          set24hStats: (next) => chartSupportRuntime?.update24hStats(next),
+          setLoading: (value) => {
+            isLoading = value;
+          },
+          setError: (value) => {
+            error = value;
+          },
+          onConnectionStatusChange,
+          clearDetectedPatterns: () => {
+            chartPatternRuntime?.clearDetectedPatterns();
+          },
+          onPatternRefresh: () => {
+            chartPatternRuntime?.runPatternDetection('visible', { fallbackToFull: true });
+          },
+          onFlushPriceUpdate: (price, pairBase) =>
+            chartSupportRuntime?.flushPriceUpdate(price, pairBase),
+          onThrottledPriceUpdate: (price, pairBase) =>
+            chartSupportRuntime?.throttledPriceUpdate(price, pairBase),
+          onEmitPriceUpdate: emitPriceUpdate,
+          getFallbackPrice: getFallbackLivePrice,
+          onError: (context, err) => {
+            console.error(`[ChartPanel] ${context} error:`, err);
+          },
+        }),
+      bindings:
+        buildChartRuntimeBindingOptions({
+          chart: chart!,
+          chartContainer,
+          isAgentMode: () => chartMode === 'agent',
+          isTradeLineEntryEnabled: () => enableTradeLineEntry,
+          onScheduleVisiblePatternScan: scheduleVisiblePatternScan,
+          onRenderDrawings: renderDrawings,
+          onResizeDrawingCanvas: resizeDrawingCanvas,
+          onSetDrawingMode: (mode) => chartSupportRuntime?.setDrawingMode(mode),
+          onZoomChart: zoomChart,
+          onResetChartScale: resetChartScale,
+          onFitChartRange: fitChartRange,
+          onToggleDrawingsVisible: () => chartSupportRuntime?.toggleDrawingsVisible(),
+        }),
       removeChart: () => {
         if (chart) {
           chart.remove();
