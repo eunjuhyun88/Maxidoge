@@ -62,6 +62,12 @@
     applyChartBootstrapState,
     applyChartPreparedMountState,
   } from './chart/chartPanelMountState';
+  import {
+    buildChartDataSeriesContext,
+    buildChartIndicatorPaneIndexes,
+    buildChartIndicatorSeriesRefs,
+    readChartIndicatorState,
+  } from './chart/chartPanelStateContext';
 
   type ChartPanelControllerModule = typeof import('./chart/chartPanelController');
   type ChartPanelSupportRuntimeModule = typeof import('./chart/chartPanelSupportRuntime');
@@ -412,9 +418,9 @@
       },
       viewport: {
         getChart: () => chart,
-        getSeriesRefs: () => {
-          const derivRefs = derivativesRuntime?.getPaneRefs();
-          return {
+        getSeriesRefs: () =>
+          buildChartIndicatorSeriesRefs({
+            derivativesRuntime,
             ma7Series,
             ma20Series,
             ma25Series,
@@ -431,24 +437,15 @@
             macdHistSeries,
             stochKSeries,
             stochDSeries,
-            oiSeries: derivRefs?.oiSeries ?? null,
-            fundingSeries: derivRefs?.fundingSeries ?? null,
-            liqLongSeries: derivRefs?.liqLongSeries ?? null,
-            liqShortSeries: derivRefs?.liqShortSeries ?? null,
-          };
-        },
-        getPaneIndexes: () => {
-          const derivRefs = derivativesRuntime?.getPaneRefs();
-          return {
+          }),
+        getPaneIndexes: () =>
+          buildChartIndicatorPaneIndexes({
+            derivativesRuntime,
             volumePaneIndex,
             rsiPaneIndex,
             macdPaneIndex,
             stochPaneIndex,
-            oiPaneIndex: derivRefs?.oiPaneIndex ?? null,
-            fundingPaneIndex: derivRefs?.fundingPaneIndex ?? null,
-            liqPaneIndex: derivRefs?.liqPaneIndex ?? null,
-          };
-        },
+          }),
         getIndicatorEnabled: () => indicatorEnabled,
         getBarSpacing: () => barSpacing,
         setBarSpacing: (next) => {
@@ -748,11 +745,11 @@
   let error = $state('');
 
   function getIndicatorState() {
-    return {
+    return readChartIndicatorState({
       rsiAvgGain: _rsiAvgGain,
       rsiAvgLoss: _rsiAvgLoss,
       maRunSum: _maRunSum,
-    };
+    });
   }
 
   function setIndicatorState(next: {
@@ -877,22 +874,23 @@
         },
       },
       data: {
-        getSeriesContext: () => ({
-          chart,
-          series,
-          volumeSeries,
-          rsiSeries,
-          bbUpperSeries,
-          bbMiddleSeries,
-          bbLowerSeries,
-          macdLineSeries,
-          macdSignalSeries,
-          macdHistSeries,
-          stochKSeries,
-          stochDSeries,
-          maPeriods: _maPeriods,
-          chartTheme,
-        }),
+        getSeriesContext: () =>
+          buildChartDataSeriesContext({
+            chart,
+            series,
+            volumeSeries,
+            rsiSeries,
+            bbUpperSeries,
+            bbMiddleSeries,
+            bbLowerSeries,
+            macdLineSeries,
+            macdSignalSeries,
+            macdHistSeries,
+            stochKSeries,
+            stochDSeries,
+            maPeriods: _maPeriods,
+            chartTheme,
+          }),
         getKlineCache: () => klineCache,
         setKlineCache: (next) => {
           klineCache = next;

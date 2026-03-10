@@ -6775,3 +6775,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - [ChartAgentStatusHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentStatusHud.svelte#L1) now holds most of the remaining action-stack presentation weight
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE
+
+## [2026-03-10 21:05:00 +0900] FINISH chart-panel-state-context-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing ChartPanel wiring drift, preserve layout/interaction, and extract the repeated series-context payloads without touching unrelated route WIP
+- What changed:
+  - Added [chartPanelStateContext.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartPanelStateContext.ts#L1)
+    - centralized indicator series-ref projection used by the support runtime viewport path
+    - centralized pane-index projection so derivatives pane refs and chart-local pane refs share one contract
+    - centralized data-runtime series context shaping and indicator accumulator snapshot read
+  - Updated [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1)
+    - replaced inline `getSeriesRefs()` and `getPaneIndexes()` object assembly with `chartPanelStateContext` helpers
+    - replaced inline `data.getSeriesContext()` payload shaping with the canonical helper
+    - replaced the local indicator accumulator snapshot object with `readChartIndicatorState()`
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartPanelStateContext.ts` as the canonical ChartPanel series/pane/state projection boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `55.05 kB`
+    - [arena/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/arena/_page.svelte.js) `141.96 kB`
+    - [terminal/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/terminal/_page.svelte.js) `185.21 kB`
+- Residual risks:
+  - [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1) still owns a wide runtime-bundle option assembly and controller wiring path
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
