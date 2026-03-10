@@ -58,6 +58,10 @@
     type ChartClientRuntimeAssembly,
     type ChartMountRuntimeModule,
   } from './chart/chartClientRuntime';
+  import {
+    applyChartBootstrapState,
+    applyChartPreparedMountState,
+  } from './chart/chartPanelMountState';
 
   type ChartPanelControllerModule = typeof import('./chart/chartPanelController');
   type ChartPanelSupportRuntimeModule = typeof import('./chart/chartPanelSupportRuntime');
@@ -765,48 +769,52 @@
   const getFallbackLivePrice = () => chartSupportRuntime?.getFallbackLivePrice() ?? null;
 
   function applyBootstrapState(bootstrap: PrepareChartMountResult['bootstrap']) {
-    chart = bootstrap.chart;
-    series = bootstrap.series;
-    ma7Series = bootstrap.ma7Series;
-    ma20Series = bootstrap.ma20Series;
-    ma25Series = bootstrap.ma25Series;
-    ma60Series = bootstrap.ma60Series;
-    ma99Series = bootstrap.ma99Series;
-    ma120Series = bootstrap.ma120Series;
-    volumeSeries = bootstrap.volumeSeries;
-    rsiSeries = bootstrap.rsiSeries;
-    bbUpperSeries = bootstrap.bbUpperSeries;
-    bbMiddleSeries = bootstrap.bbMiddleSeries;
-    bbLowerSeries = bootstrap.bbLowerSeries;
-    macdLineSeries = bootstrap.macdLineSeries;
-    macdSignalSeries = bootstrap.macdSignalSeries;
-    macdHistSeries = bootstrap.macdHistSeries;
-    stochKSeries = bootstrap.stochKSeries;
-    stochDSeries = bootstrap.stochDSeries;
-    // OI/Funding/Liq series are created lazily by derivativesRuntime
-    volumePaneIndex = bootstrap.volumePaneIndex;
-    rsiPaneIndex = bootstrap.rsiPaneIndex;
-    macdPaneIndex = bootstrap.macdPaneIndex;
-    stochPaneIndex = bootstrap.stochPaneIndex;
+    applyChartBootstrapState({
+      bootstrap,
+      setChart: (next) => { chart = next; },
+      setSeries: (next) => { series = next; },
+      setMa7Series: (next) => { ma7Series = next; },
+      setMa20Series: (next) => { ma20Series = next; },
+      setMa25Series: (next) => { ma25Series = next; },
+      setMa60Series: (next) => { ma60Series = next; },
+      setMa99Series: (next) => { ma99Series = next; },
+      setMa120Series: (next) => { ma120Series = next; },
+      setVolumeSeries: (next) => { volumeSeries = next; },
+      setRsiSeries: (next) => { rsiSeries = next; },
+      setBbUpperSeries: (next) => { bbUpperSeries = next; },
+      setBbMiddleSeries: (next) => { bbMiddleSeries = next; },
+      setBbLowerSeries: (next) => { bbLowerSeries = next; },
+      setMacdLineSeries: (next) => { macdLineSeries = next; },
+      setMacdSignalSeries: (next) => { macdSignalSeries = next; },
+      setMacdHistSeries: (next) => { macdHistSeries = next; },
+      setStochKSeries: (next) => { stochKSeries = next; },
+      setStochDSeries: (next) => { stochDSeries = next; },
+      setVolumePaneIndex: (next) => { volumePaneIndex = next; },
+      setRsiPaneIndex: (next) => { rsiPaneIndex = next; },
+      setMacdPaneIndex: (next) => { macdPaneIndex = next; },
+      setStochPaneIndex: (next) => { stochPaneIndex = next; },
+    });
   }
 
   function applyPreparedMount(preparedMount: PrepareChartMountResult) {
-    lwcModule = preparedMount.lwcModule;
-    chartTheme = preparedMount.chartTheme;
-    indicatorStripState = preparedMount.nextIndicatorStripState;
-    showIndicatorLegend = preparedMount.nextShowIndicatorLegend;
-    chartVisualMode = preparedMount.nextChartVisualMode;
-    _indicatorProfileApplied = preparedMount.nextIndicatorProfileApplied;
-    applyBootstrapState(preparedMount.bootstrap);
-    _maPeriods = chartMountRuntimeModule?.createChartMaPeriodBindings({
-      bootstrap: preparedMount.bootstrap,
+    applyChartPreparedMountState({
+      preparedMount,
+      chartMountRuntimeModule,
+      applyBootstrapState,
+      setLwcModule: (next) => { lwcModule = next; },
+      setChartTheme: (next) => { chartTheme = next; },
+      setIndicatorStripState: (next) => { indicatorStripState = next; },
+      setShowIndicatorLegend: (next) => { showIndicatorLegend = next; },
+      setChartVisualMode: (next) => { chartVisualMode = next; },
+      setIndicatorProfileApplied: (next) => { _indicatorProfileApplied = next; },
+      setMaPeriods: (next) => { _maPeriods = next; },
       setMa7Val: (value) => { ma7Val = value; },
       setMa20Val: (value) => { ma20Val = value; },
       setMa25Val: (value) => { ma25Val = value; },
       setMa60Val: (value) => { ma60Val = value; },
       setMa99Val: (value) => { ma99Val = value; },
       setMa120Val: (value) => { ma120Val = value; },
-    }) ?? [];
+    });
   }
 
   function buildRuntimeBundleOptions(): CreateChartRuntimeBundleOptions {
