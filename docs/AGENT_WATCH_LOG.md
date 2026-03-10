@@ -6660,3 +6660,34 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - unrelated dirty chart WIP in [ChartHeaderBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderBar.svelte#L1), [ChartIndicatorStrip.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartIndicatorStrip.svelte#L1), [MarketPulseBadge.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/MarketPulseBadge.svelte#L1), and [chartActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartActionRuntime.ts#L1) remains intentionally outside this slice
   - unrelated untracked WIP in [docs/usability-redesign-spec-2026-03-09.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/usability-redesign-spec-2026-03-09.md#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains outside this slice
 - Status: DONE
+
+## [2026-03-10 19:32:38 +0900] FINISH chart-agent-overlay-chrome-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the live chart hotspot, preserve runtime behavior, and split `ChartAgentOverlayChrome.svelte` into smaller presentational boundaries without touching unrelated route WIP
+- What changed:
+  - Added [chartAgentOverlayChromeContracts.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartAgentOverlayChromeContracts.ts#L1)
+    - fixed the shared prop surface for the overlay parent and its new meta/action child boundaries
+    - removed repeated local overlay prop declarations so future chrome slices cannot drift independently
+  - Added [ChartAgentMetaOverlay.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentMetaOverlay.svelte#L1)
+    - moved scale tools, indicator legend, loading overlay, and error badge into a dedicated meta HUD boundary
+    - normalized the legend rendering into a single derived entry list instead of repeating eight inline `#if` blocks
+  - Added [ChartAgentActionOverlay.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentActionOverlay.svelte#L1)
+    - moved first-scan CTA, trade CTA bar, drawing notice, chart notice, position sizer dock, position badge, and drag indicator into a dedicated action HUD boundary
+    - localized position label/risk-reward derivation so nullability does not leak into markup
+  - Updated [ChartAgentOverlayChrome.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentOverlayChrome.svelte#L1)
+    - reduced the component from `592` lines to `90` lines by leaving only composition and callback wiring
+    - preserved the existing overlay stacking order by delegating to the new meta/action children in the same render order
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the new overlay contract, meta HUD boundary, and action HUD boundary as canonical chart paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `49.16 kB`
+    - [ChartAgentSurface.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartAgentSurface.js) `47.99 kB`
+    - [terminal/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/terminal/_page.svelte.js) `185.21 kB`
+- Residual risks:
+  - [ChartAgentActionOverlay.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentActionOverlay.svelte#L1) is now the larger presentational hotspot inside the chart overlay stack
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
