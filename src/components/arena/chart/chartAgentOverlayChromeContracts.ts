@@ -85,3 +85,27 @@ export interface ChartAgentActionOverlayProps {
   onPublishTradeSignal?: () => void;
   onCancelDrawing?: () => void;
 }
+
+export interface ChartAgentTradeHudProps {
+  activeTradeSetup?: AgentTradeSetup | null;
+  drawingsVisible?: boolean;
+  hasScanned?: boolean;
+  onCloseActiveTradeSetup?: () => void;
+  onRequestAgentScan?: () => void;
+  onExecuteActiveTrade?: () => void;
+  onPublishTradeSignal?: () => void;
+}
+
+export interface ChartAgentStatusHudProps {
+  activeTradeSetup?: AgentTradeSetup | null;
+  drawingMode: DrawingMode;
+  chartNotice?: string;
+  showPosition?: boolean;
+  posEntry?: number | null;
+  posTp?: number | null;
+  posSl?: number | null;
+  posDir?: string;
+  hoverLine?: string | null;
+  isDragging?: string | null;
+  onCancelDrawing?: () => void;
+}

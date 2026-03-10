@@ -20,6 +20,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ## Entries
 
+## [2026-03-10 20:15:27 +0900] FINISH chart-client-runtime-assembly-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep executing the canonical refactor, preserve layout, and continue the remaining ChartPanel structural cleanup with push-safe slices
+- What changed:
+  - Added [chartClientRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartClientRuntime.ts#L1)
+    - centralized the client-only lazy import and first-instantiation flow for `chartMountRuntime`, `chartPanelController`, `chartPanelSupportRuntime`, and `chartDerivativesRuntime`
+    - fixed the assembly order so `ChartPanel` no longer owns module promise/cache wiring directly
+  - Updated [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1)
+    - replaced the route-local module loader glue with the canonical `chartClientRuntime` assembly helper
+    - removed duplicated support/controller/derivatives module state from the component shell
+    - reduced the file from `1284` to `1258` lines without changing layout or position
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartClientRuntime.ts` as the canonical client runtime assembly boundary for ChartPanel
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1) still owns the large runtime-bundle option builder and controller option wiring
+  - unrelated chart/home WIP remains in the worktree and must stay out of this slice
+- Commit / Push:
+  - pending
+- Status: DONE
+
 ## [2026-03-09 21:52:33 +0900] FINISH passport-shell-host-split-20260309 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
@@ -6689,5 +6714,38 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
     - [terminal/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/terminal/_page.svelte.js) `185.21 kB`
 - Residual risks:
   - [ChartAgentActionOverlay.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentActionOverlay.svelte#L1) is now the larger presentational hotspot inside the chart overlay stack
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-10 20:12:59 +0900] FINISH chart-agent-action-overlay-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart overlay hotspot, preserve the current render order, and split `ChartAgentActionOverlay.svelte` into smaller presentational surfaces without touching unrelated route WIP
+- What changed:
+  - Updated [chartAgentOverlayChromeContracts.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartAgentOverlayChromeContracts.ts#L1)
+    - extended the shared overlay contract with dedicated trade-HUD and status-HUD prop surfaces
+    - kept the overlay child prop boundaries centralized instead of letting each new HUD define its own local contract
+  - Added [ChartAgentTradeHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentTradeHud.svelte#L1)
+    - moved the overlay close button, first-scan CTA, and active trade CTA bar into a dedicated trade-action HUD boundary
+    - preserved existing CTA positioning and mobile hiding behavior
+  - Added [ChartAgentStatusHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentStatusHud.svelte#L1)
+    - moved the drawing notice, chart notice, position sizer dock, position badge, and drag indicator into a dedicated status HUD boundary
+    - kept the local position labels and risk-reward derivation next to the markup that consumes them
+  - Updated [ChartAgentActionOverlay.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentActionOverlay.svelte#L1)
+    - reduced the component from `368` lines to `49` lines by leaving only composition and callback wiring
+    - preserved the existing action stack order by rendering trade HUD first and status HUD second
+  - Updated [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1)
+    - restored the local module type aliases for chart controller/support-runtime dynamic imports so `gate` keeps the `ChartPanel` config surface contextually typed
+    - prevented the missing-module-type regression from cascading into dozens of implicit-`any` errors during the gate path
+  - Included [chartClientRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartClientRuntime.ts#L1)
+    - staged the already-referenced client runtime assembly helper into git so clean checkouts match the existing `ChartPanel` import graph and documented canonical path
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ChartAgentActionOverlay.svelte` as an action-stack composition boundary
+    - documented the new trade/status HUD components as canonical chart overlay paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+- Residual risks:
+  - [ChartAgentStatusHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentStatusHud.svelte#L1) now holds most of the remaining action-stack presentation weight
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE

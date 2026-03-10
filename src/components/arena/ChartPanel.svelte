@@ -53,13 +53,16 @@
   import type { ChartPanelController } from './chart/chartPanelController';
   import type { ChartPanelSupportRuntimeController } from './chart/chartPanelSupportRuntime';
   import type { ChartDerivativesRuntimeController } from './chart/chartDerivativesRuntime';
+  import {
+    ensureChartClientRuntime as ensureChartClientRuntimeAssembly,
+    type ChartClientRuntimeAssembly,
+    type ChartMountRuntimeModule,
+  } from './chart/chartClientRuntime';
 
-  const chartPanelShellModule = import('./chart/ChartPanelShell.svelte');
-
-  type ChartMountRuntimeModule = typeof import('./chart/chartMountRuntime');
   type ChartPanelControllerModule = typeof import('./chart/chartPanelController');
   type ChartPanelSupportRuntimeModule = typeof import('./chart/chartPanelSupportRuntime');
-  type ChartDerivativesRuntimeModule = typeof import('./chart/chartDerivativesRuntime');
+
+  const chartPanelShellModule = import('./chart/ChartPanelShell.svelte');
 
   // ═══ Props ═══
   interface Props {
@@ -359,18 +362,8 @@
   }
 
   let chartMountRuntimeModule: ChartMountRuntimeModule | null = null;
-  let chartPanelControllerModule: ChartPanelControllerModule | null = null;
-  let chartPanelSupportRuntimeModule: ChartPanelSupportRuntimeModule | null = null;
-  let chartDerivativesRuntimeModulePromise: Promise<ChartDerivativesRuntimeModule> | null = null;
-  let chartClientRuntimePromise: Promise<void> | null = null;
+  let chartClientRuntimePromise: Promise<ChartClientRuntimeAssembly> | null = null;
   let chartPanelController: ChartPanelController | null = null;
-
-  function loadChartDerivativesRuntime() {
-    if (!chartDerivativesRuntimeModulePromise) {
-      chartDerivativesRuntimeModulePromise = import('./chart/chartDerivativesRuntime');
-    }
-    return chartDerivativesRuntimeModulePromise;
-  }
 
   async function setChartMode(mode: 'agent' | 'trading') {
     await ensureChartClientRuntime();
@@ -1036,54 +1029,39 @@
   }
 
   async function ensureChartClientRuntime() {
-    if (chartClientRuntimePromise) {
-      await chartClientRuntimePromise;
-      return;
-    }
-
-    chartClientRuntimePromise = (async () => {
-      const [mountModule, controllerModule, supportRuntimeModule, derivativesRuntimeModule] = await Promise.all([
-        import('./chart/chartMountRuntime'),
-        import('./chart/chartPanelController'),
-        import('./chart/chartPanelSupportRuntime'),
-        loadChartDerivativesRuntime(),
-      ]);
-
-      chartMountRuntimeModule = mountModule;
-      chartPanelControllerModule = controllerModule;
-      chartPanelSupportRuntimeModule = supportRuntimeModule;
-
-      if (!chartSupportRuntime) {
-        chartSupportRuntime = createChartSupportRuntimeInstance(
-          supportRuntimeModule.createChartPanelSupportRuntime,
-        );
-        // Hydrate persisted drawings only when the current pair/timeframe actually has them.
-        chartSupportRuntime.syncDrawingPersistence();
-      }
-
-      if (!derivativesRuntime) {
-        derivativesRuntime = derivativesRuntimeModule.createChartDerivativesRuntime({
+    const clientRuntime = await ensureChartClientRuntimeAssembly({
+      getCachedPromise: () => chartClientRuntimePromise,
+      setCachedPromise: (next) => {
+        chartClientRuntimePromise = next;
+      },
+      getSupportRuntime: () => chartSupportRuntime,
+      setSupportRuntime: (runtime) => {
+        chartSupportRuntime = runtime;
+      },
+      getDerivativesRuntime: () => derivativesRuntime,
+      setDerivativesRuntime: (runtime) => {
+        derivativesRuntime = runtime;
+      },
+      getPanelController: () => chartPanelController,
+      setPanelController: (controller) => {
+        chartPanelController = controller;
+      },
+      createSupportRuntime: (createRuntime) =>
+        createChartSupportRuntimeInstance(createRuntime),
+      createDerivativesRuntime: (createRuntime) =>
+        createRuntime({
           getChart: () => chart,
           getLwc: () => lwcModule,
           getIndicatorEnabled: () => indicatorEnabled,
           getTheme: () => chartTheme,
           onPanesChanged: () => applyIndicatorVisibility(),
-        });
-      }
+        }),
+      createPanelController: (createController) =>
+        createChartPanelControllerInstance(createController),
+    });
 
-      if (!chartPanelController) {
-        chartPanelController = createChartPanelControllerInstance(
-          controllerModule.createChartPanelController,
-        );
-      }
-    })();
-
-    try {
-      await chartClientRuntimePromise;
-    } catch (error) {
-      chartClientRuntimePromise = null;
-      throw error;
-    }
+    chartMountRuntimeModule = clientRuntime.mountModule;
+    chartPanelController = clientRuntime.panelController;
   }
 
   $effect(() => {
@@ -1133,7 +1111,6 @@
     chartSupportRuntime = null;
     derivativesRuntime?.dispose();
     derivativesRuntime = null;
-    chartDerivativesRuntimeModulePromise = null;
     chartClientRuntimePromise = null;
   });
 
