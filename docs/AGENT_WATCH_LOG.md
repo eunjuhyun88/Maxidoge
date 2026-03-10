@@ -46,6 +46,39 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - pushed to `origin/codex/terminal-uiux-gtm-wip`
 - Status: DONE
 
+## [2026-03-11 01:44:21 +0900] FINISH chart-drawing-primitive-registry-split-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep planning and shaving the chart drawing hotspot, preserve behavior, and move primitive factory/snapshot weight out of `drawingManager.ts` without touching unrelated route WIP
+- What changed:
+  - Added [drawingManagerTypes.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingManagerTypes.ts#L1)
+    - centralized the shared `DrawingData`, `CandleOHLC`, and `DrawingManagerCallbacks` contracts so drawing runtime, undo stack, and persistence helpers stop depending on the manager file as a type bucket
+  - Added [drawingPrimitiveRegistry.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingPrimitiveRegistry.ts#L1)
+    - moved primitive subclass selection, serialized restore, drag-preview construction, and `toJSON()` snapshot parsing into a dedicated registry/factory chunk
+  - Updated [drawingManager.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingManager.ts#L1)
+    - narrowed the manager to interaction ownership, selection/undo flow, and runtime lifecycle
+    - injected the primitive registry instead of statically importing every primitive subclass and restore/snapshot helper inline
+  - Updated [chartDrawingPersistenceRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingPersistenceRuntime.ts#L1)
+    - lazy-loads both `drawingManager` and `drawingPrimitiveRegistry` when the drawing stack actually wakes up
+    - keeps the registry split behind the existing drawing runtime boundary instead of pulling it into support-runtime imports
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `drawingManagerTypes.ts` and `drawingPrimitiveRegistry.ts` as canonical chart drawing-stack boundaries
+    - clarified that the drawing lazy split now includes registry injection, not just manager/persistence bootstrap
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [drawingManager.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingManager.js) `36.26 kB`
+    - [drawingPrimitiveRegistry.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingPrimitiveRegistry.js) `62.64 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `64.49 kB`
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `58.29 kB`
+- Residual risks:
+  - this slice removed the heaviest static burden from `drawingManager.js`, but total drawing-stack weight is now split across `drawingManager.js` and `drawingPrimitiveRegistry.js`; the next hotspot is whichever part of the registry can be further narrowed without breaking primitive restore behavior
+  - `chartPanelSupportRuntime.js` rose slightly from the previous `64.00 kB` to `64.49 kB`, so future chart slices should prefer real lazy boundaries over helper-only extraction
+  - auth-side dynamic-import reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
 ## [2026-03-10 20:15:27 +0900] FINISH chart-client-runtime-assembly-20260310 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

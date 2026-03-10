@@ -20,32 +20,15 @@ import type {
 import type { DrawingMode } from '$lib/chart/chartTypes';
 import { generateDrawingId } from '$lib/chart/chartTypes';
 import { PluginBase } from './pluginBase';
-import { HorizontalLinePrimitive } from './horizontalLinePrimitive';
-import { VerticalLinePrimitive } from './verticalLinePrimitive';
-import { TrendLinePrimitive } from './trendLinePrimitive';
-import { RayPrimitive } from './rayPrimitive';
-import { FibRetracementPrimitive } from './fibRetracementPrimitive';
-import { RectanglePrimitive } from './rectanglePrimitive';
-import { PriceRangePrimitive } from './priceRangePrimitive';
-import { PositionPrimitive, type PositionData, type PositionStyleOptions } from './positionPrimitive';
-import { ExtendedLinePrimitive } from './extendedLinePrimitive';
-import { ChannelPrimitive } from './channelPrimitive';
 import type { AnchorPoint, AnchorHitResult, DrawingStyleOptions } from './drawingPrimitiveTypes';
-import { DEFAULT_DRAWING_STYLE, constrainAnchor } from './drawingPrimitiveTypes';
+import { constrainAnchor } from './drawingPrimitiveTypes';
 import { DrawingUndoStack, type DrawingAction } from './drawingUndoStack';
+import type { DrawingData, CandleOHLC, DrawingManagerCallbacks } from './drawingManagerTypes';
+import type { DrawingPrimitiveRegistry, ManagedPrimitive, PositionManagedPrimitive } from './drawingPrimitiveRegistry';
+
+export type { DrawingData, CandleOHLC, DrawingManagerCallbacks } from './drawingManagerTypes';
 
 // ── Types ────────────────────────────────────────────────────
-
-/** Serializable drawing data (for state persistence) */
-export interface DrawingData {
-  id: string;
-  type: 'hline' | 'vline' | 'trendline' | 'ray' | 'fib_retracement' | 'rect' | 'price_range' | 'position' | 'extended_line' | 'channel';
-  anchors: AnchorPoint[];
-  options: DrawingStyleOptions;
-  /** Position-specific data (only for type='position') */
-  positionData?: PositionData;
-  positionStyle?: Partial<PositionStyleOptions>;
-}
 
 /** Modes that stay active after completing a drawing (eraser only) */
 const STICKY_MODES: Set<DrawingMode> = new Set([
@@ -69,35 +52,20 @@ export function isPrimitiveDrawingMode(mode: DrawingMode): boolean {
   return PRIMITIVE_MODES.has(mode);
 }
 
-/** Minimal OHLC candle data for magnet snapping */
-export interface CandleOHLC {
-  time: unknown;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-}
-
-export interface DrawingManagerCallbacks {
-  onDrawingModeChanged: (mode: DrawingMode) => void;
-  onDrawingsChanged: (count: number) => void;
-  onSelectedChanged: (id: string | null) => void;
-  getDrawingColor: () => string;
-  /** Return kline data for magnet snap (optional — snap disabled if null) */
-  getKlines?: () => CandleOHLC[];
-  /** Fired when user right-clicks a selected drawing (context menu) */
-  onContextMenu?: (x: number, y: number, drawingId: string) => void;
-}
-
 // ── Manager ──────────────────────────────────────────────────
+
+function isPositionManagedPrimitive(value: ManagedPrimitive | null): value is PositionManagedPrimitive {
+  return !!value && 'positionData' in value && 'updatePrices' in value && 'updateTimes' in value;
+}
 
 export class DrawingManager {
   private _chart: IChartApi;
   private _series: ISeriesApi<SeriesType>;
   private _callbacks: DrawingManagerCallbacks;
+  private _registry: DrawingPrimitiveRegistry;
 
   // All attached drawing primitives
-  private _primitives: Map<string, PluginBase & { id: string; setSelected: (s: boolean) => void; setHovered: (h: boolean) => void }> = new Map();
+  private _primitives: Map<string, ManagedPrimitive> = new Map();
 
   // Drawing state
   private _drawingMode: DrawingMode = 'none';
@@ -109,7 +77,7 @@ export class DrawingManager {
 
   // Drag state
   private _dragStart: AnchorPoint | null = null;
-  private _previewPrimitive: PluginBase | null = null;
+  private _previewPrimitive: ManagedPrimitive | null = null;
 
   // Undo/Redo stack
   private _undoStack = new DrawingUndoStack();
@@ -148,10 +116,12 @@ export class DrawingManager {
     chart: IChartApi,
     series: ISeriesApi<SeriesType>,
     callbacks: DrawingManagerCallbacks,
+    registry: DrawingPrimitiveRegistry,
   ) {
     this._chart = chart;
     this._series = series;
     this._callbacks = callbacks;
+    this._registry = registry;
 
     // Chart event subscriptions
     this._onClickBound = this._onClick.bind(this);
@@ -278,9 +248,7 @@ export class DrawingManager {
   getSelectedDrawingData(): DrawingData | null {
     if (this._selectedId === null) return null;
     const p = this._primitives.get(this._selectedId);
-    if (!p || !('toJSON' in p)) return null;
-    const json = (p as any).toJSON();
-    return this._primitiveJsonToDrawingData(json);
+    return p ? this._registry.snapshotPrimitive(p) : null;
   }
 
   /** Update visual options on the selected drawing */
@@ -354,7 +322,7 @@ export class DrawingManager {
 
   /** Add a drawing from serialized data (e.g. restore from storage) */
   addDrawingFromData(data: DrawingData): void {
-    const primitive = this._createPrimitiveFromData(data);
+    const primitive = this._registry.createPrimitiveFromData(data);
     if (!primitive) return;
     this._primitives.set(data.id, primitive);
     if (this._drawingsVisible) {
@@ -367,11 +335,8 @@ export class DrawingManager {
   exportDrawings(): DrawingData[] {
     const result: DrawingData[] = [];
     this._primitives.forEach((p) => {
-      if ('toJSON' in p && typeof (p as any).toJSON === 'function') {
-        const json = (p as any).toJSON();
-        const data = this._primitiveJsonToDrawingData(json);
-        if (data) result.push(data);
-      }
+      const data = this._registry.snapshotPrimitive(p);
+      if (data) result.push(data);
     });
     return result;
   }
@@ -430,7 +395,13 @@ export class DrawingManager {
       if (price === null) return;
       const id = generateDrawingId();
       const color = this._callbacks.getDrawingColor();
-      const p = new HorizontalLinePrimitive(id, price as number, { lineColor: color });
+      const p = this._registry.createSinglePointPrimitive(
+        'hline',
+        id,
+        price as number,
+        { lineColor: color },
+      );
+      if (!p) return;
       this._primitives.set(id, p);
       if (this._drawingsVisible) {
         this._series.attachPrimitive(p);
@@ -449,7 +420,13 @@ export class DrawingManager {
       if (time === null) return;
       const id = generateDrawingId();
       const color = this._callbacks.getDrawingColor();
-      const p = new VerticalLinePrimitive(id, time as Time, { lineColor: color });
+      const p = this._registry.createSinglePointPrimitive(
+        'vline',
+        id,
+        time as Time,
+        { lineColor: color },
+      );
+      if (!p) return;
       this._primitives.set(id, p);
       if (this._drawingsVisible) {
         this._series.attachPrimitive(p);
@@ -493,49 +470,12 @@ export class DrawingManager {
       fillOpacity: 0.05,
     };
 
-    const previewId = '__preview__';
-    let preview: PluginBase | null = null;
-
-    switch (this._drawingMode) {
-      case 'trendline':
-        preview = new TrendLinePrimitive(previewId, anchor, anchor, previewOptions);
-        break;
-      case 'ray':
-        preview = new RayPrimitive(previewId, anchor, anchor, previewOptions);
-        break;
-      case 'fib_retracement':
-        preview = new FibRetracementPrimitive(previewId, anchor, anchor, previewOptions);
-        break;
-      case 'rect':
-        preview = new RectanglePrimitive(previewId, anchor, anchor, previewOptions);
-        break;
-      case 'price_range':
-        preview = new PriceRangePrimitive(previewId, anchor, anchor, previewOptions);
-        break;
-      case 'channel':
-        preview = new ChannelPrimitive(previewId, anchor, anchor, 0, previewOptions);
-        break;
-      case 'extended_line':
-        preview = new ExtendedLinePrimitive(previewId, anchor, anchor, previewOptions);
-        break;
-      case 'longentry':
-      case 'shortentry': {
-        const side = this._drawingMode === 'longentry' ? 'long' : 'short';
-        const defaultRR = 2;
-        const entryPrice = anchor.price;
-        // Initial TP/SL at entry (will spread during drag)
-        preview = new PositionPrimitive(previewId, {
-          side,
-          entryPrice,
-          entryTime: anchor.time,
-          exitTime: anchor.time,
-          takeProfitPrice: entryPrice,
-          stopLossPrice: entryPrice,
-          quantity: 0,
-        });
-        break;
-      }
-    }
+    const preview = this._registry.createDragPreview(
+      this._drawingMode,
+      '__preview__',
+      anchor,
+      previewOptions,
+    );
 
     if (preview) {
       this._previewPrimitive = preview;
@@ -550,7 +490,7 @@ export class DrawingManager {
     if (!anchor) return;
 
     // Special handling for position preview
-    if (this._previewPrimitive instanceof PositionPrimitive) {
+    if (isPositionManagedPrimitive(this._previewPrimitive)) {
       this._updatePositionPreview(this._previewPrimitive, anchor);
       return;
     }
@@ -595,12 +535,27 @@ export class DrawingManager {
     }
 
     // ── Position tools: finalize from preview data ──
-    if ((this._drawingMode === 'longentry' || this._drawingMode === 'shortentry') && this._previewPrimitive instanceof PositionPrimitive) {
+    if ((this._drawingMode === 'longentry' || this._drawingMode === 'shortentry') && isPositionManagedPrimitive(this._previewPrimitive)) {
       const previewData = this._previewPrimitive.positionData;
       this._cancelPreview();
 
       const id = generateDrawingId();
-      const finalPrimitive = new PositionPrimitive(id, { ...previewData });
+      const finalPrimitive = this._registry.createPrimitiveFromData({
+        id,
+        type: 'position',
+        anchors: [
+          { time: previewData.entryTime, price: previewData.entryPrice },
+          { time: previewData.exitTime, price: previewData.entryPrice },
+        ],
+        options: { lineColor: this._callbacks.getDrawingColor(), lineWidth: 2, lineStyle: 'solid' },
+        positionData: { ...previewData },
+      });
+      if (!finalPrimitive) {
+        this._isDrawing = false;
+        this._dragStart = null;
+        this.setDrawingMode('none');
+        return;
+      }
       this._primitives.set(id, finalPrimitive);
       if (this._drawingsVisible) {
         this._series.attachPrimitive(finalPrimitive as unknown as PluginBase);
@@ -958,7 +913,7 @@ export class DrawingManager {
     }
 
     // ── position: 3 anchors (entry=0, TP=1, SL=2) ──
-    if (json.type === 'position' && p instanceof PositionPrimitive) {
+    if (json.type === 'position' && isPositionManagedPrimitive(p)) {
       const data = p.positionData;
       if (anchorIdx === 0) {
         // Move entry → TP and SL move by same delta
@@ -1060,9 +1015,7 @@ export class DrawingManager {
   /** Snapshot a single drawing by id */
   private _snapshotDrawing(id: string): DrawingData | null {
     const p = this._primitives.get(id);
-    if (!p || !('toJSON' in p)) return null;
-    const json = (p as any).toJSON();
-    return this._primitiveJsonToDrawingData(json);
+    return p ? this._registry.snapshotPrimitive(p) : null;
   }
 
   /** Apply an undo action (reverse: after → before) */
@@ -1142,7 +1095,7 @@ export class DrawingManager {
       this._primitives.delete(data.id);
     }
     // Re-create from data
-    const primitive = this._createPrimitiveFromData(data);
+    const primitive = this._registry.createPrimitiveFromData(data);
     if (primitive) {
       this._primitives.set(data.id, primitive);
       if (this._drawingsVisible) {
@@ -1153,7 +1106,7 @@ export class DrawingManager {
 
   // ══ Private: Position Preview ═══════════════════════════════
 
-  private _updatePositionPreview(preview: PositionPrimitive, cursor: AnchorPoint): void {
+  private _updatePositionPreview(preview: PositionManagedPrimitive, cursor: AnchorPoint): void {
     if (!this._dragStart) return;
 
     const entryPrice = this._dragStart.price;
@@ -1354,31 +1307,7 @@ export class DrawingManager {
     p2: AnchorPoint,
     opts: Partial<DrawingStyleOptions>,
   ): void {
-    let primitive: (PluginBase & { id: string; setSelected: (s: boolean) => void; setHovered: (h: boolean) => void }) | null = null;
-
-    switch (mode) {
-      case 'trendline':
-        primitive = new TrendLinePrimitive(id, p1, p2, opts);
-        break;
-      case 'ray':
-        primitive = new RayPrimitive(id, p1, p2, opts);
-        break;
-      case 'fib_retracement':
-        primitive = new FibRetracementPrimitive(id, p1, p2, opts);
-        break;
-      case 'rect':
-        primitive = new RectanglePrimitive(id, p1, p2, opts);
-        break;
-      case 'price_range':
-        primitive = new PriceRangePrimitive(id, p1, p2, opts);
-        break;
-      case 'channel':
-        primitive = new ChannelPrimitive(id, p1, p2, undefined, opts);
-        break;
-      case 'extended_line':
-        primitive = new ExtendedLinePrimitive(id, p1, p2, opts);
-        break;
-    }
+    const primitive = this._registry.createTwoPointPrimitive(mode, id, p1, p2, opts);
 
     if (primitive) {
       this._primitives.set(id, primitive);
@@ -1389,74 +1318,4 @@ export class DrawingManager {
     }
   }
 
-  private _createPrimitiveFromData(data: DrawingData): (PluginBase & { id: string; setSelected: (s: boolean) => void; setHovered: (h: boolean) => void }) | null {
-    const { id, type, anchors, options } = data;
-
-    switch (type) {
-      case 'hline':
-        return anchors[0] ? new HorizontalLinePrimitive(id, anchors[0].price, options) : null;
-      case 'vline':
-        return anchors[0] ? new VerticalLinePrimitive(id, anchors[0].time, options) : null;
-      case 'trendline':
-        return anchors[0] && anchors[1] ? new TrendLinePrimitive(id, anchors[0], anchors[1], options) : null;
-      case 'ray':
-        return anchors[0] && anchors[1] ? new RayPrimitive(id, anchors[0], anchors[1], options) : null;
-      case 'fib_retracement':
-        return anchors[0] && anchors[1] ? new FibRetracementPrimitive(id, anchors[0], anchors[1], options) : null;
-      case 'rect':
-        return anchors[0] && anchors[1] ? new RectanglePrimitive(id, anchors[0], anchors[1], options) : null;
-      case 'price_range':
-        return anchors[0] && anchors[1] ? new PriceRangePrimitive(id, anchors[0], anchors[1], options) : null;
-      case 'position':
-        return data.positionData ? new PositionPrimitive(id, data.positionData, data.positionStyle) : null;
-      case 'extended_line':
-        return anchors[0] && anchors[1] ? new ExtendedLinePrimitive(id, anchors[0], anchors[1], options) : null;
-      case 'channel':
-        return anchors[0] && anchors[1] ? new ChannelPrimitive(id, anchors[0], anchors[1], undefined, options) : null;
-      default:
-        return null;
-    }
-  }
-
-  private _primitiveJsonToDrawingData(json: any): DrawingData | null {
-    if (!json || !json.id || !json.type) return null;
-
-    const type = json.type as DrawingData['type'];
-    const options = json.options ?? { ...DEFAULT_DRAWING_STYLE };
-    let anchors: AnchorPoint[] = [];
-
-    switch (type) {
-      case 'hline':
-        anchors = [{ time: 0 as unknown as Time, price: json.price ?? 0 }];
-        break;
-      case 'vline':
-        anchors = [{ time: json.time ?? (0 as unknown as Time), price: 0 }];
-        break;
-      case 'position':
-        anchors = [
-          { time: json.entryTime, price: json.entryPrice ?? 0 },
-          { time: json.exitTime, price: json.entryPrice ?? 0 },
-        ];
-        return {
-          id: json.id, type, anchors, options,
-          positionData: {
-            side: json.side ?? 'long',
-            entryPrice: json.entryPrice ?? 0,
-            entryTime: json.entryTime,
-            exitTime: json.exitTime,
-            takeProfitPrice: json.takeProfitPrice ?? 0,
-            stopLossPrice: json.stopLossPrice ?? 0,
-            quantity: json.quantity ?? 0,
-          },
-          positionStyle: json.style,
-        };
-      default:
-        if (json.p1 && json.p2) {
-          anchors = [json.p1, json.p2];
-        }
-        break;
-    }
-
-    return { id: json.id, type, anchors, options };
-  }
 }

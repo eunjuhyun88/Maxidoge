@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { STORAGE_KEYS } from '$lib/stores/storageKeys';
-import type { DrawingData } from './drawingManager';
+import type { DrawingData } from './drawingManagerTypes';
 
 /** Build storage key for a specific pair+timeframe combo */
 function storageKey(pair: string, timeframe: string): string {

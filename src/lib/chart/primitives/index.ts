@@ -15,7 +15,7 @@ export { ExtendedLinePrimitive } from './extendedLinePrimitive';
 export { ChannelPrimitive } from './channelPrimitive';
 export type { PositionData, PositionStyleOptions } from './positionPrimitive';
 export { DrawingManager, isPrimitiveDrawingMode } from './drawingManager';
-export type { DrawingData, DrawingManagerCallbacks } from './drawingManager';
+export type { DrawingData, CandleOHLC, DrawingManagerCallbacks } from './drawingManagerTypes';
 
 export type {
   AnchorPoint,

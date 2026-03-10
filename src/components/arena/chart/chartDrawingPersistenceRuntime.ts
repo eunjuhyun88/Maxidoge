@@ -1,11 +1,12 @@
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import type {
   DrawingManager,
-  DrawingManagerCallbacks,
 } from '$lib/chart/primitives/drawingManager';
+import type { DrawingManagerCallbacks } from '$lib/chart/primitives/drawingManagerTypes';
 
 type DrawingManagerModule = typeof import('$lib/chart/primitives/drawingManager');
 type DrawingPersistenceModule = typeof import('$lib/chart/primitives/drawingPersistence');
+type DrawingPrimitiveRegistryModule = typeof import('$lib/chart/primitives/drawingPrimitiveRegistry');
 type DrawingAutoSaver = {
   trigger: () => void;
   flush: () => void;
@@ -36,6 +37,7 @@ export function createChartDrawingPersistenceRuntime(
 
   let drawingManagerModulePromise: Promise<DrawingManagerModule> | null = null;
   let drawingPersistenceModulePromise: Promise<DrawingPersistenceModule> | null = null;
+  let drawingPrimitiveRegistryModulePromise: Promise<DrawingPrimitiveRegistryModule> | null = null;
   let preloadPromise: Promise<void> | null = null;
   let lastPair = '';
   let lastTimeframe = '';
@@ -58,6 +60,14 @@ export function createChartDrawingPersistenceRuntime(
     return await drawingPersistenceModulePromise;
   }
 
+  async function loadDrawingPrimitiveRegistryModule() {
+    if (!drawingPrimitiveRegistryModulePromise) {
+      drawingPrimitiveRegistryModulePromise = import('$lib/chart/primitives/drawingPrimitiveRegistry');
+    }
+
+    return await drawingPrimitiveRegistryModulePromise;
+  }
+
   function getDrawingManager() {
     return drawingManager;
   }
@@ -65,19 +75,27 @@ export function createChartDrawingPersistenceRuntime(
   async function ensureDrawingManagerReady(): Promise<DrawingManager | null> {
     if (drawingManager) return drawingManager;
 
-    const managerModule = await loadDrawingManagerModule();
+    const [managerModule, registryModule] = await Promise.all([
+      loadDrawingManagerModule(),
+      loadDrawingPrimitiveRegistryModule(),
+    ]);
     const chart = options.getChart();
     const series = options.getSeries();
     if (!chart || !series) return null;
     const callbacks = options.createDrawingManagerCallbacks();
 
-    drawingManager = new managerModule.DrawingManager(chart, series, {
-      ...callbacks,
-      onDrawingsChanged: (count) => {
-        callbacks.onDrawingsChanged(count);
-        autoSaver?.trigger();
+    drawingManager = new managerModule.DrawingManager(
+      chart,
+      series,
+      {
+        ...callbacks,
+        onDrawingsChanged: (count) => {
+          callbacks.onDrawingsChanged(count);
+          autoSaver?.trigger();
+        },
       },
-    });
+      registryModule.createDrawingPrimitiveRegistry(),
+    );
 
     if (!autoSaver) {
       const persistenceModule = await loadDrawingPersistenceModule();

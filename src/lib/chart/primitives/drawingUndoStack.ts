@@ -2,7 +2,7 @@
 // Stockclaw — Drawing Undo/Redo Stack
 // ═══════════════════════════════════════════════════════════════
 
-import type { DrawingData } from './drawingManager';
+import type { DrawingData } from './drawingManagerTypes';
 
 export type DrawingActionType = 'create' | 'delete' | 'move' | 'resize' | 'style' | 'clear';
 
