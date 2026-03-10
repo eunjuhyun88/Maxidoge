@@ -6889,3 +6889,38 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1) still owns the chart-container shell and overlay child ordering
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE
+
+## [2026-03-11 00:15:00 +0900] FINISH chart-header-bar-split-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart presentation hotspot, preserve header behavior, and split `ChartHeaderBar.svelte` into smaller presentational boundaries without touching unrelated route WIP
+- What changed:
+  - Added [chartHeaderBarContracts.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartHeaderBarContracts.ts#L1)
+    - centralized the summary/controls/meta child prop surfaces
+    - removed repeated header prop typing from each new child boundary
+  - Added [ChartHeaderSummary.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderSummary.svelte#L1)
+    - moved the pair summary, 24h stats tooltip, token switch, and timeframe controls into a dedicated summary boundary
+    - kept the price/timeframe formatting helpers close to the markup that consumes them
+  - Added [ChartHeaderControls.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderControls.svelte#L1)
+    - moved mode toggle, scan/chat/pattern CTA, publish actions, and indicator-strip restore into a dedicated controls boundary
+    - kept the responsive action hide/show rules with the control markup
+  - Added [ChartHeaderMetaStrip.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderMetaStrip.svelte#L1)
+    - moved the collapsed MA/RSI/VOL strip into a dedicated meta child boundary
+  - Updated [ChartHeaderBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderBar.svelte#L1)
+    - reduced the component from `681` lines to `182` lines by leaving only bar-level composition and shell layout
+    - preserved the external prop/callback contract used by `ChartPanelShell.svelte`
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ChartHeaderBar.svelte` as a composition boundary
+    - documented the new summary/controls/meta/contracts files as canonical header paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartHeaderBar.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartHeaderBar.js) `10.94 kB`
+    - [ChartAgentSurface.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartAgentSurface.js) `46.28 kB`
+    - [arena/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/arena/_page.svelte.js) `141.96 kB`
+- Residual risks:
+  - this slice improved ownership but increased `ChartHeaderBar.js` from roughly `9.29 kB` to `10.94 kB`, so the next slice should bias toward real lazy boundaries or `ChartAgentSurface` shell reduction rather than more helper-only splits
+  - [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1) remains the larger chart presentation shell
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE

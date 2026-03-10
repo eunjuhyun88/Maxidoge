@@ -343,7 +343,11 @@ const records = result.rows.map((r: any) => ({ ... }));
 - `src/components/arena/chart/chartRuntimeBundle.ts`: ChartPanel의 primary runtime 생성 순서, interaction binding, primary cleanup ordering 계층
 - `src/components/arena/chart/ChartTradingViewPane.svelte`: ChartPanel의 trading-mode 전용 TradingView iframe shell + loading/error/fallback UI child boundary
 - `src/components/arena/chart/ChartIndicatorStrip.svelte`: ChartPanel의 agent advanced-mode indicator strip + view toggle + legend toggle child boundary
-- `src/components/arena/chart/ChartHeaderBar.svelte`: ChartPanel의 상단 toolbar/meta/pair switch/timeframe/mode toggle/layout-preserving child boundary
+- `src/components/arena/chart/ChartHeaderBar.svelte`: ChartPanel의 상단 bar composition boundary; summary/controls/meta child 조립과 top-level shell DOM을 보유
+- `src/components/arena/chart/ChartHeaderSummary.svelte`: ChartPanel 상단 bar의 pair summary/24h stats/token switch/timeframe child boundary
+- `src/components/arena/chart/ChartHeaderControls.svelte`: ChartPanel 상단 bar의 mode toggle/scan/chat/publish/indicator restore child boundary
+- `src/components/arena/chart/ChartHeaderMetaStrip.svelte`: ChartPanel 상단 bar의 collapsed MA/RSI/VOL meta strip child boundary
+- `src/components/arena/chart/chartHeaderBarContracts.ts`: ChartPanel 상단 bar의 summary/controls/meta child prop contract 경계
 - `src/components/arena/chart/ChartToolbar.svelte`: ChartPanel agent mode의 drawing toolbar state/composition boundary; category open state, active tool memory, standalone action button orchestration을 보유
 - `src/components/arena/chart/ChartToolbarPopover.svelte`: ChartPanel drawing toolbar의 category popover child boundary; tool list markup/style와 selection affordance를 보유
 - `src/components/arena/chart/ChartToolbarIcon.svelte`: ChartPanel drawing toolbar의 icon render child boundary; toolbar와 popover가 동일 SVG icon catalog를 공유
@@ -796,7 +800,11 @@ C02와 충돌하는 다른 설계 문서는 무시. C02가 canonical.
 - **Market pulse client API canonical path**: browser-side market pulse fetch, TTL cache, inflight dedupe는 `src/lib/api/marketPulse.ts`가 단일 진실원이다. `MarketPulseBadge.svelte`나 다른 chart child가 `/api/market/pulse`를 직접 호출해 중복 polling을 만들지 말 것.
 - **Position sizer engine canonical path**: risk sizing math, RR 계산, warning code 생성은 `src/lib/engine/positionSizer.ts`가 단일 진실원이다. `PositionSizerPanel.svelte`나 chart runtime에서 `res.rr = ...` 같은 post-mutation, leverage/risk 재계산, warning 문자열 조립을 다시 흩뿌리지 말 것.
 - **Position sizer panel canonical path**: size panel의 입력 UI, quantity handoff, warning formatting surface는 `src/components/arena/chart/PositionSizerPanel.svelte`가 단일 진실원이다. API/store/polling을 이 패널에 넣지 말고, engine이 준 결과만 표시 계층에서 소비할 것.
-- **Chart header bar canonical path**: pair summary, 24h stats, token switch, timeframe controls, mode toggle, draw toolbar, scan/publish CTA, collapsed MA meta는 `src/components/arena/chart/ChartHeaderBar.svelte`가 단일 진실원이다. 레이아웃/위치 회귀를 막기 위해 동일 DOM/class 구조를 유지하고, `ChartPanel.svelte`에 이 상단 바 마크업과 스타일을 다시 인라인하지 말 것.
+- **Chart header bar canonical path**: 상단 bar의 composition 경계와 summary/controls/meta child 조립은 `src/components/arena/chart/ChartHeaderBar.svelte`가 단일 진실원이다. `ChartPanel.svelte`에 이 상단 바 마크업과 스타일을 다시 인라인하지 말 것.
+- **Chart header summary canonical path**: pair summary, 24h stats tooltip, token switch, timeframe surface는 `src/components/arena/chart/ChartHeaderSummary.svelte`가 단일 진실원이다. summary DOM과 시장 요약 스타일을 다시 `ChartHeaderBar.svelte`에 길게 인라인하지 말 것.
+- **Chart header controls canonical path**: mode toggle, scan/chat CTA, pattern trigger, publish buttons, indicator restore action은 `src/components/arena/chart/ChartHeaderControls.svelte`가 단일 진실원이다. action DOM과 responsive hide/show 규칙을 다시 `ChartHeaderBar.svelte`에 합치지 말 것.
+- **Chart header meta strip canonical path**: collapsed MA/RSI/VOL strip markup와 overflow 스타일은 `src/components/arena/chart/ChartHeaderMetaStrip.svelte`가 단일 진실원이다. meta strip DOM과 responsive hide 규칙을 다시 `ChartHeaderBar.svelte`에 인라인하지 말 것.
+- **Chart header bar contract canonical path**: summary/controls/meta child가 공유하는 prop surface는 `src/components/arena/chart/chartHeaderBarContracts.ts`가 단일 진실원이다. child 컴포넌트마다 header prop 타입을 다시 독자 선언해 drift를 만들지 말 것.
 - **Chart agent overlay chrome canonical path**: agent mode overlay의 composition 경계와 stacking order는 `src/components/arena/chart/ChartAgentOverlayChrome.svelte`가 단일 진실원이다. `ChartPanel.svelte`에는 canvas/trade-plan/annotation shell만 남기고, overlay chrome child 조립과 상위 prop contract를 다시 인라인하지 말 것.
 - **Chart agent overlay contract canonical path**: overlay chrome parent/meta/action child가 공유하는 prop surface는 `src/components/arena/chart/chartAgentOverlayChromeContracts.ts`가 단일 진실원이다. child 컴포넌트마다 overlay prop 타입을 다시 독자 선언해 drift를 만들지 말 것.
 - **Chart agent meta overlay canonical path**: scale tools, indicator legend, loading overlay, error badge는 `src/components/arena/chart/ChartAgentMetaOverlay.svelte`가 단일 진실원이다. `ChartAgentOverlayChrome.svelte`나 `ChartPanel.svelte`에 이 meta HUD 마크업과 스타일을 다시 인라인하지 말 것.
