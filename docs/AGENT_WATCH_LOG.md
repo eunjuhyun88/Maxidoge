@@ -6829,3 +6829,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - this slice improved ownership but increased `ChartPanel.js` from `55.05 kB` to `58.29 kB`, so the next slice should bias toward real lazy boundaries or moving orchestration out of the panel rather than adding more helper modules
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE
+
+## [2026-03-10 23:20:00 +0900] FINISH chart-agent-status-hud-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart overlay hotspot, preserve overlay order, and split `ChartAgentStatusHud.svelte` into smaller presentational HUD boundaries without touching unrelated route WIP
+- What changed:
+  - Added [ChartAgentDrawingStatusHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentDrawingStatusHud.svelte#L1)
+    - moved the drawing notice, chart notice, and drag indicator into a dedicated drawing-status HUD boundary
+    - kept the local derived drawing message next to the markup that consumes it
+  - Added [ChartAgentPositionHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentPositionHud.svelte#L1)
+    - moved the position sizer dock, position badge, and risk-reward label surface into a dedicated position HUD boundary
+    - kept the position-label formatting and `PositionSizerPanel` docking in one child surface
+  - Updated [ChartAgentStatusHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentStatusHud.svelte#L1)
+    - reduced the component to a composition boundary that renders drawing HUD first and position HUD second
+    - removed the inline draw/position absolute-position markup so the status HUD only owns child order and shared prop handoff
+  - Updated [chartAgentOverlayChromeContracts.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartAgentOverlayChromeContracts.ts#L1)
+    - extended the shared overlay contract with dedicated drawing-status and position-HUD prop surfaces
+    - kept the overlay child prop boundary centralized instead of letting each new HUD define its own local contract
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ChartAgentStatusHud.svelte` as a composition boundary
+    - documented `ChartAgentDrawingStatusHud.svelte` and `ChartAgentPositionHud.svelte` as canonical overlay HUD paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+- Residual risks:
+  - [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1) still owns the larger chart-surface presentation shell
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE

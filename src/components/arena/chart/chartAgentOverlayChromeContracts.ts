@@ -97,9 +97,9 @@ export interface ChartAgentTradeHudProps {
 }
 
 export interface ChartAgentStatusHudProps {
-  activeTradeSetup?: AgentTradeSetup | null;
   drawingMode: DrawingMode;
   chartNotice?: string;
+  activeTradeSetup?: AgentTradeSetup | null;
   showPosition?: boolean;
   posEntry?: number | null;
   posTp?: number | null;
@@ -108,4 +108,22 @@ export interface ChartAgentStatusHudProps {
   hoverLine?: string | null;
   isDragging?: string | null;
   onCancelDrawing?: () => void;
+}
+
+export interface ChartAgentDrawingStatusHudProps {
+  drawingMode: DrawingMode;
+  chartNotice?: string;
+  isDragging?: string | null;
+  onCancelDrawing?: () => void;
+}
+
+export interface ChartAgentPositionHudProps {
+  activeTradeSetup?: AgentTradeSetup | null;
+  showPosition?: boolean;
+  posEntry?: number | null;
+  posTp?: number | null;
+  posSl?: number | null;
+  posDir?: string;
+  hoverLine?: string | null;
+  isDragging?: string | null;
 }
