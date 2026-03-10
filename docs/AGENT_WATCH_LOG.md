@@ -46,6 +46,40 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - pushed to `origin/codex/terminal-uiux-gtm-wip`
 - Status: DONE
 
+## [2026-03-11 02:05:00 +0900] FINISH chart-position-primitive-lazy-registry-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep planning the next chart hotspot, preserve drawing behavior, and narrow the base drawing registry path by moving `PositionPrimitive` behind a real lazy boundary without touching unrelated route WIP
+- What changed:
+  - Added [drawingPositionPrimitiveRegistry.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingPositionPrimitiveRegistry.ts#L1)
+    - extracted long/short entry preview construction and serialized position restore into a dedicated position-only registry chunk
+  - Updated [drawingPrimitiveRegistry.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingPrimitiveRegistry.ts#L1)
+    - removed the static `PositionPrimitive` import from the base registry
+    - added lazy preload hooks so only position drawings trigger the position registry chunk
+  - Updated [drawingManager.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingManager.ts#L1)
+    - moved deferred long/short entry preload ownership into the manager, where drawing-mode state and mouse replay already live
+    - keeps pending mouse-down state inside the manager until the position registry is ready
+  - Updated [chartDrawingPersistenceRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingPersistenceRuntime.ts#L1)
+    - preloads position support only when persisted drawings actually contain `type='position'`
+  - Updated [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1)
+    - removed the temporary route-level deferred mode activation logic and returned to a thinner runtime/controller handoff
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `drawingPositionPrimitiveRegistry.ts` and manager-owned deferred position preload as canonical chart drawing-stack boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [drawingManager.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingManager.js) `37.86 kB`
+    - [drawingPrimitiveRegistry.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingPrimitiveRegistry.js) `53.13 kB`
+    - [drawingPositionPrimitiveRegistry.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingPositionPrimitiveRegistry.js) `11.33 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `64.79 kB`
+- Residual risks:
+  - the non-position drawing path is now lighter, but total drawing-stack weight for long/short entry flows is slightly larger once the position chunk loads; that tradeoff is intentional because the position tool is optional
+  - `chartPanelSupportRuntime.js` is still a touch heavier than the prior `64.49 kB`, so the next slice should avoid pushing optional preload policy back into base chart runtime code
+  - auth-side dynamic-import reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
 ## [2026-03-11 01:44:21 +0900] FINISH chart-drawing-primitive-registry-split-20260311 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

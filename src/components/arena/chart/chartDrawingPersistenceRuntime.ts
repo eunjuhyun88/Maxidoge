@@ -133,6 +133,7 @@ export function createChartDrawingPersistenceRuntime(
 
     const saved = persistenceModule.loadDrawings(pair, timeframe);
     if (saved.length > 0) {
+      await manager.preloadForDrawings(saved);
       manager.importDrawings(saved);
     }
   }

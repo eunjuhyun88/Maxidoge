@@ -1,6 +1,6 @@
 import type { Time } from 'lightweight-charts';
 import type { DrawingMode } from '$lib/chart/chartTypes';
-import type { PositionData, PositionStyleOptions } from './positionPrimitive';
+import type { PositionData } from './positionPrimitive';
 import { HorizontalLinePrimitive } from './horizontalLinePrimitive';
 import { VerticalLinePrimitive } from './verticalLinePrimitive';
 import { TrendLinePrimitive } from './trendLinePrimitive';
@@ -8,13 +8,14 @@ import { RayPrimitive } from './rayPrimitive';
 import { FibRetracementPrimitive } from './fibRetracementPrimitive';
 import { RectanglePrimitive } from './rectanglePrimitive';
 import { PriceRangePrimitive } from './priceRangePrimitive';
-import { PositionPrimitive } from './positionPrimitive';
 import { ExtendedLinePrimitive } from './extendedLinePrimitive';
 import { ChannelPrimitive } from './channelPrimitive';
 import type { DrawingData } from './drawingManagerTypes';
 import type { AnchorPoint, DrawingStyleOptions } from './drawingPrimitiveTypes';
 import { DEFAULT_DRAWING_STYLE } from './drawingPrimitiveTypes';
 import { PluginBase } from './pluginBase';
+
+type DrawingPositionPrimitiveRegistryModule = typeof import('./drawingPositionPrimitiveRegistry');
 
 export interface ManagedPrimitive extends PluginBase {
   id: string;
@@ -30,6 +31,8 @@ export interface PositionManagedPrimitive extends ManagedPrimitive {
 }
 
 export interface DrawingPrimitiveRegistry {
+  preloadForMode(mode: DrawingMode): Promise<void>;
+  preloadForDrawings(drawings: readonly DrawingData[]): Promise<void>;
   createSinglePointPrimitive(
     mode: 'hline' | 'vline',
     id: string,
@@ -99,7 +102,43 @@ function primitiveJsonToDrawingData(json: any): DrawingData | null {
 }
 
 export function createDrawingPrimitiveRegistry(): DrawingPrimitiveRegistry {
+  let positionPrimitiveRegistryModule: DrawingPositionPrimitiveRegistryModule | null = null;
+  let positionPrimitiveRegistryModulePromise: Promise<DrawingPositionPrimitiveRegistryModule> | null = null;
+
+  async function loadPositionPrimitiveRegistryModule() {
+    if (positionPrimitiveRegistryModule) {
+      return positionPrimitiveRegistryModule;
+    }
+
+    if (!positionPrimitiveRegistryModulePromise) {
+      positionPrimitiveRegistryModulePromise = import('./drawingPositionPrimitiveRegistry');
+    }
+
+    positionPrimitiveRegistryModule = await positionPrimitiveRegistryModulePromise;
+    return positionPrimitiveRegistryModule;
+  }
+
+  function hasPositionMode(mode: DrawingMode) {
+    return mode === 'longentry' || mode === 'shortentry';
+  }
+
+  function hasPositionDrawings(drawings: readonly DrawingData[]) {
+    return drawings.some((drawing) => drawing.type === 'position');
+  }
+
   return {
+    async preloadForMode(mode) {
+      if (hasPositionMode(mode)) {
+        await loadPositionPrimitiveRegistryModule();
+      }
+    },
+
+    async preloadForDrawings(drawings) {
+      if (hasPositionDrawings(drawings)) {
+        await loadPositionPrimitiveRegistryModule();
+      }
+    },
+
     createSinglePointPrimitive(mode, id, value, options) {
       switch (mode) {
         case 'hline':
@@ -129,17 +168,7 @@ export function createDrawingPrimitiveRegistry(): DrawingPrimitiveRegistry {
           return new ExtendedLinePrimitive(previewId, anchor, anchor, options);
         case 'longentry':
         case 'shortentry': {
-          const side = mode === 'longentry' ? 'long' : 'short';
-          const entryPrice = anchor.price;
-          return new PositionPrimitive(previewId, {
-            side,
-            entryPrice,
-            entryTime: anchor.time,
-            exitTime: anchor.time,
-            takeProfitPrice: entryPrice,
-            stopLossPrice: entryPrice,
-            quantity: 0,
-          });
+          return positionPrimitiveRegistryModule?.createPositionDragPreview(mode, previewId, anchor) ?? null;
         }
         default:
           return null;
@@ -186,7 +215,7 @@ export function createDrawingPrimitiveRegistry(): DrawingPrimitiveRegistry {
         case 'price_range':
           return anchors[0] && anchors[1] ? new PriceRangePrimitive(id, anchors[0], anchors[1], options) : null;
         case 'position':
-          return data.positionData ? new PositionPrimitive(id, data.positionData, data.positionStyle) : null;
+          return positionPrimitiveRegistryModule?.createPositionPrimitiveFromData(data) ?? null;
         case 'extended_line':
           return anchors[0] && anchors[1] ? new ExtendedLinePrimitive(id, anchors[0], anchors[1], options) : null;
         case 'channel':

@@ -58,6 +58,12 @@ function isPositionManagedPrimitive(value: ManagedPrimitive | null): value is Po
   return !!value && 'positionData' in value && 'updatePrices' in value && 'updateTimes' in value;
 }
 
+function requiresDeferredModeRegistry(
+  mode: DrawingMode,
+): mode is Extract<DrawingMode, 'longentry' | 'shortentry'> {
+  return mode === 'longentry' || mode === 'shortentry';
+}
+
 export class DrawingManager {
   private _chart: IChartApi;
   private _series: ISeriesApi<SeriesType>;
@@ -74,6 +80,9 @@ export class DrawingManager {
   private _selectedId: string | null = null;
   private _hoveredId: string | null = null;
   private _magnetEnabled = true;
+  private _pendingPrimitiveMode: Extract<DrawingMode, 'longentry' | 'shortentry'> | null = null;
+  private _pendingPrimitiveModeToken = 0;
+  private _pendingPrimitiveModeMouseDown: { x: number; y: number } | null = null;
 
   // Drag state
   private _dragStart: AnchorPoint | null = null;
@@ -162,6 +171,14 @@ export class DrawingManager {
     this._magnetEnabled = enabled;
   }
 
+  async preloadForMode(mode: DrawingMode): Promise<void> {
+    await this._registry.preloadForMode(mode);
+  }
+
+  async preloadForDrawings(drawings: readonly DrawingData[]): Promise<void> {
+    await this._registry.preloadForDrawings(drawings);
+  }
+
   setDrawingMode(mode: DrawingMode): void {
     // Cancel in-progress drawing
     this._cancelPreview();
@@ -171,6 +188,35 @@ export class DrawingManager {
     // Deselect
     if (mode !== 'none') {
       this._setSelected(null);
+    }
+
+    if (requiresDeferredModeRegistry(mode)) {
+      this._pendingPrimitiveMode = mode;
+      this._pendingPrimitiveModeMouseDown = null;
+      const token = ++this._pendingPrimitiveModeToken;
+      void this._registry.preloadForMode(mode)
+        .then(() => {
+          if (this._pendingPrimitiveModeToken !== token || this._pendingPrimitiveMode !== mode || this._drawingMode !== mode) {
+            return;
+          }
+
+          this._pendingPrimitiveMode = null;
+          const pendingMouseDown = this._pendingPrimitiveModeMouseDown;
+          this._pendingPrimitiveModeMouseDown = null;
+          if (pendingMouseDown) {
+            this.handleMouseDown(pendingMouseDown.x, pendingMouseDown.y);
+          }
+        })
+        .catch(() => {
+          if (this._pendingPrimitiveModeToken !== token) return;
+          this._pendingPrimitiveMode = null;
+          this._pendingPrimitiveModeMouseDown = null;
+          this.setDrawingMode('none');
+        });
+    } else {
+      this._pendingPrimitiveMode = null;
+      this._pendingPrimitiveModeMouseDown = null;
+      this._pendingPrimitiveModeToken += 1;
     }
 
     this._drawingMode = mode;
@@ -388,6 +434,11 @@ export class DrawingManager {
   // subscribeClick only fires when drawingMode === 'none' (selection).
 
   handleMouseDown(x: number, y: number): void {
+    if (this._pendingPrimitiveMode === this._drawingMode) {
+      this._pendingPrimitiveModeMouseDown = { x, y };
+      return;
+    }
+
     // ── Single-click tools: create immediately on mousedown ──
 
     if (this._drawingMode === 'hline') {

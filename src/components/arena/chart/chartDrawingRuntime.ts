@@ -228,7 +228,8 @@ export function createChartDrawingRuntime(
         if (mode !== 'none') {
           void preload().then(() => {
             const loadedDrawingManager = ensureDrawingManager();
-            loadedDrawingManager?.setDrawingMode(mode);
+            if (!loadedDrawingManager) return;
+            loadedDrawingManager.setDrawingMode(mode);
           });
         }
       }
@@ -547,11 +548,16 @@ export function createChartDrawingRuntime(
   function importDrawings(drawings: DrawingData[]) {
     const dm = ensureDrawingManager();
     if (dm) {
-      dm.importDrawings(drawings);
+      void dm.preloadForDrawings(drawings).then(() => {
+        dm.importDrawings(drawings);
+      });
       return;
     }
     void persistenceRuntime.ensureDrawingManagerReady().then((loadedDrawingManager) => {
-      loadedDrawingManager?.importDrawings(drawings);
+      if (!loadedDrawingManager) return;
+      void loadedDrawingManager.preloadForDrawings(drawings).then(() => {
+        loadedDrawingManager.importDrawings(drawings);
+      });
     });
   }
 
