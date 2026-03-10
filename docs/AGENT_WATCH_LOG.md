@@ -6980,3 +6980,30 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - `chartPanelSupportRuntime.js` is lighter, but it is still the larger remaining chart runtime hotspot
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE
+
+## [2026-03-10 23:58:00 +0900] FINISH chart-interactive-action-lazy-runtime-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep shaving chart runtime weight, preserve behavior, and move optional interactive chart actions off the base support-runtime path without touching unrelated route WIP
+- What changed:
+  - Added [chartInteractiveActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartInteractiveActionRuntime.ts#L1)
+    - extracted `publishCommunitySignal`, `requestChatAssist`, and `activateTradeDrawing` into a dedicated interactive runtime
+    - kept signal draft/evidence assembly and draw-mode notice logic behind the first chart action that actually needs it
+  - Updated [chartActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartActionRuntime.ts#L1)
+    - narrowed the static path to pair/timeframe changes and scan requests
+    - added a lazy runtime loader so interactive actions instantiate on first use instead of during support-runtime construction
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartInteractiveActionRuntime.ts` as the canonical interactive action lazy boundary
+    - clarified that `chartActionRuntime.ts` now owns only immediate chart actions plus the lazy handoff
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [chartInteractiveActionRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartInteractiveActionRuntime.js) `3.92 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `64.05 kB`
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `58.29 kB`
+- Residual risks:
+  - this slice reduced the base support-runtime weight, but drawing persistence/runtime remains the larger chart hotspot
+  - auth-side dynamic-import reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
