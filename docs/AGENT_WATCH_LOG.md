@@ -20,6 +20,30 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ## Entries
 
+## [2026-03-10 20:33:42 +0900] FINISH chart-mount-state-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing the canonical ChartPanel refactor, preserve layout, and continue executing the remaining runtime/state cleanup with narrow push-safe slices
+- What changed:
+  - Added [chartPanelMountState.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartPanelMountState.ts#L1)
+    - extracted the prepared-mount/bootstrap state apply path from the component shell
+    - centralized the series/pane ref assignment and MA period binding injection sequence behind a dedicated mount-state helper
+  - Updated [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1)
+    - rewired `applyBootstrapState()` and `applyPreparedMount()` to the canonical mount-state helper
+    - kept all layout and runtime behavior unchanged while reducing mount-state logic inside the component body
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartPanelMountState.ts` as the canonical mount-state apply boundary for ChartPanel
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1) still owns the large runtime-bundle option builder and controller option wiring
+  - this slice moved mount-state responsibility out of the component, but it did not yet reduce the runtime-bundle builder surface
+- Commit / Push:
+  - pending
+- Status: DONE
+
 ## [2026-03-10 20:15:27 +0900] FINISH chart-client-runtime-assembly-20260310 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip
