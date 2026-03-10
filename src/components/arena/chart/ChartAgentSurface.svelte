@@ -10,9 +10,7 @@
   import ChartAgentOverlayChrome from './ChartAgentOverlayChrome.svelte';
   import ChartAnnotationLayer from './ChartAnnotationLayer.svelte';
   import ChartDrawingCanvas from './ChartDrawingCanvas.svelte';
-  import ChartDrawingContextMenu from './ChartDrawingContextMenu.svelte';
   import ChartToolbar from './ChartToolbar.svelte';
-  import ChartTradePlanOverlay from './ChartTradePlanOverlay.svelte';
 
   type AgentAnnotation = {
     id: string;
@@ -188,9 +186,21 @@
   }: Props = $props();
 
   let containerEl: HTMLDivElement | null = $state(null);
+  let chartTradePlanOverlayModule = $state<Promise<typeof import('./ChartTradePlanOverlay.svelte')> | null>(null);
+  let chartDrawingContextMenuModule = $state<Promise<typeof import('./ChartDrawingContextMenu.svelte')> | null>(null);
 
   $effect(() => {
     onContainerReady(containerEl);
+  });
+
+  $effect(() => {
+    if (!pendingTradePlan || chartTradePlanOverlayModule) return;
+    chartTradePlanOverlayModule = import('./ChartTradePlanOverlay.svelte');
+  });
+
+  $effect(() => {
+    if (chartMode !== 'agent' || !contextMenuVisible || chartDrawingContextMenuModule) return;
+    chartDrawingContextMenuModule = import('./ChartDrawingContextMenu.svelte');
   });
 
   onDestroy(() => {
@@ -288,14 +298,19 @@
     />
   {/if}
 
-  <ChartTradePlanOverlay
-    {pendingTradePlan}
-    onCancel={onCancelTradePlan}
-    onOpen={onOpenTradeFromPlan}
-    onSetRatio={onSetTradePlanRatio}
-    onRatioPointerDown={onRatioPointerDown}
-    onRatioTrackReady={onRatioTrackReady}
-  />
+  {#if pendingTradePlan && chartTradePlanOverlayModule}
+    {#await chartTradePlanOverlayModule then chartTradePlanOverlayNs}
+      {@const ChartTradePlanOverlay = chartTradePlanOverlayNs.default}
+      <ChartTradePlanOverlay
+        {pendingTradePlan}
+        onCancel={onCancelTradePlan}
+        onOpen={onOpenTradeFromPlan}
+        onSetRatio={onSetTradePlanRatio}
+        onRatioPointerDown={onRatioPointerDown}
+        onRatioTrackReady={onRatioTrackReady}
+      />
+    {/await}
+  {/if}
 
   {#if chartMode === 'agent'}
     <ChartAnnotationLayer annotations={agentAnnotations} />
@@ -303,23 +318,26 @@
 </div>
 
 <!-- Drawing context menu (portal to body — fixed position) -->
-{#if chartMode === 'agent'}
-  <ChartDrawingContextMenu
-    visible={contextMenuVisible}
-    x={contextMenuX}
-    y={contextMenuY}
-    currentColor={selectedDrawingColor}
-    currentWidth={selectedDrawingWidth}
-    currentStyle={selectedDrawingStyle}
-    isLocked={selectedDrawingLocked}
-    onChangeColor={onContextMenuChangeColor}
-    onChangeWidth={onContextMenuChangeWidth}
-    onChangeStyle={onContextMenuChangeStyle}
-    onDuplicate={onContextMenuDuplicate}
-    onToggleLock={onContextMenuToggleLock}
-    onDelete={onContextMenuDelete}
-    onClose={onContextMenuClose}
-  />
+{#if chartMode === 'agent' && contextMenuVisible && chartDrawingContextMenuModule}
+  {#await chartDrawingContextMenuModule then chartDrawingContextMenuNs}
+    {@const ChartDrawingContextMenu = chartDrawingContextMenuNs.default}
+    <ChartDrawingContextMenu
+      visible={contextMenuVisible}
+      x={contextMenuX}
+      y={contextMenuY}
+      currentColor={selectedDrawingColor}
+      currentWidth={selectedDrawingWidth}
+      currentStyle={selectedDrawingStyle}
+      isLocked={selectedDrawingLocked}
+      onChangeColor={onContextMenuChangeColor}
+      onChangeWidth={onContextMenuChangeWidth}
+      onChangeStyle={onContextMenuChangeStyle}
+      onDuplicate={onContextMenuDuplicate}
+      onToggleLock={onContextMenuToggleLock}
+      onDelete={onContextMenuDelete}
+      onClose={onContextMenuClose}
+    />
+  {/await}
 {/if}
 
 <style>

@@ -6924,3 +6924,27 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1) remains the larger chart presentation shell
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE
+
+## [2026-03-10 23:47:04 +0900] FINISH chart-agent-surface-optional-overlay-lazy-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart presentation hotspot, prefer real lazy boundaries over helper-only splits, and reduce `ChartAgentSurface` server weight without touching unrelated route WIP
+- What changed:
+  - Updated [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1)
+    - removed the static imports for `ChartTradePlanOverlay.svelte` and `ChartDrawingContextMenu.svelte`
+    - added local lazy module state and `\$effect` loaders so the trade-plan overlay only loads when `pendingTradePlan` exists
+    - moved the drawing context menu behind a first-open lazy boundary so the menu module is loaded only when agent mode opens the context menu
+    - kept the chart container DOM, overlay ordering, and parent callback contract unchanged
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ChartAgentSurface.svelte` as the canonical owner of the optional trade-plan/context-menu lazy boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartAgentSurface.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartAgentSurface.js) `39.72 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `67.93 kB`
+- Residual risks:
+  - this slice reduced the `ChartAgentSurface` server chunk, but `chartPanelSupportRuntime.js` grew, so the next chart slice should watch runtime assembly weight instead of adding more presentational helper layers
+  - Vite still reports the expected dynamic-import note for [chartTradePlanner.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartTradePlanner.ts#L1) because it is dynamically imported by [chartActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartActionRuntime.ts#L1) and also statically imported by other chart runtimes
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
