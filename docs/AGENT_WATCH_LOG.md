@@ -46,6 +46,30 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - pushed to `origin/codex/terminal-uiux-gtm-wip`
 - Status: DONE
 
+## [2026-03-11 02:29:00 +0900] FINISH chart-drawing-runtime-surface-trim-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep shaving `chartPanelSupportRuntime`, preserve behavior, and remove dead drawing-admin surface from the base drawing runtime instead of inventing another helper-only split
+- What changed:
+  - Updated [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1)
+    - removed unused public wrapper methods for magnet toggle, undo/redo, selected-drawing style mutation, duplicate/lock helpers, and import/export helpers
+    - narrowed the runtime contract to the drawing controls actually consumed by `chartPanelSupportRuntime`
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented that admin-only drawing helpers should not come back into the base drawing runtime surface without a real caller and a lazy-boundary plan
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `62.95 kB`
+    - previous baseline before this slice: `64.79 kB`
+    - [drawingPrimitiveRegistry.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingPrimitiveRegistry.js) `53.13 kB`
+    - [drawingManager.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingManager.js) `37.86 kB`
+- Residual risks:
+  - the removed admin API surface appeared dead in the current chart shell; if a hidden consumer exists outside the searched chart/shell path it would need to reintroduce that capability through an explicit, typed boundary
+  - the drawing context menu itself is still an optional surface owned by [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1), so the next slice should verify whether its state path is fully wired or still partially dormant
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
 ## [2026-03-11 02:05:00 +0900] FINISH chart-position-primitive-lazy-registry-20260311 (frontend)
 - Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-wip

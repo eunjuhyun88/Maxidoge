@@ -5,8 +5,6 @@ import {
   type TradePreviewDraft,
   type TrendlineDraft,
 } from './chartDrawingSession';
-import type { DrawingData } from '$lib/chart/primitives/drawingManager';
-import type { DrawingStyleOptions } from '$lib/chart/primitives/drawingPrimitiveTypes';
 import { createChartDrawingPersistenceRuntime } from './chartDrawingPersistenceRuntime';
 
 type ChartTradePreviewFinalizeRuntimeModule = typeof import('./chartTradePreviewFinalizeRuntime');
@@ -67,28 +65,6 @@ export interface ChartDrawingRuntimeController {
   cancelCurrentAction(): void;
   /** Delete the currently selected drawing */
   deleteSelectedDrawing(): void;
-  /** Toggle magnet snap to candle OHLC */
-  toggleMagnet(): void;
-  /** Get magnet enabled state */
-  getMagnetEnabled(): boolean;
-  /** Undo last drawing action */
-  undo(): void;
-  /** Redo last undone action */
-  redo(): void;
-  /** Update style options on the selected drawing (context menu) */
-  updateSelectedOptions(opts: Partial<DrawingStyleOptions>): void;
-  /** Duplicate the selected drawing */
-  duplicateSelected(): void;
-  /** Toggle lock on the selected drawing */
-  toggleLockSelected(): void;
-  /** Check if selected drawing is locked */
-  isSelectedLocked(): boolean;
-  /** Get serialized data for selected drawing */
-  getSelectedDrawingData(): DrawingData | null;
-  /** Export all drawings */
-  exportDrawings(): DrawingData[];
-  /** Import drawings */
-  importDrawings(drawings: DrawingData[]): void;
   /** Call when pair or timeframe changes — saves current, loads new */
   syncPairTimeframe(): Promise<void>;
   dispose(): void;
@@ -497,70 +473,6 @@ export function createChartDrawingRuntime(
     persistenceRuntime.dispose();
   }
 
-  function toggleMagnet() {
-    const dm = ensureDrawingManager();
-    if (dm) {
-      dm.setMagnetEnabled(!dm.magnetEnabled);
-    }
-  }
-
-  function getMagnetEnabled(): boolean {
-    return persistenceRuntime.getDrawingManager()?.magnetEnabled ?? true;
-  }
-
-  function undo() {
-    const dm = ensureDrawingManager();
-    if (dm) dm.undo();
-  }
-
-  function redo() {
-    const dm = ensureDrawingManager();
-    if (dm) dm.redo();
-  }
-
-  function updateSelectedOptions(opts: Partial<DrawingStyleOptions>) {
-    const dm = ensureDrawingManager();
-    if (dm) dm.updateSelectedOptions(opts);
-  }
-
-  function duplicateSelected() {
-    const dm = ensureDrawingManager();
-    if (dm) dm.duplicateSelected();
-  }
-
-  function toggleLockSelected() {
-    const dm = ensureDrawingManager();
-    if (dm) dm.toggleLockSelected();
-  }
-
-  function isSelectedLocked(): boolean {
-    return persistenceRuntime.getDrawingManager()?.isSelectedLocked() ?? false;
-  }
-
-  function getSelectedDrawingData() {
-    return persistenceRuntime.getDrawingManager()?.getSelectedDrawingData() ?? null;
-  }
-
-  function exportDrawings() {
-    return persistenceRuntime.getDrawingManager()?.exportDrawings() ?? [];
-  }
-
-  function importDrawings(drawings: DrawingData[]) {
-    const dm = ensureDrawingManager();
-    if (dm) {
-      void dm.preloadForDrawings(drawings).then(() => {
-        dm.importDrawings(drawings);
-      });
-      return;
-    }
-    void persistenceRuntime.ensureDrawingManagerReady().then((loadedDrawingManager) => {
-      if (!loadedDrawingManager) return;
-      void loadedDrawingManager.preloadForDrawings(drawings).then(() => {
-        loadedDrawingManager.importDrawings(drawings);
-      });
-    });
-  }
-
   return {
     preload,
     setDrawingMode,
@@ -571,17 +483,6 @@ export function createChartDrawingRuntime(
     handleMouseUp,
     cancelCurrentAction,
     deleteSelectedDrawing,
-    toggleMagnet,
-    getMagnetEnabled,
-    undo,
-    redo,
-    updateSelectedOptions,
-    duplicateSelected,
-    toggleLockSelected,
-    isSelectedLocked,
-    getSelectedDrawingData,
-    exportDrawings,
-    importDrawings,
     syncPairTimeframe,
     dispose,
   };
