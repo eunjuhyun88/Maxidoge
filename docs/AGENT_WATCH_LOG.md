@@ -7035,3 +7035,31 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
   - the remaining chart hotspot is still the drawing stack itself, especially [drawingManager.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingManager.ts#L1), so the next slice should target real lazy/runtime narrowing instead of more helper-only extraction
   - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE
+
+## [2026-03-11 00:54:00 +0900] FINISH chart-trade-preview-finalize-lazy-path-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart drawing hotspot, prefer real lazy boundaries over helper-only splits, and move trade-preview finalize weight off the base support-runtime path without touching unrelated route WIP
+- What changed:
+  - Added [chartTradePreviewFinalizeRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartTradePreviewFinalizeRuntime.ts#L1)
+    - extracted preview resolve, tradebox drawing creation, pending-plan finalize, quick-trade open, and notice/GTM side effects into a dedicated lazy runtime
+    - kept this runtime loaded only from the trade-preview mouse-up path instead of the base drawing runtime import chain
+  - Updated [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1)
+    - removed the static finalize imports for `chartDrawingEngine`, `chartOverlayRenderer`, `chartDrawingSession`, `chartIndicators`, and `chartCoordinates`
+    - kept immediate draft start/update logic inline and added a module promise so trade-preview finalize code loads only when the user actually completes a line-entry drag
+    - preloads the finalize runtime when trade mode is selected so the first drag path stays responsive
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartTradePreviewFinalizeRuntime.ts` as the canonical trade-preview finalize lazy path
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [chartTradePreviewFinalizeRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartTradePreviewFinalizeRuntime.js) `3.06 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `64.00 kB`
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `58.29 kB`
+    - [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1) `582` lines
+- Residual risks:
+  - this slice restored support-runtime weight after the previous persistence split, but the large remaining chart chunk is still [drawingManager.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingManager.js) at `100.39 kB`
+  - auth-side dynamic-import reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE

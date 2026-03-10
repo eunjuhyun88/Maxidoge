@@ -1,26 +1,15 @@
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { ChartTheme } from '../ChartTheme';
 import type { DrawingItem, DrawingMode, TradePlanDraft } from '$lib/chart/chartTypes';
-import { formatPrice } from '$lib/chart/chartCoordinates';
-import { MAX_DRAWINGS } from '$lib/chart/chartIndicators';
 import {
-  makeTradeBoxDrawing as buildTradeBoxDrawing,
-} from './chartDrawingEngine';
-import {
-  isTradePreviewMode,
-  resolveTradePreview,
-} from './chartOverlayRenderer';
-import {
-  appendDrawingWithLimit,
-  finalizeTradePreview,
-  startTradePreviewDraft,
-  updateTradePreviewDraft,
   type TradePreviewDraft,
   type TrendlineDraft,
 } from './chartDrawingSession';
 import type { DrawingData } from '$lib/chart/primitives/drawingManager';
 import type { DrawingStyleOptions } from '$lib/chart/primitives/drawingPrimitiveTypes';
 import { createChartDrawingPersistenceRuntime } from './chartDrawingPersistenceRuntime';
+
+type ChartTradePreviewFinalizeRuntimeModule = typeof import('./chartTradePreviewFinalizeRuntime');
 
 const PRIMITIVE_DRAWING_MODES: Set<DrawingMode> = new Set([
   'none',
@@ -40,6 +29,28 @@ const PRIMITIVE_DRAWING_MODES: Set<DrawingMode> = new Set([
 
 function isPrimitiveDrawingMode(mode: DrawingMode): boolean {
   return PRIMITIVE_DRAWING_MODES.has(mode);
+}
+
+function isTradePreviewMode(
+  mode: DrawingMode,
+): mode is Extract<DrawingMode, 'longentry' | 'shortentry' | 'trade'> {
+  return mode === 'longentry' || mode === 'shortentry' || mode === 'trade';
+}
+
+function startTradePreviewDraft(
+  mode: Extract<DrawingMode, 'longentry' | 'shortentry' | 'trade'>,
+  x: number,
+  y: number,
+): TradePreviewDraft {
+  return { mode, startX: x, startY: y, cursorX: x, cursorY: y };
+}
+
+function updateTradePreviewDraft(
+  preview: TradePreviewDraft,
+  x: number,
+  y: number,
+): TradePreviewDraft {
+  return { ...preview, cursorX: x, cursorY: y };
 }
 
 // ── Controller interface ─────────────────────────────────────
@@ -138,6 +149,7 @@ export function createChartDrawingRuntime(
 ): ChartDrawingRuntimeController {
   let globalDrawingMouseUpBound = false;
   let drawRaf: number | null = null;
+  let tradePreviewFinalizeRuntimePromise: Promise<ChartTradePreviewFinalizeRuntimeModule> | null = null;
   const persistenceRuntime = createChartDrawingPersistenceRuntime({
     getPair: () => options.getPair(),
     getTimeframe: () => options.getTimeframe(),
@@ -169,6 +181,14 @@ export function createChartDrawingRuntime(
 
   async function syncPairTimeframe(): Promise<void> {
     await persistenceRuntime.syncPairTimeframe();
+  }
+
+  async function loadTradePreviewFinalizeRuntime() {
+    if (!tradePreviewFinalizeRuntimePromise) {
+      tradePreviewFinalizeRuntimePromise = import('./chartTradePreviewFinalizeRuntime');
+    }
+
+    return await tradePreviewFinalizeRuntimePromise;
   }
 
   function getCanvasRect() {
@@ -228,6 +248,9 @@ export function createChartDrawingRuntime(
     if (mode !== 'none') {
       options.setPendingTradePlan(null);
       options.setSelectedDrawingId(null);
+      if (isTradePreviewMode(mode)) {
+        void loadTradePreviewFinalizeRuntime();
+      }
     }
     unbindGlobalDrawingMouseUp();
     options.renderDrawings();
@@ -388,59 +411,32 @@ export function createChartDrawingRuntime(
 
     const tradePreview = options.getTradePreview();
     if (!tradePreview || !isTradePreviewMode(drawingMode)) return;
-
-    const preview = resolveTradePreview({
-      tradePreview,
-      drawingMode,
-      cursor: { x, y },
-      canvasW: rect.width,
-      canvasH: rect.height,
-      coord: { toChartPrice: options.getToChartPrice(), toChartY: options.getToChartY() },
-      livePrice: options.getLivePrice(),
-    });
-
-    if (!preview) {
-      options.pushChartNotice('\ub77c\uc778 \uc9c4\uc785 \uacc4\uc0b0 \uc2e4\ud328');
-    } else {
-      const nextDrawing = buildTradeBoxDrawing(preview, options.getToChartTime(), options.getChartTheme());
-      const finalized = finalizeTradePreview({
-        drawings: options.getDrawings(),
-        nextDrawing,
-        preview,
-        pair: options.getPair(),
-        requireTradeConfirm: options.getRequireTradeConfirm(),
-        maxDrawings: MAX_DRAWINGS,
+    void loadTradePreviewFinalizeRuntime()
+      .then(({ finalizeChartTradePreview }) => {
+        finalizeChartTradePreview({
+          tradePreview,
+          drawingMode,
+          cursor: { x, y },
+          canvasW: rect.width,
+          canvasH: rect.height,
+          pair: options.getPair(),
+          livePrice: options.getLivePrice(),
+          requireTradeConfirm: options.getRequireTradeConfirm(),
+          drawings: options.getDrawings(),
+          chartTheme: options.getChartTheme(),
+          toChartPrice: options.getToChartPrice(),
+          toChartY: options.getToChartY(),
+          toChartTime: options.getToChartTime(),
+          setDrawings: options.setDrawings,
+          setPendingTradePlan: options.setPendingTradePlan,
+          openQuickTrade: options.openQuickTrade,
+          emitGtm: options.emitGtm,
+          pushChartNotice: options.pushChartNotice,
+        });
+      })
+      .catch(() => {
+        options.pushChartNotice('\ub77c\uc778 \uc9c4\uc785 \uacc4\uc0b0 \uc2e4\ud328');
       });
-      options.setDrawings(finalized.drawings);
-
-      if (finalized.pendingTradePlan) {
-        options.setPendingTradePlan(finalized.pendingTradePlan);
-        options.pushChartNotice('Drag complete \u2014 adjust ratio and confirm');
-      } else if (finalized.lineTrade) {
-        options.openQuickTrade({
-          pair: finalized.lineTrade.pair,
-          dir: finalized.lineTrade.dir,
-          entry: finalized.lineTrade.entry,
-          tp: finalized.lineTrade.tp,
-          sl: finalized.lineTrade.sl,
-          source: 'chart-line',
-          note: `${finalized.lineTrade.dir} line-entry`,
-        });
-        options.emitGtm('terminal_line_entry_open', {
-          pair: finalized.lineTrade.pair,
-          dir: finalized.lineTrade.dir,
-          entry: finalized.lineTrade.entry,
-          tp: finalized.lineTrade.tp,
-          sl: finalized.lineTrade.sl,
-          rr: finalized.lineTrade.rr,
-        });
-        options.pushChartNotice(
-          `${finalized.lineTrade.dir} \uc9c4\uc785 \uc0dd\uc131 \u00b7 ENTRY ${formatPrice(finalized.lineTrade.entry)} \u00b7 TP ${formatPrice(finalized.lineTrade.tp)} \u00b7 SL ${formatPrice(finalized.lineTrade.sl)} \u00b7 RR 1:${finalized.lineTrade.rr.toFixed(1)}`,
-        );
-      } else {
-        options.pushChartNotice('\ub77c\uc778 \uae30\uc900 \uac00\uaca9 \uacc4\uc0b0 \uc2e4\ud328');
-      }
-    }
 
     // Trade modes are NOT sticky — reset to 'none'
     options.setDrawingModeState('none');
@@ -496,6 +492,7 @@ export function createChartDrawingRuntime(
       drawRaf = null;
     }
     unbindGlobalDrawingMouseUp();
+    tradePreviewFinalizeRuntimePromise = null;
     persistenceRuntime.dispose();
   }
 
