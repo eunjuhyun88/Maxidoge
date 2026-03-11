@@ -113,7 +113,7 @@ function parseHighlights(raw: unknown): TerminalScanSummary['highlights'] {
     .map((item) => ({
       agent: typeof item.agent === 'string' ? item.agent : 'AGENT',
       vote: item.vote === 'long' || item.vote === 'short' || item.vote === 'neutral' ? item.vote : 'neutral',
-      conf: Math.round(toNumber(item.conf as any, 0)),
+      conf: Math.round(toNumber(item.conf as string | number | null, 0)),
       note: typeof item.note === 'string' ? item.note : '',
     }));
 }

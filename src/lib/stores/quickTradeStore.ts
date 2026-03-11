@@ -6,6 +6,7 @@
 
 import { writable, derived, get } from 'svelte/store';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import {
   closeQuickTradeApi,
   fetchQuickTradesApi,
@@ -40,35 +41,15 @@ interface QuickTradeState {
   showPanel: boolean;      // toggle trade panel visibility
 }
 
-const STORAGE_KEY = STORAGE_KEYS.quickTrades;
 const MAX_TRADES = 200;
 const PRICE_SYNC_DEBOUNCE_MS = 1200;
 let _quickTradesHydrated = false;
 let _quickTradesHydratePromise: Promise<void> | null = null;
 
-function loadState(): QuickTradeState {
-  if (typeof window === 'undefined') return { trades: [], showPanel: false };
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return { trades: parsed.trades || [], showPanel: false };
-    }
-  } catch {}
-  return { trades: [], showPanel: false };
-}
+const loaded = loadFromStorage<{ trades: QuickTrade[] }>(STORAGE_KEYS.quickTrades, { trades: [] });
+export const quickTradeStore = writable<QuickTradeState>({ trades: loaded.trades, showPanel: false });
 
-export const quickTradeStore = writable<QuickTradeState>(loadState());
-
-// Persist (debounced)
-let _saveTimer: ReturnType<typeof setTimeout> | null = null;
-quickTradeStore.subscribe(s => {
-  if (typeof window === 'undefined') return;
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ trades: s.trades }));
-  }, 400);
-});
+autoSave(quickTradeStore, STORAGE_KEYS.quickTrades, (s) => ({ trades: s.trades }), 400);
 
 // ═══ Derived ═══
 export const openTrades = derived(quickTradeStore, $s =>

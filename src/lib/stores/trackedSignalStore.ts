@@ -7,6 +7,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { openQuickTrade, replaceQuickTradeId, type TradeDirection } from './quickTradeStore';
 import { STORAGE_KEYS } from './storageKeys';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 import { convertSignalApi, fetchTrackedSignalsApi, trackSignalApi, type ApiTrackedSignal, untrackSignalApi } from '$lib/api/tradingApi';
 import { buildPriceMapHash, getBaseSymbolFromPair, toNumericPriceMap, type PriceLikeMap } from '$lib/utils/price';
 
@@ -31,43 +32,27 @@ interface TrackedSignalState {
   signals: TrackedSignal[];
 }
 
-const STORAGE_KEY = STORAGE_KEYS.trackedSignals;
 const MAX_SIGNALS = 50;
 const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24 hours
 let _trackedSignalsHydrated = false;
 let _trackedSignalsHydratePromise: Promise<void> | null = null;
 
 function loadState(): TrackedSignalState {
-  if (typeof window === 'undefined') return { signals: [] };
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Auto-expire old signals on load
-      const now = Date.now();
-      const signals = (parsed.signals || []).map((s: TrackedSignal) => {
-        if (s.status === 'tracking' && s.expiresAt < now) {
-          return { ...s, status: 'expired' as SignalStatus };
-        }
-        return s;
-      });
-      return { signals };
-    }
-  } catch {}
-  return { signals: [] };
+  const raw = loadFromStorage<{ signals: TrackedSignal[] }>(STORAGE_KEYS.trackedSignals, { signals: [] });
+  const now = Date.now();
+  return {
+    signals: raw.signals.map((signal) => {
+      if (signal.status === 'tracking' && signal.expiresAt < now) {
+        return { ...signal, status: 'expired' as SignalStatus };
+      }
+      return signal;
+    }),
+  };
 }
 
 export const trackedSignalStore = writable<TrackedSignalState>(loadState());
 
-// Persist (debounced)
-let _saveTimer: ReturnType<typeof setTimeout> | null = null;
-trackedSignalStore.subscribe(s => {
-  if (typeof window === 'undefined') return;
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-  }, 400);
-});
+autoSave(trackedSignalStore, STORAGE_KEYS.trackedSignals, undefined, 400);
 
 // ═══ Derived ═══
 
