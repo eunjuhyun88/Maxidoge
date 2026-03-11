@@ -40,6 +40,8 @@ Purpose:
   - short route/page specs for the main surfaces plus selected shared routes
 - `docs/exec-plans/`
   - active plans, completed plans, debt tracker
+- `docs/task-contracts/`
+  - active and completed task stop-conditions
 - `docs/generated/`
   - derived navigation artifacts
 - `docs/references/`
@@ -57,6 +59,8 @@ Purpose:
 | route/state ownership | `docs/FRONTEND.md` | `docs/FE_STATE_MAP.md`, refactor design |
 | user-facing scope and heuristics | `docs/PRODUCT_SENSE.md` | `docs/product-specs/*.md` |
 | current implementation plans | `docs/PLANS.md` | `docs/exec-plans/index.md` |
+| task finish criteria | `docs/TASK_CONTRACTS.md` | `docs/task-contracts/active/`, `docs/generated/task-contract-report.md` |
+| practical evidence and validation | `docs/CONTEXT_VALIDATION.md` | `docs/generated/context-validation-report.md` |
 | quality and drift priorities | `docs/QUALITY_SCORE.md` | `docs/exec-plans/tech-debt-tracker.md` |
 | reliability boundaries | `docs/RELIABILITY.md` | perf/runbook docs |
 | security boundaries | `docs/SECURITY.md` | security review + scale plan |
@@ -108,6 +112,7 @@ Purpose:
 
 - Do not bulk-read every file in `docs/`.
 - Do not skip the canonical entry docs and jump straight into dated working docs.
+- Do not treat a provisional task contract as sufficient; replace placeholder finish checks with task-specific checks.
 - Do not treat old audits as source of truth when a newer execution design exists.
 - Do not start in `docs/archive/` unless the active doc explicitly points there.
 - Do not scan the full watch log; use keyword/date filtering when you need recent decisions.

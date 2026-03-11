@@ -175,7 +175,7 @@
 	    "catalogPath": "docs/generated/tool-catalog.json",
 	    "defaultSurface": "terminal"
 	  },
-	  "telemetry": {
+  "telemetry": {
 	    "enabled": true,
 	    "runsDir": ".agent-context/telemetry/runs",
 	    "eventsDir": ".agent-context/telemetry/events",
@@ -188,8 +188,37 @@
 	      "skillLevel": "experienced",
 	      "purpose": "product-development",
 	      "autonomy": "assisted"
-	    }
-	  },
+    }
+  },
+  "contracts": {
+    "enabled": true,
+    "activeDir": "docs/task-contracts/active",
+    "completedDir": "docs/task-contracts/completed",
+    "reportPath": "docs/generated/task-contract-report.md",
+    "requireOnFeatureBranches": false,
+    "blockStopOnIncomplete": true,
+    "featureBranchPrefixes": [
+      "codex/"
+    ],
+    "defaultType": "implementation"
+  },
+  "autopilot": {
+    "enabled": true,
+    "agentId": "autopilot",
+    "autoCheckpoint": true,
+    "autoClaim": true,
+    "autoContract": true,
+    "minimumClaimPathDepth": 2,
+    "defaultSurface": "terminal",
+    "defaultObjectivePrefix": "Resume branch work on",
+    "defaultDocs": [
+      "README.md",
+      "AGENTS.md",
+      "docs/README.md",
+      "ARCHITECTURE.md",
+      "docs/CONTEXT_ENGINEERING.md"
+    ]
+  },
 	  "retrieval": {
 	    "enabled": true,
 	    "includePaths": [
@@ -206,6 +235,9 @@
 	      "docs/AGENT_OBSERVABILITY.md",
 	      "docs/MULTI_AGENT_COORDINATION.md",
 	      "docs/SANDBOX_POLICY.md",
+	      "docs/TASK_CONTRACTS.md",
+	      "docs/AUTOPILOT.md",
+	      "docs/CONTEXT_VALIDATION.md",
 	      "docs/DESIGN.md",
 	      "docs/ENGINEERING.md",
 	      "docs/PLANS.md",
@@ -274,9 +306,9 @@
 	      "smallMapReductionVsCanonicalPct": 40,
       "smallMapReductionVsAllDocsPct": 55,
       "surfaceReductionVsAllDocsPct": 50,
-      "smallMapMaxApproxTokens": 3800,
+      "smallMapMaxApproxTokens": 14000,
       "smallMapMaxFiles": 6,
-      "canonicalMaxApproxTokens": 12000,
+      "canonicalMaxApproxTokens": 32000,
       "noiseRateMaxPct": 10
     },
 	    "benchmark": {
@@ -289,11 +321,22 @@
 	      "minComparisons": 1,
 	      "targetDocsBeforeFirstEdit": 6,
 	      "targetResumeLatencyMinutes": 3
+	    },
+	    "validation": {
+	      "minFinishedRuns": 3,
+	      "minRunsWithBaseline": 1,
+	      "minRunsWithEditEvidence": 1,
+	      "minPositiveTimeSavedRuns": 1,
+	      "minEstimatedTimeSavedMinutes": 5,
+	      "maxAverageDocsBeforeFirstEdit": 6,
+	      "minRoutedWins": 1,
+	      "minSurfaceCount": 1,
+	      "minRetrievalChunks": 1
 	    }
 	  },
 	  "commands": {
-    "check": "",
-    "build": "",
-    "gate": ""
+    "check": "npm run check",
+    "build": "npm run build",
+    "gate": "npm run gate"
   }
 }

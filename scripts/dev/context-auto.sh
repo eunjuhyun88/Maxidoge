@@ -107,5 +107,9 @@ else
 	fi
 fi
 
+if [ -f scripts/dev/context-autopilot.mjs ]; then
+	run_step node scripts/dev/context-autopilot.mjs "$STAGE"
+fi
+
 echo "$NOW_EPOCH" > "$MARKER_FILE"
 echo "[ctx:auto] done"

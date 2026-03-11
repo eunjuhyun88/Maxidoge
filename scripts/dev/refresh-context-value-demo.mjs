@@ -8,6 +8,16 @@ const config = readJson(path.join(rootDir, 'context-kit.json'));
 const checkMode = process.argv.includes('--check');
 const outputJsonPath = path.join(rootDir, 'docs/generated/context-value-demo.json');
 const outputMarkdownPath = path.join(rootDir, 'docs/generated/context-value-demo.md');
+const excludedAllDocs = new Set([
+  path.resolve(outputMarkdownPath),
+  path.resolve(path.join(rootDir, 'docs/generated/context-efficiency-report.md')),
+  path.resolve(path.join(rootDir, 'docs/generated/context-validation-report.md')),
+  path.resolve(path.join(rootDir, 'docs/generated/task-contract-report.md')),
+]);
+const excludedAllDocsPrefixes = [
+  path.resolve(path.join(rootDir, 'docs/task-contracts/active')) + path.sep,
+  path.resolve(path.join(rootDir, 'docs/task-contracts/completed')) + path.sep,
+];
 
 function writeManaged(filePath, content) {
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : null;
@@ -76,9 +86,6 @@ const smallMapFiles = [
   path.join(rootDir, 'ARCHITECTURE.md'),
   path.join(rootDir, 'docs/SYSTEM_INTENT.md'),
   path.join(rootDir, 'docs/CONTEXT_ENGINEERING.md'),
-  path.join(rootDir, 'docs/AGENT_FACTORY.md'),
-  path.join(rootDir, 'docs/TOOL_DESIGN.md'),
-  path.join(rootDir, 'docs/AGENT_OBSERVABILITY.md'),
 ];
 
 const allDocsFiles = [
@@ -86,10 +93,15 @@ const allDocsFiles = [
   path.join(rootDir, 'AGENTS.md'),
   path.join(rootDir, 'CLAUDE.md'),
   path.join(rootDir, 'ARCHITECTURE.md'),
+  ...listMarkdownFiles(path.join(rootDir, '.claude')),
   ...listMarkdownFiles(path.join(rootDir, 'docs')),
   ...listMarkdownFiles(path.join(rootDir, 'agents')),
   ...listMarkdownFiles(path.join(rootDir, 'tools')),
-];
+].filter((filePath) => {
+  const resolved = path.resolve(filePath);
+  if (excludedAllDocs.has(resolved)) return false;
+  return !excludedAllDocsPrefixes.some((prefix) => resolved.startsWith(prefix));
+});
 
 const smallMap = bundleStats(smallMapFiles);
 const allDocs = bundleStats(allDocsFiles);
@@ -211,7 +223,7 @@ const markdown = [
   'npm run registry:query -- --kind tool --q retrieve',
   'npm run registry:describe -- --kind tool --id context-retrieve',
   'npm run retrieve:query -- --q "routing rules"',
-  'npm run agent:start -- --agent planner --surface core',
+  'npm run agent:start -- --agent planner --surface terminal',
   'npm run agent:event -- --type doc_open --path docs/PLANS.md',
   'npm run agent:finish -- --status success --baseline-minutes 30',
   'npm run agent:report',

@@ -1,16 +1,16 @@
 {
   "version": 1,
   "smallMap": {
-    "files": 9,
-    "lines": 1369,
-    "approxTokens": 7250
+    "files": 6,
+    "lines": 1196,
+    "approxTokens": 6653
   },
   "allDocs": {
-    "files": 145,
-    "lines": 41534,
-    "approxTokens": 189187
+    "files": 157,
+    "lines": 46492,
+    "approxTokens": 223391
   },
-  "smallMapReductionVsAllDocsPct": 96.2,
+  "smallMapReductionVsAllDocsPct": 97,
   "registry": {
     "surfaceCount": 4,
     "commandCount": 42
@@ -26,20 +26,27 @@
     "sourceCount": 36
   },
   "telemetry": {
-    "runCount": 0,
-    "finishedRunCount": 0,
-    "totalEstimatedTimeSavedMinutes": null,
-    "latestRun": null
+    "runCount": 3,
+    "finishedRunCount": 3,
+    "totalEstimatedTimeSavedMinutes": 11.8,
+    "latestRun": {
+      "runId": "R-20260311154844-planner",
+      "agent": "planner",
+      "docsBeforeFirstEdit": 2,
+      "actualMinutes": 1.9,
+      "baselineMinutes": 5,
+      "timeSavedMinutes": 3.1
+    }
   },
   "ab": {
-    "comparisons": 0,
-    "routedWins": 0
+    "comparisons": 1,
+    "routedWins": 1
   },
   "feltChecks": [
     {
       "label": "Small start bundle",
       "pass": true,
-      "evidence": "7250 tokens vs 189187 tokens across all docs (96.2% smaller)"
+      "evidence": "6653 tokens vs 223391 tokens across all docs (97% smaller)"
     },
     {
       "label": "Discovery works without chat memory",
@@ -53,13 +60,13 @@
     },
     {
       "label": "Time-saved evidence exists",
-      "pass": false,
-      "evidence": "0 finished runs, n/a minutes estimated saved"
+      "pass": true,
+      "evidence": "3 finished runs, 11.8 minutes estimated saved"
     },
     {
       "label": "Routed mode beat baseline at least once",
-      "pass": false,
-      "evidence": "0/0 routed wins"
+      "pass": true,
+      "evidence": "1/1 routed wins"
     }
   ]
 }

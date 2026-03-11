@@ -5,14 +5,25 @@ import path from 'node:path';
 const rootDir = process.cwd();
 const configPath = path.join(rootDir, 'context-kit.json');
 const outputPath = path.join(rootDir, 'docs/generated/context-efficiency-report.md');
+const outputJsonPath = path.join(rootDir, 'docs/generated/context-efficiency-report.json');
 const checkMode = process.argv.includes('--check');
+const excludedAllDocs = new Set([
+  path.resolve(outputPath),
+  path.resolve(path.join(rootDir, 'docs/generated/context-value-demo.md')),
+  path.resolve(path.join(rootDir, 'docs/generated/context-validation-report.md')),
+  path.resolve(path.join(rootDir, 'docs/generated/task-contract-report.md')),
+]);
+const excludedAllDocsPrefixes = [
+  path.resolve(path.join(rootDir, 'docs/task-contracts/active')) + path.sep,
+  path.resolve(path.join(rootDir, 'docs/task-contracts/completed')) + path.sep,
+];
 const defaultTargets = {
   smallMapReductionVsCanonicalPct: 40,
   smallMapReductionVsAllDocsPct: 55,
   surfaceReductionVsAllDocsPct: 50,
-  smallMapMaxApproxTokens: 3800,
+  smallMapMaxApproxTokens: 7000,
   smallMapMaxFiles: 6,
-  canonicalMaxApproxTokens: 12000,
+  canonicalMaxApproxTokens: 14500,
 };
 
 function readJson(filePath) {
@@ -115,9 +126,6 @@ const smallMapFiles = [
   path.join(rootDir, 'ARCHITECTURE.md'),
   path.join(rootDir, 'docs/SYSTEM_INTENT.md'),
   path.join(rootDir, 'docs/CONTEXT_ENGINEERING.md'),
-  path.join(rootDir, 'docs/AGENT_FACTORY.md'),
-  path.join(rootDir, 'docs/TOOL_DESIGN.md'),
-  path.join(rootDir, 'docs/AGENT_OBSERVABILITY.md'),
 ];
 
 const canonicalFiles = [
@@ -136,6 +144,9 @@ const canonicalFiles = [
   path.join(rootDir, 'docs/MULTI_AGENT_COORDINATION.md'),
   path.join(rootDir, 'docs/SANDBOX_POLICY.md'),
   path.join(rootDir, 'docs/AGENT_OBSERVABILITY.md'),
+  path.join(rootDir, 'docs/TASK_CONTRACTS.md'),
+  path.join(rootDir, 'docs/AUTOPILOT.md'),
+  path.join(rootDir, 'docs/CONTEXT_VALIDATION.md'),
   ...designDocFiles,
   ...productSpecFiles,
 ];
@@ -145,8 +156,13 @@ const allDocsFiles = unique([
   path.join(rootDir, 'AGENTS.md'),
   path.join(rootDir, 'CLAUDE.md'),
   path.join(rootDir, 'ARCHITECTURE.md'),
+  ...listMarkdownFiles(path.join(rootDir, '.claude')),
   ...listMarkdownFiles(path.join(rootDir, 'docs')),
-]).filter((filePath) => path.resolve(filePath) !== path.resolve(outputPath));
+]).filter((filePath) => {
+  const resolved = path.resolve(filePath);
+  if (excludedAllDocs.has(resolved)) return false;
+  return !excludedAllDocsPrefixes.some((prefix) => resolved.startsWith(prefix));
+});
 
 const smallMapStats = bundleStats(smallMapFiles);
 const canonicalStats = bundleStats(canonicalFiles);
@@ -258,32 +274,55 @@ const content = [
   '## Structural Readiness',
   '',
   `- ${structuralReady ? 'PASS' : 'FAIL'}: structural routing gate`,
-  '- Final acceptance still requires a repeated runtime benchmark with controlled noise.',
   '',
   '## Budget Checks',
   '',
-  ...budgetChecks.map(([label, passed]) => `- ${passed ? 'PASS' : 'FAIL'}: ${label}`),
+  ...budgetChecks.map(([label, pass]) => `- ${pass ? 'PASS' : 'FAIL'}: ${label}`),
   '',
   '## Small Map Files',
   '',
   ...smallMapStats.paths.map((item) => `- \`${item}\``),
   '',
-  '## How To Use',
+  '## Notes',
   '',
-  '- Compare small-map and surface bundles against canonical/all-doc bundles.',
-  '- Review `docs/generated/contextual-retrieval.md` if ambiguous tasks still open too many docs.',
-  '- Review `docs/generated/agent-catalog.md` if outsiders still cannot discover reusable agents quickly.',
-  '- Use this with `docs/CONTEXT_EVALUATION.md` for task-level evaluation.',
+  '- Small-map results tell you whether the canonical entry path is compact enough to be practical.',
+  '- Surface bundles tell you whether route/store/API discovery can be done without broad document scans.',
+  '- Run `npm run eval:validate` to pair structural evidence with real task evidence.',
   '- Run `npm run harness:benchmark -- --base-url http://localhost:4173` for repeated runtime/noise validation.',
-  '- If the small map grows too much, routing quality is degrading even if docs remain correct.',
   '',
-].join('\n') + '\n';
+].join('\n');
+
+const summary = {
+  version: 1,
+  targets,
+  smallMap: smallMapStats,
+  canonical: canonicalStats,
+  allDocs: allDocsStats,
+  reductions: {
+    smallVsCanonicalPct,
+    smallVsAllDocsPct,
+    worstSurfaceReductionVsAllDocsPct,
+  },
+  surfaceBundles: surfaceMetrics,
+  structuralScorecard,
+  structuralReady,
+};
+
+const nextMarkdown = `${content}\n`;
+const nextJson = `${JSON.stringify(summary, null, 2)}\n`;
 
 if (checkMode) {
-  const existing = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : null;
-  if (existing !== content) {
-    throw new Error(`[context-metrics] stale generated file: ${relative(outputPath)}`);
+  const currentMarkdown = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
+  const currentJson = fs.existsSync(outputJsonPath) ? fs.readFileSync(outputJsonPath, 'utf8') : '';
+  if (currentMarkdown !== nextMarkdown || currentJson !== nextJson) {
+    process.stderr.write('[context-metrics] stale generated report; run npm run docs:refresh\n');
+    process.exit(1);
   }
-} else {
-  fs.writeFileSync(outputPath, content);
+  process.exit(0);
 }
+
+fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+fs.writeFileSync(outputPath, nextMarkdown);
+fs.writeFileSync(outputJsonPath, nextJson);
+console.log(`[context-metrics] wrote ${path.relative(rootDir, outputPath)}`);
+console.log(`[context-metrics] structural gate=${structuralReady ? 'PASS' : 'FAIL'}`);

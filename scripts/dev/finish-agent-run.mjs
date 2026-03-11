@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { clearActiveRun, currentBranch, loadRun, resolveActiveRunId, saveRun, withTelemetryLock } from './agent-telemetry-lib.mjs';
+import { clearActiveRun, currentBranch, gitSnapshot, loadRun, resolveActiveRunId, saveRun, withTelemetryLock } from './agent-telemetry-lib.mjs';
 
 const rootDir = process.cwd();
 const options = {
@@ -62,6 +62,10 @@ withTelemetryLock(rootDir, () => {
   run.endedAt = new Date().toISOString();
   run.baselineMinutes = options.baselineMinutes === '' ? run.baselineMinutes : Number(options.baselineMinutes);
   run.actualMinutes = options.actualMinutes === '' ? run.actualMinutes : Number(options.actualMinutes);
+  run.git = {
+    ...(run.git ?? {}),
+    endSnapshot: gitSnapshot(rootDir),
+  };
 
   saveRun(rootDir, run);
   clearActiveRun(rootDir, runId, run.branch || currentBranch(rootDir));

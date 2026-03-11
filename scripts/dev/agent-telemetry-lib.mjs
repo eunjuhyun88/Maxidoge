@@ -50,6 +50,41 @@ export function currentBranch(rootDir) {
   }
 }
 
+function execGit(rootDir, args) {
+  try {
+    return execSync(`git ${args.join(' ')}`, {
+      cwd: rootDir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return '';
+  }
+}
+
+function parseStatusPaths(output) {
+  return output
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => line.slice(3).trim())
+    .filter(Boolean)
+    .map((item) => item.includes(' -> ') ? item.split(' -> ').pop() : item);
+}
+
+export function gitSnapshot(rootDir) {
+  const head = execGit(rootDir, ['rev-parse', 'HEAD']) || null;
+  const branch = currentBranch(rootDir);
+  const statusOutput = execGit(rootDir, ['status', '--porcelain', '--untracked-files=all']);
+  const changedPaths = [...new Set(parseStatusPaths(statusOutput))].sort((left, right) => left.localeCompare(right));
+  return {
+    head,
+    branch,
+    changedPaths,
+    changedPathCount: changedPaths.length,
+  };
+}
+
 function safeName(value) {
   return String(value).replace(/[^A-Za-z0-9._-]+/g, '__');
 }
@@ -210,6 +245,14 @@ export function runMetrics(run, events) {
   const timeSavedMinutes = baselineMinutes !== null && actualMinutes !== null
     ? Number((baselineMinutes - actualMinutes).toFixed(2))
     : null;
+  const startPaths = new Set(run.git?.startSnapshot?.changedPaths ?? []);
+  const endPaths = new Set(run.git?.endSnapshot?.changedPaths ?? []);
+  const newChangedPaths = [...endPaths].filter((item) => !startPaths.has(item)).sort((left, right) => left.localeCompare(right));
+  const firstEditPaths = [...new Set(ordered
+    .filter((event) => event.type === 'first_edit' && event.path)
+    .map((event) => String(event.path).trim())
+    .filter(Boolean))];
+  const firstEditPathsChanged = firstEditPaths.filter((item) => endPaths.has(item));
   return {
     docsBeforeFirstEdit,
     retrievalBeforeFirstEdit,
@@ -217,6 +260,13 @@ export function runMetrics(run, events) {
     actualMinutes,
     baselineMinutes,
     timeSavedMinutes,
+    changedPathsAtFinish: [...endPaths],
+    changedPathCountAtFinish: endPaths.size,
+    newChangedPathsSinceStart: newChangedPaths,
+    newChangedPathCountSinceStart: newChangedPaths.length,
+    firstEditPathCount: firstEditPaths.length,
+    firstEditPathsChanged,
+    firstEditPathChangedCount: firstEditPathsChanged.length,
   };
 }
 

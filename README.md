@@ -115,12 +115,15 @@ npm run preview
 - `npm run safe:sync:gate`: 동기화 후 `check + build`까지 실행
 - `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`: machine snapshot 저장
 - `npm run ctx:checkpoint -- --work-id "<W-ID>" --surface "<surface>" --objective "<objective>"`: semantic working-memory checkpoint 저장
+- `npm run contract:new -- --id "<task-id>" --surface "<surface>"`: active task contract scaffold 생성
+- `npm run contract:check`: current branch task contract discipline 검사
 - `npm run ctx:compact`: snapshot + checkpoint를 branch brief/handoff로 압축
 - `npm run ctx:compact -- --docs-check pass --check pass --build pass --gate pass`: 검증 결과까지 포함해 brief/handoff 갱신
 - `npm run ctx:check -- --strict`: local brief/handoff 품질 검사
 - `npm run ctx:pin -- --add "<durable fact>"`: 리셋 시 유실되면 안 되는 고정 사실 저장
 - `npm run ctx:restore -- --mode brief|handoff|files`: 복구(brief/handoff/파일 복구 의도 분리)
 - `npm run ctx:auto -- <stage>`: 자동 저장/컴팩션 오케스트레이션 (hook/safe 스크립트에서 호출)
+- `npm run eval:validate`: 실제 작업 기준 practical validation 보고서 생성
 
 ### Solo Safety Routine (Recommended)
 
@@ -191,6 +194,10 @@ npm run preview
      --doc "docs/AGENT_CONTEXT_COMPACTION_PROTOCOL.md" \
      --next "update scripts/dev/context-*.sh"
    ```
+3. 비사소한 작업은 task contract를 만든다:
+   ```bash
+   npm run contract:new -- --id "chart-container-race" --surface "arena"
+   ```
 3. 핵심 결정사항 고정:
    ```bash
    npm run ctx:pin -- --add "Do not merge without required write-access approval"
@@ -215,6 +222,15 @@ npm run preview
    - 파일 상태 복구: `--mode files`
    - `--mode context`는 기존 흐름 호환을 위한 alias이며 실제로는 `brief`를 의미
    - mode 없이 실행하면 실패하도록 설계되어 혼선 방지
+7. 실제로 컨텍스트 시스템이 시간을 아끼는지 측정:
+   ```bash
+   npm run agent:start -- --agent planner --surface terminal --task-id "TASK-001"
+   npm run agent:event -- --type doc_open --path docs/README.md
+   npm run agent:event -- --type first_edit --path src/components/arena/ChartPanel.svelte
+   npm run agent:finish -- --status success --baseline-minutes 20
+   npm run agent:report
+   npm run eval:validate
+   ```
 
 ### Context Artifact Model
 

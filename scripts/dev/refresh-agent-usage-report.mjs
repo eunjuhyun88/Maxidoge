@@ -8,6 +8,7 @@ const checkMode = process.argv.includes('--check');
 const { telemetry } = telemetryConfig(rootDir);
 const outputJsonPath = path.join(rootDir, telemetry.reportPath ?? 'docs/generated/agent-usage-report.json');
 const outputMarkdownPath = path.join(rootDir, 'docs/generated/agent-usage-report.md');
+
 function average(values) {
   if (values.length === 0) return null;
   return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
@@ -64,6 +65,11 @@ withTelemetryLock(rootDir, () => {
   const docsBeforeFirstEdit = runs.map((run) => run.metrics.docsBeforeFirstEdit);
   const retrievalBeforeFirstEdit = runs.map((run) => run.metrics.retrievalBeforeFirstEdit);
   const registryBeforeFirstEdit = runs.map((run) => run.metrics.registryBeforeFirstEdit);
+  const changedPathCounts = finishedRuns.map((run) => run.metrics.newChangedPathCountSinceStart).filter((value) => value !== null && typeof value !== 'undefined');
+  const runsWithEditEvidence = finishedRuns.filter((run) =>
+    (run.metrics.newChangedPathCountSinceStart ?? 0) > 0 ||
+    (run.metrics.firstEditPathChangedCount ?? 0) > 0
+  ).length;
 
   const summary = {
     version: 1,
@@ -76,6 +82,8 @@ withTelemetryLock(rootDir, () => {
     averageDocsBeforeFirstEdit: average(docsBeforeFirstEdit),
     averageRetrievalQueriesBeforeFirstEdit: average(retrievalBeforeFirstEdit),
     averageRegistryQueriesBeforeFirstEdit: average(registryBeforeFirstEdit),
+    averageChangedPathsSinceStart: average(changedPathCounts),
+    runsWithEditEvidence,
     primitiveBreakdowns: {
       purpose: groupByPrimitive(runs, 'purpose'),
       autonomy: groupByPrimitive(runs, 'autonomy'),
@@ -115,6 +123,8 @@ withTelemetryLock(rootDir, () => {
     `- Avg docs before first edit: \`${summary.averageDocsBeforeFirstEdit ?? 'n/a'}\``,
     `- Avg retrieval queries before first edit: \`${summary.averageRetrievalQueriesBeforeFirstEdit ?? 'n/a'}\``,
     `- Avg registry queries before first edit: \`${summary.averageRegistryQueriesBeforeFirstEdit ?? 'n/a'}\``,
+    `- Avg changed paths since start: \`${summary.averageChangedPathsSinceStart ?? 'n/a'}\``,
+    `- Runs with edit evidence: \`${summary.runsWithEditEvidence}\``,
     '',
     '## Economic Primitive Breakdown',
     '',

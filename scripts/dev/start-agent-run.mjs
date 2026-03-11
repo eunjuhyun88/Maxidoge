@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-import { agentManifest } from './agent-telemetry-lib.mjs';
-import { currentBranch, saveRun, setActiveRun, telemetryConfig, withTelemetryLock } from './agent-telemetry-lib.mjs';
+import { agentManifest, currentBranch, gitSnapshot, saveRun, setActiveRun, telemetryConfig, withTelemetryLock } from './agent-telemetry-lib.mjs';
 
 const rootDir = process.cwd();
 const { telemetry } = telemetryConfig(rootDir);
@@ -94,6 +93,10 @@ const run = {
     skillLevel: options.skillLevel,
     purpose: options.purpose,
     autonomy: options.autonomy,
+  },
+  git: {
+    startSnapshot: gitSnapshot(rootDir),
+    endSnapshot: null,
   },
 };
 

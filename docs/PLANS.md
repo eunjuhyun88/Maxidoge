@@ -10,6 +10,7 @@ Purpose:
 2. Multi-step work should be represented in `docs/exec-plans/active/`.
 3. Completed plans move to `docs/exec-plans/completed/` or are marked historical from the index.
 4. The watch log records execution history; it is not the canonical plan.
+5. Task contracts live beside plans, but do not replace them; plans describe sequence, contracts define finish.
 
 ## Current Active Planning Surface
 

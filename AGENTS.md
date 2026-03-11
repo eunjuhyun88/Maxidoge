@@ -22,7 +22,11 @@ This file defines mandatory execution rules for all coding agents in this reposi
      - `npm run ctx:save -- --title "<task>" --work-id "<W-ID>" --agent "<agent>"`
 9. For any non-trivial, multi-step, architectural, or cross-file task, record a semantic checkpoint before the first edit:
    - `npm run ctx:checkpoint -- --work-id "<W-ID>" --surface "<surface>" --objective "<objective>"`
-10. Do not start edits on `main`. Work must run on `codex/<task-name>` branch.
+   - `ctx:auto` may create a provisional checkpoint if the branch does not have one yet; replace the objective with task-specific intent before treating it as authoritative.
+10. For non-trivial work, keep an active task contract under `docs/task-contracts/active/`.
+   - `ctx:auto` may create a provisional contract for feature branches.
+   - Replace provisional finish checks with task-specific checks before calling the task complete.
+11. Do not start edits on `main`. Work must run on `codex/<task-name>` branch.
 
 ## Mandatory Branch/Sync Policy
 1. `main` is always protected:
@@ -68,7 +72,9 @@ This file defines mandatory execution rules for all coding agents in this reposi
    - `npm run ctx:restore -- --mode context` is allowed only as a compatibility alias to `brief`
 5. Pre-push must pass the local context quality check:
    - `npm run ctx:check -- --strict`
-6. Keep `.agent-context/` local-only (gitignored). Never commit runtime snapshots or secret notes.
+6. Pre-push should pass task-contract discipline when a branch contract exists:
+   - `npm run contract:check`
+7. Keep `.agent-context/` local-only (gitignored). Never commit runtime snapshots or secret notes.
 
 ## Mandatory Finish Sequence
 1. Commit and push only after passing check/build.
@@ -83,10 +89,11 @@ This file defines mandatory execution rules for all coding agents in this reposi
    - `.agent-context/handoffs/<branch>-latest.md`
    - compatibility path `.agent-context/compact/<branch>-latest.md`
    - If missing, run `npm run ctx:compact`.
-4. If this task is merged into `main`, run `npm run check` and `npm run build` again on `main`.
-5. If this task is merged into `main` and an upstream unified workspace exists, append the integration summary there; otherwise record the absence of the upstream mirror in the finish log and keep repo-local logs authoritative.
-6. If the task changed architecture, surface behavior, or authority boundaries, update the relevant canonical doc under `docs/`, not only the watch log.
-7. Push/merge actions require explicit user request or approval.
+4. If the branch has an active task contract, do not mark the task finished until the finish line is checked or intentionally left incomplete with explicit log context.
+5. If this task is merged into `main`, run `npm run check` and `npm run build` again on `main`.
+6. If this task is merged into `main` and an upstream unified workspace exists, append the integration summary there; otherwise record the absence of the upstream mirror in the finish log and keep repo-local logs authoritative.
+7. If the task changed architecture, surface behavior, or authority boundaries, update the relevant canonical doc under `docs/`, not only the watch log.
+8. Push/merge actions require explicit user request or approval.
 
 ## Logging Model
 - Development log (always): `/Users/ej/Downloads/maxidoge-clones/integration/docs/AGENT_WATCH_LOG.md`
@@ -99,6 +106,8 @@ This file defines mandatory execution rules for all coding agents in this reposi
 - Root architecture map: `/Users/ej/Downloads/maxidoge-clones/frontend/ARCHITECTURE.md`
 - Task-level docs router: `/Users/ej/Downloads/maxidoge-clones/frontend/docs/README.md`
 - Canonical docs layer: `docs/{DESIGN,FRONTEND,PLANS,PRODUCT_SENSE,QUALITY_SCORE,RELIABILITY,SECURITY}.md`
+- Task stop-condition layer: `docs/TASK_CONTRACTS.md`, `docs/task-contracts/active/`
+- Practical validation layer: `docs/CONTEXT_VALIDATION.md`
 - Historical/reference-only docs: `/Users/ej/Downloads/maxidoge-clones/frontend/docs/archive/`
 - Sibling clone folders are not canonical implementation targets.
 
