@@ -1,6 +1,6 @@
 # Task Contract Report
 
-- Current branch: `codex/terminal-uiux-gtm-wip`
+- Current branch: `codex/frontend-memento-core`
 - Active dir: `docs/task-contracts/active`
 - Completed dir: `docs/task-contracts/completed`
 - Require contract on feature branches: `no`

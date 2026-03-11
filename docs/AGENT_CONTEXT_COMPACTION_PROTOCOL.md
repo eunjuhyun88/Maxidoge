@@ -1,7 +1,7 @@
 # Agent Context Memory Protocol
 
 Last updated: 2026-03-06
-Scope: current git worktree rooted at this repository
+Scope: `/Users/ej/Downloads/maxidoge-clones/frontend`
 
 ## 1) Why
 
@@ -184,6 +184,19 @@ Produces:
 - compatibility compact brief
 - lightweight state json
 
+Optional validation flags:
+
+```bash
+npm run ctx:compact -- \
+  --docs-check pass \
+  --check pass \
+  --build pass \
+  --gate pass
+```
+
+Use these when brief/handoff should record known validation state instead of `unknown`.
+The standard hook paths refresh artifacts after successful `check` or `gate` so the latest branch brief stays truthful.
+
 ### Validate context quality
 
 ```bash
@@ -223,7 +236,8 @@ Automation runs through `ctx:auto`.
 - `safe:sync-start` -> save snapshot
 - `safe:sync-end` -> save snapshot, refresh brief/handoff
 - `pre-push` -> save snapshot, refresh brief/handoff, then strict quality check
-- `post-merge` -> save snapshot, refresh brief/handoff
+- `pre-push` -> after `npm run gate`, refresh brief/handoff with validation state
+- `post-merge` -> save snapshot, refresh brief/handoff, then refresh validation state after `npm run check`
 
 Environment controls:
 
