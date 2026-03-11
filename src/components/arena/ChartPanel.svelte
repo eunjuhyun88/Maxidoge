@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
   import { gameState } from '$lib/stores/gameState';
   import {
     pairToSymbol,
@@ -199,7 +199,9 @@
     dispatch('clearTradeSetup');
   }
 
-  let chartContainer: HTMLDivElement;
+  let chartContainer: HTMLDivElement | null = null;
+  let chartContainerReadyPromise: Promise<HTMLDivElement> | null = null;
+  let resolveChartContainerReady: ((container: HTMLDivElement) => void) | null = null;
   let chart: IChartApi | null = null;
   let lwcModule: typeof import('lightweight-charts') | null = null;
   let series: ISeriesApi<'Candlestick'> | null = $state(null);
@@ -381,6 +383,33 @@
   let chartClientRuntimePromise: Promise<ChartClientRuntimeAssembly> | null = null;
   let chartPanelController: ChartPanelController | null = null;
 
+  function getChartContainerOrThrow(): HTMLDivElement {
+    if (!chartContainer) {
+      throw new Error('Chart container is not ready');
+    }
+    return chartContainer;
+  }
+
+  function waitForChartContainer(): Promise<HTMLDivElement> {
+    if (chartContainer) return Promise.resolve(chartContainer);
+    if (!chartContainerReadyPromise) {
+      chartContainerReadyPromise = new Promise((resolve) => {
+        resolveChartContainerReady = resolve;
+      });
+    }
+    return chartContainerReadyPromise;
+  }
+
+  function setChartContainer(container: HTMLDivElement | null) {
+    chartContainer = container;
+    if (!container) return;
+    if (resolveChartContainerReady) {
+      resolveChartContainerReady(container);
+      resolveChartContainerReady = null;
+      chartContainerReadyPromise = null;
+    }
+  }
+
   async function setChartMode(mode: 'agent' | 'trading') {
     await ensureChartClientRuntime();
     await chartPanelController?.setChartMode(mode);
@@ -402,7 +431,7 @@
       overlay: {
         getChart: () => chart,
         getSeries: () => series,
-        getChartContainer: () => chartContainer,
+        getChartContainer: () => getChartContainerOrThrow(),
         getDrawingCanvas: () => drawingCanvas,
         getChartMode: () => chartMode,
         getOverlayPatterns: () => overlayPatterns,
@@ -840,7 +869,7 @@
       position:
         buildChartPositionRuntimeOptions({
           getSeries: () => series,
-          getChartContainer: () => chartContainer,
+          getChartContainer: () => getChartContainerOrThrow(),
           getTheme: () => chartTheme,
           getShowPosition: () => showPosition,
           getPositionLevels: () => ({
@@ -863,7 +892,7 @@
       tradingView:
         buildChartTradingViewRuntimeOptions({
           getContainer: () => tvContainer,
-          getThemeTarget: () => tvContainer || chartContainer,
+          getThemeTarget: () => tvContainer || getChartContainerOrThrow(),
           getPair: () => storeState.pair,
           getTimeframe: () => storeState.timeframe,
           setTheme: (theme) => {
@@ -943,7 +972,7 @@
       bindings:
         buildChartRuntimeBindingOptions({
           chart: chart!,
-          chartContainer,
+          chartContainer: getChartContainerOrThrow(),
           isAgentMode: () => chartMode === 'agent',
           isTradeLineEntryEnabled: () => enableTradeLineEntry,
           onScheduleVisiblePatternScan: scheduleVisiblePatternScan,
@@ -969,7 +998,7 @@
   ) {
     return createController({
       getPrepareMountOptions: () => ({
-        chartContainer,
+        chartContainer: getChartContainerOrThrow(),
         advancedMode,
         indicatorStripState,
         showIndicatorLegend,
@@ -1113,6 +1142,8 @@
 
   onMount(async () => {
     await ensureChartClientRuntime();
+    await waitForChartContainer();
+    await tick();
     await chartPanelController?.mount();
   });
 
@@ -1211,7 +1242,7 @@
     onToggleIndicatorLegend: toggleIndicatorLegend,
     onSetIndicatorStripState: setIndicatorStripState,
     onAgentSurfaceContainerReady: (container) => {
-      chartContainer = container as HTMLDivElement;
+      setChartContainer(container as HTMLDivElement | null);
     },
     onChartMouseDown: handleChartMouseDown,
     onChartMouseMove: handleChartMouseMove,
