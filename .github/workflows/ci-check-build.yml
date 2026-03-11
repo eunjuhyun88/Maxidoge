@@ -38,6 +38,9 @@ jobs:
       - name: Docs context check
         run: npm run docs:check
 
+      - name: Task contract check
+        run: npm run contract:check
+
   check:
     needs: docs
     runs-on: ubuntu-latest
