@@ -27,6 +27,11 @@ if [ -x scripts/dev/check-context-quality.sh ]; then
 	bash scripts/dev/check-context-quality.sh --strict
 fi
 
+if [ -f scripts/dev/check-task-contracts.mjs ]; then
+	echo "[pre-push] task contract check"
+	node scripts/dev/check-task-contracts.mjs
+fi
+
 echo "[pre-push] fetching origin"
 git fetch origin --prune
 
