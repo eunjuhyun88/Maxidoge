@@ -71,6 +71,7 @@ const lines = [
   `- Surface: \`${surface}\``,
   `- Type: \`${type}\``,
   `- Status: \`${status}\``,
+  `- Provisional: \`${args.provisional ? 'yes' : 'no'}\``,
   '',
   '## Goal',
   '',

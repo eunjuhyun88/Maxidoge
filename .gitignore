@@ -32,3 +32,14 @@ vite.config.ts.timestamp-*
 
 # Agent context runtime snapshots (local only)
 .agent-context/
+context-kit.local.json
+.codex/
+
+# Local context evidence (runtime-only)
+/docs/generated/agent-usage-report.json
+/docs/generated/agent-usage-report.md
+/docs/generated/context-ab-report.md
+/docs/generated/context-validation-report.json
+/docs/generated/context-validation-report.md
+/docs/task-contracts/active/*.md
+!/docs/task-contracts/active/README.md
