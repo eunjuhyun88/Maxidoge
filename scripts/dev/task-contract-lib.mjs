@@ -73,6 +73,11 @@ function metadataField(text, label) {
   return match ? match[1].trim() : '';
 }
 
+function metadataBoolean(text, label) {
+  const value = metadataField(text, label).toLowerCase();
+  return value === 'yes' || value === 'true';
+}
+
 function firstHeading(text) {
   const match = text.match(/^#\s+(.+)$/m);
   return match ? match[1].trim() : '';
@@ -94,6 +99,9 @@ export function parseContractFile(rootDir, filePath, bucket) {
   const surface = metadataField(text, 'Surface');
   const type = metadataField(text, 'Type');
   const declaredStatus = metadataField(text, 'Status');
+  const provisional = metadataBoolean(text, 'Provisional')
+    || text.includes('Provisional contract for ')
+    || text.includes('Replace this provisional contract with task-specific finish checks');
   const items = finishItems(text);
   const doneCount = items.filter((item) => item.checked).length;
   const missingHeadings = REQUIRED_CONTRACT_HEADINGS.filter((heading) => !text.includes(`${heading}\n`) && !text.includes(`${heading}\r\n`));
@@ -119,6 +127,7 @@ export function parseContractFile(rootDir, filePath, bucket) {
     surface,
     type,
     declaredStatus,
+    provisional,
     finishTotal: items.length,
     finishDone: doneCount,
     complete,
@@ -155,6 +164,8 @@ export function shouldRequireContract(rootDir = repoRoot()) {
 export function renderTaskContractReport(rootDir = repoRoot()) {
   const { contracts, active, completed } = collectContracts(rootDir);
   const branch = currentBranch(rootDir);
+  const visibleActive = active.filter((item) => !item.provisional);
+  const visibleCompleted = completed.filter((item) => !item.provisional);
   const lines = [
     '# Task Contract Report',
     '',
@@ -168,19 +179,19 @@ export function renderTaskContractReport(rootDir = repoRoot()) {
     '',
     '| Contract | Branch | Surface | Type | Finish | Status | Notes |',
     '| --- | --- | --- | --- | --- | --- | --- |',
-    ...(active.length ? active.map((item) => `| \`${item.relPath}\` | \`${item.branch || '-'}\` | \`${item.surface || '-'}\` | \`${item.type || '-'}\` | ${item.finishDone}/${item.finishTotal} | \`${item.status}\` | ${item.warnings.length ? item.warnings.join('; ') : 'ok'} |`) : ['| none | - | - | - | 0/0 | `none` | no active contracts |']),
+    ...(visibleActive.length ? visibleActive.map((item) => `| \`${item.relPath}\` | \`${item.branch || '-'}\` | \`${item.surface || '-'}\` | \`${item.type || '-'}\` | ${item.finishDone}/${item.finishTotal} | \`${item.status}\` | ${item.warnings.length ? item.warnings.join('; ') : 'ok'} |`) : ['| none | - | - | - | 0/0 | `none` | no active contracts |']),
     '',
     '## Completed Contracts',
     '',
     '| Contract | Branch | Surface | Type | Finish | Notes |',
     '| --- | --- | --- | --- | --- | --- |',
-    ...(completed.length ? completed.map((item) => `| \`${item.relPath}\` | \`${item.branch || '-'}\` | \`${item.surface || '-'}\` | \`${item.type || '-'}\` | ${item.finishDone}/${item.finishTotal} | ${item.warnings.length ? item.warnings.join('; ') : 'ok'} |`) : ['| none | - | - | - | 0/0 | no completed contracts |']),
+    ...(visibleCompleted.length ? visibleCompleted.map((item) => `| \`${item.relPath}\` | \`${item.branch || '-'}\` | \`${item.surface || '-'}\` | \`${item.type || '-'}\` | ${item.finishDone}/${item.finishTotal} | ${item.warnings.length ? item.warnings.join('; ') : 'ok'} |`) : ['| none | - | - | - | 0/0 | no completed contracts |']),
     '',
     '## Current Branch Verdict',
     '',
   ];
 
-  const branchActive = active.filter((item) => item.branch === branch);
+  const branchActive = visibleActive.filter((item) => item.branch === branch);
   if (branchActive.length === 0) {
     lines.push('- No active contract is bound to the current branch.');
   } else {
