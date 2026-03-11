@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { runServerScan, type WarRoomScanResult } from '$lib/server/scanEngine';
+import { runLLMScan, shouldUseLLMScan } from '$lib/server/llmScan';
 import { PAIR_RE, UUID_RE, toBoundedInt } from '$lib/server/apiValidation';
 import { query, withTransaction } from '$lib/server/db';
 
@@ -113,7 +114,7 @@ function parseHighlights(raw: unknown): TerminalScanSummary['highlights'] {
     .map((item) => ({
       agent: typeof item.agent === 'string' ? item.agent : 'AGENT',
       vote: item.vote === 'long' || item.vote === 'short' || item.vote === 'neutral' ? item.vote : 'neutral',
-      conf: Math.round(toNumber(item.conf as any, 0)),
+      conf: Math.round(toNumber(item.conf as string | number | null, 0)),
       note: typeof item.note === 'string' ? item.note : '',
     }));
 }
@@ -255,14 +256,36 @@ async function persistScan(userId: string, scan: WarRoomScanResult): Promise<str
 }
 
 export async function runTerminalScan(
-  userId: string,
+  userId: string | null | undefined,
   request: { pair?: unknown; timeframe?: unknown }
 ): Promise<RunTerminalScanResult> {
   const { pair, timeframe } = normalizeScanRequest(request);
-  const scan = await runServerScan(pair, timeframe);
+  const persistUserId = typeof userId === 'string' && UUID_RE.test(userId) ? userId : null;
+
+  // C-02 routing: LLM scan for eligible users, B-02 fallback on error
+  let scan: WarRoomScanResult;
+  if (shouldUseLLMScan(persistUserId)) {
+    try {
+      scan = await runLLMScan(pair, timeframe);
+    } catch (error) {
+      console.warn('[C-02→B-02] fallback:', error instanceof Error ? error.message : error);
+      scan = await runServerScan(pair, timeframe);
+    }
+  } else {
+    scan = await runServerScan(pair, timeframe);
+  }
+
+  if (!persistUserId) {
+    const scanId = randomUUID();
+    return {
+      scanId,
+      persisted: false,
+      data: fromScanResult(scanId, scan),
+    };
+  }
 
   try {
-    const scanId = await persistScan(userId, scan);
+    const scanId = await persistScan(persistUserId, scan);
     return {
       scanId,
       persisted: true,
@@ -419,4 +442,3 @@ export async function getTerminalScanSignals(
     throw error;
   }
 }
-

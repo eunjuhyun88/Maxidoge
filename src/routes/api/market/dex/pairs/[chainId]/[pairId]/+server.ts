@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { fetchDexPair } from '$lib/server/dexscreener';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 export const GET: RequestHandler = async ({ params }) => {
   try {
@@ -16,9 +17,9 @@ export const GET: RequestHandler = async ({ params }) => {
         },
       }
     );
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.startsWith('invalid ')) {
-      return json({ error: error.message }, { status: 400 });
+  } catch (error: unknown) {
+    if (getErrorMessage(error).startsWith('invalid ')) {
+      return json({ error: getErrorMessage(error) }, { status: 400 });
     }
     console.error('[market/dex/pairs/:chainId/:pairId/get] unexpected error:', error);
     return json({ error: 'Failed to load dex pair' }, { status: 500 });

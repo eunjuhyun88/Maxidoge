@@ -12,6 +12,7 @@
 // 데이터 없을 시 value: 0, detail: 'Data unavailable' 반환.
 
 import type { FactorResult, TrendAnalysis, DivergenceSignal, BinanceKline } from './types';
+import { clamp } from '$lib/utils/math';
 import { calcSMA, calcEMA, calcRSI, calcATR, calcOBV, calcMACD, calcCVD, calcBollingerBands } from './indicators';
 import { analyzeTrend, detectDivergence, analyzeMultiTF } from './trend';
 
@@ -77,9 +78,6 @@ export interface MarketContext {
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
 
 function neutralFactor(factorId: string, reason = 'Data unavailable'): FactorResult {
   return { factorId, value: 0, detail: reason };
@@ -898,8 +896,8 @@ export function computeFactor(factorId: string, ctx: MarketContext): FactorResul
   if (!fn) return neutralFactor(factorId, `Unknown factor: ${factorId}`);
   try {
     return fn(ctx);
-  } catch (err: any) {
-    return neutralFactor(factorId, `Error: ${err?.message ?? 'unknown'}`);
+  } catch (err: unknown) {
+    return neutralFactor(factorId, `Error: ${(err instanceof Error ? err.message : 'unknown')}`);
   }
 }
 

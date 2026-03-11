@@ -13,27 +13,30 @@
   import { ensureArbitrumChain } from '$lib/wallet/chainSwitch';
 
   // ── Props ──────────────────────────────────────────
-  export let onClose: () => void = () => {};
+  interface Props {
+    onClose?: () => void;
+  }
+  let { onClose = () => {} }: Props = $props();
 
   // ── State ──────────────────────────────────────────
-  let markets: GmxMarket[] = [];
-  let selectedMarket: GmxMarket | null = null;
-  let direction: 'LONG' | 'SHORT' = 'LONG';
-  let collateral = '';
-  let leverage = 10;
-  let step: 'input' | 'loading' | 'approving' | 'signing' | 'confirming' | 'done' | 'error' = 'input';
-  let errorMsg = '';
-  let balance: GmxBalanceInfo | null = null;
-  let resultTxHash = '';
+  let markets = $state<GmxMarket[]>([]);
+  let selectedMarket = $state<GmxMarket | null>(null);
+  let direction = $state<'LONG' | 'SHORT'>('LONG');
+  let collateral = $state('');
+  let leverage = $state(10);
+  let step = $state<'input' | 'loading' | 'approving' | 'signing' | 'confirming' | 'done' | 'error'>('input');
+  let errorMsg = $state('');
+  let balance = $state<GmxBalanceInfo | null>(null);
+  let resultTxHash = $state('');
   const collateralInputId = 'gmx-collateral-input';
 
   // ── Derived ────────────────────────────────────────
-  $: collateralNum = parseFloat(collateral) || 0;
-  $: sizeUsd = collateralNum * leverage;
-  $: walletConnected = $walletStore.connected;
-  $: isValid = collateralNum >= 1 && collateralNum <= 100_000 && leverage >= 1 && leverage <= 100 && selectedMarket;
-  $: hasEnoughUsdc = balance ? collateralNum <= balance.usdcBalance : true;
-  $: hasEnoughEth = balance ? balance.ethBalance > 0.001 : true;
+  const collateralNum = $derived(parseFloat(collateral) || 0);
+  const sizeUsd = $derived(collateralNum * leverage);
+  const walletConnected = $derived($walletStore.connected);
+  const isValid = $derived(collateralNum >= 1 && collateralNum <= 100_000 && leverage >= 1 && leverage <= 100 && !!selectedMarket);
+  const hasEnoughUsdc = $derived(balance ? collateralNum <= balance.usdcBalance : true);
+  const hasEnoughEth = $derived(balance ? balance.ethBalance > 0.001 : true);
 
   // ── Init ───────────────────────────────────────────
   async function loadMarkets() {
@@ -172,8 +175,8 @@
       });
 
       step = 'done';
-    } catch (err: any) {
-      errorMsg = err?.message ?? '알 수 없는 오류';
+    } catch (err: unknown) {
+      errorMsg = err instanceof Error ? err.message : '알 수 없는 오류';
       step = 'error';
     }
   }
@@ -186,12 +189,12 @@
   }
 </script>
 
-<div class="gmx-overlay" on:click|self={handleClose} role="presentation">
+<div class="gmx-overlay" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) handleClose(); }} role="presentation">
   <div class="gmx-panel">
     <!-- Header -->
     <div class="gmx-header">
       <span class="gmx-title">OPEN PERP</span>
-      <button class="gmx-close" on:click={handleClose}>✕</button>
+      <button class="gmx-close" onclick={handleClose}>✕</button>
     </div>
 
     {#if step === 'input'}
@@ -201,7 +204,7 @@
           <button
             class="market-btn"
             class:active={selectedMarket?.address === m.address}
-            on:click={() => { selectedMarket = m; }}
+            onclick={() => { selectedMarket = m; }}
           >
             {m.label}
           </button>
@@ -210,10 +213,10 @@
 
       <!-- Direction Toggle -->
       <div class="gmx-direction">
-        <button class="dir-btn long" class:active={direction === 'LONG'} on:click={() => { direction = 'LONG'; }}>
+        <button class="dir-btn long" class:active={direction === 'LONG'} onclick={() => { direction = 'LONG'; }}>
           ▲ LONG
         </button>
-        <button class="dir-btn short" class:active={direction === 'SHORT'} on:click={() => { direction = 'SHORT'; }}>
+        <button class="dir-btn short" class:active={direction === 'SHORT'} onclick={() => { direction = 'SHORT'; }}>
           ▼ SHORT
         </button>
       </div>
@@ -224,7 +227,7 @@
         <input id={collateralInputId} type="number" bind:value={collateral} min="1" max="100000" step="1" placeholder="100" />
         <div class="quick-amounts">
           {#each [10, 25, 50, 100, 500] as v}
-            <button class="qa-btn" on:click={() => setQuickCollateral(v)}>${v}</button>
+            <button class="qa-btn" onclick={() => setQuickCollateral(v)}>${v}</button>
           {/each}
         </div>
         {#if balance}
@@ -237,7 +240,7 @@
         <div class="field-label">Leverage: {leverage}x</div>
         <div class="leverage-btns">
           {#each [1, 2, 5, 10, 25, 50] as lev}
-            <button class="lev-btn" class:active={leverage === lev} on:click={() => setLeverage(lev)}>
+            <button class="lev-btn" class:active={leverage === lev} onclick={() => setLeverage(lev)}>
               {lev}x
             </button>
           {/each}
@@ -269,7 +272,7 @@
       {/if}
 
       <!-- Submit Button -->
-      <button class="gmx-submit" disabled={!isValid || !walletConnected || !hasEnoughUsdc} on:click={handleOpenPosition}>
+      <button class="gmx-submit" disabled={!isValid || !walletConnected || !hasEnoughUsdc} onclick={handleOpenPosition}>
         {#if !walletConnected}
           Connect Wallet First
         {:else if !isValid}
@@ -319,14 +322,14 @@
             Arbiscan에서 보기 ↗
           </a>
         {/if}
-        <button class="gmx-submit" on:click={handleClose}>닫기</button>
+        <button class="gmx-submit" onclick={handleClose}>닫기</button>
       </div>
 
     {:else if step === 'error'}
       <div class="gmx-status error">
         <span class="status-icon">✕</span>
         <p>{errorMsg}</p>
-        <button class="gmx-submit" on:click={() => { step = 'input'; }}>다시 시도</button>
+        <button class="gmx-submit" onclick={() => { step = 'input'; }}>다시 시도</button>
       </div>
     {/if}
   </div>
@@ -340,7 +343,7 @@
   }
   .gmx-panel {
     width: 100%; max-width: 420px;
-    background: #111; border-top: 2px solid var(--yel, #E8967D);
+    background: #111; border-top: 2px solid var(--yel, var(--term-accent, #e8967d));
     border-radius: 16px 16px 0 0;
     padding: 16px; display: flex; flex-direction: column; gap: 12px;
     animation: slideUp .25s ease-out;
@@ -358,11 +361,11 @@
 
   .gmx-markets { display: flex; gap: 6px; }
   .market-btn {
-    flex: 1; padding: 8px; border: 1px solid rgba(232,150,125,.15); border-radius: 8px;
-    background: rgba(232,150,125,.04); color: rgba(232,150,125,.5);
+    flex: 1; padding: 8px; border: 1px solid rgba(var(--t-accent-rgb),.15); border-radius: 8px;
+    background: rgba(var(--t-accent-rgb),.04); color: rgba(var(--t-accent-rgb),.5);
     font: 700 12px/1 var(--fm); cursor: pointer; transition: all .15s;
   }
-  .market-btn.active { background: rgba(232,150,125,.12); color: var(--yel); border-color: rgba(232,150,125,.4); }
+  .market-btn.active { background: rgba(var(--t-accent-rgb),.12); color: var(--yel); border-color: rgba(var(--t-accent-rgb),.4); }
 
   .gmx-direction { display: flex; gap: 8px; }
   .dir-btn {
@@ -382,30 +385,30 @@
     letter-spacing: 1px;
   }
   .gmx-field input {
-    background: rgba(255,255,255,.06); border: 1px solid rgba(232,150,125,.15); border-radius: 6px;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(var(--t-accent-rgb),.15); border-radius: 6px;
     padding: 10px 12px; color: #fff; font: 400 14px/1 var(--fm); outline: none;
   }
   .gmx-field input:focus { border-color: var(--yel); }
-  .gmx-field input::placeholder { color: rgba(255,255,255,.25); }
+  .gmx-field input::placeholder { color: rgba(255,255,255,.5); }
 
   .quick-amounts { display: flex; gap: 4px; margin-top: 4px; }
   .qa-btn {
-    flex: 1; padding: 5px; border: 1px solid rgba(232,150,125,.12); border-radius: 4px;
-    background: rgba(232,150,125,.04); color: rgba(232,150,125,.6);
+    flex: 1; padding: 5px; border: 1px solid rgba(var(--t-accent-rgb),.12); border-radius: 4px;
+    background: rgba(var(--t-accent-rgb),.04); color: rgba(var(--t-accent-rgb),.6);
     font: 400 10px/1 var(--fm); cursor: pointer; transition: all .15s;
   }
-  .qa-btn:hover { background: rgba(232,150,125,.1); color: var(--yel); }
+  .qa-btn:hover { background: rgba(var(--t-accent-rgb),.1); color: var(--yel); }
 
   .balance-hint { font: 400 10px/1 var(--fm); color: rgba(255,255,255,.3); margin-top: 2px; }
 
   .leverage-btns { display: flex; gap: 4px; }
   .lev-btn {
-    flex: 1; padding: 7px 4px; border: 1px solid rgba(232,150,125,.12); border-radius: 6px;
-    background: rgba(232,150,125,.04); color: rgba(232,150,125,.5);
+    flex: 1; padding: 7px 4px; border: 1px solid rgba(var(--t-accent-rgb),.12); border-radius: 6px;
+    background: rgba(var(--t-accent-rgb),.04); color: rgba(var(--t-accent-rgb),.5);
     font: 700 11px/1 var(--fm); cursor: pointer; transition: all .15s;
   }
-  .lev-btn.active { background: rgba(232,150,125,.15); color: var(--yel); border-color: rgba(232,150,125,.4); }
-  .lev-btn:hover { background: rgba(232,150,125,.08); }
+  .lev-btn.active { background: rgba(var(--t-accent-rgb),.15); color: var(--yel); border-color: rgba(var(--t-accent-rgb),.4); }
+  .lev-btn:hover { background: rgba(var(--t-accent-rgb),.08); }
 
   .gmx-summary {
     display: flex; flex-direction: column; gap: 6px;
@@ -435,14 +438,14 @@
   .gmx-status.error .status-icon { color: #FF5E7A; }
 
   .status-spinner {
-    width: 28px; height: 28px; border: 2px solid rgba(232,150,125,.2);
+    width: 28px; height: 28px; border: 2px solid rgba(var(--t-accent-rgb),.2);
     border-top-color: var(--yel); border-radius: 50%;
     animation: spin .7s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .tx-link {
-    font: 400 11px/1 var(--fm); color: rgba(232,150,125,.7);
+    font: 400 11px/1 var(--fm); color: rgba(var(--t-accent-rgb),.7);
     text-decoration: none; margin-top: 4px;
   }
   .tx-link:hover { color: var(--yel); text-decoration: underline; }

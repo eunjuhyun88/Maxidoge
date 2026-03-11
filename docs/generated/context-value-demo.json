@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "smallMap": {
+    "files": 6,
+    "lines": 1196,
+    "approxTokens": 6653
+  },
+  "allDocs": {
+    "files": 157,
+    "lines": 46492,
+    "approxTokens": 223391
+  },
+  "smallMapReductionVsAllDocsPct": 97,
+  "registry": {
+    "surfaceCount": 4,
+    "commandCount": 42
+  },
+  "agents": {
+    "count": 3
+  },
+  "tools": {
+    "count": 3
+  },
+  "retrieval": {
+    "chunkCount": 306,
+    "sourceCount": 36
+  },
+  "telemetry": {
+    "runCount": 3,
+    "finishedRunCount": 3,
+    "totalEstimatedTimeSavedMinutes": 11.8,
+    "latestRun": {
+      "runId": "R-20260311154844-planner",
+      "agent": "planner",
+      "docsBeforeFirstEdit": 2,
+      "actualMinutes": 1.9,
+      "baselineMinutes": 5,
+      "timeSavedMinutes": 3.1
+    }
+  },
+  "ab": {
+    "comparisons": 1,
+    "routedWins": 1
+  },
+  "feltChecks": [
+    {
+      "label": "Small start bundle",
+      "pass": true,
+      "evidence": "6653 tokens vs 223391 tokens across all docs (97% smaller)"
+    },
+    {
+      "label": "Discovery works without chat memory",
+      "pass": true,
+      "evidence": "4 surfaces, 3 agents, 3 tools"
+    },
+    {
+      "label": "Ambiguity has a retrieval escape hatch",
+      "pass": true,
+      "evidence": "306 retrieval chunks across 36 sources"
+    },
+    {
+      "label": "Time-saved evidence exists",
+      "pass": true,
+      "evidence": "3 finished runs, 11.8 minutes estimated saved"
+    },
+    {
+      "label": "Routed mode beat baseline at least once",
+      "pass": true,
+      "evidence": "1/1 routed wins"
+    }
+  ]
+}

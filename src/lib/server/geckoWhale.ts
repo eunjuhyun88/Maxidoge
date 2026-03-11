@@ -7,6 +7,7 @@
 
 import { getCached, setCache } from './providers/cache';
 import type { CQWhaleData } from './cryptoquant';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 const GT_BASE = 'https://api.geckoterminal.com/api/v2';
 const CACHE_TTL = 300_000; // 5분 (rate limit ~30 req/min 대비 넉넉)
@@ -88,7 +89,7 @@ async function gtFetch<T>(path: string): Promise<T | null> {
     setCache(cacheKey, json as T, CACHE_TTL);
     return json as T;
   } catch (err) {
-    console.error('[GeckoWhale] fetch error:', err instanceof Error ? err.message : err);
+    console.error('[GeckoWhale] fetch error:', err instanceof Error ? getErrorMessage(err) : err);
     return null;
   }
 }

@@ -6,6 +6,7 @@ import { toBoundedInt } from '$lib/server/apiValidation';
 import { withTransaction } from '$lib/server/db';
 import { buildOrpoPairs } from '$lib/server/orpo/pairBuilder';
 import { estimateJsonlByteSize, serializeOrpoPairsToJsonl } from '$lib/server/orpo/exportJsonl';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 function normalizeDate(value: unknown, fallback: Date): Date {
   if (typeof value !== 'string' || !value.trim()) return fallback;
@@ -192,8 +193,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
       },
       { status: 201 },
     );
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('DATABASE_URL is not set')) {
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('DATABASE_URL is not set')) {
       return json({ error: 'Server database is not configured' }, { status: 500 });
     }
     if (error instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });

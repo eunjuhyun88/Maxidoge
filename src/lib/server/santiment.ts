@@ -8,6 +8,7 @@
 import { env } from '$env/dynamic/private';
 import { getCached, setCache } from './providers/cache';
 import type { LunarCrushTopicData } from './lunarcrush';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 const ENDPOINT = 'https://api.santiment.net/graphql';
 const CACHE_TTL = 120_000; // 2 min (same as LunarCrush)
@@ -165,7 +166,7 @@ export async function fetchSantimentSocial(topic: string): Promise<LunarCrushTop
     setCache(cacheKey, result, CACHE_TTL);
     return result;
   } catch (err) {
-    console.error('[Santiment]', err instanceof Error ? err.message : err);
+    console.error('[Santiment]', err instanceof Error ? getErrorMessage(err) : err);
     return null;
   }
 }

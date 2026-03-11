@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
 
   onMount(() => {
-    void goto('/signals?view=oracle', {
+    void goto('/signals?view=ai', {
       replaceState: true,
       noScroll: true,
       keepFocus: true,
@@ -14,7 +14,7 @@
 
 <div class="oracle-redirect">
   <p>Redirecting to Community Oracle leaderboard...</p>
-  <a href="/signals?view=oracle">Open now</a>
+  <a href="/signals?view=ai">Open now</a>
 </div>
 
 <style>

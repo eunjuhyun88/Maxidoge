@@ -10,7 +10,7 @@
 // 이 단일 스토어를 구독하도록 교체 예정.
 
 import { writable, derived, get, type Readable } from 'svelte/store';
-import { normalizeSymbol } from '$lib/utils/price';
+import { normalizeSymbol, normalizePrice } from '$lib/utils/price';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -88,10 +88,6 @@ export const solPrice = derived(livePrice, ($p) => $p.SOL?.price ?? 0);
 
 // ─── Actions ─────────────────────────────────────────────────
 
-function normalizePrice(value: number): number | null {
-  if (!Number.isFinite(value) || value <= 0) return null;
-  return value;
-}
 
 function shouldSkipRestFallback(prev: PriceEntry | undefined, incomingSource: LivePriceSource): boolean {
   if (!prev) return false;

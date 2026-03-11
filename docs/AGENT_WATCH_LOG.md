@@ -20,6 +20,1132 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 
 ## Entries
 
+## [2026-03-10 20:33:42 +0900] FINISH chart-mount-state-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing the canonical ChartPanel refactor, preserve layout, and continue executing the remaining runtime/state cleanup with narrow push-safe slices
+- What changed:
+  - Added [chartPanelMountState.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartPanelMountState.ts#L1)
+    - extracted the prepared-mount/bootstrap state apply path from the component shell
+    - centralized the series/pane ref assignment and MA period binding injection sequence behind a dedicated mount-state helper
+  - Updated [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1)
+    - rewired `applyBootstrapState()` and `applyPreparedMount()` to the canonical mount-state helper
+    - kept all layout and runtime behavior unchanged while reducing mount-state logic inside the component body
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartPanelMountState.ts` as the canonical mount-state apply boundary for ChartPanel
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1) still owns the large runtime-bundle option builder and controller option wiring
+  - this slice moved mount-state responsibility out of the component, but it did not yet reduce the runtime-bundle builder surface
+- Commit / Push:
+  - `610e376` `refactor(chart): split mount state apply`
+  - `799d5e4` `docs: record chart mount state push`
+  - pushed to `origin/codex/terminal-uiux-gtm-wip`
+- Status: DONE
+
+## [2026-03-11 02:29:00 +0900] FINISH chart-drawing-runtime-surface-trim-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep shaving `chartPanelSupportRuntime`, preserve behavior, and remove dead drawing-admin surface from the base drawing runtime instead of inventing another helper-only split
+- What changed:
+  - Updated [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1)
+    - removed unused public wrapper methods for magnet toggle, undo/redo, selected-drawing style mutation, duplicate/lock helpers, and import/export helpers
+    - narrowed the runtime contract to the drawing controls actually consumed by `chartPanelSupportRuntime`
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented that admin-only drawing helpers should not come back into the base drawing runtime surface without a real caller and a lazy-boundary plan
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `62.95 kB`
+    - previous baseline before this slice: `64.79 kB`
+    - [drawingPrimitiveRegistry.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingPrimitiveRegistry.js) `53.13 kB`
+    - [drawingManager.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingManager.js) `37.86 kB`
+- Residual risks:
+  - the removed admin API surface appeared dead in the current chart shell; if a hidden consumer exists outside the searched chart/shell path it would need to reintroduce that capability through an explicit, typed boundary
+  - the drawing context menu itself is still an optional surface owned by [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1), so the next slice should verify whether its state path is fully wired or still partially dormant
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-11 02:05:00 +0900] FINISH chart-position-primitive-lazy-registry-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep planning the next chart hotspot, preserve drawing behavior, and narrow the base drawing registry path by moving `PositionPrimitive` behind a real lazy boundary without touching unrelated route WIP
+- What changed:
+  - Added [drawingPositionPrimitiveRegistry.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingPositionPrimitiveRegistry.ts#L1)
+    - extracted long/short entry preview construction and serialized position restore into a dedicated position-only registry chunk
+  - Updated [drawingPrimitiveRegistry.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingPrimitiveRegistry.ts#L1)
+    - removed the static `PositionPrimitive` import from the base registry
+    - added lazy preload hooks so only position drawings trigger the position registry chunk
+  - Updated [drawingManager.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingManager.ts#L1)
+    - moved deferred long/short entry preload ownership into the manager, where drawing-mode state and mouse replay already live
+    - keeps pending mouse-down state inside the manager until the position registry is ready
+  - Updated [chartDrawingPersistenceRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingPersistenceRuntime.ts#L1)
+    - preloads position support only when persisted drawings actually contain `type='position'`
+  - Updated [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1)
+    - removed the temporary route-level deferred mode activation logic and returned to a thinner runtime/controller handoff
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `drawingPositionPrimitiveRegistry.ts` and manager-owned deferred position preload as canonical chart drawing-stack boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [drawingManager.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingManager.js) `37.86 kB`
+    - [drawingPrimitiveRegistry.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingPrimitiveRegistry.js) `53.13 kB`
+    - [drawingPositionPrimitiveRegistry.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingPositionPrimitiveRegistry.js) `11.33 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `64.79 kB`
+- Residual risks:
+  - the non-position drawing path is now lighter, but total drawing-stack weight for long/short entry flows is slightly larger once the position chunk loads; that tradeoff is intentional because the position tool is optional
+  - `chartPanelSupportRuntime.js` is still a touch heavier than the prior `64.49 kB`, so the next slice should avoid pushing optional preload policy back into base chart runtime code
+  - auth-side dynamic-import reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-11 01:44:21 +0900] FINISH chart-drawing-primitive-registry-split-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep planning and shaving the chart drawing hotspot, preserve behavior, and move primitive factory/snapshot weight out of `drawingManager.ts` without touching unrelated route WIP
+- What changed:
+  - Added [drawingManagerTypes.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingManagerTypes.ts#L1)
+    - centralized the shared `DrawingData`, `CandleOHLC`, and `DrawingManagerCallbacks` contracts so drawing runtime, undo stack, and persistence helpers stop depending on the manager file as a type bucket
+  - Added [drawingPrimitiveRegistry.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingPrimitiveRegistry.ts#L1)
+    - moved primitive subclass selection, serialized restore, drag-preview construction, and `toJSON()` snapshot parsing into a dedicated registry/factory chunk
+  - Updated [drawingManager.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingManager.ts#L1)
+    - narrowed the manager to interaction ownership, selection/undo flow, and runtime lifecycle
+    - injected the primitive registry instead of statically importing every primitive subclass and restore/snapshot helper inline
+  - Updated [chartDrawingPersistenceRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingPersistenceRuntime.ts#L1)
+    - lazy-loads both `drawingManager` and `drawingPrimitiveRegistry` when the drawing stack actually wakes up
+    - keeps the registry split behind the existing drawing runtime boundary instead of pulling it into support-runtime imports
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `drawingManagerTypes.ts` and `drawingPrimitiveRegistry.ts` as canonical chart drawing-stack boundaries
+    - clarified that the drawing lazy split now includes registry injection, not just manager/persistence bootstrap
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [drawingManager.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingManager.js) `36.26 kB`
+    - [drawingPrimitiveRegistry.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingPrimitiveRegistry.js) `62.64 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `64.49 kB`
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `58.29 kB`
+- Residual risks:
+  - this slice removed the heaviest static burden from `drawingManager.js`, but total drawing-stack weight is now split across `drawingManager.js` and `drawingPrimitiveRegistry.js`; the next hotspot is whichever part of the registry can be further narrowed without breaking primitive restore behavior
+  - `chartPanelSupportRuntime.js` rose slightly from the previous `64.00 kB` to `64.49 kB`, so future chart slices should prefer real lazy boundaries over helper-only extraction
+  - auth-side dynamic-import reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-10 20:15:27 +0900] FINISH chart-client-runtime-assembly-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep executing the canonical refactor, preserve layout, and continue the remaining ChartPanel structural cleanup with push-safe slices
+- What changed:
+  - Added [chartClientRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartClientRuntime.ts#L1)
+    - centralized the client-only lazy import and first-instantiation flow for `chartMountRuntime`, `chartPanelController`, `chartPanelSupportRuntime`, and `chartDerivativesRuntime`
+    - fixed the assembly order so `ChartPanel` no longer owns module promise/cache wiring directly
+  - Updated [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1)
+    - replaced the route-local module loader glue with the canonical `chartClientRuntime` assembly helper
+    - removed duplicated support/controller/derivatives module state from the component shell
+    - reduced the file from `1284` to `1258` lines without changing layout or position
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartClientRuntime.ts` as the canonical client runtime assembly boundary for ChartPanel
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1) still owns the large runtime-bundle option builder and controller option wiring
+  - unrelated chart/home WIP remains in the worktree and must stay out of this slice
+- Commit / Push:
+  - pending
+- Status: DONE
+
+## [2026-03-09 21:52:33 +0900] FINISH passport-shell-host-split-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing the passport refactor toward the design goal, preserve layout, and continue with push-safe narrow slices
+- What changed:
+  - Added [PassportHeaderSection.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportHeaderSection.svelte#L1)
+    - moved the editable avatar/profile header, portfolio hero, and verified stamp into a dedicated host component
+  - Added [PassportNavChrome.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportNavChrome.svelte#L1)
+    - moved the tab bar, quick-action rail, and focus strip into a dedicated chrome boundary
+  - Added [passportTabShared.css](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/passportTabShared.css#L1)
+    - defined the shared passport tab panel/detail styles outside the route shell
+  - Added [PassportProfileTab.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportProfileTab.svelte#L1), [PassportWalletTab.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportWalletTab.svelte#L1), [PassportPositionsTab.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportPositionsTab.svelte#L1), [PassportArenaTab.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportArenaTab.svelte#L1)
+    - split the remaining tab bodies into dedicated hosts without changing the layout order or tab flow
+    - localized the tab-specific markup and CSS so the route now acts as a shell/controller instead of a tab renderer
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - rewired the route to use the header/nav host components and all four tab hosts
+    - removed route-local tab markup and tab-specific CSS
+    - reduced the route shell from `2514` to `520` lines without changing tab content layout
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the passport shell boundary and the new tab host canonical paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+- Residual risks:
+  - `passport/+page.svelte` still owns page-level state/runtime wiring for ui-state, avatar/name editing, holdings hydrate, and learning panel state
+  - unrelated auth/chart/wallet WIP remains in the worktree and must stay out of the passport commit
+- Commit / Push:
+  - `a19f0a2` `refactor(passport): split remaining tab hosts`
+  - pushed to `origin/codex/terminal-uiux-gtm-wip`
+- Status: DONE
+
+## [2026-03-09 18:01:52 +0900] FINISH wallet-store-proof-removal-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep moving on the current Phase 2 path, remove more mixed authority from the wallet layer, and keep narrow pushable slices with canonical logs
+- What changed:
+  - Updated [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+    - removed persisted `signature` from `WalletState`
+    - deleted the store-level `signMessage(...)` helper
+    - kept the store scoped to wallet connection transport only
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - stopped mirroring signed wallet proof into the general wallet store
+    - kept wallet proof fully local to the modal/auth funnel
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded that wallet proof is now transient UI state rather than wallet transport state
+- Validation:
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) still owns most of the wallet auth state machine even though proof no longer leaks into `walletStore`
+  - unrelated arena/CLAUDE WIP remains outside this slice
+- Commit / Push:
+  - `refactor: remove wallet proof from wallet store`
+  - pushed to `origin/codex/terminal-uiux-gtm-wip`
+- Status: DONE
+
+## [2026-03-09 17:55:57 +0900] FINISH auth-wallet-resolve-header-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the current refactor/design path, land the auth/header wallet-first slice correctly, keep pushing narrow slices, and keep canonical docs/logs aligned with the CLAUDE boundary rules
+- What changed:
+  - Added [auth/resolve/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/resolve/+server.ts#L1) and updated [authRepository.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/authRepository.ts#L1), [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1), and [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/auth.ts#L1)
+    - landed the wallet-first auth resolve endpoint and browser contract so signed wallets now resolve to `logged_in` or `needs_signup` before signup UI
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1), [walletModalStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletModalStore.ts#L1), [walletModalFlow.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalFlow.ts#L1), and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1)
+    - removed the dead login helper path
+    - made `resolving` a transient in-modal step instead of an open-step destination
+    - sent missing-proof and resolve-error fallbacks back to `sign-message` or `wallet-select` instead of dropping users into signup
+    - cleared stale proof/error state on modal close so reopen state is deterministic
+  - Updated [Header.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/Header.svelte#L1)
+    - kept the connected profile dropdown flow
+    - switched logout to the canonical wallet modal transport
+    - auto-closes the dropdown on route changes and disconnect
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1) and regenerated [api-group-map.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/generated/api-group-map.md#L1)
+    - Phase 2 now counts `17` in-scope handlers including `/api/auth/resolve`
+    - the generated API inventory now reflects `Auth & Session = 8`
+- Validation:
+  - `npm run docs:refresh`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - Vite still reports the expected dynamic-import note for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1); runtime behavior is unchanged, but the transport/helper chunk split is still not ideal
+  - unrelated dirty arena/CLAUDE WIP remains outside this auth slice and must stay out of the commit
+- Commit / Push:
+  - `refactor: add wallet auth resolve flow`
+  - pushed to `origin/codex/terminal-uiux-gtm-wip`
+- Status: DONE
+
+## [2026-03-09 17:18:06 +0900] FINISH passport-summary-holdings-runtime-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the canonical passport refactor correctly after syncing the branch, keep layout/position unchanged, and keep canonical docs/logs updated
+- What changed:
+  - Synced the local branch to origin with `git pull --ff-only` before continuing because remote already had two `passport` learning-panel commits on the same branch
+  - Added [passportSummaryViewModel.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/passport/passportSummaryViewModel.ts#L1)
+    - moved passport header stat and focus-strip interpretation out of the route
+    - centralized win-rate/risk/readiness judgment so `passport/+page.svelte` stops owning large `derived.by()` insight blocks
+  - Added [passportHoldingsRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/passport/passportHoldingsRuntime.ts#L1)
+    - moved wallet-holdings hydrate/sync/disconnect fallback lifecycle out of the route
+    - made route-owned holdings state a single runtime-backed object instead of multiple local atoms/effects
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - replaced inline focus/header derivation with summary view-model helpers
+    - replaced direct holdings fetch/effect logic with the holdings runtime
+    - kept existing tab order, layout, and visual positioning unchanged
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `passportSummaryViewModel.ts` and `passportHoldingsRuntime.ts` as canonical boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors, 4 warnings`)
+  - `npm run gate`: PASS
+  - warnings remain unrelated local WIP in [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L851)
+  - [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1): `2732` -> `2514` lines
+- Residual risks:
+  - `passport/+page.svelte` still owns large tab markup/CSS and should be split by tab host next
+  - unrelated auth/chart wallet WIP remains dirty in the worktree and must stay out of the passport commit
+- Commit / Push:
+  - `5ac9db7` `refactor(passport): extract summary and holdings runtime`
+  - pushed to `origin/codex/terminal-uiux-gtm-wip`
+- Status: DONE
+
+## [2026-03-07 22:32:27 +0900] FINISH frontend-arena-view-props-dedupe-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Arena cleanup/removal work without changing layout/positioning, and reduce repeated route-template wiring
+- What changed:
+  - Simplified `src/routes/arena/+page.svelte` further:
+    - added shared derived prop bundles for alternate Arena views and result panel rendering
+    - collapsed repeated `ChartWarView` / `MissionControlView` / `CardDuelView` prop wiring into one shared spread contract
+    - collapsed repeated `ResultPanel` prop wiring into one shared derived contract
+  - Kept layout stable:
+    - no DOM structure change in the Arena layout tree
+    - no class name or positioning contract change
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `2569` -> `2557` lines
+  - server chunk `entries/pages/arena/_page.svelte.js`: `142.14 kB`
+  - server chunk `chunks/ChartPanel.js`: `87.71 kB`
+- Residual risks:
+  - route still owns preview overlay shell state and several UI-only toggles
+  - this slice reduced duplication, not heavy runtime ownership, so chunk movement is small by design
+- Status: DONE
+
+## [2026-03-07 22:28:39 +0900] FINISH frontend-arena-feed-chart-cleanup-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep decomposing Arena while removing unnecessary route-local code without changing layout/positioning
+- What changed:
+  - Added `src/lib/arena/controllers/arenaChartController.ts`:
+    - owns `ChartPanel` drag callback -> `hypothesis/chartBridge` mutation bridge
+    - removes repeated `onDragTP/onDragSL/onDragEntry` handlers from `arena/+page.svelte`
+  - Simplified `src/routes/arena/+page.svelte`:
+    - removed dead local `feedMessages` state and `feedCursorTimer`
+    - `addFeed()` now writes directly into `battleFeedStore` instead of mutating an unrendered local queue
+    - removed thin wrappers for `confirmPreview`, `goLobby`, `playAgain`, `confirmGoLobby`, `handleKeydown`, `selectFloatDir`
+    - `HypothesisPanel` now binds directly to `arenaPhaseController.submitHypothesis`
+    - `ChartPanel` now binds directly to `arenaChartController` drag handlers
+  - Fixed unrelated gate blockers already present in the worktree so validation could stay green:
+    - added explicit reduce callback typing in `src/routes/api/portfolio/holdings/+server.ts`
+    - kept `src/lib/stores/positionStore.ts` on the narrowed non-null status path used by the current branch
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `arenaChartController.ts` as the chart drag canonical boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `2618` -> `2569` lines
+  - `src/lib/arena/controllers/arenaChartController.ts`: `39` lines
+  - server chunk `entries/pages/arena/_page.svelte.js`: `142.18 kB`
+  - server chunk `chunks/ChartPanel.js`: `87.23 kB`
+- Residual risks:
+  - `arena/+page.svelte` still owns preview overlay shell state and several view-only toggles
+  - build size moved only slightly because this slice removed dead state and wrapper code, not large presentation/runtime payloads
+- Status: DONE
+
+## [2026-03-07 21:44:39 +0900] FINISH frontend-arena-agent-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Arena decomposition without changing layout/positioning, and remove the remaining local agent-state/speech/chat runtime from `arena/+page.svelte`
+- What changed:
+  - Added `src/lib/arena/controllers/arenaAgentRuntime.ts` as the canonical agent UI runtime:
+    - owns active-agent state initialization
+    - owns typing speech timers and delayed speech clear
+    - owns arena battle chat append/message composition
+  - Simplified `src/routes/arena/+page.svelte`:
+    - removed local `initAgentStates()`, `speechTimers`, `appendBattleChatMessage()`
+    - route now delegates speech/chat/agent-state base mutation to `arenaAgentRuntime`
+    - route keeps only thin bridge wrappers for `battlePresentationRuntime.syncAgentState()` and `syncAgentEnergy()`
+  - Documentation catch-up:
+    - `frontend/CLAUDE.md` now records `arenaAgentRuntime.ts` as the canonical agent/chat state boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `2664` -> `2618` lines
+  - `src/lib/arena/controllers/arenaAgentRuntime.ts`: `132` lines
+  - server chunk `entries/pages/arena/_page.svelte.js`: `142.16 kB`
+  - server chunk `chunks/ChartPanel.js`: `86.94 kB`
+- Residual risks:
+  - `arena/+page.svelte` still owns chart drag handlers, preview overlay shell wiring, and some feed/timer utilities
+  - `battlePresentationRuntime` sync remains intentionally bridged in the route; future refactors should preserve this separation instead of folding sprite runtime into the new agent runtime
+- Status: DONE
+
+## [2026-03-07 21:41:18 +0900] FINISH frontend-arena-battle-controller-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Arena decomposition without changing layout/positioning, and move the remaining battle phase entry/resolver wiring out of `arena/+page.svelte`
+- What changed:
+  - Added `src/lib/arena/controllers/arenaBattleController.ts` as the canonical battle-phase controller:
+    - owns fallback position normalization from `hypothesis -> pos`
+    - owns `createBattleResolver()` bootstrap, subscribe, resolved-result advance, and resolver cleanup
+    - keeps `arena/+page.svelte` from directly owning live resolver lifecycle
+  - Simplified `src/routes/arena/+page.svelte`:
+    - removed the local `initBattle()` monolith
+    - phase entry now delegates `BATTLE` to `arenaBattleController.initBattle()`
+    - route no longer imports `createBattleResolver` or subscribes to `BattleTickState` directly
+    - route `onDestroy()` now delegates resolver cleanup to `arenaBattleController.destroy()`
+  - Closed a shell-reset bug:
+    - `src/lib/arena/controllers/arenaShellController.ts` now takes `clearBattleSession`
+    - lobby/play-again/reset now clear both the active battle resolver and battle turn timers
+    - this prevents live battle updates from leaking after exiting Arena mid-battle
+  - Documentation catch-up:
+    - `frontend/CLAUDE.md` now records `arenaAnalysisPresentationRuntime.ts` and `arenaBattleController.ts` as canonical boundaries
+    - Arena phase controller guidance now reflects `DRAFT/ANALYSIS/HYPOTHESIS/BATTLE/RESULT` dispatch ownership
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `2882` -> `2664` lines
+  - `src/lib/arena/controllers/arenaBattleController.ts`: `142` lines
+  - `src/lib/arena/controllers/arenaAnalysisPresentationRuntime.ts`: `129` lines
+  - `src/lib/arena/controllers/arenaPhaseController.ts`: `163` lines
+  - server chunk `entries/pages/arena/_page.svelte.js`: `139.88 kB`
+  - server chunk `chunks/ChartPanel.js`: `86.94 kB`
+- Residual risks:
+  - `arena/+page.svelte` still owns chart drag handlers, preview overlay wiring, and some result/view shell coordination
+  - battle presentation remains separate from resolver ownership by design; future refactors should not merge `arenaBattlePresentationRuntime.ts` back into the new battle controller
+- Status: DONE
+
+## [2026-03-07 13:52:35 +0900] FINISH frontend-arena-uiux-layout-design-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: improve and restate how the Arena UI/UX should be laid out after defining the optimized core loop
+- What changed:
+  - Added `docs/exec-plans/active/arena-uiux-layout-design-2026-03-07.md`
+    - defines Arena as chart-first, council-second, theater-third
+    - reframes the screen around one compact north rail, one primary decision workspace, and one subordinate support strip
+    - sets the desktop hierarchy to left chart board + right phase rail
+    - maps `SETUP`, `COUNCIL`, `COMMIT`, `RESOLVE`, and `SCORE` to concrete right-rail behaviors
+    - demotes battle spectacle, live feed, narration, and optional views below the trading decision loop
+    - demotes the current equal-weight `ViewPicker` model and makes the board view the canonical default
+  - Updated active planning indexes:
+    - `docs/exec-plans/index.md`
+    - `docs/PLANS.md`
+    - `docs/exec-plans/active/README.md`
+- Validation:
+  - planning/docs only; no runtime code changed
+  - no `check/build` rerun required for this slice
+- Residual risks:
+  - the current Arena implementation still renders multiple first-class summary surfaces until Batch 4 implementation starts
+  - layout simplification must be sequenced after controller extraction to avoid mixing architecture and visual regression risk
+- Status: DONE
+
+## [2026-03-07 13:48:42 +0900] FINISH frontend-arena-core-loop-design-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: restate what Arena is fundamentally trying to do, then define the optimized loop before implementation
+- What changed:
+  - Added `docs/exec-plans/active/arena-core-loop-design-2026-03-07.md`
+    - redefines Arena as a trading-judgment training loop rather than a battle-screen-first feature
+    - separates outer loop, inner core loop, and presentation loop
+    - normalizes the core flow to `setup -> council -> commit -> resolve -> score`
+    - maps current UI phases (`ANALYSIS`, `HYPOTHESIS`, `BATTLE`, `RESULT`, etc.) onto optimized domain phases
+    - identifies the five core artifacts that should drive Batch 4 extraction: match context, council snapshot, hypothesis commit, resolution result, scorecard
+  - Updated `docs/exec-plans/active/arena-page-controller-design-2026-03-07.md`
+    - now explicitly depends on the new core-loop design doc
+  - Updated active planning indexes:
+    - `docs/exec-plans/index.md`
+    - `docs/PLANS.md`
+    - `docs/exec-plans/active/README.md`
+- Validation:
+  - planning/docs only; no runtime code changed
+  - no `check/build` rerun required for this slice
+- Residual risks:
+  - the route implementation still follows the old mixed presentation/domain structure until Slice A/B start
+  - current UI phase names remain in code, so extraction must preserve behavior while shifting ownership to the optimized domain loop
+- Status: DONE
+
+## [2026-03-07 13:02:44 +0900] FINISH frontend-arena-batch4-design-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: design the next post-terminal refactor batch, centered on `arena/+page.svelte`
+- What changed:
+  - Added `docs/exec-plans/active/arena-page-controller-design-2026-03-07.md`
+    - maps the current `arena/+page.svelte` monolith into controller/runtime/state/selectors boundaries
+    - defines the target `src/lib/arena/{controllers,battle,replay,adapters,state,selectors}` folder map
+    - breaks Batch 4 into five concrete slices: foundation, chart bridge/hypothesis, replay/reward/feed, battle runtime, match controller cleanup
+    - records invariants: no layout change, no chart regression, phase order preserved, offline fallback preserved
+  - Updated the active planning surface:
+    - `docs/exec-plans/index.md`
+    - `docs/PLANS.md`
+    - `docs/exec-plans/active/README.md`
+- Validation:
+  - planning/docs only; no runtime code changed
+  - no `check/build` rerun required for this slice
+- Residual risks:
+  - `arena/+page.svelte` still owns battle runtime, replay orchestration, chart bridge, feed/timer registry, and server sync until Slice A/B implementation starts
+- Status: DONE
+
+## [2026-03-07 13:02:44 +0900] FINISH frontend-terminal-viewport-mobile-split-cleanup-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: finish another terminal cleanup slice without changing layout or positioning
+- What changed:
+  - Added `src/components/terminal/TerminalChartViewport.svelte` as the canonical chart viewport boundary:
+    - owns shared `ChartPanel` event wiring for mobile/tablet/desktop terminal layouts
+    - composes optional `ChartVerdictOverlay` without changing existing wrapper class names or DOM order
+    - removes repeated chart callback plumbing from the three layout shells
+  - Added `src/lib/terminal/terminalMobileSplitRuntime.ts` as the canonical mobile split runtime:
+    - owns chart/chat split ratio state
+    - owns divider drag lifecycle and container-height-based clamp logic
+    - removes local split math and pointer orchestration from `TerminalMobileLayout.svelte`
+  - Simplified terminal layout shells:
+    - `src/components/terminal/TerminalMobileLayout.svelte` now delegates chart viewport wiring and mobile split lifecycle
+    - `src/components/terminal/TerminalTabletLayout.svelte` and `src/components/terminal/TerminalDesktopLayout.svelte` now share the viewport boundary and consume canonical verdict meta helper instead of duplicating verdict strings
+    - deleted unused legacy `src/components/terminal/VerdictBanner.svelte`
+  - Cleaned dead terminal shell surface:
+    - removed unused mobile props/state from `src/routes/terminal/+page.svelte` (`mobileOpenTrades`, `mobileTrackedSignals`, mobile share prop wiring)
+    - `terminalActionRuntime.ts` now consumes the canonical `TerminalChartRequestDetail` type
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `TerminalChartViewport.svelte` and `terminalMobileSplitRuntime.ts` as terminal canonical boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/terminal/+page.svelte`: `409` -> `401` lines
+  - `src/components/terminal/TerminalMobileLayout.svelte`: `205` -> `179` lines
+  - `src/components/terminal/TerminalTabletLayout.svelte`: `168` -> `152` lines
+  - `src/components/terminal/TerminalDesktopLayout.svelte`: `222` -> `209` lines
+  - `src/components/terminal/TerminalChartViewport.svelte`: `73` lines
+  - `src/lib/terminal/terminalMobileSplitRuntime.ts`: `55` lines
+  - server entry `entries/pages/terminal/_page.svelte.js`: `183.27 kB`
+- Residual risks:
+  - terminal layout structure is now mostly shell-level, but `WarRoom.svelte` and `IntelPanel.svelte` remain the main terminal-side heavy panels
+  - `/terminal` server entry is still large because page composition is synchronous; future size work should focus on panel internals or lazy boundaries, not more route-local extraction
+- Status: DONE
+
+## [2026-03-07 12:19:41 +0900] FINISH frontend-chart-mount-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by extracting the remaining `ChartPanel.svelte` mount/bootstrap/runtime wiring without changing layout or positioning
+- What changed:
+  - Added `src/components/arena/chart/chartMountRuntime.ts` as the canonical mount/bootstrap helper boundary:
+    - owns lightweight-charts import and bootstrap preparation
+    - owns advanced-mode initial strip normalization and first indicator profile application
+    - owns MA period binding creation helper
+    - owns primary runtime bundle setup/cleanup ordering
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed the inlined bootstrap creation path from `onMount`
+    - removed the inlined primary runtime bundle creation/cleanup closure
+    - now keeps only runtime state assignment and callback wiring around the extracted mount helper
+  - Kept runtime behavior stable:
+    - same mount order
+    - same cleanup contract
+    - same shell/layout structure
+    - no intended layout or positioning change
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `chartMountRuntime.ts` as the mount/bootstrap canonical path
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `1169` -> `1194` lines
+  - `src/components/arena/chart/chartMountRuntime.ts`: `147` lines
+  - server chunk `ChartPanel.js` after this slice: `111.37 kB`
+- Residual risks:
+  - structure is cleaner, but the extracted helper is still synchronously bundled so server chunk weight increased
+  - the next high-value refactor is the remaining `ChartPanel.svelte` action/state bridge layer and then the page-level `arena/+page.svelte` controller split
+- Status: DONE
+
+## [2026-03-07 11:54:39 +0900] FINISH frontend-chart-panel-shell-boundary-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by extracting the remaining top-level presentation shell from `ChartPanel.svelte` without changing layout or positioning
+- What changed:
+  - Added `src/components/arena/chart/ChartPanelShell.svelte` as the canonical presentation shell boundary:
+    - owns `.chart-wrapper` DOM and wrapper styling
+    - owns top-level composition of `ChartHeaderBar`, lazily loaded `ChartIndicatorStrip`, `ChartAgentSurface`, lazily loaded `ChartTradingViewPane`
+    - owns the lazy-import effects for indicator strip and TradingView pane
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline wrapper markup and wrapper styles
+    - removed parent-owned indicator-strip/trading-pane lazy module state/effects
+    - now delegates all presentation shell composition to `ChartPanelShell.svelte`
+  - Kept behavioral and layout contracts stable:
+    - same DOM ordering inside the shell
+    - same class names and wrapper styling
+    - same callback wiring for scan/chat/publish/trade-plan/drag/tradingview container handoff
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `ChartPanelShell.svelte` as the top-level presentation shell boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `1264` -> `1169` lines
+  - server chunk `ChartPanel.js` after this slice: `107.98 kB`
+- Residual risks:
+  - structure is cleaner, but this remains a synchronous shell extraction so SSR chunk weight increased
+  - the next high-value split is the remaining `ChartPanel.svelte` on-mount/bootstrap/runtime wiring path
+- Status: DONE
+
+## [2026-03-07 11:48:29 +0900] FINISH frontend-chart-agent-surface-boundary-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by extracting the chart-container surface from `ChartPanel.svelte` without changing layout or positioning
+- What changed:
+  - Added `src/components/arena/chart/ChartAgentSurface.svelte` as the canonical chart surface boundary:
+    - owns the `.chart-container` DOM/class surface and hidden state toggle
+    - owns chart mouse/wheel event surface and container ref handoff
+    - composes `ChartAgentOverlayChrome`, `ChartDrawingCanvas`, `ChartTradePlanOverlay`, `ChartAnnotationLayer` in the existing stacking order
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline chart-container markup
+    - removed parent-owned chart-container styles
+    - now delegates the entire agent chart surface to `ChartAgentSurface.svelte`
+  - Closed the warning regression created during the move:
+    - removed the dead parent `.chart-container` selector so `0 warnings` baseline is restored
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `ChartAgentSurface.svelte` as the layout-preserving chart surface boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `1287` -> `1264` lines
+  - server chunk `ChartPanel.js` after this slice: `103.87 kB`
+- Residual risks:
+  - structure is cleaner, but this was still a synchronous composition move so SSR chunk weight increased
+  - the next high-value split is the remaining parent-owned header/indicator/trading pane orchestration and on-mount runtime wiring
+- Status: DONE
+
+## [2026-03-07 11:44:29 +0900] FINISH frontend-chart-drawing-canvas-boundary-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by extracting the remaining drawing canvas shell from `ChartPanel.svelte` without changing layout or positioning
+- What changed:
+  - Added `src/components/arena/chart/ChartDrawingCanvas.svelte` as the canonical drawing canvas DOM boundary:
+    - owns the `<canvas>` markup, `drawing-active` class surface, and canvas-local styling
+    - preserves the existing absolute-position and pointer-event contract
+    - parent only wires the canvas ref and runtime mouse handlers
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline drawing canvas markup
+    - removed dead `.drawing-canvas` styles from the parent
+    - now delegates canvas DOM ownership to `ChartDrawingCanvas.svelte`
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `ChartDrawingCanvas.svelte` as the layout-preserving canvas boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `1285` -> `1287` lines
+  - server chunk `ChartPanel.js` after this slice: `99.50 kB`
+- Residual risks:
+  - this slice improved DOM ownership separation, but it is still a synchronous child extraction so SSR chunk weight did not improve
+  - the next high-value split is the remaining chart-container coordinator wiring and action handoff around the parent shell
+- Status: DONE
+
+## [2026-03-07 11:42:32 +0900] FINISH frontend-chart-tradeplan-annotation-boundary-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by extracting the remaining trade-plan overlay and annotation surface from `ChartPanel.svelte` without changing layout or positioning
+- What changed:
+  - Added `src/components/arena/chart/ChartTradePlanOverlay.svelte` as the canonical trade-plan overlay boundary:
+    - owns planner summary rows, ratio track/preset UI, open/cancel CTA
+    - keeps the existing responsive absolute-position styling intact
+    - parent only wires ratio drag, cancel, open, and ratio-track element handoff
+  - Added `src/components/arena/chart/ChartAnnotationLayer.svelte` as the canonical annotation surface boundary:
+    - owns annotation popup selection state
+    - owns annotation marker/popup markup and styling
+    - preserves the existing absolute-position class surface inside `.chart-container`
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline trade-plan overlay markup and dead styles
+    - removed inline annotation markup and dead styles
+    - removed parent-owned annotation selection state
+    - now delegates both surfaces to the new child boundaries while keeping the same DOM region and visual placement
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `ChartTradePlanOverlay.svelte` and `ChartAnnotationLayer.svelte` as layout-preserving child boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `1535` -> `1285` lines
+  - server chunk `ChartPanel.js` after this slice: `99.04 kB`
+- Residual risks:
+  - structure improved and layout stayed stable, but this was still a synchronous child extraction so SSR chunk weight did not drop
+  - the next high-value split is the remaining parent-owned drawing canvas shell and chart-surface interaction handoff
+- Status: DONE
+
+## [2026-03-07 11:26:36 +0900] FINISH frontend-chart-agent-overlay-chrome-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by extracting the `.chart-container` agent overlay chrome without changing layout or positioning
+- What changed:
+  - Added `src/components/arena/chart/ChartAgentOverlayChrome.svelte` as the canonical agent overlay chrome boundary:
+    - owns scale tools, indicator legend, loading/error badge
+    - owns first-scan CTA, trade CTA bar, drawing indicator, chart notice, position badge, drag indicator
+    - preserves the existing absolute-position class surface inside `.chart-container`
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline agent overlay chrome markup and related styles
+    - kept canvas, trade-plan overlay, annotation surface in the parent
+    - now delegates overlay chrome to `ChartAgentOverlayChrome.svelte` with callback wiring only
+  - Closed an unrelated terminal import drift that blocked validation:
+    - added `src/lib/terminal/terminalChatSeed.ts`
+    - moved `buildInitialTerminalChatMessages()` out of `terminalEventMappers.ts`
+    - updated `src/routes/terminal/+page.svelte` to import the seed builder from the new file
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `ChartAgentOverlayChrome.svelte` as the agent overlay chrome boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `1838` -> `1535` lines
+  - server chunk `ChartPanel.js` after this slice: `98.60 kB`
+- Residual risks:
+  - structure is better and layout stayed stable, but this was still a synchronous extraction, so SSR chunk weight increased again
+  - the next high-value split is the remaining parent-owned `trade-plan overlay + annotation surface + drawing canvas shell`
+- Status: DONE
+
+## [2026-03-07 11:06:10 +0900] FINISH frontend-chart-header-bar-boundary-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by extracting the top chart toolbar/meta shell while preserving layout and positioning
+- What changed:
+  - Added `src/components/arena/chart/ChartHeaderBar.svelte` as the canonical top-bar child boundary:
+    - owns pair summary and 24h stats
+    - owns pair switch, timeframe controls, mode toggle, draw toolbar, scan/publish CTA
+    - owns collapsed MA meta row and top-bar responsive/tv-like styling
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline top-bar markup and top-bar-specific styles
+    - now delegates the shell to `ChartHeaderBar.svelte` with prop/callback wiring only
+  - Kept the visual contract stable on purpose:
+    - same DOM ordering
+    - same class names
+    - same responsive rules
+    - no intended layout/position change
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `ChartHeaderBar.svelte` as the layout-preserving top-bar boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `2464` -> `1838` lines
+  - server chunk `ChartPanel.js` after this slice: `95.07 kB`
+- Residual risks:
+  - this slice improves structure and preserves layout, but it is a synchronous child extraction, not a lazy boundary, so SSR chunk weight did not improve
+  - the next high-value split is the agent chart-surface overlay composition inside `.chart-container`, where true lazy or deeper child boundaries can still pay off
+- Status: DONE
+
+## [2026-03-07 10:50:32 +0900] FINISH frontend-chart-indicator-strip-boundary-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by extracting the agent advanced-mode indicator strip from `src/components/arena/ChartPanel.svelte`
+- What changed:
+  - Added `src/components/arena/chart/ChartIndicatorStrip.svelte` as the canonical agent advanced-mode child boundary:
+    - owns expanded/collapsed indicator strip markup
+    - owns visual mode toggle, indicator chip toggles, legend toggle, hide/collapse controls
+    - owns strip-specific responsive and tv-like styling
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline indicator strip markup and strip-specific styles
+    - lazy-loads `ChartIndicatorStrip.svelte` only when agent advanced mode actually needs the strip
+    - now keeps only strip state and callback wiring in the parent shell
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `ChartIndicatorStrip.svelte` as the indicator strip child boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `2658` -> `2464` lines
+  - server chunk `ChartPanel.js` after this slice: `89.02 kB`
+- Residual risks:
+  - `ChartPanel.svelte` is materially smaller now, but agent chart-surface overlays and top-bar orchestration are still concentrated in the parent
+  - the next high-value split is either the always-on chart toolbar/meta shell or the agent chart-surface overlay composition inside `.chart-container`
+- Status: DONE
+
+## [2026-03-07 10:46:17 +0900] FINISH frontend-chart-trading-pane-boundary-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by creating the first true child/lazy boundary for `src/components/arena/ChartPanel.svelte` trading mode
+- What changed:
+  - Added `src/components/arena/chart/ChartTradingViewPane.svelte` as the canonical trading-mode child boundary:
+    - owns TradingView iframe shell
+    - owns loading/error/fallback UI
+    - owns `#tradingview_widget` container DOM handoff
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline trading-mode TradingView markup
+    - lazy-loads `ChartTradingViewPane.svelte` only when `chartMode === 'trading'`
+    - now keeps only module loading and container handoff in the parent shell
+  - Removed dead parent TradingView-only styles from `ChartPanel.svelte` after the child extraction
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `ChartTradingViewPane.svelte` as the TradingView pane child boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `2763` -> `2658` lines
+  - server chunk `ChartPanel.js` after this slice: `90.55 kB`
+- Residual risks:
+  - this is the first real child/lazy boundary, but agent-mode UI and bootstrap wiring are still concentrated in `ChartPanel.svelte`
+  - SSR chunk weight still rose, so the next high-value split should target agent-mode toolbar/meta/chart-surface composition rather than another tiny runtime
+- Status: DONE
+
+## [2026-03-07 04:05:25 +0900] FINISH frontend-chart-runtime-bundle-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by reducing the `onMount` bootstrap/runtime wiring block inside `src/components/arena/ChartPanel.svelte`
+- What changed:
+  - Added `src/components/arena/chart/chartRuntimeBundle.ts` as the canonical primary chart runtime bundle:
+    - owns primary runtime creation order for pattern/position/tradingview/data
+    - owns `bindChartRuntimeInteractions` setup
+    - owns primary runtime dispose ordering and chart removal
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline primary runtime creation sequence from `onMount`
+    - removed inline interaction binding and primary cleanup ordering from the mount path
+    - now delegates the primary mount/dispose pipeline to `chartRuntimeBundle`
+  - Closed a real cleanup gap while doing the extraction:
+    - added `disposeChartSupportRuntimes()` so `chartTradePlanRuntime` is disposed on the normal `cleanup` path, not just the fallback path
+    - `catch` path now runs chart cleanup immediately on initialization failure
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `chartRuntimeBundle.ts` as the canonical primary runtime bundle boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `2767` -> `2763` lines
+  - server chunk `ChartPanel.js` after this slice: `89.67 kB`
+- Residual risks:
+  - the mount sequence is more coherent now, but chunk weight still does not improve because the heavy chart path remains a single eager boundary
+  - the next high-value move is not another small runtime; it is either a child/lazy boundary for chart modes or a larger split around bootstrap/data UI composition
+- Status: DONE
+
+## [2026-03-07 03:58:26 +0900] FINISH frontend-chart-price-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by removing the remaining price flush/throttle, 24h stats, fallback live price, and chart data transient cleanup from `src/components/arena/ChartPanel.svelte`
+- What changed:
+  - Added `src/components/arena/chart/chartPriceRuntime.ts` as the canonical chart price boundary:
+    - owns immediate priceStore flush on bootstrap loads
+    - owns throttled WS price propagation
+    - owns 24h stats application
+    - owns fallback live price lookup and reload transient cleanup
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline price throttle timer bookkeeping
+    - removed inline `set24hStats`, `getFallbackLivePrice`, and transient cleanup body
+    - now delegates price-side orchestration to `chartPriceRuntime`
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `chartPriceRuntime.ts` as the canonical price/runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `2774` -> `2767` lines
+  - server chunk `ChartPanel.js` after this slice: `89.58 kB`
+- Residual risks:
+  - price orchestration is cleaner, but line-count reduction is now small and chunk weight continues to rise because the heavy chart path is still one eager boundary
+  - the next meaningful slice should target the `onMount` bootstrap/runtime wiring block or split `ChartPanel` into a true child boundary instead of adding more small runtime files
+- Status: DONE
+
+## [2026-03-07 03:55:29 +0900] FINISH frontend-chart-action-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by removing the remaining pair/timeframe switch, chart-origin scan/chat/community signal, and trade-drawing activation orchestration from `src/components/arena/ChartPanel.svelte`
+- What changed:
+  - Added `src/components/arena/chart/chartActionRuntime.ts` as the canonical chart action boundary:
+    - owns pair/timeframe change orchestration
+    - owns chart-origin scan request and chat request emission
+    - owns community signal publish preflight and GTM emission
+    - owns trade-drawing activation flow
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline `changePair`, `changeTF`, `requestAgentScan`, `publishCommunitySignal`, `requestChatAssist`
+    - converted exported `activateTradeDrawing` to a thin runtime delegation layer
+    - now delegates chart action branching to `chartActionRuntime`
+  - Incidental type-alignment fix to hold the zero-warning baseline:
+    - `src/routes/terminal/+page.svelte` now passes `livePrice` map to `SignalPostForm` and uses number-based `livePrices` access for terminal community prefill
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `chartActionRuntime.ts` as the canonical chart action boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `2839` -> `2774` lines
+  - server chunk `ChartPanel.js` after this slice: `86.04 kB`
+- Residual risks:
+  - action orchestration is now split, but the chunk keeps growing because all extracted runtimes are still eagerly imported into the same ChartPanel boundary
+  - the next high-value slice is no longer another small helper; it should target `onMount` bootstrap/runtime wiring or create a true lazy/child boundary around heavy chart modes
+- Status: DONE
+
+## [2026-03-07 03:46:00 +0900] FINISH frontend-chart-viewport-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by removing the remaining indicator visibility, pane layout, zoom, Y-auto, and scale-reset viewport lifecycle from `src/components/arena/ChartPanel.svelte`
+- What changed:
+  - Added `src/components/arena/chart/chartViewportRuntime.ts` as the canonical chart viewport boundary:
+    - owns indicator visibility apply across MA/RSI/volume series
+    - owns pane stretch layout based on RSI/volume enablement
+    - owns bar-spacing time-scale apply
+    - owns zoom, fit-content, Y-auto toggle, and reset-scale controls
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline `applyIndicatorVisibility`, `applyPaneLayout`, `applyTimeScale`
+    - removed inline `zoomChart`, `fitChartRange`, `toggleAutoScaleY`, `resetChartScale`
+    - now delegates viewport controls to `chartViewportRuntime`
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `chartViewportRuntime.ts` as the canonical viewport lifecycle boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `2871` -> `2839` lines
+  - server chunk `ChartPanel.js` after this slice: `78.01 kB`
+- Residual risks:
+  - viewport extraction reduced component weight again, but bundle weight is still increasing because all of these runtimes remain eagerly imported inside the same chunk
+  - `ChartPanel.svelte` still owns bootstrap wiring, price/data orchestration, notices, and top-bar action branching; the next slice should target one of those larger remaining controllers
+- Status: DONE
+
+## [2026-03-07 03:42:56 +0900] FINISH frontend-chart-overlay-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by removing the remaining overlay canvas render/resize and agent overlay cleanup lifecycle from `src/components/arena/ChartPanel.svelte`
+- What changed:
+  - Added `src/components/arena/chart/chartOverlayRuntime.ts` as the canonical chart overlay canvas boundary:
+    - owns overlay canvas context caching
+    - owns `renderDrawings` orchestration and `toOverlayPoint` projection
+    - owns canvas resize/context invalidation
+    - owns agent overlay price-line cleanup handoff
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline `renderDrawings`, `toOverlayPoint`, and `resizeDrawingCanvas`
+    - removed inline agent price-line cleanup body
+    - now delegates overlay canvas work to `chartOverlayRuntime`
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `chartOverlayRuntime.ts` as the canonical overlay lifecycle boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `2886` -> `2871` lines
+  - server chunk `ChartPanel.js` after this slice: `72.20 kB`
+- Residual risks:
+  - line count keeps dropping, but chunk weight is still moving in the wrong direction because runtime extraction has not yet created a true lazy boundary
+  - `ChartPanel.svelte` still owns indicator/pane layout, chart scale controls, bootstrap wiring, and notice flow; the next slice should target a larger controller block instead of more tiny helpers
+- Status: DONE
+
+## [2026-03-07 03:36:54 +0900] FINISH frontend-chart-drawing-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by removing the remaining drawing mode, global mouseup, ghost-line RAF, and line-entry finalize lifecycle from `src/components/arena/ChartPanel.svelte`
+- What changed:
+  - Added `src/components/arena/chart/chartDrawingRuntime.ts` as the canonical chart drawing interaction boundary:
+    - owns drawing mode transitions and transient drawing state reset
+    - owns global `mouseup` binding/unbinding for line-entry drag
+    - owns RAF-throttled ghost-line and trade-preview pointer lifecycle
+    - owns line-entry finalize / pending trade-plan creation / immediate quick-trade open flow
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline drawing mode reset helpers
+    - removed inline global mouseup binding/unbinding
+    - removed inline `_drawRAF` bookkeeping and pointer move/up lifecycle
+    - now delegates drawing lifecycle to `chartDrawingRuntime`
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `chartDrawingRuntime.ts` as the canonical drawing lifecycle boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `3025` -> `2886` lines
+  - server chunk `ChartPanel.js` after this slice: `52.20 kB`
+- Residual risks:
+  - the drawing lifecycle is out, but overlay render/canvas resize and agent overlay cleanup were still inside `ChartPanel.svelte` at this point
+  - chunk weight increased despite the line-count drop, so the next slice needed to target a larger render boundary rather than just more event helpers
+- Status: DONE
+
+## [2026-03-07 03:06:45 +0900] FINISH frontend-chart-position-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 by removing the remaining position-line and TP/SL/ENTRY drag lifecycle from `src/components/arena/ChartPanel.svelte`
+- What changed:
+  - Added `src/components/arena/chart/chartPositionRuntime.ts` as the canonical chart position interaction boundary:
+    - owns TP/SL/ENTRY price-line sync and cleanup
+    - owns hover/drag target transitions
+    - owns wheel-based TP/SL/ENTRY adjustment flow
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline position price-line create/remove logic
+    - removed inline `handleChartMouseDown`, `handleChartMouseMove`, `handleChartMouseUp`, `handleChartWheel`, and `priceFromY`
+    - now delegates position overlay lifecycle to `chartPositionRuntime`
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `chartPositionRuntime.ts` as the canonical position lifecycle boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `3056` -> `3025` lines
+  - server chunk `ChartPanel.js` after this slice: `34.62 kB`
+- Residual risks:
+  - `ChartPanel.svelte` is smaller again, but runtime extraction is not reducing chunk weight yet; the next slice should target the larger drawing lifecycle block rather than another small controller split
+  - drawing canvas lifecycle, ghost-line RAF path, and agent-setup overlay cleanup still live in `ChartPanel.svelte`
+- Status: DONE
+
+## [2026-03-07 03:03:03 +0900] FINISH frontend-chart-trade-plan-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue Batch 3 after the pattern runtime split by removing the remaining trade-plan pointer lifecycle and confirm/cancel orchestration from `src/components/arena/ChartPanel.svelte`
+- What changed:
+  - Added `src/components/arena/chart/chartTradePlanRuntime.ts` as the canonical chart trade-plan interaction boundary:
+    - owns ratio pointer drag lifecycle
+    - owns trade-plan confirm/cancel side effects
+    - owns pending trade-plan cleanup when the plan disappears
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline ratio drag bookkeeping (`_ratioDragPointerId`, `_ratioDragBound`)
+    - removed inline `setTradePlanRatio`, `openTradeFromPlan`, `cancelTradePlan`, and pointer listener helpers
+    - now delegates trade-plan interaction to `chartTradePlanRuntime`
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `chartTradePlanRuntime.ts` as the canonical trade-plan lifecycle boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `3119` -> `3056` lines
+  - server chunk `ChartPanel.js` after this slice: `34.62 kB`
+- Residual risks:
+  - line count dropped again, but the extracted runtime increased server chunk weight; the next Batch 3 slice should prefer high-removal targets like drawing or position drag rather than many tiny helper layers
+  - `ChartPanel.svelte` still owns drawing session lifecycle, overlay-triggered notices, and TP/SL/ENTRY drag orchestration
+- Status: DONE
+
+## [2026-03-07 02:47:55 +0900] FINISH frontend-chart-pattern-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: revisit the remaining refactor design, move on from terminal diminishing returns, and continue with the next `ChartPanel` extraction slice
+- What changed:
+  - Added `src/components/arena/chart/chartPatternRuntime.ts` as the canonical chart pattern lifecycle boundary:
+    - owns pattern marker merge with agent markers
+    - owns visible-range pattern scan debounce scheduling
+    - owns pattern snapshot application and focus-range movement
+    - owns optional lightweight-charts guide line-series cleanup
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline `_patternRangeScanTimer`, pattern signature, and line-series lifecycle bookkeeping
+    - delegates pattern refresh, visible-range scan scheduling, focus, and cleanup to `chartPatternRuntime`
+    - keeps `ChartPanel` as the coordinator for props, DOM refs, and user actions instead of the pattern control tower
+  - Incidental validation drift fixes required to restore the zero-warning baseline:
+    - `src/components/community/SignalPostCard.svelte`: replaced invalid `onclick|stopPropagation` usage with explicit runes-safe handlers and documented the intentional card-level tabindex pattern
+    - `src/routes/signals/+page.svelte`: replaced the `nav[role=tablist]` wrapper with a plain `div` tablist and removed an empty CSS ruleset
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents `chartPatternRuntime.ts` as the canonical pattern lifecycle boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `3201` -> `3119` lines
+  - server chunk `ChartPanel.js` after this slice: `30.42 kB`
+- Residual risks:
+  - `ChartPanel.svelte` still owns drawing/trade-plan interaction and position drag orchestration, so Batch 3 is not complete yet
+  - the unrelated warning drift in community/signals is closed for now, but those surfaces are still active and can regress if not kept on the zero-warning baseline
+- Status: DONE
+
+## [2026-03-07 02:38:22 +0900] FINISH frontend-terminal-engagement-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the terminal shell cleanup by removing density persistence and mobile engagement analytics from `src/routes/terminal/+page.svelte`
+- What changed:
+  - Added `src/lib/terminal/terminalEngagementRuntime.ts` as the canonical terminal engagement boundary:
+    - owns density-mode persistence/readback
+    - owns mobile tab-change GTM emission
+    - owns mobile viewport/nav impression lifecycle state
+  - Tightened terminal shared typing:
+    - `src/lib/terminal/terminalTypes.ts` now exports `TerminalDensityMode`
+    - terminal layout/panel consumers now reference the shared density contract instead of repeating the union inline
+  - Simplified `src/routes/terminal/+page.svelte`:
+    - removed inline `mobileViewTracked` / `mobileNavTracked` state flags
+    - removed inline density-mode toggle/localStorage logic
+    - removed inline mobile tab-change GTM emission logic
+    - now delegates mobile engagement sync to `terminalEngagementRuntime`
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents terminal engagement runtime ownership and keeps the modal lazy-boundary rule explicit
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `/terminal` server entry after this slice: `155.47 kB`
+- Residual risks:
+  - `/terminal` remains much lighter than the pre-lazy baseline (`168.92 kB`), but this slice did not reduce it further; the next slice should target actual lazy boundaries or move on to the next hotspot
+  - `src/routes/terminal/+page.svelte` still owns top-level scan/chat/session state wiring, so terminal shell cleanup is close to done but not fully minimal
+- Status: DONE
+
+## [2026-03-07 02:33:38 +0900] FINISH frontend-terminal-lazy-modal-boundary-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the terminal cleanup by reducing `/terminal` route weight with real lazy boundaries instead of another pure extraction
+- What changed:
+  - Simplified `src/routes/terminal/+page.svelte`:
+    - removed eager top-level imports of `CopyTradeModal.svelte` and `SignalPostForm.svelte`
+    - added lazy module boundaries for both modal-only surfaces
+    - preloads `CopyTradeModal` on `copyTradeStore` open intent and URL bootstrap
+    - preloads `SignalPostForm` on share-modal open intent
+    - switched to runes-safe dynamic component rendering instead of deprecated `<svelte:component>`
+  - Preserved terminal behavior:
+    - copy-trade bootstrap still opens immediately after query parsing
+    - share modal still uses the canonical `terminalCommunityRuntime` prefill/close flow
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `/terminal` server entry after this slice: `153.91 kB`
+- Residual risks:
+  - first-open modal interactions can pay a small async import cost on cold open
+  - route still owned mobile engagement flags at this point, which remained the next cleanup target
+- Status: DONE
+
+## [2026-03-07 02:27:31 +0900] FINISH frontend-terminal-community-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the terminal cleanup by removing share-modal and community signal publish logic from `src/routes/terminal/+page.svelte`
+- What changed:
+  - Added `src/lib/terminal/terminalCommunityRuntime.ts` as the canonical terminal community boundary:
+    - owns share modal open/close and prefill generation
+    - owns chart-origin signal tracking and community post creation
+    - owns copy-trade modal opening from chart-origin community signals
+    - owns terminal system chat message append after publish
+  - Extended `src/lib/terminal/terminalTypes.ts`:
+    - added `TerminalSharePrefill` so the modal prefill contract is typed in the canonical terminal type surface
+  - Simplified `src/routes/terminal/+page.svelte`:
+    - removed inline store mutation logic for `trackSignal`, `incrementTrackedSignals`, `notifySignalTracked`, `addCommunityPost`
+    - removed inline share prefill builder logic
+    - removed redundant wrapper handlers that were only forwarding to runtime methods
+    - now passes runtime methods directly into the mobile/tablet/desktop layouts for chart scan/chat/community callbacks where safe
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents terminal community runtime ownership
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `/terminal` server entry after this slice: `168.92 kB`
+- Residual risks:
+  - route readability improved, but bundle size regressed again (`168.13 kB` -> `168.92 kB`); the next terminal slice should target real code elimination or lazy boundaries instead of another pure extraction
+  - mobile GTM/impression state and some shell-only coordination still remain in `src/routes/terminal/+page.svelte`
+- Status: DONE
+
+## [2026-03-07 02:23:32 +0900] FINISH frontend-terminal-layout-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the terminal extraction plan by removing desktop/tablet split drag and resize lifecycle from `src/routes/terminal/+page.svelte`
+- What changed:
+  - Added `src/lib/terminal/terminalLayoutRuntime.ts` as the canonical terminal layout boundary:
+    - owns desktop left/right panel collapse state transitions
+    - owns desktop drag lifecycle and wheel-based side-panel resize
+    - owns tablet intel split drag/wheel/reset lifecycle
+    - owns viewport resize sync for tablet intel width defaults/clamping
+  - Simplified `src/routes/terminal/+page.svelte`:
+    - removed inline `mousemove`, `mouseup`, `pointermove`, `pointerup`, `pointercancel`, and `resize` listener logic
+    - removed inline desktop panel clamp and drag bookkeeping
+    - now delegates desktop/tablet layout runtime to `terminalLayoutRuntime`
+  - Tightened terminal shared types:
+    - added `TerminalPanelResizeTarget` to `src/lib/terminal/terminalTypes.ts`
+    - removed dead tablet split types that were only serving the deleted 2-axis layout path
+  - Removed dead helper/code paths:
+    - deleted unused tablet left/bottom split helpers from `src/lib/terminal/terminalHelpers.ts`
+    - eliminated the legacy `tabletLeftWidth` / `tabletBottomHeight` route state entirely
+  - Updated layout consumer typing:
+    - `src/components/terminal/TerminalDesktopLayout.svelte` now uses the canonical `TerminalPanelResizeTarget` type
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents terminal layout runtime ownership and explicitly forbids reviving the deleted tablet 2-axis split path
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `/terminal` server entry after this slice: `168.13 kB`
+- Residual risks:
+  - boundary quality improved, but `/terminal` server entry grew (`165.38 kB` -> `168.13 kB`); the next slice should bias toward bundle reduction, not just extraction purity
+  - `src/routes/terminal/+page.svelte` still owns mobile analytics toggles and some shell coordination, so the route is cleaner but not yet minimal
+- Status: DONE
+
+## [2026-03-07 02:15:11 +0900] FINISH frontend-terminal-chat-shell-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the terminal extraction plan by removing the remaining chat transport and shell bootstrap logic from `src/routes/terminal/+page.svelte`
+- What changed:
+  - Added `src/lib/terminal/terminalChatRuntime.ts` as the canonical intel-chat boundary:
+    - owns user message append
+    - owns `/api/chat/messages` request flow
+    - owns pattern-intent handoff to the action runtime
+    - owns offline fallback and suggested-direction updates
+  - Added `src/lib/terminal/terminalShellRuntime.ts` as the canonical terminal shell bootstrap boundary:
+    - owns GTM emitter creation for the terminal shell
+    - owns live ticker formatting/loading via transport helpers
+    - owns `copyTrade=1` URL bootstrap parsing and rewrite output
+  - Extended `src/lib/api/terminalApi.ts`:
+    - added terminal chat transport and typed error surface
+    - added live-ticker aggregation over Fear & Greed + CoinGecko global
+  - Simplified `src/routes/terminal/+page.svelte`:
+    - removed direct `/api/chat/messages` fetch logic
+    - removed direct `/api/feargreed` and `/api/coingecko/global` fetch logic
+    - removed inline `copyTrade` query parsing/rewrite logic
+    - removed inline terminal GTM emitter implementation
+  - Tightened terminal shared typing:
+    - `src/lib/terminal/terminalTypes.ts` now exports `TerminalChatConnectionStatus`
+  - Updated canonical guidance:
+    - `frontend/CLAUDE.md` now documents terminal chat runtime, shell runtime, and terminal API transport boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `/terminal` server entry after this slice: `165.38 kB`
+- Residual risks:
+  - `src/routes/terminal/+page.svelte` still owns desktop/tablet split drag and resize lifecycle; that remains the next extraction target
+  - `/terminal` route size is still dominated by shell/layout state and downstream panel imports, so this slice improved boundaries more than bundle weight
+- Status: DONE
+
 ### W-20260223-001
 
 - Start (KST): 2026-02-23 19:26
@@ -39,6 +1165,116 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Diff vs plan:
   - 계획 대비 추가: 협업 운영 고정을 위해 `docs/README.md`에 Watcher 규칙 명시
 - Commit / Push: `8d11a36` — pushed to origin
+- Status: DONE
+
+## [2026-03-06 23:39:18 +0900] FINISH frontend-phase7-chartpanel-dead-fallback-removal-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue automatically after restoring the zero-warning baseline and trim the next low-risk residual path from `ChartPanel.svelte`
+- What changed:
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed the dead `loadFallbackData()` demo candle path
+    - removed the now-unused `generateCandles` import from `src/lib/chart/chartHelpers.ts`
+  - Preserved the canonical runtime split:
+    - live/bootstrap/history ownership stays in `chartDataRuntime.ts`
+    - no runtime authority was moved back into `ChartPanel.svelte`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `/terminal` server entry in the build remains `136.69 kB`
+- Residual risks:
+  - `ChartPanel.svelte` still contains additional non-dead orchestration that can be carved down later
+  - next structural work should target remaining fallback/dead-branch review or legacy tree ownership cleanup, not warning cleanup
+- Status: DONE
+
+## [2026-03-06 23:52:11 +0900] FINISH frontend-phase7-chart-tradingview-runtime-split-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue automatically after restoring the zero-warning baseline and keep reducing `ChartPanel.svelte` by extracting the remaining TradingView lifecycle orchestration
+- What changed:
+  - Added `src/components/arena/chart/chartTradingViewRuntime.ts` as the canonical TradingView lifecycle boundary:
+    - owns widget instance lifecycle
+    - owns safe-mode fallback and retry behavior
+    - owns timeout handling
+    - owns debounced pair/timeframe re-init keying
+    - keeps GTM events inside one controller path
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed direct TradingView widget/timer bookkeeping (`tvWidget`, load/init timers, re-init key)
+    - delegated mode-change resets and retry behavior to `chartTradingViewRuntime.ts`
+    - cleanup now disposes the TradingView runtime instead of tearing down the iframe path inline
+  - Restored repo validation after unrelated branch drift surfaced during `npm run check`:
+    - `src/components/terminal/PolymarketBetPanel.svelte`: narrowed `unknown` error handling before reading `message`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=0)
+  - `/terminal` server entry after this extraction: `136.98 kB`
+- Residual risks:
+  - `ChartPanel.svelte` still owns chart creation and drawing/pattern orchestration, so RF-06 is not fully complete yet
+  - `/terminal` server output regressed slightly (`136.69 kB` -> `136.98 kB`) due to the new runtime module, but remains effectively flat; future slices should avoid casual growth
+  - `npm run build` and `npm run check:budget` should continue to run sequentially because `.svelte-kit/output` contention remains possible
+- Status: DONE
+
+## [2026-03-07 00:08:42 +0900] FINISH frontend-phase7-chart-bootstrap-split-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue automatically after the TradingView lifecycle split and reduce the next large `ChartPanel.svelte` mount block by extracting the lightweight-charts bootstrap path
+- What changed:
+  - Added `src/components/arena/chart/chartBootstrap.ts` as the canonical chart bootstrap boundary:
+    - owns lightweight-charts instance creation
+    - owns candlestick series creation
+    - owns MA line series creation
+    - owns volume pane bootstrap
+    - owns RSI pane bootstrap and guide lines
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed the large inline chart/pane/series bootstrap block from `onMount`
+    - delegates bootstrap to `chartBootstrap.ts` and then wires the returned series into the remaining runtime layers
+  - Restored repo validation after unrelated branch drift surfaced during `npm run check`:
+    - `src/components/terminal/PolymarketBetPanel.svelte`: narrowed `unknown` error handling before reading `message`
+  - Observed one transient build failure:
+    - Vite static copy step briefly threw `ENOENT` for an existing `static/arena/references/retro-glow-text-logo-effect-2-o.png`
+    - rerunning the same sequential build succeeded; this looked like a transient out-dir copy race rather than a missing asset
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=0)
+  - `/terminal` server entry after this extraction: `138.99 kB`
+- Residual risks:
+  - `ChartPanel.svelte` still owns drawing/pattern/position interaction orchestration, so RF-06 is still open
+  - `/terminal` server entry grew again (`136.98 kB` -> `138.99 kB`); the next slices should bias toward net-negative or flat bundle impact
+  - `npm run build` and `npm run check:budget` should continue to run sequentially because `.svelte-kit/output` contention remains possible
+- Status: DONE
+
+## [2026-03-06 23:29:54 +0900] FINISH frontend-phase7-warning-zero-baseline-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue automatically after the chart data runtime extraction, clear the remaining warning backlog, and lock the repo back to a zero-warning baseline
+- What changed:
+  - Finished the planned low-risk warning cleanup:
+    - `src/components/shared/TokenDropdown.svelte`: converted mutable element refs to `$state(...)`
+    - `src/components/arena/PhaseGuide.svelte`: removed phase prop initial-capture pattern and moved the phase transition effect to a closure-safe sync path
+  - Cleared the remaining shared/legacy warning backlog:
+    - `src/components/shared/PokemonFrame.svelte`: replaced deprecated `<slot />` rendering with `{@render children?.()}`
+    - `src/components/shared/{HPBar,TypewriterBox,PhaseTransition}.svelte`: normalized self-closing non-void tags
+    - `src/components/arena-v2/{BattleScreen,BattleMissionView,BattleChartView,BattleCardView,ResultScreen}.svelte`: normalized self-closing non-void tags
+    - `src/components/arena-v2/ResultScreen.svelte`: removed stale `svelte-ignore` comments and made the reveal-skip surface keyboard-accessible
+    - `src/components/arena-v2/HypothesisScreen.svelte`: moved RAG hint loading to `onMount`, made RAG state reactive, removed prop initial-capture state warnings, and normalized slider CSS compatibility
+    - `src/components/arena-v2/DraftScreen.svelte`: normalized slider CSS compatibility
+  - Closed incidental validation drift:
+    - `src/lib/wallet/eip712Signing.ts`: fixed the malformed catch block created during earlier branch drift so `npm run build` is green again
+  - Updated canonical docs:
+    - `CLAUDE.md`
+    - `docs/warning-priority-2026-03-06.md`
+    - `docs/FRONTEND_REFACTOR_EXECUTION_DESIGN_2026-03-06.md`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=0)
+  - `/terminal` server entry in the build after the warning cleanup remains `136.69 kB`
+- Residual risks:
+  - warning cleanup is no longer the bottleneck; the next best refactor lever is residual `ChartPanel.svelte` cleanup (fallback/demo branches and remaining orchestration)
+  - sibling legacy app trees still create drift noise until canonical ownership cleanup is enforced more aggressively
+  - `npm run build` and `npm run check:budget` should continue to run sequentially because `.svelte-kit/output` contention remains possible
 - Status: DONE
 
 ---
@@ -258,6 +1494,40 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Overlap check (before work):
   - `git log -n 12` 확인: 최신 커밋은 docs/BE/store 정리, Agent 3 IN_PROGRESS 항목 없음
   - `W-006`, `W-008`은 FE 컴포넌트 범위(`src/components/**`, `src/routes/**`)로 이번 수정(`src/lib/services/**`, `src/lib/stores/**`)과 충돌 없음
+
+## [2026-03-06 21:09:59 +0900] FINISH frontend-phase2-copytrade-idempotency-terminal-shell-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: continue until the current refactor line is actually stable end-to-end
+- What changed:
+  - Added durable copy-trade publish idempotency:
+    - `src/lib/stores/copyTradeStore.ts` now keeps `publishMutationId`
+    - `src/lib/api/tradingApi.ts` carries `clientMutationId`
+    - `src/routes/api/copy-trades/publish/+server.ts` reuses existing canonical outcomes before/inside transaction and after `23505`
+    - `db/migrations/0007_copy_trade_publish_idempotency.sql`
+    - `supabase/migrations/014_copy_trade_publish_idempotency.sql`
+  - Continued terminal shell extraction:
+    - added `src/routes/terminal/terminalTypes.ts`
+    - added `src/components/terminal/TerminalDesktopLayout.svelte`
+    - added `src/components/terminal/TerminalTabletLayout.svelte`
+    - added `src/components/terminal/TerminalMobileLayout.svelte`
+    - `src/routes/terminal/+page.svelte` now acts as orchestration shell instead of holding all layout markup
+  - Moved terminal route shell styling out of route-local `<style>` into:
+    - `src/components/terminal/terminalShell.css`
+    - this restored warning-budget stability after layout extraction
+  - Repaired shared server/API error handling regression:
+    - `src/lib/utils/errorUtils.ts` is now the canonical `unknown error` helper (`getErrorMessage`, `getErrorCode`, `createErrorWithCode`)
+    - server/API files were normalized away from direct `error?.code` / `error?.message` access
+  - Updated project guide:
+    - `frontend/CLAUDE.md`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 39 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=39)
+- Residual risks:
+  - terminal shell is split, but view-model extraction is still pending (`terminalViewModel`, `intelViewModel`)
+  - `ChartPanel.svelte` remains structurally heavy and is still the next major performance split target
+  - remaining warnings are mostly unrelated arena-v2/shared markup cleanup and one IntelPanel a11y item
+- Status: DONE
   - 현재 워크트리의 docs 변경은 기존 로그 갱신 이력이며, 이번 작업은 Agent 3 범위 파일만 수정
 - Changes (actual):
   - `src/lib/services/livePriceSyncService.ts` 신규
@@ -1969,123 +3239,3918 @@ Purpose: 작업 중복을 막고, 작업 전/후 실제 변경 이력을 시간 
 - Context compact check: present (`.agent-context/compact/codex-arena-game-feel-latest.md`)
 - Status: DONE
 
-### W-20260306-0034-frontend-codex (start)
+## [2026-03-06 00:30:20 +0900] START quality-workflow-guard-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: CLAUDE.md 기준으로 가드/기록/컨텍스트 관리 포함해 정리
+- Initial branch: feat/onchain-alerts-dashboard
+- Overlap check:
+  - `frontend`를 활성 코드베이스로 고정, `frontend-passport`는 deprecated 경로로 취급
+  - 기존 경고 baseline(`0 errors, 49 warnings`)을 기준선으로 설정
+  - 기존 pre-push safe-sync/gate 규칙과 충돌 없이 guard 추가 가능 확인
 
-- Start: 2026-03-06 00:34 +0900
-- Agent: Codex (GPT-5)
-- Repo path: /Users/ej/Downloads/maxidoge-clones/frontend
+## [2026-03-06 00:37:00 +0900] FINISH quality-workflow-guard-20260306 (frontend)
+- What changed:
+  - Added workspace guard script: `scripts/dev/guard-active-workspace.sh`
+  - Added warning budget script: `scripts/dev/check-svelte-warning-budget.sh`
+  - Updated npm scripts (`package.json`):
+    - `guard:workspace`
+    - `check:budget`
+    - `gate` = `guard:workspace + check:budget + build`
+  - Updated pre-push hook to run workspace guard first
+  - Updated CI check workflow to run:
+    - `npm run guard:workspace`
+    - `npm run check:budget` with `WARNING_BUDGET=49`
+  - Added warning cleanup priority doc: `docs/warning-priority-2026-03-06.md`
+  - Updated `CLAUDE.md`:
+    - Commands / Directory Structure / Git Workflow / Active Branches / Known Pitfalls / Task Backlog 반영
+- Validation results:
+  - `npm run guard:workspace`: PASS (`frontend`)
+  - `ALLOW_LEGACY_WORKSPACE` 미설정 상태에서 `frontend-passport` 컨텍스트 guard 실행: BLOCKED (expected)
+  - `WARNING_BUDGET=49 npm run check:budget`: PASS (`0 errors, 49 warnings`)
+- Commit / Push: pending at log time
+- Status: DONE
+
+## [2026-03-06 18:12:04 +0900] START frontend-refactor-execution-design-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: 구현 전에 전체 성능/구조/버그/보안/중복 기준을 포함한 리팩토링 설계를 먼저 고정
+- Initial branch: unknown (git metadata unavailable from repo root during analysis)
+- Overlap check:
+  - 기존 `terminal-refactor-master-plan-2026-03-06.md`와 `terminal-uiux-refactor-design-v3-2026-03-06.md`는 terminal 중심
+  - 이번 설계는 terminal 상위 레벨에서 state authority, server authority, security, legacy duplication까지 포함한 frontend 전체 실행 설계로 정의
+
+## [2026-03-06 18:12:04 +0900] FINISH frontend-refactor-execution-design-20260306 (frontend)
+- What changed:
+  - Added canonical execution design doc:
+    - `docs/FRONTEND_REFACTOR_EXECUTION_DESIGN_2026-03-06.md`
+  - Locked implementation order:
+    - Phase 1: state authority repair
+    - Phase 2: domain integrity repair
+    - Phase 3+: terminal/intel/chart split
+- Key decisions:
+  - `priceStore`를 유일한 live price source로 유지하고 `gameState`의 live price mirror를 제거한다.
+  - profile/badge/quick-trade 등은 서버 authoritative로 정리하고 `localStorage`는 cache/offline staging으로 제한한다.
+  - terminal UI 분해보다 먼저 correctness/performance debt를 제거한다.
+  - legacy sibling app copies는 canonical source가 아니며 신규 작업 복제를 금지한다.
+- Validation reference:
+  - `npm run check`: PASS (`0 errors, 35 warnings`)
+  - `npm run build`: PASS
+- Status: DONE
+
+## [2026-03-06 19:08:15 +0900] FINISH frontend-phase1-state-authority-quicktrade-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- What changed:
+  - Removed `priceStore -> gameState.prices` live mirror and left `gameState.prices` as legacy boot fallback only.
+  - Added shared pair-price selectors in `src/lib/utils/price.ts` and switched active consumers to `priceStore`:
+    - `routes/arena/+page.svelte`
+    - `components/arena/ChartPanel.svelte`
+    - `components/arena/HypothesisPanel.svelte`
+    - `components/terminal/BottomPanel.svelte`
+    - `components/terminal/IntelPanel.svelte`
+    - `routes/signals/+page.svelte`
+  - Hardened `quickTradeStore` optimistic/server reconcile:
+    - hydrate now dedupes optimistic local trades against server-open trades by semantic key + time window
+    - server ID replacement now merges rather than duplicating
+    - local-close-before-open-ack path now replays close against server ID after open ack arrives
+- Validation:
+  - `npm run check`: PASS (`0 errors, 38 warnings`)
+  - `npm run build`: PASS
+  - Note: one concurrent `check/build` attempt produced transient `.svelte-kit/output` ENOENT; sequential build passed
+- Residual risks:
+  - Hydration dedupe is best-effort because server API still lacks client mutation IDs
+  - large chunk warning remains in terminal/arena bundles and belongs to next phase
+- Status: DONE
+
+## [2026-03-06 19:16:40 +0900] FINISH frontend-phase2-domain-integrity-plan-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: fix the next refactor plan specifically around profile/badge authority and trade-domain integrity before implementation
+- What changed:
+  - Expanded Phase 2 in `docs/FRONTEND_REFACTOR_EXECUTION_DESIGN_2026-03-06.md`
+  - Locked four concrete workstreams:
+    - `P2-A` profile authority split
+    - `P2-B` tracked signal mutation integrity
+    - `P2-C` copy-trade transaction boundary cleanup
+    - `P2-D` dead persistence cleanup
+- Key findings captured in the plan:
+  - `userProfileStore.ts` computes badges locally and syncs them back to the server
+  - `PATCH /api/profile` accepts client-authored `badges` and `displayTier`
+  - `trackedSignalStore.ts` still uses plain optimistic ID replacement and hydrate merge by raw IDs
+  - `copyTradeStore.ts` still issues dual optimistic mutations without a single mutation envelope
+  - `dbStore.ts` is a legacy persistence layer inconsistent with current server-authoritative direction
+- Runtime code changes: none
+- Status: DONE
+
+## [2026-03-06 19:13:07 +0900] START frontend-phase1-state-authority-followup-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - Branch: codex/terminal-uiux-gtm-refine
-- Base origin/main hash: 7e94a0cf580430cbf8c65b63f83ecf3e82f3786f
-- Working tree status:
-  - ## codex/terminal-uiux-gtm-refine
-  - M docs/AGENT_WATCH_LOG.md
-- Task summary: Terminal page 종합 개선 설계 및 구현 (UIUX + GTM + 중복 제거 + 잠재 버그/성능 개선)
-- Overlap/conflict check result: 기존 변경은 docs/AGENT_WATCH_LOG.md 1건이며 기능 코드와 직접 충돌 없음. 기능 파일은 clean 상태에서 시작.
-- safe:status result: PASS (npm run safe:status 완료, ctx:auto snapshot/compact 완료)
-- Notes: /Users/ej/Downloads/maxi-doge-unified/README.md 경로는 로컬에 존재하지 않아 확인 불가. 현재 리포 AGENTS 규칙 기준으로 진행.
+- Request: 설계 이후 실제 Phase 1 구현 계속 진행
+- Scope for this pass:
+  - `gameState.prices` 잔여 소비 경로 제거
+  - terminal의 중복 `hydrateQuickTrades()` 진입점 제거
+  - live price fallback을 `priceStore + bases` 기준으로 정리
 
-### W-20260306-0034-frontend-codex (finish)
-
-- End: 2026-03-06 00:44 +0900
-- Agent: Codex (GPT-5)
+## [2026-03-06 19:17:34 +0900] FINISH frontend-phase1-state-authority-followup-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - What changed:
-  - Terminal UIUX/GTM 개선 반영 (WarRoom 요약/CTA, Intel 상태 UX, Chart first-scan CTA 경량화)
-  - 방향 뱃지 공통 컴포넌트 도입: `src/components/terminal/DirectionBadge.svelte`
-  - 하단 티커 Fear&Greed 강조 및 정보 칩화
-  - 데드코드 제거: `PredictPanel.svelte`, `QuickTradePanel.svelte`, `ScanBriefCards.svelte` 삭제
-  - Notification bell 위치 보정으로 모바일/터미널 겹침 완화
-- Validation results:
-  - `npm run check`: PASS (0 errors, 기존 경고 다수 유지)
-  - `npm run build`: PASS (기존 경고 다수 유지)
-- Commit hash: N/A (커밋/푸시 미요청)
-- Push status: N/A (미요청)
-- Final working tree status:
-  - ## codex/terminal-uiux-gtm-refine
-  - M src/components/arena/ChartPanel.svelte
-  - M src/components/shared/NotificationTray.svelte
-  - M src/components/terminal/IntelPanel.svelte
-  - D src/components/terminal/PredictPanel.svelte
-  - D src/components/terminal/QuickTradePanel.svelte
-  - D src/components/terminal/ScanBriefCards.svelte
-  - M src/components/terminal/VerdictBanner.svelte
-  - M src/components/terminal/VerdictCard.svelte
-  - M src/components/terminal/WarRoom.svelte
-  - M src/components/terminal/warroom/WarRoomFooterSection.svelte
-  - M src/components/terminal/warroom/WarRoomHeaderSection.svelte
-  - M src/components/terminal/warroom/WarRoomSignalFeed.svelte
-  - M src/components/terminal/warroom/warroom.css
-  - M src/routes/terminal/+page.svelte
-  - ?? src/components/terminal/DirectionBadge.svelte
-- Context compact check: present (`frontend/.agent-context/compact/codex-terminal-uiux-gtm-refine-latest.md`)
+  - Removed remaining active `gameState.prices` fallback usage from arena consumers and aligned BTC fallback to `priceStore + bases`.
+  - Removed terminal-local `hydrateQuickTrades()` on-mount call so quick-trade hydration enters only through `hydrateDomainStores()` or explicit force refresh.
+  - Renamed community signal price input from ambiguous `prices` to `livePrices` and reused `getPairPrice()` / `getBaseSymbolFromPair()` for pair-aware base price resolution.
+- Validation:
+  - `rg -n "$gameState.prices|state.prices?|state.prices.|gameState.prices|{ prices: $livePrices }" src`: no matches in active `src/`
+  - `npm run check`: PASS (`0 errors, 44 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `gameState.prices` field still exists as legacy boot fallback in store shape and should be removed only with a wider state migration.
+  - large client chunk warning (`836.56 kB`) and terminal server bundle size (`172.44 kB`) remain for the next performance pass.
 - Status: DONE
 
-### W-20260306-0034-frontend-codex (uiux-final finish)
-
-- End: 2026-03-06 01:07 +0900
-- Agent: Codex (GPT-5)
+## [2026-03-06 19:52:08 +0900] FINISH frontend-phase2-domain-integrity-implementation-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: implement Phase 2 so profile/badge/tracked-signal authority is handled by the real SvelteKit backend rather than local cache logic
 - What changed:
-  - Positions UX 상태모델 강화: `live/error-empty/demo` 분기 추가
-  - 연결 실패 + 실포지션 0건일 때 데모 포지션 자동 fallback 렌더
-    - `TRADES`, `PERPS`, `MARKET BETS` 모두 demo 배지/스타일로 표시
-  - 동기화 배지 상태에 `DEMO MODE` 추가
-  - 전체 최적화 기준 문서 추가: `frontend/docs/terminal-uiux-optimization-v2.md`
-- Validation results:
-  - `npm run check`: PASS (0 errors, 47 warnings)
+  - Added shared profile authority helpers in `src/lib/profile/profileAuthority.ts` and server projection logic in `src/lib/server/profileProjection.ts`.
+  - Reworked `GET /api/profile` and `GET /api/profile/passport` to hydrate stats, tier, badges, tracked-signal count, and total PnL from `syncUserProfileProjection(user.id)` instead of trusting stale `user_profiles` fields.
+  - Locked `PATCH /api/profile` down to `nickname` and `avatar`; client-authored `displayTier` and `badges` are now rejected as server-managed fields.
+  - Rewrote `src/lib/stores/userProfileStore.ts` so `localStorage` is cache-only:
+    - no client badge minting
+    - no badge sync back to server
+    - optimistic edits remain only for `nickname` and `avatar`
+    - tracked-signal and PnL refresh now converge back through server hydrate
+  - Hardened `src/lib/stores/trackedSignalStore.ts` reconcile semantics:
+    - added `clientMutationId`-based track ACK matching
+    - preserved local conversion state when track ACK arrives late
+    - prevented `convert` and `untrack` from firing against unresolved local-only UUIDs
+    - added fallback server trade open when signal conversion cannot resolve a server signal id
+  - Extended tracked-signal API contract:
+    - `src/lib/api/tradingApi.ts` now carries optional `clientMutationId`
+    - `POST /api/signals/track` echoes `clientMutationId` and refreshes profile projection after insert
+  - Refreshed profile projection after mutations that affect tier/badges/stats:
+    - `src/routes/api/copy-trades/publish/+server.ts`
+    - `src/routes/api/quick-trades/[id]/close/+server.ts`
+    - `src/lib/server/progressionUpdater.ts`
+    - `src/routes/api/progression/+server.ts`
+  - Removed unused legacy persistence file `src/lib/stores/dbStore.ts`.
+- Validation:
+  - `npm run check`: PASS (`0 errors, 39 warnings`)
   - `npm run build`: PASS
-- Commit hash: N/A (커밋/푸시 미요청)
-- Push status: N/A (미요청)
-- Final working tree status:
-  - ## codex/terminal-uiux-gtm-refine
-  - M src/components/arena/ChartPanel.svelte
-  - M src/components/shared/NotificationTray.svelte
-  - M src/components/terminal/IntelPanel.svelte
-  - D src/components/terminal/PredictPanel.svelte
-  - D src/components/terminal/QuickTradePanel.svelte
-  - D src/components/terminal/ScanBriefCards.svelte
-  - M src/components/terminal/VerdictBanner.svelte
-  - M src/components/terminal/VerdictCard.svelte
-  - M src/components/terminal/WarRoom.svelte
-  - M src/components/terminal/warroom/WarRoomFooterSection.svelte
-  - M src/components/terminal/warroom/WarRoomHeaderSection.svelte
-  - M src/components/terminal/warroom/WarRoomSignalFeed.svelte
-  - M src/components/terminal/warroom/warroom.css
-  - M src/routes/terminal/+page.svelte
-  - ?? src/components/terminal/DirectionBadge.svelte
-  - ?? docs/terminal-uiux-optimization-v2.md
-- Context compact check: present (`frontend/.agent-context/compact/codex-terminal-uiux-gtm-refine-latest.md`)
+- Residual risks:
+  - profile projection currently recomputes from transactional tables on request/mutation; if volume rises, this should move to a denormalized stats updater or materialized summary path.
+  - large client chunk warning (`836.56 kB`) still remains and belongs to the next terminal/chart split phase.
+  - existing Svelte warnings in unrelated UI files remain untouched in this pass.
 - Status: DONE
 
-### W-20260306-0034-frontend-codex (follow-up finish)
+## [2026-03-06 20:19:11 +0900] START frontend-phase2-security-boundary-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: state authority 다음 단계로 profile / quick-trade / polymarket mutation 경계 강화
+- Scope for this pass:
+  - mutating endpoint body parsing을 `readJsonBody` 계열로 통일
+  - profile PATCH의 허용 필드와 rate limit 명시
+  - quick-trade / polymarket에 IP + distributed rate limit 패턴 적용
 
-- End: 2026-03-06 00:57 +0900
-- Agent: Codex (GPT-5)
+## [2026-03-06 20:19:11 +0900] FINISH frontend-phase2-security-boundary-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
 - What changed:
-  - `src/routes/terminal/+page.svelte` runes/legacy 혼합 회귀 제거 (legacy `$:` 반응형으로 복원), ticker chip/resize-handle 공통화는 유지
-  - `src/components/terminal/VerdictBanner.svelte` 미사용 파생값 제거
-  - `src/components/terminal/warroom/WarRoomSignalFeed.svelte` 방향/신뢰도 중복 UI 제거
-  - `src/components/terminal/warroom/warroom.css` 미사용 vote/conf 스타일 제거
-- Validation results:
-  - `npm run check`: PASS (0 errors, 47 warnings 유지)
+  - Added shared guarded JSON body reader:
+    - `src/lib/server/requestGuards.ts`
+  - Added mutation-specific limiters:
+    - `src/lib/server/rateLimit.ts`
+  - Hardened `PATCH /api/profile`:
+    - only `nickname`, `avatar` are accepted
+    - oversized / invalid JSON is rejected explicitly
+    - IP + distributed rate limit added
+  - Hardened quick-trade mutations:
+    - `src/routes/api/quick-trades/open/+server.ts`
+    - `src/routes/api/quick-trades/[id]/close/+server.ts`
+    - raw `request.json()` 제거
+    - body size limit + validation + IP/distributed rate limit 추가
+  - Hardened Polymarket order flow:
+    - `src/routes/api/positions/polymarket/prepare/+server.ts`
+    - `src/routes/api/positions/polymarket/submit/+server.ts`
+    - guarded JSON parsing + IP/distributed rate limit 적용
+    - authenticated wallet mismatch를 거부하도록 강화
+- Validation:
+  - `npm run check`: PASS (`0 errors, 39 warnings`)
   - `npm run build`: PASS
+  - terminal server page output: `168.96 kB`
+- Residual risks:
+  - `profile` projection 계산은 아직 read-path recompute 비중이 커서 트래픽 증가 시 denormalized updater로 옮겨야 한다.
+  - large client chunk warning (`836.56 kB`)은 여전히 남아 있고 다음 terminal/chart split 단계에서 해결해야 한다.
+  - `src/routes/terminal/+page.svelte.bak` 같은 dead copy cleanup은 아직 남아 있다.
+- Status: DONE
+
+## [2026-03-06 20:30:18 +0900] FINISH frontend-phase2-copytrade-canonical-publish-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Request: continue the next refactor step by making copy-trade publish server-canonical instead of dual optimistic fallback mutations
+- What changed:
+  - Reworked `src/lib/stores/copyTradeStore.ts`:
+    - publish is now a single async mutation path using `publishCopyTradeApi()` as the canonical backend write
+    - removed fallback `openQuickTradeApi()` + `trackSignalApi()` fan-out when publish fails
+    - added `isPublishing` / `publishError` state to lock the modal during submission
+    - added optimistic rollback on publish failure using local `removeQuickTrade()` and `removeTracked()`
+    - success path now reconciles local optimistic IDs against the canonical publish response and refreshes `userProfile`
+  - Updated `src/components/modals/CopyTradeModal.svelte`:
+    - publish button is async and double-submit safe
+    - modal controls are disabled while publish is in flight
+    - inline pending/error status is shown instead of silently failing
+  - Added `removeQuickTrade()` to `src/lib/stores/quickTradeStore.ts` for optimistic rollback.
+  - Normalized `POST /api/copy-trades/publish` response shape in `src/routes/api/copy-trades/publish/+server.ts`:
+    - returns full quick-trade fields (`pnlPercent`, `source`, `note`, `closedAt`, `closePnl`)
+    - returns full tracked-signal fields (`pnlPercent`, `source`, `note`)
+    - keeps copy-trade publish as the single server-authoritative mutation boundary
+  - Added `@ts-expect-error` guards in `src/lib/arena-war/battlePixiRuntime.ts` for intentional Pixi internal ESM subpath imports used only for bundle-size control.
+- Validation:
+  - `npm run check`: PASS (`0 errors, 39 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - copy-trade publish still lacks durable backend idempotency; repeated requests from multiple tabs could still create duplicate runs until a server-side mutation key is persisted.
+  - terminal shell / chart split remains the next structural priority.
+  - existing unrelated Svelte warnings remain untouched in this pass.
+- Status: DONE
+
+## [2026-03-06 21:27:25 +0900] FINISH frontend-phase3-terminal-viewmodel-chart-csp-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue until the terminal/chart/security refactor is materially completed from the current design baseline
+- What changed:
+  - Extracted terminal route pure view-model logic:
+    - `src/components/terminal/terminalViewModel.ts`
+    - moved terminal decision rail state, control-bar prop assembly, shared panel prop assembly, ticker chip classification, offline fallback reply shaping out of `src/routes/terminal/+page.svelte`
+  - Extracted Intel panel pure view-model logic:
+    - `src/components/terminal/intelViewModel.ts`
+    - moved positions/trending/feed/headline/policy-card derived state out of `src/components/terminal/IntelPanel.svelte`
+    - removed unused `latestScan` pass-through from the Intel shared props contract
+    - fixed tablist focusability warning in `IntelPanel.svelte`
+  - Split TradingView embed wiring from chart runtime:
+    - added `src/lib/chart/tradingviewEmbed.ts`
+    - `src/components/arena/ChartPanel.svelte` now delegates iframe URL creation and teardown to the adapter instead of rebuilding that logic inline
+  - Hardened response security policy:
+    - `src/hooks.server.ts` now builds an allowlist-based CSP
+    - production policy explicitly covers Google Fonts, TradingView frame embed, Binance websocket, inline styles, and self-hosted assets
+    - dev policy remains relaxed enough for Vite/HMR
+  - Stabilized terminal scan API parsing:
+    - `src/routes/api/terminal/scan/+server.ts`
+    - extracted the RAG save payload before `fireAndForget()` to avoid parser instability during `svelte-check`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 36 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=36`)
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` is still a large mixed-responsibility component; TradingView embed is isolated now, but overlay/pattern/trade-planner extraction remains.
+  - terminal server bundle is still large (`/terminal` server entry about `220.86 kB`); the next meaningful reduction requires deeper chart/service splitting rather than more prop reshaping.
+  - existing unrelated Svelte warnings remain in arena-v2/shared legacy components and are now the dominant warning budget consumers.
+- Status: DONE
+
+## [2026-03-06 21:49:12 +0900] FINISH frontend-phase4-chart-planner-runes-stabilization-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue the next refactor phase by extracting more ChartPanel core logic and keep validation green until the batch is fully closed
+- What changed:
+  - Extracted chart trade-planning math into `src/lib/chart/chartTradePlanner.ts`:
+    - moved line-entry normalization (`entry/sl/tp/rr`) out of `ChartPanel.svelte`
+    - moved preview -> `TradePlanDraft` shaping out of `ChartPanel.svelte`
+    - moved canonical planned-order calculation out of `chartDrawingEngine.ts`
+    - moved community signal draft shaping (`source/reason/confidence`) out of `ChartPanel.svelte`
+  - Updated chart type contracts in `src/lib/chart/chartTypes.ts`:
+    - added `PlannedTradeOrder`, `LineEntryTradeDraft`, `CommunitySignalDraft`
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - chart component now delegates trade-plan and community-signal calculations to `chartTradePlanner.ts`
+    - removed local duplicate trade math and one-off draft typing
+    - trimmed stale imports while keeping side effects (open trade, GTM, notices) local
+  - Re-aligned terminal Intel contracts after `check:budget` exposed rune/event drift:
+    - `src/components/terminal/IntelPanel.svelte` now uses runes-compatible `$state` for mutable UI data and callback props for `onSendChat`, `onGoToTrade`, `onCollapse`
+    - `src/components/terminal/{TerminalDesktopLayout,TerminalTabletLayout,TerminalMobileLayout}.svelte` now pass callback props instead of invalid `on:` listeners
+    - `src/routes/terminal/+page.svelte` `handleSendChat()` now accepts the plain `{ text }` payload expected by the Intel callback contract
+  - Removed a latent Svelte type error in `src/components/community/OracleLeaderboard.svelte` by converting the period filter to `$derived.by(...)`.
+- Validation:
+  - `npm run check`: PASS (`0 errors, 37 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=37`)
+  - `/terminal` server entry reduced to about `137.47 kB` after this pass (from `220.86 kB` in the prior logged baseline)
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` still owns overlay rendering, pattern range orchestration, and drawing interaction; RF-06 is not fully complete yet.
+  - warning budget is healthy again, but remaining warnings are still concentrated in legacy `arena-v2/shared` components and should be cleaned in a dedicated pass instead of mixed into domain refactors.
+  - `IntelPanel.svelte` is stable again, but it remains a broad orchestration component; a later pass should extract fetch/sync services if further size reduction is required.
+- Status: DONE
+
+## [2026-03-06 22:06:54 +0900] FINISH frontend-phase5-chart-pattern-render-contract-stabilization-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue automatically until the current ChartPanel split batch is stabilized, validated, and documented
+- What changed:
+  - Expanded `src/components/arena/chart/chartPatternEngine.ts` into the canonical pure pattern-scan layer:
+    - added visible-range candle slicing
+    - added pattern signature / snapshot construction
+    - added `detectChartPatternState()` to return both user-facing scan report and overlay state in one pure path
+  - Extended `src/lib/chart/chartTypes.ts` with shared pattern scan contracts:
+    - `PatternScanScope`
+    - `PatternScanReport`
+    - terminal helpers now import the shared types instead of duplicating local equivalents
+  - Extended `src/components/arena/chart/chartDrawingEngine.ts` with persisted drawing rendering:
+    - added `toChartX` to `CoordProvider`
+    - added `drawDrawingItems()` so `ChartPanel.svelte` no longer owns the drawing-item render loop inline
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - delegated pattern detection state transitions to `chartPatternEngine.ts`
+    - delegated persisted drawing rendering to `chartDrawingEngine.ts`
+    - restored the dual contract needed across routes by dispatching component events while still honoring callback props
+    - converted new mutable runes variables (`klineCache`, `drawings`, `drawingCanvas`, `tvContainer`, `ratioTrackEl`, `_tvFallbackTried`) to `$state(...)`
+    - normalized chart interaction a11y suppressions to the Svelte 5 warning names so warning count returned to baseline
+  - Hardened callback propagation across terminal shells:
+    - `src/components/terminal/{TerminalDesktopLayout,TerminalTabletLayout,TerminalMobileLayout}.svelte`
+    - `src/routes/terminal/+page.svelte`
+    - explicit wrapper lambdas now preserve the detail-payload callback contract and prevent event/callback type drift
+- Validation:
+  - `npm run check`: PASS (`0 errors, 37 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=37`)
+  - `/terminal` server entry: `138.36 kB`
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` is smaller and more coherent, but overlay orchestration and interaction state are still concentrated there; RF-06 remains open.
+  - warning budget is back to baseline, but most remaining warnings still come from legacy `arena-v2` and shared components rather than the terminal/chart path.
+  - `npm run build` and `npm run check:budget` should continue to run sequentially; concurrent runs can still contend on `.svelte-kit/output`.
+- Status: DONE
+
+## [2026-03-06 22:36:46 +0900] FINISH frontend-phase6-chart-overlay-session-extraction-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue automatically by extracting the next ChartPanel overlay boundary, keep validation green, and document the new canonical split
+- What changed:
+  - Added `src/components/arena/chart/chartDrawingSession.ts` as the canonical pure drawing-session layer:
+    - extracted hline/trendline/trade-preview draft transitions
+    - extracted line-entry finalize branching used by `ChartPanel.svelte`
+  - Added `src/components/arena/chart/chartOverlayRenderer.ts` as the canonical overlay-canvas orchestration layer:
+    - centralizes pattern overlay, agent trade setup overlay, persisted drawing render, trade preview render, and ghost trendline drawing order
+    - exposes `isTradePreviewMode()` / `resolveTradePreview()` so `ChartPanel.svelte` no longer duplicates drawing-mode branching
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline overlay clear/render decision tree
+    - delegated overlay rendering to `chartOverlayRenderer.ts`
+    - delegated drawing-session branching to `chartDrawingSession.ts`
+    - removed stale local helper/import leftovers created during the split
+  - Recovered repo-wide validation after an unrelated dirty runes drift surfaced in `src/routes/arena/+page.svelte`:
+    - repaired the broken `state -> gs` reference migration
+    - replaced remaining legacy `$:` blocks with `$derived(...)` / `$effect(...)`
+    - converted mutable route state back to `$state(...)`
+    - replaced deprecated `on:click` usage with `onclick`
+  - Kept `src/routes/passport/+page.svelte` runes cleanup from the previous validation unblocker in place; no new passport regressions were introduced in this pass.
+- Validation:
+  - `npm run check`: PASS (`0 errors, 37 warnings`)
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=37`)
+  - `npm run build`: PASS
+  - `/terminal` server entry: `136.71 kB`
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` still owns interaction orchestration and lifecycle wiring; RF-06 is improved but not fully complete.
+  - the remaining warning budget is still dominated by legacy `arena-v2/shared` components and a few shared rune migrations (`TokenDropdown`, `PhaseGuide`).
+  - `npm run build` and `npm run check:budget` must continue to run sequentially; parallel runs still race on `.svelte-kit/output`.
+- Status: DONE
+
+## [2026-03-06 22:44:30 +0900] FINISH frontend-context-system-rollout-finalization-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Work ID: W-20260306-2209-frontend-codex
+- Request: finish the context-system rollout end-to-end, verify the current branch, and leave accurate resume artifacts for the next session
+- What changed:
+  - Finalized semantic context artifacts for the current branch:
+    - refreshed `.agent-context/checkpoints/codex-terminal-uiux-gtm-wip-latest.md`
+    - generated `.agent-context/briefs/codex-terminal-uiux-gtm-wip-latest.md`
+    - generated `.agent-context/handoffs/codex-terminal-uiux-gtm-wip-latest.md`
+    - updated `.agent-context/state/w-20260306-2209-frontend-codex.json`
+  - Extended `scripts/dev/context-compact.sh` so brief/handoff/state can record explicit validation status:
+    - `--docs-check`
+    - `--check`
+    - `--build`
+    - `--gate`
+  - Wired successful validation back into context artifacts:
+    - `.githooks/pre-push` now refreshes branch artifacts after `npm run gate`
+    - `scripts/dev/sync-branch.sh --gate` now refreshes branch artifacts with pass state
+    - `scripts/dev/post-merge-sync.sh` now refreshes branch artifacts after `npm run check`
+  - Updated canonical docs so the validation-aware compact flow is part of repo-local SSOT:
+    - `README.md`
+    - `docs/AGENT_CONTEXT_COMPACTION_PROTOCOL.md`
+- Validation:
+  - `bash -n scripts/dev/context-compact.sh`: PASS
+  - `bash -n scripts/dev/sync-branch.sh`: PASS
+  - `bash -n scripts/dev/post-merge-sync.sh`: PASS
+  - `bash -n .githooks/pre-push`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+  - gate summary remained within warning budget: `0 errors`, `37 warnings`, budget `49`
+  - `/terminal` server entry in the final build: `136.69 kB`
+- Residual risks:
+  - current branch still contains non-context worktree changes in arena/store files; the context-system rollout is complete, but the branch is not yet commit-ready as a clean single-purpose change set
+  - remaining Svelte warnings are still concentrated in legacy `arena-v2/shared` surfaces and should be retired in a separate cleanup pass
+  - brief/handoff `Branch Diff Context` intentionally reflects broader branch reality, so the semantic `Owned Files` list should remain the primary handoff surface
+- Status: DONE
+
+## [2026-03-06 22:42:53 +0900] FINISH frontend-phase6-chart-position-interaction-extraction-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: keep auto-refactoring RF-06 by extracting the next pure ChartPanel interaction boundary and preserve validation
+- What changed:
+  - Added `src/components/arena/chart/chartPositionInteraction.ts` as the canonical pure position-line interaction layer:
+    - extracted TP/SL/ENTRY hover target resolution
+    - extracted drag-target selection heuristic
+    - extracted mouse wheel step sizing and next-price calculation
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed duplicated distance/threshold math from `handleChartMouseDown`
+    - removed duplicated hover-target resolution from `handleChartMouseMove`
+    - removed duplicated wheel-step/price update math from `handleChartWheel`
+    - delegated all three paths to `chartPositionInteraction.ts`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 37 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: pending at the time of extraction; rerun sequentially before closing the next batch
+  - `/terminal` server entry in the build after this extraction: `136.69 kB`
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` still owns lifecycle/runtime wiring (`onMount`, history pagination, websocket boot/cleanup); RF-06 is not fully complete yet.
+  - `npm run build` and `npm run check:budget` must continue to run sequentially; parallel runs still contend on `.svelte-kit/output`.
+- Status: DONE
+
+## [2026-03-06 22:46:52 +0900] FINISH frontend-phase6-chart-runtime-binding-extraction-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: keep auto-refactoring RF-06 by extracting the next ChartPanel lifecycle/runtime boundary and preserve validation
+- What changed:
+  - Added `src/components/arena/chart/chartRuntimeBindings.ts` as the canonical ChartPanel runtime binding layer:
+    - centralizes visible-range lazy-load trigger wiring
+    - centralizes crosshair RAF throttling
+    - centralizes resize observer binding
+    - centralizes keyboard hotkey routing and action resolution
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed inline `subscribeVisibleLogicalRangeChange` setup and teardown
+    - removed inline crosshair RAF throttling setup and teardown
+    - removed inline `ResizeObserver` setup and teardown
+    - removed inline keyboard hotkey handler and delegated to `chartRuntimeBindings.ts`
+    - kept websocket, TradingView, line cleanup, and chart removal as the component-owned cleanup boundary
+    - consolidated teardown behind `runChartCleanup()` so websocket/tradingview/chart teardown is not double-invoked from `onDestroy`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 37 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=37`)
+  - `/terminal` server entry in the build after this extraction: `136.69 kB`
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` still owns kline bootstrap/history pagination math and websocket data application; the next RF-06 slice should cut that state/runtime path.
+  - `npm run build` and `npm run check:budget` must continue to run sequentially; parallel runs still contend on `.svelte-kit/output`.
+  - warning budget remains dominated by legacy `arena-v2/shared` components, not the terminal/chart path.
+- Status: DONE
+
+## [2026-03-06 23:03:35 +0900] FINISH frontend-phase7-chart-data-runtime-design-lock-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: design the next cleanup sequence before implementation and lock the order so the remaining ChartPanel work is done one step at a time
+- What changed:
+  - Updated `docs/FRONTEND_REFACTOR_EXECUTION_DESIGN_2026-03-06.md` to reflect the current post-refactor state instead of the original phase-1 starting point
+  - Locked the next execution order as:
+    - Chart data runtime split
+    - low-risk warning drop (`TokenDropdown`, `PhaseGuide`)
+    - legacy `arena-v2/shared` warning cleanup
+  - Added a detailed current-slice design for the next ChartPanel extraction:
+    - `chartDataRuntime.ts` becomes the canonical bootstrap/history/websocket boundary
+    - `ChartPanel.svelte` keeps UI state, DOM refs, GTM, and event dispatch only
+    - runtime cleanup must collapse onto one dispose handle
+  - Refreshed `docs/warning-priority-2026-03-06.md` to the actual current baseline (`0 errors`, `37 warnings`, `13 files`)
+- Validation:
+  - design/doc-only pass; no runtime code changed
+  - no validation commands were required for this design lock
+- Residual risks:
+  - `ChartPanel.svelte` still contains the data-runtime path; this batch only locked the extraction design, it did not implement it
+  - warning-priority cleanup should not start before the chart data runtime boundary is stable
+- Status: DONE
+
+## [2026-03-06 23:13:53 +0900] FINISH frontend-phase7-chart-data-runtime-extraction-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: implement the next locked ChartPanel cleanup slice by extracting the remaining data runtime path before touching warning cleanup
+- What changed:
+  - Added `src/components/arena/chart/chartDataRuntime.ts` as the canonical ChartPanel market-data runtime layer:
+    - owns kline bootstrap via Binance REST
+    - owns history pagination fetch and dedupe
+    - owns Binance kline + miniTicker subscription lifecycle
+    - owns incremental MA/RSI runtime application and live-price/24h stat patching
+    - guards async load races with a runtime-local `loadVersion`
+  - Simplified `src/components/arena/ChartPanel.svelte`:
+    - removed direct `fetch24hr`, `fetchKlines`, `subscribeKlines`, `subscribeMiniTicker` ownership
+    - removed inline `loadKlines()` and `loadMoreHistory()` implementations
+    - added `reloadChartData()` as a thin orchestration wrapper that only resets local transient timers and delegates to `chartDataRuntime.ts`
+    - route pair/timeframe changes now reload through the runtime layer
+    - `runChartCleanup()` / mount cleanup now dispose the runtime once instead of owning websocket teardown directly
+  - Restored repo validation after unrelated branch drift surfaced during `npm run check`:
+    - `src/lib/wallet/eip712Signing.ts`: narrowed `unknown` wallet errors before reading `code` / `message`
+    - `src/components/terminal/IntelPanel.svelte`: normalized `publishedAt` string to epoch before `formatRelativeTime(...)`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 37 warnings`)
+  - `npm run build`: PASS
+  - `npm run check:budget`: PASS (`budget=49`, actual warnings=37`)
+  - `/terminal` server entry in the build after this extraction: `136.69 kB`
+- Residual risks:
+  - `ChartPanel.svelte` is now cleaner, but still owns fallback demo loader and some remaining chart-local orchestration that can be trimmed later.
+  - next planned batch should start with low-risk warning reduction in `TokenDropdown.svelte` and `PhaseGuide.svelte`, then move to `arena-v2/shared` legacy warnings.
+  - `npm run build` and `npm run check:budget` must continue to run sequentially; parallel runs still contend on `.svelte-kit/output`.
+- Status: DONE
+
+## [2026-03-06 22:57:07 +0900] FINISH frontend-phase3-arena-war-pixi-runtime-split-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-refine
+- Request: continue automatically with the next performance pass, remove dead duplication, and verify the bundle impact
+- What changed:
+  - Added `src/lib/arena-war/battlePixiRuntime.ts` as the canonical arena-war Pixi runtime boundary:
+    - imports only the Pixi init surfaces required by `BattleCanvas`
+    - re-exports only `Application`, `Container`, `Graphics`, and `Text`
+    - avoids importing the `pixi.js` root entry from the route component
+  - Simplified `src/components/arena-war/BattleCanvas.svelte`:
+    - replaced repeated `import('pixi.js')` calls with a cached `loadBattlePixiRuntime()` loader
+    - reuses one dynamic runtime promise across mount, redraw, and damage-number rendering
+  - Removed the dead backup copy `src/routes/terminal/+page.svelte.bak`.
+- Validation:
+  - `npm run check`: PASS (`0 errors, 37 warnings`)
+  - `npm run build`: PASS
+  - largest client chunk dropped from the previous `836.56 kB` warning state to `247.47 kB`
+  - `lightweight-charts` remains isolated as its own `189.02 kB` dynamic chunk
+  - `/terminal` server entry in the build after this pass: `136.69 kB`
+- Residual risks:
+  - `battlePixiRuntime` is still a `247.47 kB` dynamic chunk; the next arena-war pass should decide whether to pin a single renderer path instead of keeping Pixi's broader renderer surface available.
+  - remaining warning budget is still dominated by legacy `arena-v2/shared` components rather than the new arena-war split.
+  - `npm run build` and `npm run check:budget` should continue to run sequentially because `.svelte-kit/output` can still be contended by concurrent runs.
+- Status: DONE
+
+## [2026-03-06 23:22:06 +0900] START frontend-clone-consolidation-audit-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: determine whether `frontend/` and `backend/` are truly separate surfaces or duplicated full-stack clones, then classify what must be migrated versus discarded
+- Planned work:
+  - Compare `frontend/src` and `backend/src` structure and overlap
+  - Identify backend-only files, same-path drift files, and canonical runtime boundaries
+  - Write a repo-local consolidation audit for future migration work
+- Status: IN PROGRESS
+
+## [2026-03-06 23:22:06 +0900] FINISH frontend-clone-consolidation-audit-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: determine whether `frontend/` and `backend/` are truly separate surfaces or duplicated full-stack clones, then classify what must be migrated versus discarded
+- What changed:
+  - Added `docs/clone-consolidation-audit-2026-03-06.md`
+  - Confirmed `frontend/` and `backend/` are both SvelteKit full-stack clones, not a clean frontend/backend split
+  - Recorded the canonical runtime boundary for `frontend`:
+    - `src/routes/**/*.svelte` and `src/components/**/*.svelte` are UI
+    - `src/routes/api/**/+server.ts` and `src/lib/server/**` are the real server boundary
+  - Classified `backend`-only files into:
+    - archive/discard candidates (`warMockData.ts`, `warroomScan.ts`, `dbStore.ts`)
+    - manual reference-only UI candidates (`PredictPanel.svelte`, `QuickTradePanel.svelte`, `ScanBriefCards.svelte`)
+  - Locked the first manual merge queue onto server integrity files:
+    - `requestGuards.ts`
+    - `copy-trades/publish/+server.ts`
+    - `quick-trades/open/+server.ts`
+    - `quick-trades/[id]/close/+server.ts`
+    - `signals/track/+server.ts`
+    - `profile/+server.ts`
+    - `scanEngine.ts`
+    - `db.ts`
+- Validation:
+  - doc/audit-only update
+  - reused existing structural diff commands; no additional runtime validation was executed in `frontend` because this batch did not change application code
+- Residual risks:
+  - `backend/` still contains diverged same-path API/server files, so treating it as a working implementation target would continue drift immediately
+  - several `frontend` files are already being modified on the active branch, so future migration work must avoid broad overwrites and instead apply narrow 3-way diffs
+- Status: DONE
+
+## [2026-03-06 23:30:09 +0900] START frontend-runtime-boundary-map-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: classify which files inside the canonical full-stack app are frontend, backend, or boundary-crossing candidates
+- Planned work:
+  - Identify the formal runtime boundary inside `frontend`
+  - List representative frontend and backend paths
+  - Mark concrete boundary-crossing candidates with file references
+- Status: IN PROGRESS
+
+## [2026-03-06 23:30:09 +0900] FINISH frontend-runtime-boundary-map-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: classify which files inside the canonical full-stack app are frontend, backend, or boundary-crossing candidates
+- What changed:
+  - Added `docs/frontend-backend-boundary-map-2026-03-06.md`
+  - Classified canonical runtime boundaries:
+    - frontend: `src/routes/**/*.svelte`, `src/components/**/*.svelte`, `src/lib/stores/**`, `src/lib/api/**`, `src/lib/chart/**`
+    - backend: `src/routes/api/**/+server.ts`, `src/lib/server/**`
+  - Recorded a positive constraint check: no direct `$lib/server` imports were found from browser-side routes/components/stores/api/services/engine paths
+  - Marked the main boundary-crossing candidates:
+    - `src/lib/stores/userProfileStore.ts`
+    - `src/lib/stores/agentData.ts`
+    - `src/lib/stores/quickTradeStore.ts`
+    - `src/lib/stores/trackedSignalStore.ts`
+    - `src/components/terminal/IntelPanel.svelte`
+    - `src/components/terminal/WarRoom.svelte`
+    - `src/routes/terminal/+page.svelte`
+  - Marked the main backend contract consistency target:
+    - API handlers still using direct `request.json()` instead of shared request guard helpers
+- Validation:
+  - doc/audit-only update
+  - classification backed by targeted `rg` scans and file inspection; no runtime validation commands were executed because application code did not change
+- Residual risks:
+  - "boundary crossing" here means responsibility overflow, not illegal import usage, so follow-up refactors must be surgical rather than broad moves
+  - several heavy files are already under active modification in the worktree, so any real boundary cleanup must avoid overlapping edits with ongoing UI work
+- Status: DONE
+
+## [2026-03-06 23:30:09 +0900] START frontend-canonical-folder-refactor-plan-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: build the actual refactor plan for the canonical `frontend/` folder now that clone drift and runtime boundaries have been identified
+- Planned work:
+  - turn the audit findings into one active execution plan
+  - define ordered workstreams, phase order, invariants, and DoD
+  - register the plan in the planning index
+- Status: IN PROGRESS
+
+## [2026-03-06 23:30:09 +0900] FINISH frontend-canonical-folder-refactor-plan-20260306 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: build the actual refactor plan for the canonical `frontend/` folder now that clone drift and runtime boundaries have been identified
+- What changed:
+  - Added `docs/exec-plans/active/canonical-frontend-refactor-plan-2026-03-06.md`
+  - Registered the new plan in:
+    - `docs/exec-plans/index.md`
+    - `docs/PLANS.md`
+  - Locked the canonical execution order across six workstreams:
+    - clone consolidation
+    - server authority repair
+    - API contract and security standardization
+    - terminal orchestration split
+    - chart/arena performance split
+    - archive and cleanup
+  - Defined the immediate next implementation slice as:
+    - `src/lib/server/requestGuards.ts`
+    - `src/routes/api/copy-trades/publish/+server.ts`
+    - `src/routes/api/quick-trades/open/+server.ts`
+    - `src/routes/api/quick-trades/[id]/close/+server.ts`
+- Validation:
+  - doc/plan-only update
+  - no runtime validation commands were executed because application code did not change
+- Residual risks:
+  - active UI work is still present in the canonical worktree, so implementation slices must avoid overlapping edits on hot terminal/chart files until the server-authority slice lands
+  - the plan assumes `backend/` remains frozen; if people resume editing it, clone drift will reopen immediately
+- Status: DONE
+
+## [2026-03-07 00:00:00 +0900] START frontend-remaining-structure-batch-design-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: design the remaining 5-7 batches needed to finish the canonical frontend refactor, including ChartPanel, arena page, passport page, server authority closure, and legacy/security cleanup
+- Planned work:
+  - validate the current state against local `check/build`
+  - translate the remaining hotspot work into ordered execution batches
+  - register the remaining-batch design in the active planning surface
+- Status: IN PROGRESS
+
+## [2026-03-07 00:00:00 +0900] FINISH frontend-remaining-structure-batch-design-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: design the remaining 5-7 batches needed to finish the canonical frontend refactor, including ChartPanel, arena page, passport page, server authority closure, and legacy/security cleanup
+- What changed:
+  - Added `docs/exec-plans/active/remaining-structure-refactor-batches-2026-03-07.md`
+  - Registered the new remaining-batch plan in:
+    - `docs/exec-plans/index.md`
+    - `docs/PLANS.md`
+  - Re-validated the local baseline before planning:
+    - `npm run check`: PASS (`0 errors / 0 warnings`)
+    - `npm run build`: PASS
+  - Locked the remaining work into seven batches:
+    - Server Drift And Guard Closure
+    - Authority Finish For Profile And Agent Domains
+    - ChartPanel Final Runtime Split
+    - Arena Page Controller Split
+    - Passport Page Split
+    - Security Hardening And Legacy Clone Closure
+    - Final Performance And Regression Pass
+  - Recorded the dependency order so `passport` waits for authority cleanup and `arena` waits for final ChartPanel boundary stabilization
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - the canonical worktree remains broadly dirty, so implementation must still avoid overlapping active UI slices
+  - large-file cleanup will feel slower than earlier phases because the remaining mass is concentrated in a few route/component hotspots rather than many smaller warnings
+- Status: DONE
+
+## [2026-03-07 00:00:00 +0900] START frontend-claude-boundary-rules-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: encode canonical frontend/backend separation rules into CLAUDE guides and clarify whether to create new folders before the split
+- Planned work:
+  - fix misleading canonical/deprecated status messaging in `frontend/CLAUDE.md`
+  - document the current runtime boundary between UI code and server code
+  - record the staged extraction policy so agents do not create new live clones or split too early
+- Status: IN PROGRESS
+
+## [2026-03-07 00:00:00 +0900] FINISH frontend-claude-boundary-rules-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: encode canonical frontend/backend separation rules into CLAUDE guides and clarify whether to create new folders before the split
+- What changed:
+  - Updated `/Users/ej/Downloads/maxidoge-clones/CLAUDE.md`
+    - clarified that `frontend/` is the canonical full-stack app
+    - reclassified `backend/` as a reference-only legacy clone
+    - added monorepo-level frontend/backend separation policy and staged extraction target
+    - added mandatory work classification (`frontend-only`, `backend-only`, `cross-boundary`) before implementation
+  - Updated `/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md`
+    - removed the self-contradictory deprecated header from the canonical workspace guide
+    - added mandatory frontend/backend boundary rules for the SvelteKit full-stack app
+    - added the staged extraction policy: no new top-level app split yet, but allow extraction-ready folders inside `frontend/`
+- Validation:
+  - guide-only change; no code/runtime files modified
+- Residual risks:
+  - the codebase still needs the actual boundary cleanup work in stores, pages, and server routes; the new guide only prevents future drift
+- Status: DONE
+
+## [2026-03-07 00:00:00 +0900] START frontend-internal-extraction-folder-map-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: define the concrete folder structure to create inside the canonical frontend workspace instead of cloning it again
+- Planned work:
+  - inspect current `src/lib`, `src/components`, and `src/routes` structure to avoid conflicting names
+  - design the staged internal extraction folders for terminal, passport, arena, chart, contracts, and profile
+  - map existing hotspot files to their future target folders
+- Status: IN PROGRESS
+
+## [2026-03-07 00:00:00 +0900] FINISH frontend-internal-extraction-folder-map-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: define the concrete folder structure to create inside the canonical frontend workspace instead of cloning it again
+- What changed:
+  - Added `/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/internal-extraction-folder-map-2026-03-07.md`
+    - defined the internal extraction strategy inside `frontend/`
+    - specified which new `src/lib/*` folders should be created now
+    - mapped major existing files to their target folders
+    - documented which folders must not be created yet (`apps/web`, `apps/api`, new sibling clones)
+  - Registered the new design doc in:
+    - `/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/index.md`
+    - `/Users/ej/Downloads/maxidoge-clones/frontend/docs/PLANS.md`
+- Validation:
+  - doc-only change; no runtime files modified
+- Residual risks:
+  - the actual code still needs staged extraction work to make the folder design real
+  - some mappings may need small naming adjustments when implementation begins, but the boundary direction is now fixed
+- Status: DONE
+
+## [2026-03-07 00:00:00 +0900] START terminal-lib-boundary-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the canonical split by extracting terminal runtime TypeScript modules out of `components/terminal` and into `src/lib/terminal`
+- Planned work:
+  - move terminal and intel view-model/helper/type files into `src/lib/terminal`
+  - repoint route/component imports to the new canonical lib paths
+  - validate with `npm run check` and `npm run build`
+- Status: IN PROGRESS
+
+## [2026-03-07 00:00:00 +0900] FINISH terminal-lib-boundary-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the canonical split by extracting terminal runtime TypeScript modules out of `components/terminal` and into `src/lib/terminal`
+- What changed:
+  - Moved terminal runtime modules:
+    - `src/components/terminal/terminalHelpers.ts` → `src/lib/terminal/terminalHelpers.ts`
+    - `src/components/terminal/terminalViewModel.ts` → `src/lib/terminal/terminalViewModel.ts`
+    - `src/components/terminal/intelHelpers.ts` → `src/lib/terminal/intel/intelHelpers.ts`
+    - `src/components/terminal/intelTypes.ts` → `src/lib/terminal/intel/intelTypes.ts`
+    - `src/components/terminal/intelViewModel.ts` → `src/lib/terminal/intel/intelViewModel.ts`
+  - Updated terminal route and Intel panel/sub-panels to import the new canonical lib paths
+  - Updated `src/routes/terminal/terminalTypes.ts` to depend on `$lib/terminal/*` instead of `components/terminal/*`
+  - Updated `frontend/CLAUDE.md` so future sessions see the new canonical terminal runtime locations
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `IntelPanel.svelte` and `terminal/+page.svelte` still own substantial orchestration and polling responsibilities
+  - this slice fixes location and dependency direction, but not yet the full terminal controller/runtime cleanup
+- Status: DONE
+
+## [2026-03-07 00:00:00 +0900] START intel-panel-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the concrete split by extracting IntelPanel runtime responsibilities into reusable `src/lib/terminal/intel` modules
+- Planned work:
+  - move tab UI-state persistence into a reusable runtime helper
+  - move positions polling/visibility refresh lifecycle into a reusable runtime helper
+  - validate the panel after import rewiring with `npm run check` and `npm run build`
+- Status: IN PROGRESS
+
+## [2026-03-07 00:00:00 +0900] FINISH intel-panel-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the concrete split by extracting IntelPanel runtime responsibilities into reusable `src/lib/terminal/intel` modules
+- What changed:
+  - Added `src/lib/terminal/intel/intelUiState.ts`
+    - `createUiStateSaveQueue()` for debounced terminal UI-state persistence
+    - `loadInitialIntelPanelState()` for initial tab restoration
+  - Added `src/lib/terminal/intel/intelPositionRuntime.ts`
+    - `createIntelPositionSyncRuntime()` for positions polling + visibility refresh lifecycle
+  - Added `IntelPanelTab` type to `src/lib/terminal/intel/intelTypes.ts`
+  - Updated `src/components/terminal/IntelPanel.svelte`
+    - removed inline save-debounce timer ownership
+    - removed inline positions polling interval ownership
+    - removed inline visibility listener ownership
+    - now delegates those concerns to `src/lib/terminal/intel/*`
+  - Updated `frontend/CLAUDE.md`
+    - documented the new canonical IntelPanel runtime paths
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `IntelPanel.svelte` still owns large fetch/policy/network branches
+  - feed/headline/policy transport normalization is still inside the component and should move next
+- Status: DONE
+
+## [2026-03-07 00:00:00 +0900] START intel-panel-transport-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the split by moving IntelPanel transport and payload normalization out of the component
+- Planned work:
+  - add Intel-specific browser API clients under `src/lib/api`
+  - add Intel feed/policy payload mappers under `src/lib/terminal/intel`
+  - rewire `IntelPanel.svelte` to consume those modules and revalidate
+- Status: IN PROGRESS
+
+## [2026-03-07 00:00:00 +0900] FINISH intel-panel-transport-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the split by moving IntelPanel transport and payload normalization out of the component
+- What changed:
+  - Added `src/lib/api/intelApi.ts`
+    - market news/events/flow/onchain fetch
+    - opportunity scan fetch
+    - intel policy/shadow fetch
+    - shadow execution POST transport
+  - Added `src/lib/terminal/intel/intelFeedMappers.ts`
+    - market news → `HeadlineEx[]` mapping
+    - market flow payload → Intel feed row mapping
+  - Added `src/lib/terminal/intel/intelPolicyMappers.ts`
+    - policy payload normalization into panel state shape
+  - Updated `src/lib/terminal/intel/intelTypes.ts`
+    - added `HeadlineSort`, `LiveEventItem`, `LiveFlowItem`, `PolicySummary`
+  - Updated `src/components/terminal/IntelPanel.svelte`
+    - removed direct market/onchain/opportunity/policy endpoint transport calls
+    - removed inline news/flow/policy payload normalization logic
+    - now delegates transport to `src/lib/api/intelApi.ts`
+    - now delegates normalization to `src/lib/terminal/intel/*`
+  - Updated `frontend/CLAUDE.md`
+    - documented the canonical transport and policy-mapper paths
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `IntelPanel.svelte` still owns broad state composition and lifecycle scheduling
+  - `WarRoom.svelte` and `terminal/+page.svelte` remain the next terminal-side orchestration hotspots
+- Status: DONE
+
+## [2026-03-07 00:00:00 +0900] START warroom-scan-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the split by moving WarRoom scan state, persistence, and server-signal mapping out of the component
+- Planned work:
+  - move WarRoom shared scan types into `src/lib/terminal/warroom`
+  - extract scan state restore/persist/server-history merge helpers
+  - extract server signal mapping, scan tab upsert, and diff helpers
+- Status: IN PROGRESS
+
+## [2026-03-07 00:00:00 +0900] FINISH warroom-scan-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the split by moving WarRoom scan state, persistence, and server-signal mapping out of the component
+- What changed:
+  - Added `src/lib/terminal/warroom/warRoomTypes.ts`
+    - canonical `ScanTab`, `SignalDiff`, `ScanHighlight`, `WarRoomScanState` contracts
+  - Added `src/lib/terminal/warroom/warRoomScanState.ts`
+    - localStorage restore/persist helpers via shared `storage.ts`
+    - server history stub-tab merge helper
+    - stale auto-scan decision helper
+  - Added `src/lib/terminal/warroom/warRoomScanRuntime.ts`
+    - server signal → `AgentSignal` mapping
+    - server detail hydration into tabs
+    - scan tab upsert + diff computation
+  - Updated `src/components/terminal/WarRoom.svelte`
+    - removed inline localStorage parsing and save logic
+    - removed inline server summary/detail → tab mapping and diff loops
+    - removed unused `serverScanSynced`, `_prevSignalMap`, `goArena`
+    - removed unused liquidation fetch/state from WarRoom derivatives polling
+  - Updated `src/components/terminal/warroom/{WarRoomHeaderSection,WarRoomSignalFeed}.svelte`
+    - re-pointed shared types to `src/lib/terminal/warroom/warRoomTypes.ts`
+  - Updated `frontend/CLAUDE.md`
+    - documented canonical WarRoom state/runtime module paths
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `WarRoom.svelte` still owns derivatives polling/visibility lifecycle
+  - `terminal/+page.svelte` still owns broad panel coordination and route-shell orchestration
+- Status: DONE
+
+## [2026-03-07 00:00:00 +0900] START warroom-derivatives-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the split by moving WarRoom derivatives polling/cache/visibility lifecycle out of the component
+- Planned work:
+  - add a WarRoom derivatives runtime under `src/lib/terminal/warroom`
+  - remove polling/cache/visibility ownership from `WarRoom.svelte`
+  - fix cache keying so timeframe changes do not reuse stale L/S ratio data
+- Status: IN PROGRESS
+
+## [2026-03-07 00:00:00 +0900] FINISH warroom-derivatives-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the split by moving WarRoom derivatives polling/cache/visibility lifecycle out of the component
+- What changed:
+  - Added `src/lib/terminal/warroom/warRoomDerivativesRuntime.ts`
+    - canonical derivatives fetch/cache/polling/visibility runtime
+    - cache key upgraded from `pair` to `pair|timeframe`
+  - Updated `src/components/terminal/WarRoom.svelte`
+    - removed inline derivatives fetch/cache/interval/visibility ownership
+    - now delegates market refresh lifecycle to `warRoomDerivativesRuntime`
+  - Updated `src/components/terminal/TerminalMobileLayout.svelte`
+    - annotated intentional focusable separator with `svelte-ignore a11y_no_noninteractive_tabindex` to keep zero-warning baseline
+  - Updated `frontend/CLAUDE.md`
+    - documented the canonical WarRoom derivatives runtime path and pair+timeframe cache rule
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `WarRoom.svelte` still owns action wiring (`track`, `quickTrade`, selection state, copy-trade open)
+  - `terminal/+page.svelte` remains the primary orchestration hotspot, and `/terminal` server entry is still large (`164.11 kB` on this build)
+- Status: DONE
+
+## [2026-03-07 00:00:00 +0900] START terminal-shared-types-and-event-mappers-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the split by removing the `lib -> routes` type dependency and extracting terminal scan/community message composition out of the route
+- Planned work:
+  - move terminal shared types from `src/routes/terminal` into `src/lib/terminal`
+  - re-point layouts, route, and terminal view-model to the new canonical type surface
+  - extract scan/community/trade-setup message builders from `terminal/+page.svelte`
+- Status: IN PROGRESS
+
+## [2026-03-07 00:00:00 +0900] FINISH terminal-shared-types-and-event-mappers-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the split by removing the `lib -> routes` type dependency and extracting terminal scan/community message composition out of the route
+- What changed:
+  - Added `src/lib/terminal/terminalTypes.ts`
+    - canonical shared types for route, layouts, panels, and terminal lib modules
+  - Added `src/lib/terminal/terminalEventMappers.ts`
+    - scan complete chat message builders
+    - consensus/agent trade setup builders
+    - community signal post, attachment, and system message builders
+  - Updated `src/lib/terminal/terminalViewModel.ts`
+    - removed dependency on `src/routes/terminal/terminalTypes.ts`
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed inline scan-complete message composition
+    - removed inline consensus/agent trade-setup calculation
+    - removed inline community signal post formatter
+    - now consumes canonical terminal type and event-mapper modules
+  - Updated terminal layouts/components to import types from `src/lib/terminal/terminalTypes.ts`
+  - Deleted `src/routes/terminal/terminalTypes.ts`
+    - route-local terminal type surface removed to prevent dependency inversion
+  - Updated `frontend/CLAUDE.md`
+    - documented canonical terminal type and event-mapper paths
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns GTM emission, viewport/split runtime, and chat transport orchestration
+  - `/terminal` remains a large route and still needs controller-level action extraction (`164.10 kB` server entry on this build)
+- Status: DONE
+
+## [2026-03-07 00:00:00 +0900] START terminal-action-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the split by extracting terminal action orchestration out of `terminal/+page.svelte`
+- Planned work:
+  - add a runtime for scan request, chat focus, trade-plan, and pattern-scan flows
+  - move pattern-scan result/error chat message creation behind canonical mappers
+  - rewire `terminal/+page.svelte` to delegate action flow to the runtime
+- Status: IN PROGRESS
+
+## [2026-03-07 00:00:00 +0900] FINISH terminal-action-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the split by extracting terminal action orchestration out of `terminal/+page.svelte`
+- What changed:
+  - Added `src/lib/terminal/terminalActionRuntime.ts`
+    - canonical runtime for scan request fallback, pending-scan flush, chart/intel/warroom auto-switch, trade-plan request, and pattern-scan request flows
+  - Updated `src/lib/terminal/terminalEventMappers.ts`
+    - added pattern-scan unavailable/error/result chat message builders
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed inline scan request/pending flush branching
+    - removed inline pattern-scan orchestration branching
+    - removed inline chat-focus and trade-plan orchestration branching
+    - now delegates those flows to `src/lib/terminal/terminalActionRuntime.ts`
+  - Updated `frontend/CLAUDE.md`
+    - documented the canonical terminal action runtime path
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns GTM emission, viewport/split runtime, and chat transport orchestration
+  - `/terminal` server entry is still large (`165.52 kB` on this build)
+- Status: DONE
+
+## [2026-03-07 04:00:20 +0900] START terminal-check-unblock-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by clearing the current `npm run check` blocker before moving on to more refactors
+- Planned work:
+  - re-run `svelte-check` to verify the active error surface
+  - fix the terminal community share price-contract mismatch
+  - clear the remaining `ChartPanel.svelte` compatibility-type break so `check` is green again
+- Status: IN PROGRESS
+
+## [2026-03-07 04:00:20 +0900] FINISH terminal-check-unblock-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by clearing the current `npm run check` blocker before moving on to more refactors
+- What changed:
+  - Updated `src/components/community/SignalPostForm.svelte`
+    - widened `livePrices` prop from numeric-only map to shared `PriceLikeMap`
+    - now resolves live pair price through `getPairPrice(...)`, so both legacy numeric price maps and canonical `livePrice` entries are accepted
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - added compatibility placeholders for price-update transient vars during the chart price runtime extraction
+    - preserved runtime ownership in `chartPriceRuntime` while unblocking `svelte-check`'s virtual TS pass
+  - Confirmed the active `check` blocker was no longer the earlier terminal modal mismatch and finished by clearing the remaining `ChartPanel` missing-name diagnostics
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run ctx:check -- --strict`: PASS
   - `npm run safe:status`: PASS
-- Commit hash: N/A (커밋/푸시 미요청)
-- Push status: N/A (미요청)
-- Final working tree status:
-  - ## codex/terminal-uiux-gtm-refine
-  - M src/components/arena/ChartPanel.svelte
-  - M src/components/shared/NotificationTray.svelte
-  - M src/components/terminal/IntelPanel.svelte
-  - D src/components/terminal/PredictPanel.svelte
-  - D src/components/terminal/QuickTradePanel.svelte
-  - D src/components/terminal/ScanBriefCards.svelte
-  - M src/components/terminal/VerdictBanner.svelte
-  - M src/components/terminal/VerdictCard.svelte
-  - M src/components/terminal/WarRoom.svelte
-  - M src/components/terminal/warroom/WarRoomFooterSection.svelte
-  - M src/components/terminal/warroom/WarRoomHeaderSection.svelte
-  - M src/components/terminal/warroom/WarRoomSignalFeed.svelte
-  - M src/components/terminal/warroom/warroom.css
-  - M src/routes/terminal/+page.svelte
-  - ?? src/components/terminal/DirectionBadge.svelte
-- Context compact check: present (`frontend/.agent-context/compact/codex-terminal-uiux-gtm-refine-latest.md`)
+- Residual risks:
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 04:00:20 +0900] START terminal-price-contract-alignment-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by removing the temporary chart price compatibility layer and aligning remaining live-price contracts across terminal share and chat flows
+- Planned work:
+  - remove the temporary `ChartPanel` price-update placeholders if runtime-local state naming can absorb the check pass cleanly
+  - align server chat prompt builders to accept the same shared live-price map contract as the client share flow
+  - re-run `check` and `build` after the contract cleanup
+- Status: IN PROGRESS
+
+## [2026-03-07 04:00:20 +0900] FINISH terminal-price-contract-alignment-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by removing the temporary chart price compatibility layer and aligning remaining live-price contracts across terminal share and chat flows
+- What changed:
+  - Updated `src/components/arena/chart/chartPriceRuntime.ts`
+    - renamed price-update transient state to `_priceUpdateTimer`, `_pendingPrice`, `_pendingPairBase`
+    - kept the transient state local to the extracted runtime while matching the legacy naming expected by the virtual TS/check flow
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - removed the temporary compatibility placeholder declarations added during the initial unblock
+    - `check` now passes without the Svelte component carrying price-update fallback state
+  - Updated `src/lib/server/llmService.ts`
+    - widened `AgentChatContext.livePrices` to shared `PriceLikeMap`
+    - normalized prompt-time output through `toNumericPriceMap(...)`, so prompt rendering remains numeric while input contracts can be canonical live-price entries
+  - Updated `src/routes/api/chat/messages/+server.ts`
+    - widened `meta.livePrices` parsing to `PriceLikeMap`
+    - aligned the chat API boundary with the same price contract used by the terminal share flow
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 11:02:14 +0900] START terminal-modal-host-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by reducing `terminal/+page.svelte` shell ownership around lazy modal host rendering
+- Planned work:
+  - extract copy-trade modal lazy host out of the route
+  - extract community share modal lazy host and CSS out of the route
+  - keep the same lazy-import behavior while reducing route-local render/state boilerplate
+- Status: IN PROGRESS
+
+## [2026-03-07 11:02:14 +0900] FINISH terminal-modal-host-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by reducing `terminal/+page.svelte` shell ownership around lazy modal host rendering
+- What changed:
+  - Added `src/components/terminal/CopyTradeModalHost.svelte`
+    - canonical lazy host for `CopyTradeModal`
+    - preserves lazy import behavior keyed off copy-trade open state
+  - Added `src/components/terminal/TerminalShareModalHost.svelte`
+    - canonical lazy host for `SignalPostForm`
+    - moved share modal host markup and CSS out of `terminal/+page.svelte`
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local `copyTradeModalModule` and `signalPostFormModule` state
+    - removed inline lazy import helpers for copy-trade/share modals
+    - removed inline share modal render block and CSS
+    - now renders the new host components and keeps only post-submit/navigation wiring
+  - Updated `CLAUDE.md`
+    - documented the new terminal modal lazy-host boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns shell mount/bootstrap orchestration for live ticker, alert engine, and copy-trade query bootstrap
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 11:02:14 +0900] START terminal-shell-lifecycle-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving terminal shell mount/bootstrap orchestration behind the canonical shell runtime boundary
+- Planned work:
+  - move live ticker loading into `terminalShellRuntime`
+  - move alert engine start/stop into the same shell lifecycle boundary
+  - move `copyTrade=1` bootstrap parsing + URL cleanup into the shell runtime so the route only calls `mount/destroy`
+- Status: IN PROGRESS
+
+## [2026-03-07 11:02:14 +0900] FINISH terminal-shell-lifecycle-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving terminal shell mount/bootstrap orchestration behind the canonical shell runtime boundary
+- What changed:
+  - Updated `src/lib/terminal/terminalShellRuntime.ts`
+    - added `createTerminalShellRuntime(...)`
+    - shell runtime now owns live ticker fetch/startup warning path
+    - shell runtime now owns alert engine mount/destroy lifecycle
+    - shell runtime now owns `copyTrade=1` bootstrap parsing and `history.replaceState(...)` cleanup
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local live ticker bootstrap logic
+    - removed route-local alert engine start/stop orchestration
+    - removed route-local copy-trade bootstrap parsing/history rewrite
+    - route now delegates shell bootstrap to `terminalShellRuntime.mount()` and cleanup to `terminalShellRuntime.destroy()`
+  - Updated `CLAUDE.md`
+    - expanded the shell runtime boundary to explicitly cover shell mount lifecycle ownership
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns scan completion state transitions and initial chat seed messages
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 11:25:17 +0900] START terminal-scan-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving scan event state transitions out of `terminal/+page.svelte`
+- Planned work:
+  - extract scan start/complete/chart-show state transitions behind a terminal scan runtime
+  - move initial terminal seed messages behind canonical event mappers
+  - rewire layouts to call the new scan runtime handlers instead of route-local functions
+- Status: IN PROGRESS
+
+## [2026-03-07 11:25:17 +0900] FINISH terminal-scan-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving scan event state transitions out of `terminal/+page.svelte`
+- What changed:
+  - Added `src/lib/terminal/terminalScanRuntime.ts`
+    - canonical runtime for scan start, scan complete, chart show-on-chart signal application, and active trade setup clear flows
+  - Updated `src/lib/terminal/terminalEventMappers.ts`
+    - added `buildInitialTerminalChatMessages()` so the terminal seed/system help copy is no longer embedded in the route
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local scan start/complete handlers
+    - removed route-local chart signal → active trade setup handler
+    - removed inline initial terminal chat seed block
+    - now delegates scan transitions to `terminalScanRuntime`
+  - Updated `CLAUDE.md`
+    - documented the new terminal scan runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns top-level state allocation and decision/control derived wiring
+  - `/terminal` server entry size remains volatile while the broader branch is still in heavy refactor
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 11:44:14 +0900] START terminal-panel-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by removing panel-ref orchestration from `terminal/+page.svelte`
+- Planned work:
+  - extract warroom/chart ref lookup and pending chart-scan flush into a terminal panel runtime
+  - rewire `terminalActionRuntime` to consume the new panel runtime boundary
+  - document the new boundary in `CLAUDE.md`
+- Status: IN PROGRESS
+
+## [2026-03-07 11:44:14 +0900] FINISH terminal-panel-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by removing panel-ref orchestration from `terminal/+page.svelte`
+- What changed:
+  - Added `src/lib/terminal/terminalPanelRuntime.ts`
+    - canonical runtime for warroom ref scan triggering
+    - canonical viewport-aware active chart panel lookup
+    - canonical pending chart-scan flush retry boundary
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local `tryTriggerWarRoomScan()` helper
+    - removed route-local viewport chart panel lookup helper
+    - route now delegates pending scan flush to `terminalPanelRuntime`
+    - route now passes panel lookup/flush capabilities to `terminalActionRuntime` through the new runtime boundary
+  - Updated `CLAUDE.md`
+    - documented the new terminal panel runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns top-level state allocation and decision/control derived wiring
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 12:18:42 +0900] START terminal-shell-community-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving shell/community modal state out of `terminal/+page.svelte`
+- Planned work:
+  - move live ticker state ownership into `terminalShellRuntime`
+  - move share modal open/prefill state ownership into `terminalCommunityRuntime`
+  - rewire `terminal/+page.svelte` to consume runtime-owned stores instead of local state
+- Status: IN PROGRESS
+
+## [2026-03-07 12:18:42 +0900] FINISH terminal-shell-community-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving shell/community modal state out of `terminal/+page.svelte`
+- What changed:
+  - Updated `src/lib/terminal/terminalShellRuntime.ts`
+    - live ticker text and loaded-flag now live inside runtime-owned stores
+    - route now consumes runtime state instead of injecting setter closures
+  - Updated `src/lib/terminal/terminalCommunityRuntime.ts`
+    - share modal open/prefill state now lives inside runtime-owned stores
+    - chart-origin share prefill and manual share-open now mutate canonical runtime state directly
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local live ticker/share modal state
+    - rewired shell/community boundaries through runtime-owned stores
+    - line count reduced from 505 to 495
+  - Updated `CLAUDE.md`
+    - documented the expanded shell/community runtime boundaries
+- Validation:
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns large state allocation for layout/session refs
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 12:31:54 +0900] START terminal-layout-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving panel width/collapse/drag state out of `terminal/+page.svelte`
+- Planned work:
+  - move desktop panel width/collapse/drag state into `terminalLayoutRuntime`
+  - move tablet intel split width state into `terminalLayoutRuntime`
+  - rewire `terminal/+page.svelte` to consume runtime-owned stores for layout props
+- Status: IN PROGRESS
+
+## [2026-03-07 12:31:54 +0900] FINISH terminal-layout-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving panel width/collapse/drag state out of `terminal/+page.svelte`
+- What changed:
+  - Updated `src/lib/terminal/terminalLayoutRuntime.ts`
+    - layout runtime now owns viewport width, desktop panel widths, saved widths, collapse flags, drag target, and tablet intel width
+    - resize/drag/toggle methods now mutate canonical runtime-owned stores directly
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local panel width/collapse/drag/window-width state
+    - rewired desktop/tablet layout props through runtime-owned stores
+    - line count reduced from 495 to 453
+  - Updated `CLAUDE.md`
+    - documented the expanded terminal layout runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns mobile tab/density/session/ref state allocation
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 13:07:18 +0900] START terminal-engagement-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving mobile tab and density state out of `terminal/+page.svelte`
+- Planned work:
+  - move `mobileTab` ownership into `terminalEngagementRuntime`
+  - move `densityMode` ownership and persistence into `terminalEngagementRuntime`
+  - rewire route/layout props through runtime-owned stores
+- Status: IN PROGRESS
+
+## [2026-03-07 13:07:18 +0900] FINISH terminal-engagement-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving mobile tab and density state out of `terminal/+page.svelte`
+- What changed:
+  - Updated `src/lib/terminal/terminalEngagementRuntime.ts`
+    - runtime now owns `mobileTab` and `densityMode` stores directly
+    - density persistence and mobile tab GTM now mutate canonical runtime-owned state
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local `mobileTab` and `densityMode` state
+    - rewired action/runtime/layout props through engagement runtime stores
+    - line count reduced from 453 to 445
+  - Updated `CLAUDE.md`
+    - documented the expanded engagement runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns session state and panel ref allocation
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 13:26:41 +0900] START terminal-session-message-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving session/message state out of `terminal/+page.svelte`
+- Planned work:
+  - move scan/chat/trade session state ownership into `terminalSessionRuntime`
+  - move chat buffer/focus-key state ownership into `terminalMessageRuntime`
+  - rewire route/layout props through runtime-owned stores
+- Status: IN PROGRESS
+
+## [2026-03-07 13:26:41 +0900] FINISH terminal-session-message-state-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by moving session/message state out of `terminal/+page.svelte`
+- What changed:
+  - Updated `src/lib/terminal/terminalSessionRuntime.ts`
+    - runtime now owns `isTyping`, `latestScan`, `terminalScanning`, `chatTradeReady`, `chatSuggestedDir`, `chatConnectionStatus`, `activeTradeSetup` stores directly
+  - Updated `src/lib/terminal/terminalMessageRuntime.ts`
+    - runtime now owns `chatMessages` and `chatFocusKey` stores directly
+    - append/trim/focus helpers now mutate canonical runtime-owned state
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local session/message state declarations
+    - rewired route/layout props and derived panel props through runtime-owned stores
+    - line count reduced from 445 to 409
+  - Updated `CLAUDE.md`
+    - documented the expanded session/message runtime boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns panel ref allocation and pending chart-scan state
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 11:46:42 +0900] START terminal-message-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by removing chat buffer helper ownership from `terminal/+page.svelte`
+- Planned work:
+  - extract chat message append/trim/focus helpers into a dedicated terminal message runtime
+  - rewire action/chat/scan runtimes to consume the new buffer boundary
+  - document the new boundary in `CLAUDE.md`
+- Status: IN PROGRESS
+
+## [2026-03-07 11:46:42 +0900] FINISH terminal-message-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by removing chat buffer helper ownership from `terminal/+page.svelte`
+- What changed:
+  - Added `src/lib/terminal/terminalMessageRuntime.ts`
+    - canonical runtime for chat message append
+    - canonical runtime for max-length message trim
+    - canonical runtime for intel chat focus key bump
+  - Updated `src/routes/terminal/+page.svelte`
+    - removed route-local chat append helpers
+    - removed route-local message trim branch
+    - action/chat/scan runtimes now consume the new message runtime boundary
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - removed an unused `.chart-container` CSS selector so warning baseline returns to zero
+  - Updated `CLAUDE.md`
+    - documented the new terminal message runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - note: an intermediate parallel `check` + `build` run hit `.svelte-kit` output contention (`manifest-full.js` ENOENT); the final serial build passed cleanly
+- Residual risks:
+  - `terminal/+page.svelte` still owns top-level state allocation and decision/control derived wiring
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 11:52:39 +0900] START terminal-session-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by removing repeated session-state accessors from `terminal/+page.svelte`
+- Planned work:
+  - extract scan/chat/trade session getter-setter wiring into a dedicated terminal session runtime
+  - rewire action/chat/scan runtimes and derived props to consume the new session boundary
+  - document the new boundary in `CLAUDE.md`
+- Status: IN PROGRESS
+
+## [2026-03-07 11:52:39 +0900] FINISH terminal-session-runtime-extraction-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by removing repeated session-state accessors from `terminal/+page.svelte`
+- What changed:
+  - Added `src/lib/terminal/terminalSessionRuntime.ts`
+    - canonical getter-setter boundary for terminal scan/chat/trade session state
+    - exposes shared accessors for `latestScan`, `terminalScanning`, `chatTradeReady`, `chatSuggestedDir`, `chatConnectionStatus`, `activeTradeSetup`, `isTyping`
+  - Updated `src/routes/terminal/+page.svelte`
+    - rewired decision state and shared panel props through `terminalSessionRuntime`
+    - action/chat/scan runtimes now consume session accessors from the shared runtime instead of route-local duplicated closures
+  - Updated `CLAUDE.md`
+    - documented the new terminal session runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `terminal/+page.svelte` still owns top-level state declarations and layout-level derived prop assembly
+  - `/terminal` build artifact size remains volatile while the broader branch is still in heavy refactor
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 11:57:23 +0900] START extracted-module-tracking-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by making the current extracted import graph trackable on remote
+- Planned work:
+  - identify untracked extracted modules already referenced by tracked terminal/chart files
+  - add those modules so the pushed branch better matches local build state
+  - rerun validation and push the consistency slice
+- Status: IN PROGRESS
+
+## [2026-03-07 11:57:23 +0900] FINISH extracted-module-tracking-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue by making the current extracted import graph trackable on remote
+- What changed:
+  - Added tracked copies of the extracted `src/components/arena/chart/**` child boundaries and runtime modules already imported by `ChartPanel.svelte`
+  - Added tracked copies of the extracted `src/lib/terminal/**`, `src/lib/terminal/intel/**`, and `src/lib/terminal/warroom/**` modules already imported by terminal route and panels
+  - Added tracked copies of the extracted terminal/community leaf components and `src/lib/api/intelApi.ts` needed by the current terminal/signals/intel import graph
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - the branch still contains many unrelated modified tracked files outside this consistency slice
+  - `/terminal` and `ChartPanel` artifact sizes remain volatile while the broader extraction branch is still in flux
+- Status: DONE
+
+## [2026-03-07 13:07:54 +0900] START arena-foundation-and-chart-bridge-slices-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue with the correctly designed Arena refactor using the core-loop and boundary plans
+- Planned work:
+  - extract arena display contracts/selectors out of `src/routes/arena/+page.svelte`
+  - move chart bridge state and drag math into a dedicated arena adapter without changing layout
+  - document the new canonical arena boundaries
+- Status: IN PROGRESS
+
+## [2026-03-07 13:07:54 +0900] FINISH arena-foundation-and-chart-bridge-slices-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue with the correctly designed Arena refactor using the core-loop and boundary plans
+- What changed:
+  - Added `src/lib/arena/state/arenaTypes.ts`
+    - canonical display contracts for arena result/phase/mode/score state
+  - Added `src/lib/arena/selectors/arenaViewModel.ts`
+    - canonical selectors for phase track, mode label, mission text, result title, score summary, agent summaries
+  - Added `src/lib/arena/adapters/arenaChartBridge.ts`
+    - canonical chart bridge for chart position snapshot, hypothesis drag math, active-agent marker/annotation decoration
+  - Updated `src/routes/arena/+page.svelte`
+    - removed route-local mode/phase/mission/result/score string assembly
+    - replaced route-local chart position + marker/annotation state with adapter-backed `chartBridge`
+    - rewired chart drag handlers to use shared chart-bridge math instead of inlined RR calculations
+  - Updated `src/components/arena/arenaState.ts`
+    - narrowed file responsibility back to analysis-to-C02 mapping only
+  - Updated `CLAUDE.md`
+    - documented the new arena selector and chart-bridge canonical boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns replay/reward/feed/battle lifecycles and remains very large
+  - `src/components/arena/ChartPanel.svelte` and `src/routes/arena/+page.svelte` server artifacts remain heavy
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 13:24:21 +0900] START arena-replay-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going by moving replay orchestration out of `src/routes/arena/+page.svelte`
+- Planned work:
+  - extract replay session seed/start/finish logic into `src/lib/arena/replay`
+  - extract replay step to feed-message mapping so the route stops owning the switch-case
+  - document the new replay boundary in `CLAUDE.md`
+- Status: IN PROGRESS
+
+## [2026-03-07 13:24:21 +0900] FINISH arena-replay-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going by moving replay orchestration out of `src/routes/arena/+page.svelte`
+- What changed:
+  - Added `src/lib/arena/replay/arenaReplayRuntime.ts`
+    - canonical replay session seed/start/finish helpers
+    - canonical replay step → feed message mapping
+    - canonical replay auto-advance delay helper
+  - Updated `src/routes/arena/+page.svelte`
+    - removed route-local replay data/session assembly
+    - removed route-local replay step switch-case for feed messages
+    - rewired replay advance/finish/reset flow through the shared runtime
+  - Updated `CLAUDE.md`
+    - documented the new arena replay runtime boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns reward calculation, live feed/event timers, and battle presentation lifecycle
+  - `src/routes/arena/+page.svelte` server artifact remains heavy at `116.76 kB`
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 13:46:18 +0900] START arena-feed-and-reward-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going by moving live-event/feed cadence and reward calculation out of `src/routes/arena/+page.svelte`
+- Planned work:
+  - extract live-event timer/cadence/feed emission into `src/lib/arena/feed`
+  - extract result reward XP/badge/streak calculation into `src/lib/arena/reward`
+  - remove dead route-local live event state if it is no longer rendered
+- Status: IN PROGRESS
+
+## [2026-03-07 13:46:18 +0900] FINISH arena-feed-and-reward-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going by moving live-event/feed cadence and reward calculation out of `src/routes/arena/+page.svelte`
+- What changed:
+  - Added `src/lib/arena/feed/arenaLiveEventRuntime.ts`
+    - canonical live-event cadence/timer/feed-emission runtime for ANALYSIS/HYPOTHESIS/BATTLE phases
+  - Added `src/lib/arena/reward/arenaRewardRuntime.ts`
+    - canonical reward state seed and result reward XP/badge/streak calculation
+  - Updated `src/routes/arena/+page.svelte`
+    - removed route-local live-event timer loop and reward math
+    - replaced dead `liveEvents` state with runtime-owned event emission only
+    - rewired reward modal props through `rewardState`
+    - removed unused `ArenaEventCard` import
+  - Updated `CLAUDE.md`
+    - documented live-event and reward canonical boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns battle presentation lifecycle, compare flow, and result-side animation orchestration
+  - `src/routes/arena/+page.svelte` server artifact remains heavy at `116.87 kB`
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 14:02:11 +0900] START arena-compare-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going by moving compare overlay calculation out of `src/routes/arena/+page.svelte`
+- Planned work:
+  - extract compare overlay state and consensus computation into `src/lib/arena/compare`
+  - extract compare auto-advance delay helper
+  - validate without changing layout or compare UI markup
+- Status: IN PROGRESS
+
+## [2026-03-07 14:02:11 +0900] FINISH arena-compare-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going by moving compare overlay calculation out of `src/routes/arena/+page.svelte`
+- What changed:
+  - Added `src/lib/arena/compare/arenaCompareRuntime.ts`
+    - canonical compare overlay state seed
+    - canonical consensus/user-vs-agent compare data builder
+    - canonical compare auto-advance delay helper
+  - Updated `src/routes/arena/+page.svelte`
+    - removed route-local compare data assembly
+    - rewired compare state and compare auto-advance to the shared runtime
+  - Updated `CLAUDE.md`
+    - documented the new compare canonical boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - note: one intermediate build failed due transient `.svelte-kit` output contention/module resolution drift; the immediate serial rerun passed cleanly
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns battle presentation lifecycle and result-side animation/chat orchestration
+  - `src/routes/arena/+page.svelte` server artifact remains heavy at `116.92 kB`
+  - `src/components/arena/ChartPanel.svelte` server chunk remains very heavy at `198.24 kB`
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 18:41:56 +0900] START chartpanel-controller-contract-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the ChartPanel cleanup by extracting a canonical controller/contracts layer before touching shell/view-model work
+- Planned work:
+  - add a shared ChartPanel public contract module for terminal/layout consumers
+  - extract ChartPanel mount/reload/mode-switch/pattern-scan/cleanup orchestration into a controller
+  - validate with check + warning budget + build without changing chart shell behavior
+- Status: IN PROGRESS
+
+## [2026-03-07 18:41:56 +0900] FINISH chartpanel-controller-contract-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the ChartPanel cleanup by extracting a canonical controller/contracts layer before touching shell/view-model work
+- What changed:
+  - Added `src/lib/chart/chartPanelContracts.ts`
+    - canonical ChartPanel public handle contract
+    - canonical cross-surface scan/chat/community-signal detail types
+  - Added `src/components/arena/chart/chartPanelController.ts`
+    - canonical mount/bootstrap orchestration
+    - canonical reload/mode-switch/TradingView retry-sync orchestration
+    - canonical intel-origin pattern scan/public-handle/cleanup ordering
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - moved mount/reload/mode-switch/pattern-scan/cleanup orchestration to the controller
+    - kept shell markup and runtime-local state ownership in place
+  - Updated `src/lib/terminal/terminalTypes.ts`
+    - aliased `ChartPanelHandle` to the shared chart contract instead of re-declaring the handle
+  - Updated `CLAUDE.md`
+    - documented `chartPanelController.ts` and `chartPanelContracts.ts` as canonical boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - note: `npm run build` still intermittently hits the known `.svelte-kit/output` ENOENT contention in this workspace; the direct serial `vite build` pass succeeded cleanly
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` still owns wide shell prop wiring and local UI state, so RF-06 remains open
+  - `src/components/arena/ChartPanel.svelte` server chunk remains heavy at `198.24 kB`
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 19:43:01 +0900] START chartpanel-shell-viewmodel-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the ChartPanel cleanup by extracting the shell-facing display-state contract/view-model and stop hand-assembling the full prop list inline
+- Planned work:
+  - add a canonical shell view-model module for ChartPanel/ChartPanelShell
+  - type ChartPanelShell against the shared prop contract instead of maintaining a local copy
+  - collapse the giant ChartPanel -> ChartPanelShell prop list into derived state + action bundles
+- Status: IN PROGRESS
+
+## [2026-03-07 19:43:01 +0900] FINISH chartpanel-shell-viewmodel-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the ChartPanel cleanup by extracting the shell-facing display-state contract/view-model and stop hand-assembling the full prop list inline
+- What changed:
+  - Added `src/lib/chart/chartPanelViewModel.ts`
+    - canonical `ChartPanelShellState` / `ChartPanelShellActions` / `ChartPanelShellProps`
+    - canonical shell display-state builder for `ChartPanel -> ChartPanelShell`
+  - Updated `src/components/arena/chart/ChartPanelShell.svelte`
+    - removed the local duplicated prop interface
+    - typed the shell directly against the shared view-model contract
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - replaced the hand-written `ChartPanelShell` prop list with a derived `chartPanelShellState`
+    - grouped callback wiring into `chartPanelShellActions`
+  - Updated `CLAUDE.md`
+    - documented `chartPanelViewModel.ts` as the canonical shell-facing contract boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - note: one intermediate direct build again hit the known transient `.svelte-kit/output` ENOENT; the immediate serial rerun passed cleanly
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` still owns large local UI state and callback wiring, so RF-06 remains open
+  - `src/components/arena/ChartPanel.svelte` line count rose to `1222` while `ChartPanelShell.svelte` dropped to `294`; the structural boundary improved, but the parent shell/action bundle is still too wide
+  - `src/components/arena/ChartPanel.svelte` server chunk increased to `199.55 kB`, so the next slice should target real code elimination or a true child/lazy boundary rather than another thin abstraction
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 21:18:44 +0900] START arena-battle-runtime-slices-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep refactoring arena by extracting the remaining battle presentation and resolver reaction logic without changing layout or element positioning
+- Planned work:
+  - extract character sprite helper + turn sequence orchestration from `src/routes/arena/+page.svelte`
+  - extract live battle tick reaction/result-feed normalization from the resolver subscription
+  - rewire the route to keep phase/server sync in place while moving timer-heavy battle UI logic into `src/lib/arena/battle/*`
+- Status: IN PROGRESS
+
+## [2026-03-07 21:18:44 +0900] FINISH arena-battle-runtime-slices-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep refactoring arena by extracting the remaining battle presentation and resolver reaction logic without changing layout or element positioning
+- What changed:
+  - Added `src/lib/arena/battle/arenaBattlePresentationRuntime.ts`
+    - canonical sprite helper/state sync layer for arena battle presentation
+    - canonical turn-sequence, VS splash, narration/chat HUD timer orchestration
+  - Added `src/lib/arena/battle/arenaBattleResolverRuntime.ts`
+    - canonical live tick reaction layer for favorable/adverse agent reactions
+    - canonical VS meter/HP reaction and timeout/tp/sl result feed normalization
+  - Updated `src/routes/arena/+page.svelte`
+    - removed route-local character presentation helpers and turn-timer array
+    - delegated live resolver tick branch logic to the new battle runtime helpers
+    - kept layout, DOM order, class names, and positioning unchanged
+  - Updated `CLAUDE.md`
+    - documented the new arena battle runtime canonical paths and non-regression rules
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns result scoring/progression persistence and server sync branches, so the page controller is still wider than target
+  - `src/routes/arena/+page.svelte` server entry remains heavy at `136.27 kB`
+  - `src/components/arena/ChartPanel.svelte` server chunk remains heavy at `199.55 kB`
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 22:07:12 +0900] START arena-result-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor by extracting result scoring, progression persistence, and resolve-sync payload assembly from `arena/+page.svelte`
+- Planned work:
+  - extract the result-stage scoring/payload builder into `src/lib/arena/result/*`
+  - extract wallet/agent/history/PnL/server-resolve persistence orchestration into the same canonical runtime
+  - rewire `initResult()` to keep only state transitions and presentation hooks
+- Status: IN PROGRESS
+
+## [2026-03-07 22:07:12 +0900] FINISH arena-result-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor by extracting result scoring, progression persistence, and resolve-sync payload assembly from `arena/+page.svelte`
+- What changed:
+  - Added `src/lib/arena/result/arenaResultRuntime.ts`
+    - canonical result-stage win/tag, LP/FBS, reward/result payload builder
+    - canonical wallet/agent/history/PnL/server-resolve persistence helper
+  - Updated `src/routes/arena/+page.svelte`
+    - replaced the large inline `initResult()` scoring/persistence branch with runtime calls
+    - kept result modal/display flow and layout untouched
+  - Updated `CLAUDE.md`
+    - documented `arenaResultRuntime.ts` as the canonical result-stage boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns phase transitions, tournament flow, and some cooldown/lobby reset orchestration
+  - `src/routes/arena/+page.svelte` server entry remains heavy at `136.27 kB`
+  - `src/components/arena/ChartPanel.svelte` server chunk remains heavy at `198.97 kB`
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 22:44:08 +0900] START arena-shell-controller-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor by extracting shell-level lobby/reset/keyboard/tournament control from `arena/+page.svelte` without changing layout
+- Planned work:
+  - add a canonical arena shell controller for lobby/play-again/reset/exit-confirm/keyboard shortcuts
+  - remove dead bracket/tournament tab state that is no longer rendered in the route
+  - rewire the route to use the controller and keep markup/CSS intact
+- Status: IN PROGRESS
+
+## [2026-03-07 22:44:08 +0900] FINISH arena-shell-controller-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor by extracting shell-level lobby/reset/keyboard/tournament control from `arena/+page.svelte` without changing layout
+- What changed:
+  - Added `src/lib/arena/controllers/arenaShellController.ts`
+    - canonical shell controller for lobby reset, play-again restart, exit confirm, and keyboard shortcut routing
+    - canonical lobby tournament reset seed
+  - Updated `src/routes/arena/+page.svelte`
+    - delegated `initCooldown/goLobby/playAgain/confirmGoLobby/handleKeydown` to the shell controller
+    - removed dead route-local tournament bracket state/effect that had no template consumers
+  - Updated `CLAUDE.md`
+    - documented `arenaShellController.ts` as the canonical shell control boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns phase init dispatch and several phase-local flows (`initAnalysis/initHypothesis/initBattle`)
+  - `src/routes/arena/+page.svelte` server entry increased to `140.74 kB`, so the next slice should target phase controller extraction rather than another thin wrapper
+  - `src/components/arena/ChartPanel.svelte` server chunk remains heavy at `214.49 kB`
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 20:53:47 +0900] FINISH frontend-chart-support-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the ChartPanel refactor by collapsing inline support runtime assembly without changing layout or interaction contracts
+- What changed:
+  - Added `src/components/arena/chart/chartPanelSupportRuntime.ts`
+    - canonical support-runtime boundary for ChartPanel-owned overlay/viewport/trade-plan/drawing/action/price runtime assembly
+    - canonical wrapper command surface (`renderDrawings`, trade-plan commands, drawing commands, chart-origin actions, price update helpers)
+    - canonical support-runtime dispose ordering
+  - Updated `src/components/arena/chart/chartPanelController.ts`
+    - public trade-drawing activation no longer reaches into a raw action-runtime getter
+    - controller now depends on the support-runtime activation callback boundary
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - replaced six parent-owned runtime refs (`overlay`, `viewport`, `tradePlan`, `drawing`, `action`, `price`) with the single support runtime
+    - removed repeated wrapper helpers and rewired shell actions/buildRuntimeBundle bindings through the canonical support runtime
+    - kept shell markup, callback/event contract, and chart behavior intact
+  - Updated `CLAUDE.md`
+    - documented `chartPanelSupportRuntime.ts` as the canonical support-runtime boundary
+    - refreshed the ChartPanel cleanup rule to point at controller/support-runtime disposal ordering
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `1217` -> `1115` lines
+  - `src/components/arena/chart/chartPanelSupportRuntime.ts`: `137` lines
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` is smaller and cleaner, but the server chunk is still heavy at `215.79 kB`
+  - the next ChartPanel slice should target real chunk reduction or a stronger lazy/runtime boundary rather than more thin wrapper extraction
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 21:00:25 +0900] FINISH frontend-chart-client-lazy-runtime-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the ChartPanel refactor by turning controller/support runtime assembly into a real client-only lazy boundary
+- What changed:
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - removed static value imports of `chartMountRuntime`, `chartPanelController`, `chartPanelSupportRuntime`
+    - added client-side lazy loading for those modules via `ensureChartClientRuntime()`
+    - moved support-runtime creation and controller creation behind lazy factory functions
+    - kept public handle, shell state, and runtime behavior stable while shrinking the SSR graph
+  - Updated `CLAUDE.md`
+    - documented the client-only lazy runtime rule so those modules are not statically re-imported later
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - server chunk `src/components/arena/ChartPanel.svelte`: `215.79 kB -> 86.94 kB`
+  - new split server chunks:
+    - `chartMountRuntime.js`: `65.37 kB`
+    - `chartPanelSupportRuntime.js`: `66.03 kB`
+    - `chartPanelController.js`: `4.26 kB`
+- Residual risks:
+  - `src/routes/terminal/+page.svelte` server entry remains heavy at `183.98 kB`
+  - `src/routes/arena/+page.svelte` remains the main structural hotspot at `140.74 kB`
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 21:07:23 +0900] FINISH arena-phase-controller-hypothesis-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor by extracting the `ANALYSIS`/`HYPOTHESIS`/`PREVIEW` phase-entry controller without changing layout
+- What changed:
+  - Added `src/lib/arena/controllers/arenaPhaseController.ts`
+    - canonical controller for analysis sync kickoff
+    - canonical hypothesis countdown/timeout fallback
+    - canonical submitted hypothesis apply + preview auto-confirm flow
+  - Updated `src/routes/arena/+page.svelte`
+    - delegated `initAnalysis`, `initHypothesis`, `initPreview`, `confirmPreview`, and `onHypothesisSubmit` to the new controller
+    - introduced shared timer clear helpers for hypothesis and preview auto-advance
+    - kept route markup, layout, and phase order unchanged
+  - Updated `CLAUDE.md`
+    - documented `arenaPhaseController.ts` as the canonical phase-entry boundary for the current extracted scope
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - `src/lib/arena/controllers/arenaPhaseController.ts`: `134` lines
+  - `src/routes/arena/+page.svelte` remains structurally heavy at `3158` lines
+  - server entry `src/routes/arena/+page.svelte`: `140.80 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns `initDraft`, `initBattle`, `initResult`, replay flow, and compare/dead overlay paths
+  - this slice improved controller boundaries but did not reduce the arena route server entry
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 21:13:37 +0900] FINISH arena-legacy-overlay-retirement-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the arena refactor by removing unreachable `compare` / `verdict` overlay paths from the current 5-phase loop
+- What changed:
+  - Updated `src/routes/arena/+page.svelte`
+    - removed dead `compare` / `verdict` state, functions, timer ownership, overlay markup, and CSS
+    - removed stale shell-controller wiring for `setVerdictVisible` / `setCompareVisible`
+    - kept the active phase order as `DRAFT -> ANALYSIS -> HYPOTHESIS -> BATTLE -> RESULT`
+  - Updated `src/lib/arena/controllers/arenaShellController.ts`
+    - dropped legacy overlay setters from the shell controller contract and cooldown cleanup path
+  - Removed `src/lib/arena/compare/arenaCompareRuntime.ts`
+    - the runtime had no remaining call sites after the arena route converged on the 5-phase loop
+  - Updated `CLAUDE.md`
+    - documented compare/verdict overlays as retired legacy paths under the current arena phase model
+  - Updated `docs/exec-plans/active/arena-page-controller-design-2026-03-07.md`
+    - aligned the active controller design with the current 5-phase scope
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `3158 -> 2900`
+  - server entry `src/routes/arena/+page.svelte`: `140.80 kB -> 136.25 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns `initDraft`, `initBattle`, `initResult`, replay flow, and battle/result orchestration
+  - historical docs/log entries still reference the removed compare runtime as part of earlier slices
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 21:18:41 +0900] FINISH arena-match-controller-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the arena refactor by extracting squad deploy server-sync responsibilities out of the route shell
+- What changed:
+  - Added `src/lib/arena/controllers/arenaMatchController.ts`
+    - canonical controller for squad deploy server sync
+    - canonical equal-weight draft payload build from selected agents
+    - canonical server sync reset helper for route/shell reuse
+  - Updated `src/routes/arena/+page.svelte`
+    - delegated `onSquadDeploy()` to `arenaMatchController.deploySquad()`
+    - rewired route-local server sync reset through `arenaMatchController.clearServerSyncState()`
+    - removed route-local `createArenaMatch()/submitArenaDraft()/normalizeAgentId()` deploy flow
+  - Updated `CLAUDE.md`
+    - documented `arenaMatchController.ts` as the canonical squad deploy/server-sync boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `2900 -> 2897`
+  - new controller `src/lib/arena/controllers/arenaMatchController.ts`: `70` lines
+  - server entry `src/routes/arena/+page.svelte`: `136.25 kB -> 139.73 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns `initDraft`, `initBattle`, `initResult`, replay flow, and battle/result orchestration
+  - this slice improved server-sync boundaries but did not reduce the arena server entry
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 23:06:21 +0900] START arena-phase-dispatch-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor by moving draft-phase entry and phase dispatch deeper into the existing phase controller without changing layout
+- Planned work:
+  - expand `src/lib/arena/controllers/arenaPhaseController.ts` to own `DRAFT` phase entry and phase dispatch
+  - remove route-local `initDraft/initAnalysis/initHypothesis/initPreview/onPhaseInit` wrappers
+  - keep battle/result entry local for now and validate the thinner phase shell
+- Status: IN PROGRESS
+
+## [2026-03-07 23:06:21 +0900] FINISH arena-phase-dispatch-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor by moving draft-phase entry and phase dispatch deeper into the existing phase controller without changing layout
+- What changed:
+  - Updated `src/lib/arena/controllers/arenaPhaseController.ts`
+    - added canonical `DRAFT` phase entry support
+    - added canonical `onPhaseInit()` dispatch for `DRAFT/ANALYSIS/HYPOTHESIS/BATTLE/RESULT`
+  - Updated `src/routes/arena/+page.svelte`
+    - removed route-local `initDraft/initAnalysis/initHypothesis/initPreview/onPhaseInit` wrappers
+    - rewired `setPhaseInitCallback()` directly through the phase controller
+    - removed stale tournament bracket imports left over after earlier shell cleanup
+  - Updated `CLAUDE.md`
+    - expanded the arena phase controller canonical rule to include draft entry and phase dispatch
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `3140 -> 2882`
+  - `ChartPanel.js` server chunk: `214.49 kB -> 86.94 kB`
+  - arena server entry: `140.74 kB -> 139.75 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns `initScout/initGather/initCouncil`, `initBattle`, `initResult`, replay flow, and battle/result orchestration
+  - the branch remains broadly dirty from unrelated in-flight refactor work
+- Status: DONE
+
+## [2026-03-07 21:30:18 +0900] FINISH arena-result-controller-replay-retirement-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor by extracting result-phase orchestration and removing unreachable replay route integration
+- What changed:
+  - Added `src/lib/arena/controllers/arenaResultController.ts`
+    - canonical result-phase orchestration for resolved result projection
+    - canonical result persistence + presentation wiring
+    - canonical PvP reveal scheduling with stable opponent score projection
+  - Updated `src/lib/arena/state/arenaTypes.ts`
+    - added `opponentScore` to the arena result display contract
+  - Updated `src/lib/arena/selectors/arenaViewModel.ts`
+    - extended the result seed with `opponentScore`
+  - Updated `src/lib/arena/result/arenaResultRuntime.ts`
+    - stabilized fallback opponent score so the PvP overlay no longer recomputes a random score on rerender
+  - Updated `src/routes/arena/+page.svelte`
+    - delegated result entry to `arenaResultController.initResult()`
+    - removed dead replay state, timer ownership, banner markup, and replay CSS from the route shell
+    - removed dead local `matchHistory` cache and stale `AgentArenaView` import
+    - rewired PvP overlay to `resultData.opponentScore`
+  - Removed `src/lib/arena/replay/arenaReplayRuntime.ts`
+    - the runtime had no remaining call sites after replay route integration was removed
+  - Updated `CLAUDE.md`
+    - documented `arenaResultController.ts` as the canonical result-phase boundary
+    - documented replay route integration as retired
+  - Updated `docs/exec-plans/active/arena-page-controller-design-2026-03-07.md`
+    - aligned the active arena controller plan with the replay-retired route scope
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `2697`
+  - `src/lib/arena/controllers/arenaResultController.ts`: `151` lines
+  - server entry `src/routes/arena/+page.svelte`: `139.64 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns `initScout/initGather/initCouncil`, `initBattle`, and battle presentation wiring
+  - the route structure is meaningfully smaller, but the arena server entry is still heavy
+  - historical docs/log entries still reference the removed replay runtime as part of earlier slices
+- Status: DONE
+
+## [2026-03-07 23:29:22 +0900] FINISH arena-dead-battle-shell-state-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going by deleting and cleaning dead arena battle shell state after the controller split
+- What changed:
+  - Updated `src/routes/arena/+page.svelte`
+    - removed dead route-local `findings`, `councilActive`, and `enemyMomentum` state
+    - removed shell wiring that only existed to reset those dead values
+    - kept layout and battle UI behavior unchanged
+  - Updated `src/lib/arena/controllers/arenaAnalysisPresentationRuntime.ts`
+    - removed dead `revealFinding()` contract from scout choreography
+  - Updated `src/lib/arena/battle/arenaBattlePresentationRuntime.ts`
+    - removed unused `enemyMomentum` runtime contract and updates
+  - Updated `src/lib/arena/controllers/arenaShellController.ts`
+    - removed dead `setCouncilActive` / `clearFindings` shell reset hooks
+  - Updated `CLAUDE.md`
+    - documented the retired dead battle-shell state so it is not silently restored later
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `2551`
+  - server entry `src/routes/arena/+page.svelte`: `143.47 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns `safeTimeout`, `addFeed`, particle juice helpers, and top-level battle HUD state
+  - this cleanup removed dead state but did not improve the current arena server entry
+  - current build shows renewed chunk pressure around `src/components/arena/ChartPanel.svelte` and `chartPanelSupportRuntime`
+- Status: DONE
+
+## [2026-03-07 23:29:07 +0900] FINISH arena-shell-preview-toggle-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor without changing layout, remove inline shell state mutations, and keep trimming dead route state
+- What changed:
+  - Updated `src/lib/arena/state/arenaTypes.ts`
+    - added `ArenaPreviewDisplay` so the preview card display contract lives in the arena state layer
+  - Updated `src/lib/arena/selectors/arenaViewModel.ts`
+    - added `buildArenaPreviewDisplay()` for preview dir/icon/price/rr/config formatting
+  - Updated `src/lib/arena/controllers/arenaChartController.ts`
+    - extended the canonical chart controller to own marker visibility and TP/SL line visibility toggles
+  - Updated `src/lib/arena/controllers/arenaShellController.ts`
+    - extended the canonical shell controller to own match-history open/close and hypothesis float-dir selection
+    - shell reset now closes match history and clears exit-confirm state consistently
+  - Updated `src/routes/arena/+page.svelte`
+    - replaced preview card inline formatting with `arenaPreviewDisplay`
+    - replaced inline match-history, float-dir, marker toggle, and position-line toggle mutations with controller calls
+    - added derived `arenaChartPanelProps` to collapse repeated chart prop wiring
+    - removed dead `findings` route state and stale analysis runtime option wiring
+  - Updated `CLAUDE.md`
+    - documented preview display selector ownership and expanded shell/chart controller responsibilities
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `2551`
+  - `src/lib/arena/controllers/arenaShellController.ts`: `149` lines
+  - `src/lib/arena/controllers/arenaChartController.ts`: `54` lines
+  - `src/lib/arena/selectors/arenaViewModel.ts`: `125` lines
+  - server entry `src/routes/arena/+page.svelte`: `143.47 kB`
+  - server chunk `src/components/arena/ChartPanel.svelte`: `100.39 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns heavy phase composition and large amounts of battle/sidebar markup
+  - arena server entry grew relative to earlier slices, so the next batch should bias toward controller extraction rather than more inline composition
+  - `ChartPanel` remains the heaviest arena-adjacent server chunk even after route cleanup
+- Status: DONE
+
+## [2026-03-07 23:32:12 +0900] FINISH arena-shell-view-reward-cleanup-slice-20260307 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning the arena route without changing layout, remove more inline store mutations, and delete obvious dead code
+- What changed:
+  - Updated `src/lib/arena/controllers/arenaShellController.ts`
+    - added `selectArenaView()` so the view picker now uses the canonical shell controller
+  - Updated `src/lib/arena/controllers/arenaResultController.ts`
+    - added `closeReward()` so reward modal close no longer mutates route state inline
+  - Updated `src/routes/arena/+page.svelte`
+    - removed unused `DOGE_VOTE_LONG` and `juice_flyNumber` imports
+    - replaced local `phaseLabel` state with a derived phase label
+    - rewired squad-config back action to `arenaShellController.goLobby()`
+    - rewired `ViewPicker` select to `arenaShellController.selectArenaView`
+    - rewired `ArenaRewardModal` close to `arenaResultController.closeReward`
+    - removed stale game-juice import comment
+  - Updated `CLAUDE.md`
+    - expanded shell/result controller canonical ownership to include view selection and reward close
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `2546`
+  - `src/lib/arena/controllers/arenaShellController.ts`: `152` lines
+  - `src/lib/arena/controllers/arenaResultController.ts`: `158` lines
+  - server entry `src/routes/arena/+page.svelte`: `143.87 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns large phase-specific markup and sidebar composition
+  - arena server entry is still heavy, so the next slice should remove composition burden rather than add more route-level derived props
+  - `ChartPanel` remains the heaviest adjacent chunk and still dominates arena-related SSR weight
+- Status: DONE
+
+## [2026-03-08 00:12:22 +0900] FINISH arena-selector-sync-hud-cleanup-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue removing dead arena route code and move repeated battle/sidebar display formatting into canonical selectors without changing layout
+- What changed:
+  - Updated `src/lib/arena/state/arenaTypes.ts`
+    - added canonical display contracts for api sync status and battle shell display
+  - Updated `src/lib/arena/selectors/arenaViewModel.ts`
+    - added `buildArenaApiSyncStatus()`
+    - added `buildArenaBattlePhaseDisplay()`
+    - added `buildArenaBattleHudDisplay()`
+    - added `buildArenaBattleLogPreview()`
+  - Updated `src/routes/arena/+page.svelte`
+    - removed the dead wallet gate overlay and unused wallet imports
+    - rewired api sync badge, battle phase label/timer, battle HUD price/HP text, narration fallback, and battle-log preview to selector-derived values
+    - kept DOM order and layout intact while trimming inline formatting branches from the route shell
+  - Updated `CLAUDE.md`
+    - expanded selector ownership to cover sync status and battle HUD/log display
+    - documented the wallet gate dead path as retired
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `2535`
+  - `src/lib/arena/selectors/arenaViewModel.ts`: `181` lines
+  - `src/lib/arena/state/arenaTypes.ts`: `81` lines
+  - server entry `src/routes/arena/+page.svelte`: `145.02 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns large battle/sidebar markup and phase composition
+  - route line count is improving, but server entry size is not; the next slice should bias toward view-host extraction or larger composition boundaries
+  - `ChartPanel` remains the dominant arena-adjacent chunk and still limits SSR weight gains
+- Status: DONE
+
+## [2026-03-08 00:26:10 +0900] FINISH arena-feed-phase-timer-runtime-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning the arena route, remove more route-local shell helpers, and lock the new canonical boundaries in the docs
+- What changed:
+  - Added `src/lib/arena/feed/arenaBattleFeedRuntime.ts`
+    - battle/system/event feed payload normalization now lives in one canonical runtime
+    - route no longer calls `pushFeedItem()` or manually shapes `SYSTEM` feed entries
+  - Added `src/lib/arena/state/arenaPhaseTimerRuntime.ts`
+    - hidden `hypothesisInterval`, `previewAutoTimer`, and `pvpShowTimer` ownership moved out of the route
+    - clear/destroy sequencing for those timers now lives behind one canonical runtime
+  - Updated `src/routes/arena/+page.svelte`
+    - rewired battle, result, analysis, live-event, and match-controller feed writes through `arenaBattleFeedRuntime`
+    - rewired hypothesis countdown, preview auto-confirm, and PvP reveal timer lifecycle through `arenaPhaseTimerRuntime`
+    - removed route-local `addFeed()`, `clearHypothesisCountdown()`, `clearPreviewAutoAdvance()`, and `clearPvpShowTimer()` helpers
+  - Updated `src/lib/arena/controllers/arenaAnalysisPresentationRuntime.ts`
+    - tightened the feed callback contract to `Direction` instead of an unbounded string
+  - Updated `CLAUDE.md`
+    - documented `arenaBattleFeedRuntime.ts`, `arenaTimerRegistry.ts`, `arenaPhaseTimerRuntime.ts`, and `arenaVisualEffectsRuntime.ts` as canonical arena boundaries
+  - Updated `docs/exec-plans/active/arena-page-controller-design-2026-03-07.md`
+    - synced the active arena controller plan to the implemented feed/timer/visual runtime paths
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `2472`
+  - `src/lib/arena/feed/arenaBattleFeedRuntime.ts`: `47` lines
+  - `src/lib/arena/state/arenaPhaseTimerRuntime.ts`: `59` lines
+  - server entry `src/routes/arena/+page.svelte`: `149.08 kB`
+  - server chunk `src/components/arena/ChartPanel.svelte`: `100.39 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `144.85 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns `clearArenaDynamics()`, agent/chat wrapper helpers, and large phase-specific markup
+  - structure improved, but arena SSR weight regressed again; the next slice should bias toward server-chunk reduction rather than more thin helper extraction
+  - `chartPanelSupportRuntime` remains extremely heavy, so arena cleanup and chart chunk work are still coupled
+- Status: DONE
+
+## [2026-03-08 03:28:56 +0900] FINISH arena-topbar-boundary-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep tightening the arena shell by moving another presentation-only block out of the route while preserving layout and validation baselines
+- What changed:
+  - Added `src/components/arena/ArenaTopbar.svelte`
+    - arena top shell now owns the lobby/exit-confirm CTA, phase track, mode badge, LP/W-L stat strip, and match-history button markup
+    - moved topbar-only responsive CSS and `pulseWarn` animation out of the route
+  - Updated `src/routes/arena/+page.svelte`
+    - replaced the inline topbar DOM with `ArenaTopbar`
+    - kept `MatchHistory`, `PhaseGuide`, and downstream battle/view wiring unchanged
+  - Updated `src/components/arena/chart/PositionSizerPanel.svelte`
+    - added explicit `for`/`id` label associations to preserve the zero-warning baseline
+  - Updated `src/components/arena/chart/chartDrawingRuntime.ts`
+    - repaired the primitive drawing mode helper name drift so the chart drawing runtime matches its own runtime contract again
+  - Updated `CLAUDE.md`
+    - documented `ArenaTopbar.svelte` as the canonical arena top shell boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `1088`
+  - `src/components/arena/ArenaTopbar.svelte`: `279` lines
+  - `src/components/arena/chart/PositionSizerPanel.svelte`: `328` lines
+  - `src/components/arena/chart/chartDrawingRuntime.ts`: `674` lines
+  - server entry `src/routes/arena/+page.svelte`: `208.64 kB`
+  - server chunk `src/components/arena/ChartPanel.svelte`: `118.70 kB`
+  - server chunk `src/lib/chart/primitives/drawingManager.ts`: `100.39 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.24 kB`
+- Residual risks:
+  - route maintainability improved sharply, but SSR weight regressed hard; the next slice should target bundle/chunk reduction, not another large synchronous presentation extraction
+  - `ArenaBattleLayout.svelte`, `ArenaChartRail.svelte`, and `ArenaBattleSidebar.svelte` are now the main arena presentation hotspots
+  - `chartDrawingRuntime.ts` is back to green, but the drawing stack is still a large synchronous chunk footprint
+- Status: DONE
+
+## [2026-03-08 11:50:45 +0900] FINISH arena-optional-panel-lazy-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena refactor with a performance bias, but avoid another failed lazy boundary on the always-on chart surface
+- What changed:
+  - Updated `src/routes/arena/+page.svelte`
+    - removed top-level static imports for optional arena surfaces:
+      - `src/components/arena/MatchHistory.svelte`
+      - `src/components/arena/views/ChartWarView.svelte`
+      - `src/components/arena/views/MissionControlView.svelte`
+      - `src/components/arena/views/CardDuelView.svelte`
+      - `src/components/arena/ResultPanel.svelte`
+    - added on-demand loaders so match history opens lazily and alternate arena views / alt-view result panel only load when those branches are actually active
+    - kept always-on shell imports (`ArenaTopbar`, `PhaseGuide`, `ViewPicker`, `ArenaBattleLayout`) unchanged to avoid regressing the main battle view
+    - added lightweight loading placeholders for lazy alternate views and the alt-view result panel
+  - Updated `CLAUDE.md`
+    - documented the arena optional-panel lazy policy so those imports are not silently made static again later
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `1192`
+  - `src/components/arena/ArenaChartRail.svelte`: `124` lines
+  - `src/components/arena/MatchHistory.svelte`: `412` lines
+  - `src/components/arena/views/ChartWarView.svelte`: `468` lines
+  - `src/components/arena/views/MissionControlView.svelte`: `587` lines
+  - `src/components/arena/views/CardDuelView.svelte`: `643` lines
+  - `src/components/arena/ResultPanel.svelte`: `279` lines
+  - server entry `src/routes/arena/+page.svelte`: `167.89 kB`
+  - server chunk `src/components/arena/ChartPanel.svelte`: `49.08 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.25 kB`
+  - server chunk `src/lib/chart/primitives/drawingManager.ts`: `100.39 kB`
+- Residual risks:
+  - the arena SSR entry improved meaningfully, but `drawingManager.js` is still the single heaviest chart-adjacent server chunk
+  - the always-on battle path is now dominated by `ArenaBattleLayout` + chart drawing/runtime internals, not by optional modal/view shells
+  - a failed attempt to lazy-load the always-on `ChartPanel` through `ArenaChartRail` was intentionally discarded because it worsened chunk distribution instead of helping it
+- Status: DONE
+
+## [2026-03-08 03:15:50 +0900] FINISH arena-battle-layout-derivatives-cleanup-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: organize the remaining arena WIP, resolve route/layout conflicts, and make the slice commit-ready
+- What changed:
+  - Added `src/components/arena/ArenaBattleLayout.svelte`
+    - battle-stage chart/sidebar/reward/result/PvP/floating-word markup moved out of `arena/+page.svelte`
+    - battle-only responsive CSS now lives with the extracted layout instead of the route shell
+  - Added `src/components/arena/chart/chartDerivativesRuntime.ts`
+    - OI/Funding/Liquidation pane lazy creation and Coinalyze sync now live behind one chart runtime
+    - `ChartPanel.svelte` only toggles visibility and triggers sync through the runtime
+  - Updated `src/routes/arena/+page.svelte`
+    - route now renders `ArenaBattleLayout` as the battle-stage presentation boundary
+    - removed duplicated battle layout CSS that was left behind after extraction, eliminating route-local warning noise
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - wired derivative indicator toggle/sync through `chartDerivativesRuntime`
+  - Updated `src/components/arena/ChartTheme.ts`, `src/components/arena/chart/ChartIndicatorStrip.svelte`, `src/components/arena/chart/chartViewportRuntime.ts`, `src/lib/chart/chartIndicators.ts`, `src/lib/chart/chartTypes.ts`
+    - added theme colors, indicator keys, strip controls, pane refs, and viewport visibility support for `oi`, `funding`, and `liq`
+  - Updated `CLAUDE.md` and `docs/exec-plans/active/arena-page-controller-design-2026-03-07.md`
+    - locked `ArenaBattleLayout.svelte` and `chartDerivativesRuntime.ts` as canonical boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - route line count `src/routes/arena/+page.svelte`: `1392`
+  - `src/components/arena/ArenaBattleLayout.svelte`: `1030` lines
+  - `src/components/arena/chart/chartDerivativesRuntime.ts`: `259` lines
+- Residual risks:
+  - `ArenaBattleLayout.svelte` is now the main battle presentation hotspot and still deserves smaller child boundaries later
+  - `ChartPanel.svelte` remains heavy at `1269` lines even after moving derivative pane ownership out
+  - arena SSR weight is still dominated by chart-related chunks, so the next slice should reduce `ChartPanel`/support-runtime weight rather than only moving route helpers
+- Status: DONE
+
+## [2026-03-08 03:28:12 +0900] FINISH chart-support-lazy-split-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning the arena chart stack, reduce `ChartPanel` support-runtime SSR pressure, and keep the slice commit-ready without touching unrelated arena WIP files
+- What changed:
+  - Updated `src/components/arena/chart/chartActionRuntime.ts`
+    - community signal draft/evidence assembly now lazy-loads `src/lib/chart/chartTradePlanner.ts` and `src/lib/terminal/signalEvidence.ts`
+    - `publishCommunitySignal(...)` now resolves those modules only when the user actually publishes
+  - Updated `src/components/arena/chart/chartDrawingRuntime.ts`
+    - primitive drawing manager/persistence stack now lazy-loads `drawingManager` and `drawingPersistence`
+    - added runtime `preload()`/async `syncPairTimeframe()` so primitive mode and saved drawing hydration can warm the stack without static SSR imports
+  - Updated `src/components/arena/chart/chartPanelSupportRuntime.ts`
+    - support-runtime now prewarms the drawing stack on client create and awaits the new async drawing/action surfaces without holding heavy static imports
+  - Updated `CLAUDE.md`
+    - locked the chart signal-assembly lazy boundary and chart drawing-stack lazy boundary as canonical rules
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/chart/chartActionRuntime.ts`: `235` lines
+  - `src/components/arena/chart/chartDrawingRuntime.ts`: `674` lines
+  - `src/components/arena/chart/chartPanelSupportRuntime.ts`: `156` lines
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.24 kB`
+  - split server chunk `src/lib/chart/primitives/drawingManager.ts`: `100.39 kB`
+  - split server chunk `src/lib/terminal/signalEvidence.ts`: `4.68 kB`
+  - split server chunk `src/lib/chart/primitives/drawingPersistence.ts`: `1.41 kB`
+- Residual risks:
+  - `src/components/arena/ChartPanel.svelte` itself still stays large, so total arena SSR pressure is not solved by this slice alone
+  - unrelated arena presentation WIP files remain dirty in the worktree and were intentionally excluded from this slice
+  - the next chart slice should target `ChartPanel.svelte` or `ChartPanelShell.svelte` composition weight instead of re-expanding support-runtime imports
+- Status: DONE
+
+## [2026-03-08 03:33:29 +0900] FINISH chart-panel-shell-lazy-split-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing arena chart SSR weight after the support-runtime split, with another narrow slice that stays compatible with the current arena WIP
+- What changed:
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - `ChartPanelShell.svelte` is now loaded through a dynamic import instead of a static component import
+    - `chartDerivativesRuntime.ts` is now loaded through the client runtime bootstrap path instead of a static module import
+    - `ChartPanel` still owns state/view-model assembly, but presentation shell and derivatives runtime are now separate lazy chunk boundaries
+  - Updated `CLAUDE.md`
+    - locked the chart panel shell lazy boundary and chart derivatives lazy boundary as canonical rules
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ChartPanel.svelte`: `1281` lines
+  - `src/components/arena/chart/ChartPanelShell.svelte`: `299` lines
+  - `src/components/arena/chart/chartDerivativesRuntime.ts`: `259` lines
+  - server chunk `src/components/arena/ChartPanel.svelte`: `49.08 kB` (was `118.70 kB` before this slice)
+  - split server chunk `src/components/arena/chart/ChartPanelShell.svelte`: `56.29 kB`
+  - split server chunk `src/components/arena/chart/chartDerivativesRuntime.ts`: `5.27 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.25 kB`
+- Residual risks:
+  - total arena SSR pressure is still dominated by `ChartPanelShell`, `chartPanelSupportRuntime`, and `drawingManager` together
+  - `ChartPanel.svelte` is now structurally thinner at import boundaries, but it still owns a large amount of state/wiring
+  - the next slice should target `ChartHeaderBar`/`ChartAgentSurface` boundaries or trim state ownership inside `ChartPanel.svelte`
+- Status: DONE
+
+## [2026-03-08 03:36:16 +0900] FINISH chart-panel-shell-child-lazy-split-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cutting arena chart SSR weight by splitting the remaining static shell chain under `ChartPanelShell`
+- What changed:
+  - Updated `src/components/arena/chart/ChartPanelShell.svelte`
+    - `ChartHeaderBar.svelte` is now loaded through a dynamic import instead of a static shell import
+    - `ChartAgentSurface.svelte` is now loaded through a dynamic import instead of a static shell import
+    - `ChartPanelShell` remains the composition boundary, but header/surface now live as separate split chunks
+  - Updated `CLAUDE.md`
+    - locked the chart shell child lazy boundaries as canonical rules
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/chart/ChartPanelShell.svelte`: `306` lines
+  - `src/components/arena/chart/ChartHeaderBar.svelte`: `663` lines
+  - `src/components/arena/chart/ChartAgentSurface.svelte`: `335` lines
+  - server chunk `src/components/arena/chart/ChartPanelShell.svelte`: `8.08 kB` (was `56.29 kB` before this slice)
+  - split server chunk `src/components/arena/chart/ChartHeaderBar.svelte`: `9.24 kB`
+  - split server chunk `src/components/arena/chart/ChartAgentSurface.svelte`: `40.65 kB`
+  - server chunk `src/components/arena/ChartPanel.svelte`: `49.08 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.25 kB`
+- Residual risks:
+  - `ChartAgentSurface` is now the largest presentation-adjacent chart chunk
+  - `chartPanelSupportRuntime` and `drawingManager` still dominate chart SSR pressure more than presentation code
+  - the next slice should either split `ChartAgentSurface` internals or further narrow `chartPanelSupportRuntime`/`drawingManager` entry paths
+- Status: DONE
+
+## [2026-03-08 03:46:55 +0900] FINISH arena-battle-host-child-split-cleanup-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning arena, resolve layout/CSS conflicts, and continue deleting dead presentation code without moving layout positions
+- What changed:
+  - Updated `src/routes/arena/+page.svelte`
+    - removed leftover `live-event-stack` and retired `wallet-gate` CSS from the route shell
+    - route now keeps only arena shell/topbar/view-switch/global-juice styling
+  - Added `src/components/arena/arenaBattleLayoutTypes.ts`
+    - extracted canonical `ArenaChartPanelProps` contract for battle presentation children
+  - Added `src/components/arena/ArenaChartRail.svelte`
+    - moved chart-side rail, hypothesis sheet, direction bar, preview overlay, and score bar out of `ArenaBattleLayout`
+  - Added `src/components/arena/ArenaBattleSidebar.svelte`
+    - moved mission/combat HUD, arena stage, battle log, reward modal, result overlay, PvP overlay, and floating words out of `ArenaBattleLayout`
+  - Replaced `src/components/arena/ArenaBattleLayout.svelte`
+    - battle host is now a thin coordinator that only composes left/right child boundaries
+  - Deleted `src/components/arena/BattleStage.svelte` and `src/components/arena/ArenaHUD.svelte`
+    - both were unreferenced legacy presentation components
+  - Updated `src/lib/styles/arena-tone.css`
+    - removed legacy `BattleStage` and retired `wallet-gate` styling
+  - Updated `CLAUDE.md`
+    - locked `ArenaBattleLayout -> ArenaChartRail/ArenaBattleSidebar` as the arena battle presentation boundary rule
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `1088` lines
+  - `src/components/arena/ArenaBattleLayout.svelte`: `218` lines
+  - `src/components/arena/ArenaChartRail.svelte`: `483` lines
+  - `src/components/arena/ArenaBattleSidebar.svelte`: `878` lines
+  - no remaining `BattleStage`, `ArenaHUD`, `live-event-stack`, or route-local `wallet-gate` references in `src`
+- Residual risks:
+  - `src/components/arena/ArenaBattleSidebar.svelte` is now the largest battle presentation hotspot and still deserves smaller result/PvP/stage child boundaries
+  - `src/components/arena/ChartPanel.svelte` and chart support/runtime chunks still dominate arena SSR weight
+  - `src/routes/arena/+page.svelte` is much smaller, but phase/controller ownership is not fully finished yet
+- Status: DONE
+
+## [2026-03-08 04:18:42 +0900] FINISH arena-battle-child-boundary-normalization-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning arena, resolve presentation conflicts, and continue deleting/reorganizing dead layout-preserving code until the battle host is normalized
+- What changed:
+  - Added `src/components/arena/ArenaBattleStageSurface.svelte`
+    - moved battle stage particles, center node, connections, char sprites, VS splash, critical/combo overlays out of `ArenaBattleSidebar`
+  - Added `src/components/arena/ArenaBattleOutcomeOverlay.svelte`
+    - moved reward modal, result overlay, PvP overlay, and floating doge words out of `ArenaBattleSidebar`
+  - Added `src/components/arena/ArenaBattleMissionBar.svelte`
+    - moved mission phase/status bar out of `ArenaBattleSidebar`
+  - Added `src/components/arena/ArenaBattleCombatHud.svelte`
+    - moved LONG/SHORT meter and market HP HUD out of `ArenaBattleSidebar`
+  - Added `src/components/arena/ArenaBattleNarrationLog.svelte`
+    - moved narration strip and battle log out of `ArenaBattleSidebar`
+  - Updated `src/components/arena/ArenaBattleSidebar.svelte`
+    - reduced to a thin sidebar coordinator that composes mission/HUD/stage/log/outcome child boundaries
+  - Added `src/components/arena/ArenaHypothesisOverlay.svelte`
+    - moved hypothesis sheet and direction float bar out of `ArenaChartRail`
+  - Added `src/components/arena/ArenaPreviewOverlay.svelte`
+    - moved preview card overlay out of `ArenaChartRail`
+  - Added `src/components/arena/ArenaChartScoreBar.svelte`
+    - moved score ring, stats, mode badge, marker toggles, and lobby CTA out of `ArenaChartRail`
+  - Updated `src/components/arena/ArenaChartRail.svelte`
+    - reduced to a thin chart-side coordinator that composes chart panel + hypothesis/preview/score children
+  - Updated `CLAUDE.md`
+    - locked `ArenaBattleLayout -> ArenaChartRail/ArenaBattleSidebar -> child boundaries` as the canonical arena battle presentation rule
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `1088` lines
+  - `src/components/arena/ArenaBattleLayout.svelte`: `218` lines
+  - `src/components/arena/ArenaChartRail.svelte`: `124` lines
+  - `src/components/arena/ArenaHypothesisOverlay.svelte`: `122` lines
+  - `src/components/arena/ArenaPreviewOverlay.svelte`: `180` lines
+  - `src/components/arena/ArenaChartScoreBar.svelte`: `178` lines
+  - `src/components/arena/ArenaBattleSidebar.svelte`: `142` lines
+  - `src/components/arena/ArenaBattleMissionBar.svelte`: `60` lines
+  - `src/components/arena/ArenaBattleCombatHud.svelte`: `93` lines
+  - `src/components/arena/ArenaBattleNarrationLog.svelte`: `76` lines
+  - `src/components/arena/ArenaBattleStageSurface.svelte`: `457` lines
+  - `src/components/arena/ArenaBattleOutcomeOverlay.svelte`: `228` lines
+  - server entry `src/routes/arena/+page.svelte`: `212.95 kB`
+- Residual risks:
+  - `src/components/arena/ArenaBattleStageSurface.svelte` is now the largest pure battle presentation hotspot
+  - total arena SSR pressure is still dominated by `ChartPanel`/chart support runtimes more than host presentation components
+  - `src/routes/arena/+page.svelte` is now structurally smaller at the presentation edge, but phase/controller ownership still needs more trimming
+- Status: DONE
+
+## [2026-03-08 04:31:27 +0900] FINISH arena-battle-layout-prop-bundle-normalization-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue cleaning arena without moving layout positions and reduce route-level battle host wiring
+- What changed:
+  - Updated `src/components/arena/arenaBattleLayoutTypes.ts`
+    - added canonical `ArenaChartRailProps` and `ArenaBattleSidebarProps` bundle contracts
+  - Updated `src/components/arena/ArenaBattleLayout.svelte`
+    - reduced battle host to a thin `chartRailProps` / `battleSidebarProps` coordinator
+    - removed the large flattened prop list from the host layer
+  - Updated `src/routes/arena/+page.svelte`
+    - introduced derived `arenaBattleLayoutProps`
+    - route now passes one bundled battle-layout contract instead of manually wiring dozens of presentation props inline
+  - Updated `CLAUDE.md`
+    - locked `arenaBattleLayoutTypes.ts` bundle contracts as the canonical battle-host wiring rule
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `1098` lines
+  - `src/components/arena/ArenaBattleLayout.svelte`: `51` lines
+  - `src/components/arena/arenaBattleLayoutTypes.ts`: `91` lines
+  - server entry `src/routes/arena/+page.svelte`: `210.61 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns substantial phase/controller state even though the battle presentation edge is now much thinner
+  - `src/components/arena/ArenaBattleStageSurface.svelte` remains the largest pure presentation hotspot on the battle side
+  - total arena SSR pressure is still dominated by `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
+- Status: DONE
+
+## [2026-03-08 11:45:29 +0900] FINISH full-system-redesign-blueprint-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: stop working piecemeal and consolidate the entire frontend/backend redesign into one top-level blueprint
+- What changed:
+  - Added `docs/exec-plans/active/full-system-redesign-blueprint-2026-03-08.md`
+    - consolidated the current redesign authority into one blueprint
+    - fixed the final target topology as `apps/web`, `apps/api`, `apps/worker`, `packages/contracts`, `packages/domain`, `packages/platform`
+    - defined runtime ownership, non-negotiable boundary rules, domain ownership matrix, migration phases, validation gates, and anti-goals
+    - linked the existing migration map, validation, contract catalog, folder map, and boundary inventories as supporting references instead of competing top-level plans
+  - Updated `docs/exec-plans/active/README.md`
+    - added the new blueprint at the top of the active plan set
+  - Updated `docs/exec-plans/index.md`
+    - added the new blueprint as the first active execution-plan entry
+- Validation:
+  - `npm run docs:check`: PASS
+  - `docs/exec-plans/active/full-system-redesign-blueprint-2026-03-08.md`: `436` lines
+- Residual risks:
+  - the blueprint is now the top-level design authority, but execution still depends on the detailed boundary inventory and contract extraction documents being kept aligned
+  - the codebase still contains unrelated arena WIP in the worktree, so future execution slices must keep commit scope narrow
+  - the next design-to-implementation bridge should be a domain-by-domain execution checklist derived from this blueprint, not another competing top-level architecture doc
+- Status: DONE
+
+## [2026-03-08 12:07:54 +0900] FINISH arena-scene-shell-extraction-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning arena without changing layout positions and move the remaining scene shell markup out of the route
+- What changed:
+  - Added `src/components/arena/ArenaMatchScene.svelte`
+    - moved API sync badge, topbar, match-history mount point, phase guide, view picker, alt-view lazy host, result-panel overlay, and battle-layout switching out of `arena/+page.svelte`
+  - Updated `src/routes/arena/+page.svelte`
+    - replaced the large non-lobby/non-draft scene markup with a single `ArenaMatchScene` boundary
+    - introduced derived `arenaMatchSceneProps` bundle so the route now hands off scene-shell presentation in one contract
+    - removed scene-shell-local CSS from the route
+  - Updated `CLAUDE.md`
+    - locked `ArenaMatchScene.svelte` as the canonical post-lobby/post-draft arena scene shell
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/routes/arena/+page.svelte`: `1078` lines
+  - `src/components/arena/ArenaMatchScene.svelte`: `233` lines
+  - `src/components/arena/ArenaBattleLayout.svelte`: `51` lines
+  - `src/components/arena/ArenaChartRail.svelte`: `124` lines
+  - `src/components/arena/ArenaBattleSidebar.svelte`: `142` lines
+  - server entry `src/routes/arena/+page.svelte`: `173.86 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` still owns significant phase/controller runtime despite the scene shell extraction
+  - `src/components/arena/ArenaBattleStageSurface.svelte` remains the largest pure battle presentation hotspot
+  - arena SSR pressure is still dominated by `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
+- Status: DONE
+
+## [2026-03-08 12:19:31 +0900] FINISH arena-scene-lazy-owner-normalization-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep designing while saving progress and move remaining scene-shell lazy ownership out of the route
+- What changed:
+  - Updated `src/components/arena/ArenaMatchScene.svelte`
+    - moved lazy component ownership for `MatchHistory`, `ResultPanel`, `ChartWarView`, `MissionControlView`, and `CardDuelView` into the scene shell
+    - scene shell now resolves its own lazy imports instead of receiving preloaded component constructors from the route
+  - Updated `CLAUDE.md`
+    - locked lazy import ownership under `ArenaMatchScene.svelte`
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run build`: PASS
+  - `src/components/arena/ArenaMatchScene.svelte`: `281` lines
+  - `src/routes/arena/+page.svelte`: `1008` lines
+  - server entry `src/routes/arena/+page.svelte`: `173.86 kB`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` is thinner at the scene shell edge, but phase/controller orchestration still dominates the file
+  - `src/components/arena/ArenaBattleStageSurface.svelte` remains the largest pure presentation hotspot
+  - arena SSR pressure is still dominated by `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
+- Status: DONE
+
+## [2026-03-08 12:16:13 +0900] FINISH phase-0-boundary-freeze-checklist-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing the redesign forward by turning the top-level blueprint into an execution checklist with an actual current-state baseline
+- What changed:
+  - Added `docs/exec-plans/active/phase-0-boundary-freeze-checklist-2026-03-08.md`
+    - translated the redesign blueprint into the concrete Phase 0 execution checklist
+    - captured the current baseline:
+      - browser-side `$lib/server` imports in `src/routes`, `src/components`, `src/lib/stores`, `src/lib/api`: `0`
+      - confirmed browser-side direct `/api` fetch bypass still alive in `src/lib/stores/warRoomStore.ts`
+      - `31` files under `src/lib/api/**` still declare local `interface` or `type` shapes
+    - fixed the Phase 0 workstreams, domain readiness scorecard, immediate execution queue, and repeated validation commands
+  - Updated `docs/exec-plans/active/README.md`
+    - added the Phase 0 checklist right under the master redesign blueprint
+  - Updated `docs/exec-plans/index.md`
+    - added the Phase 0 checklist to the Active section
+- Validation:
+  - `npm run docs:check`: PASS
+  - `docs/exec-plans/active/phase-0-boundary-freeze-checklist-2026-03-08.md`: `309` lines
+- Residual risks:
+  - the checklist is only useful if the baseline numbers keep being refreshed as slices land
+  - the current direct `/api` bypass in `warRoomStore.ts` still blocks a fully clean seam
+  - `terminalApi.ts` and `arenaApi.ts` still need more contract-owned DTO coverage before Phase 0 can be treated as complete
+- Status: DONE
+
+## [2026-03-08 12:21:47 +0900] FINISH chart-drawing-lazy-hydration-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep the drawing stack, but stop waking `drawingManager` on initial chart entry and clean up the code path
+- What changed:
+  - Updated `src/lib/chart/primitives/drawingPersistence.ts`
+    - added `hasDrawings(pair, timeframe)` so runtime code can check persistence cheaply without hydrating the full drawing stack
+  - Updated `src/components/arena/chart/chartDrawingRuntime.ts`
+    - split dynamic imports into separate drawing-manager and drawing-persistence loaders
+    - moved autosaver creation behind actual drawing-manager initialization
+    - changed `syncPairTimeframe()` to lazy-hydrate the manager only when persisted drawings exist for the current pair/timeframe or the manager is already active
+    - updated primitive mode activation to reuse `preload()` so first-use drawing activation also restores persisted drawings
+    - tightened `toggleDrawingsVisible()` so visibility toggles do not force a manager preload when no drawings exist
+  - Updated `src/components/arena/chart/chartPanelSupportRuntime.ts`
+    - removed unconditional `drawingRuntime.preload()` during support-runtime creation
+  - Updated `src/components/arena/ChartPanel.svelte`
+    - kept the initial persistence sync, but it now only hydrates drawings when the current pair/timeframe actually has persisted state
+  - Updated `CLAUDE.md`
+    - locked the new persistence-first / manager-later drawing lazy policy as canonical
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - server chunk `src/components/arena/ChartPanel.svelte`: `49.08 kB`
+  - server chunk `src/components/arena/chart/chartPanelSupportRuntime.ts`: `63.70 kB`
+  - server chunk `src/lib/chart/primitives/drawingManager.ts`: `100.39 kB`
+  - server entry `src/routes/arena/+page.svelte`: `173.86 kB`
+- Residual risks:
+  - this slice improves initial runtime behavior more than build-size metrics; `drawingManager` remains the heaviest chart-side chunk and still needs deeper code splitting if SSR pressure becomes the next target
+  - drawing tool actions that are currently no-op before manager init (`undo`, `redo`, magnet/style actions) may still need first-use lazy activation if those controls become user-visible earlier
+  - `ChartPanel` and `chartPanelSupportRuntime` are still major arena-side hotspots even after the eager preload path was removed
+- Status: DONE
+
+## [2026-03-08 15:03:49 +0900] FINISH arena-scene-lazy-ownership-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep cleaning arena by moving optional scene lazy-loading out of the route and into the scene shell boundary
+- What changed:
+  - Updated `src/components/arena/ArenaMatchScene.svelte`
+    - moved `MatchHistory`, `ChartWarView`, `MissionControlView`, `CardDuelView`, and alt-view `ResultPanel` dynamic import ownership into the scene shell
+    - added local lazy component state plus scene-owned effects keyed by `matchHistoryOpen`, `arenaView`, and `resultVisible`
+  - Updated `src/routes/arena/+page.svelte`
+    - removed route-local lazy component type aliases, state slots, and `ensure*Component()` helpers
+    - removed route-level lazy-loading effects for match history and alt views
+    - shrank `arenaMatchSceneProps` down to pure scene props instead of component constructor plumbing
+  - Updated `CLAUDE.md`
+    - locked `ArenaMatchScene.svelte` as the owner of optional scene lazy boundaries
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - `src/routes/arena/+page.svelte`: `1008` lines
+  - `src/components/arena/ArenaMatchScene.svelte`: `281` lines
+  - server entry `src/routes/arena/+page.svelte`: `171.29 kB`
+- Residual risks:
+  - `arena/+page.svelte` is thinner, but it still owns a large controller/runtime assembly surface
+  - `ArenaMatchScene.svelte` now owns scene lazy loading correctly, but the battle-side view-model bundle still comes from the route and can be reduced further
+  - arena SSR pressure is still dominated by `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
+- Status: DONE
+
+## [2026-03-08 15:19:16 +0900] FINISH arena-battle-sidebar-lazy-chunk-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing arena performance cleanup, but only keep slices that materially reduce the SSR route weight
+- What changed:
+  - Updated `src/components/arena/ArenaBattleSidebar.svelte`
+    - removed static imports for `ArenaBattleStageSurface.svelte` and `ArenaBattleOutcomeOverlay.svelte`
+    - switched both to dynamic import boundaries via awaited component modules
+    - kept mission bar, combat HUD, and narration log statically in place since they are small and always visible
+  - Updated `CLAUDE.md`
+    - locked the battle-sidebar child lazy boundary rule so the heavy presentation pair is not pulled back into the main sidebar import chain
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `npm run check:budget`: PASS (`0/49`)
+  - `node node_modules/.bin/vite build`: PASS
+  - server entry `src/routes/arena/+page.svelte`: `158.39 kB` (from `174.34 kB` on the rejected prior slice baseline)
+  - server chunk `src/components/arena/ArenaBattleStageSurface.svelte`: `6.97 kB`
+  - server chunk `src/components/arena/ArenaBattleOutcomeOverlay.svelte`: `7.63 kB`
+- Residual risks:
+  - the main arena SSR pressure is now more clearly concentrated in `ChartPanel`, `chartPanelSupportRuntime`, and `drawingManager`
+  - battle sidebar is thinner, but the route still owns a large controller/runtime assembly surface
+  - if the stage or outcome components gain synchronous imports again, the arena route entry can regress quickly
+- Status: DONE
+
+## [2026-03-08 12:35:41 +0900] FINISH phase-2-identity-settings-bootstrap-cutover-design-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep the redesign moving, but stay in design mode and turn the abstract Phase 2 line into an actual cutover design
+- What changed:
+  - Added `docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md`
+    - fixed the true Phase 2 scope as `16` core route handlers across `auth`, `profile`, `preferences`, `ui-state`, `notifications`, and `activity`
+    - explicitly excluded `profile/passport/learning/**` and `positions/polymarket/auth` from this cutover
+    - documented the current browser edges: `auth.ts`, `profileApi.ts`, `preferencesApi.ts`, `notificationsApi.ts`, `walletStore.ts`, `userProfileStore.ts`, `notificationStore.ts`, and shell hydration surfaces
+    - captured the key blockers:
+      - `walletStore` still mixes session mirror and wallet-modal UX
+      - `userProfileStore` still mixes server projection, local cache, and client-derived overlays
+      - `notificationsApi.ts` still owns canonical notification DTOs
+      - `notificationStore.ts` still mixes durable notifications, toasts, `p0Override`, and demo seed behavior
+      - `activity` routes exist server-side but still do not have a browser wrapper seam
+    - fixed the target split and cutover sequence for `contracts -> shell bootstrap split -> route thinning -> api cutover`
+  - Updated `docs/exec-plans/active/README.md`
+    - added the dedicated Phase 2 cutover design to the active plan set
+  - Updated `docs/exec-plans/index.md`
+    - added the dedicated Phase 2 cutover design to the active execution-plan index
+- Validation:
+  - `rg --files frontend/src/routes/api | rg '/(auth|profile|preferences|ui-state|notifications|activity)'`: PASS
+  - validated `16` core Phase 2 handlers and separately confirmed deferred `profile/passport/learning/**` plus `positions/polymarket/auth`
+  - `docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md`: added as the new execution-level Phase 2 authority
+- Residual risks:
+  - the core route scan also matches deferred `profile/passport/learning/**`, so future implementation slices must keep exclusion lines explicit
+  - `notifications` and `activity` still lack the full contract/wrapper prep needed before code cutover starts
+  - `notificationStore.ts` remains one of the biggest shell-boundary tangles until it is split
+- Status: DONE
+
+## [2026-03-08 15:12:07 +0900] FINISH phase-2-notifications-activity-boundary-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the Phase 2 redesign by actually landing the notifications/activity contract seam and splitting the mixed notification store
+- What changed:
+  - Added [notifications.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/notifications.ts#L1)
+    - fixed the canonical transport contract for notification records, list queries, create payloads, and mark-read/delete responses
+  - Added [activity.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/activity.ts#L1)
+    - fixed the canonical transport contract for activity feed queries, activity records, and reaction writes
+  - Added [activityApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/activityApi.ts#L1)
+    - created the missing browser wrapper seam for durable activity feed reads and reaction writes
+  - Updated [notificationsApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/notificationsApi.ts#L1)
+    - stopped owning notification DTOs locally and moved to contract-backed notification transport shapes
+    - normalized list/create/mark-read/delete operations around the shared contracts
+  - Added [notificationsStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/notificationsStore.ts#L1), [toastStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/toastStore.ts#L1), [p0OverrideStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/p0OverrideStore.ts#L1), and [notificationEvents.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/notificationEvents.ts#L1)
+    - split durable notifications, ephemeral toasts, P0 override state, and event helper functions into distinct boundaries
+  - Replaced [notificationStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/notificationStore.ts#L1)
+    - converted the old mixed implementation file into a compatibility barrel
+  - Updated key consumers
+    - [NotificationTray.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/NotificationTray.svelte#L1) now hydrates durable notifications without seeding demo notifications by default
+    - [ToastStack.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ToastStack.svelte#L1), [P0Banner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/P0Banner.svelte#L1), [HypothesisPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/HypothesisPanel.svelte#L1), [alertEngine.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/services/alertEngine.ts#L1), [copyTradeStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/copyTradeStore.ts#L1), [hydration.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/hydration.ts#L1), [WarRoom.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/WarRoom.svelte#L1), [CopyTradeModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/CopyTradeModal.svelte#L1), [signals/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/signals/+page.svelte#L1), and [terminalCommunityRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/terminal/terminalCommunityRuntime.ts#L1) now point at the split boundaries directly
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded the landed status snapshot and narrowed the remaining blockers to `walletStore`, `userProfileStore`, and route-thinning work
+- Validation:
+  - `rg -n "notificationStore|seedNotifications" src --glob '!src/routes/api/**'`: only the compatibility barrel and manual seed helper remain
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `notificationStore.ts` still exists as a compatibility barrel, so full import migration is not complete yet
+  - route handlers under `api/notifications` and `api/activity` still own row mapping and SQL shaping
+  - `walletStore.ts` and `userProfileStore.ts` remain the next real Phase 2 boundary hotspots
+- Status: DONE
+
+## [2026-03-08 15:31:42 +0900] FINISH phase-2-notifications-activity-route-thinning-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going after the browser boundary split and thin the notifications/activity routes so the Phase 2 backend edge is less route-local
+- What changed:
+  - Updated [notifications.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/notifications.ts#L1)
+    - added `NOTIFICATION_TYPES` so route validation and transport contracts share the same allowed type set
+  - Updated [activity.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/activity.ts#L1)
+    - added `ACTIVITY_SOURCE_PAGES` so the reaction route no longer owns its own source-page enum copy
+  - Added [notificationRecord.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/notificationRecord.ts#L1)
+    - extracted notification row-to-contract mapping out of `api/notifications/+server.ts`
+  - Added [activityRecord.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/activityRecord.ts#L1)
+    - extracted activity row-to-contract mapping out of `api/activity/+server.ts` and `api/activity/reaction/+server.ts`
+  - Updated [notifications/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/notifications/+server.ts#L1)
+    - now reuses contract-owned notification type validation and shared row mapping
+  - Updated [activity/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/activity/+server.ts#L1) and [activity/reaction/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/activity/reaction/+server.ts#L1)
+    - now reuse contract-owned source-page validation and shared row mapping
+- Validation:
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - route handlers still own inline SQL and have not yet been moved behind dedicated service/repository modules
+  - `walletStore.ts` and `userProfileStore.ts` remain the larger unresolved Phase 2 boundary hotspots
+- Status: DONE
+
+## [2026-03-08 15:58:24 +0900] FINISH phase-2-auth-profile-store-split-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going after notifications/activity and split the next real Phase 2 hotspots: auth session vs wallet shell, and profile projection vs client-derived metrics
+- What changed:
+  - Added [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1)
+    - moved cookie-backed session hydration and authenticated user ownership out of `walletStore.ts`
+  - Updated [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+    - `walletStore` now consumes `authSessionStore` and acts as wallet/modal shell state with compatibility mirroring
+    - local persistence no longer treats `email`, `nickname`, and `tier` as authoritative persisted fields
+  - Updated [Header.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/Header.svelte#L1) and [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - moved auth-session function imports to the dedicated auth-session store
+  - Added [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1)
+    - moved cached server projection and optimistic profile edits into a dedicated projection store
+  - Added [userProfileDerivedStatsStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileDerivedStatsStore.ts#L1)
+    - moved client-derived metrics from match history into a dedicated derived store
+  - Replaced [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
+    - converted it into a compatibility aggregate that merges projection and derived stats for existing consumers
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded the landed auth/profile store split and narrowed the remaining blockers
+  - Updated [refresh-generated-context.mjs](/Users/ej/Downloads/maxidoge-clones/frontend/scripts/dev/refresh-generated-context.mjs#L1)
+    - added metadata for `authSessionStore`, `userProfileProjectionStore`, and `userProfileDerivedStatsStore`
+- Validation:
+  - `npm run docs:check`: PASS
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `walletStore.ts` and `userProfileStore.ts` still expose compatibility read models, so full consumer migration is not complete yet
+  - Phase 2 route handlers still need deeper service/repository extraction
+- Status: DONE
+
+## [2026-03-08 18:22:18 +0900] FINISH arena-scene-contract-typing-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the arena refactor, close the uncommitted scene-shell contract slice, and make the new boundary explicit before pushing
+- What changed:
+  - Added [ArenaAltViewHost.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaAltViewHost.svelte#L1)
+    - extracted the optional alt-view lazy imports and alt-view-only result overlay out of `ArenaMatchScene.svelte`
+    - kept `ArenaMatchScene.svelte` focused on scene-shell ownership while the host owns `chart/mission/card` swapping and result overlay loading
+  - Added [arenaMatchSceneTypes.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/arenaMatchSceneTypes.ts#L1)
+    - fixed the canonical typed contract for `ArenaMatchScene` alt-view props, result-panel props, and battle-layout bundle props
+    - replaced the old loose `Record<string, unknown>` contract with explicit `ArenaAltViewProps`, `ArenaResultPanelProps`, and `ArenaBattleLayoutSceneProps`
+  - Added [arenaSceneProps.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/selectors/arenaSceneProps.ts#L1)
+    - created the route-side typed wrapper seam for scene, result, chart, and battle-layout prop bundles
+    - locked the route-to-scene bundle handoff under a single canonical helper path instead of ad-hoc object literals
+  - Updated [ArenaMatchScene.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaMatchScene.svelte#L1)
+    - switched the component to the shared `ArenaMatchSceneProps` contract
+    - replaced ambiguous empty-object defaults with shape-safe defaults for alt-view and result-panel props
+    - removed the now-unused local prop-interface type imports after the shared contract cutover
+    - handed alt-view/result overlay loading off to `ArenaAltViewHost.svelte` so the scene shell stays thinner
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - routed scene/result/chart/layout bundle creation through the typed `arenaSceneProps.ts` helpers
+    - kept the route focused on controller/state ownership while the scene shell remains in `ArenaMatchScene.svelte`
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ArenaAltViewHost.svelte`, `arenaMatchSceneTypes.ts`, and `arenaSceneProps.ts` as the canonical scene-shell/contract path so future refactors do not regress to route-local lazy state or untyped bundle props
+- Validation:
+  - `npm run check`: PASS
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+  - `npm run gate`: PASS
+  - server entry: `src/routes/arena/+page.svelte` = `159.42 kB`
+  - line counts: `src/routes/arena/+page.svelte` = `1015`, `src/components/arena/ArenaMatchScene.svelte` = `151`
+- Residual risks:
+  - `arenaSceneProps.ts` is intentionally a thin typed wrapper seam today; if scene bundle derivation grows, the next extraction should move real formatting logic there instead of back into `arena/+page.svelte`
+  - unrelated WIP remains dirty in `ChartIndicatorStrip.svelte` and `marketPulse`-related files and was intentionally excluded from this slice
+- Status: DONE
+
+## [2026-03-08 18:39:12 +0900] FINISH phase-2-profile-consumer-narrowing-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going after the auth/profile store split and trim direct compatibility-store consumers before the next backend cutover slice
+- What changed:
+  - Updated [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1)
+    - added direct projection-level exports for `profileTier`, `earnedBadges`, and `lockedBadges`
+  - Updated [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
+    - re-exported the projection-owned badge/tier selectors while keeping merged `profileStats` on the compatibility aggregate
+  - Updated [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1)
+    - switched the home hero badge from full `userProfileStore` to narrow `profileTier`
+  - Updated [ContextBanner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ContextBanner.svelte#L1)
+    - removed unused profile hydration and compatibility-store dependency entirely
+  - Updated [LivePanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/live/LivePanel.svelte#L1)
+    - removed an unused `userProfileStore` subscription
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - now reads badge/tier mutation helpers from `userProfileProjectionStore` and leaves only merged profile/stat reads on `userProfileStore`
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded the narrower projection-consumer seam and reduced the remaining compatibility hotspot list
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `passport/+page.svelte` still depends on the merged compatibility aggregate for combined profile + derived stats
+  - `walletStore.ts` still carries auth-facing compatibility fields for `WalletModal.svelte`
+- Status: DONE
+
+## [2026-03-08 19:02:54 +0900] FINISH phase-2-wallet-auth-identity-cut-slice-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on Phase 2 and remove the remaining auth identity duplication from `walletStore`
+- What changed:
+  - Updated [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1)
+    - added `authSessionIdentity` so wallet consumers can read email, nickname, tier, and phase directly from session authority
+  - Updated [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+    - removed duplicated `email`, `nickname`, and `tier` from wallet state
+    - removed the unused `registerUser` / `userTier` compatibility surface
+    - switched modal step routing to consult `authSessionStore` instead of local mirrored identity
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - switched account/profile rendering and signed-session checks from `walletState.*` identity fields to `authSessionIdentity`
+    - kept wallet transport state (`address`, `provider`, `chain`, `balance`, `signature`) on `walletStore`
+  - Result:
+    - auth identity now has one browser authority path: `authSessionStore`
+    - wallet state is reduced to wallet connection, modal flow, and lifecycle shell state
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+- Residual risks:
+  - `walletStore.ts` still mixes wallet connection UX with modal step orchestration and lifecycle phase tracking
+  - `WalletModal.svelte` remains a large component even though its authority split is now cleaner
+- Status: DONE
+
+## [2026-03-08 18:36:16 +0900] FINISH arena-stage-surface-host-split-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep refactoring the arena scene without changing layout, keep deleting repetitive structure, and stabilize the remaining battle/scene presentation hotspots
+- What changed:
+  - Added [ArenaAltViewHost.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaAltViewHost.svelte#L1)
+    - moved `chart/mission/card` lazy loading and alt-view-only `ResultPanel` overlay ownership out of `ArenaMatchScene.svelte`
+    - kept the scene shell focused on topbar, phase guide, match-history host, view switch, and battle/alt-view switching
+  - Added [arenaBattleStageTypes.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/arenaBattleStageTypes.ts#L1)
+    - introduced the canonical prop contract for the battle stage surface host
+  - Added [ArenaBattleParticleField.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaBattleParticleField.svelte#L1)
+    - extracted grid, particle, and connector rendering from the battle stage surface
+  - Added [ArenaBattleCenterNode.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaBattleCenterNode.svelte#L1)
+    - extracted the center price node without changing placement or styling
+  - Added [ArenaBattleAgentSprite.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaBattleAgentSprite.svelte#L1)
+    - extracted agent sprite presentation, hit popup, HP/energy bars, vote badge, and sprite animation CSS into a dedicated child boundary
+  - Added [ArenaBattleStageFx.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaBattleStageFx.svelte#L1)
+    - extracted VS splash, critical popup, and combo overlay FX from the host surface
+  - Updated [ArenaBattleStageSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaBattleStageSurface.svelte#L1)
+    - converted it into a thin stage host that only coordinates particle field, center node, agent sprites, and FX overlays
+  - Updated [ArenaMatchScene.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaMatchScene.svelte#L1)
+    - removed inline alt-view/result lazy-loader state and handed that responsibility to `ArenaAltViewHost.svelte`
+  - Updated [arenaBattleLayoutTypes.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/arenaBattleLayoutTypes.ts#L1)
+    - aligned sidebar prop contracts with shared `ArenaParticle` and `ArenaFloatingWord` types instead of inline object shapes
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the new `ArenaAltViewHost` and battle-stage child boundaries as canonical ownership paths
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - server entry: `src/routes/arena/+page.svelte` = `159.67 kB`
+  - line counts:
+    - `src/components/arena/ArenaMatchScene.svelte` = `157`
+    - `src/components/arena/ArenaAltViewHost.svelte` = `172`
+    - `src/components/arena/ArenaBattleStageSurface.svelte` = `62`
+- Residual risks:
+  - `src/routes/arena/+page.svelte` is still controller-heavy at `1015` lines and remains the next structural hotspot
+  - `ArenaBattleAgentSprite.svelte` now owns most battle-sprite CSS, so future visual changes should stay there instead of leaking back into the host or route
+- Status: DONE
+
+## [2026-03-08 18:36:16 +0900] FINISH arena-agent-bridge-cutover-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the arena route cleanup, remove more inline glue without changing layout, and close noisy helper/cast paths inside `arena/+page.svelte`
+- What changed:
+  - Added [arenaAgentBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaAgentBridge.ts#L1)
+    - centralized arena route agent speech/state/energy/chat glue above `arenaAgentRuntime`
+    - normalized the `SYSTEM` chat author path so route/controller code no longer needs `as any` casts
+    - added an explicit presentation-sync binding seam for `battlePresentationRuntime.syncAgentState` / `syncAgentEnergy`
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - removed the local `setSpeech()`, `setAgentState()`, `setAgentEnergy()`, and `addChatMsg()` helpers
+    - switched `battlePresentationRuntime`, `arenaShellController`, `arenaResultController`, `arenaBattleController`, `arenaPhaseController`, and `arenaAnalysisPresentationRuntime` to the shared `arenaAgentBridge`
+    - removed inline `SYSTEM` chat casts in hypothesis/result paths
+    - reduced route size from `1015` to `1002` lines
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaAgentBridge.ts` as the canonical agent bridge path for future arena refactors
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - server entry: `src/routes/arena/+page.svelte` = `161.03 kB`
+- Residual risks:
+  - `arena/+page.svelte` still owns the large controller/runtimes wiring block and remains the next extraction target
+  - current build pulled in unrelated `market/pulse` WIP during route-map generation, so generated-doc drift outside this slice should still be treated as separate work
+- Status: DONE
+
+## [2026-03-08 23:28:08 +0900] FINISH arena-state-bridge-bundle-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep refactoring the arena route without changing layout, keep deleting repeated controller glue, and keep the CLAUDE/watch-log trail current before the next push
+- What changed:
+  - Added [arenaBattleStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaBattleStateBridge.ts#L1)
+    - centralized battle presentation/result/battle-controller access to route-level battle HUD and turn state
+    - removed repeated setter lambdas for `charSprites`, `battleTurns`, `battleNarration`, `battlePhaseLabel`, `vsMeter`, `enemyHP`, and combo/critical/VS flags from the runtime wiring surface
+  - Added [arenaPageStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaPageStateBridge.ts#L1)
+    - centralized route-local page state ownership for server sync, chart bridge, hypothesis timer, overlay visibility, match-history/open-exit state, and float direction
+    - gave `arenaMatchController`, `arenaShellController`, `arenaPhaseController`, `arenaResultController`, and `arenaChartController` a shared state bridge instead of repeating ad-hoc getter/setter closures
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - switched battle presentation, battle controller, result controller, phase controller, shell controller, match controller, and chart controller to the shared battle/page state bridges
+    - collapsed boilerplate assignment closures after the bridge cutover so the route dropped from `1002` to `975` lines
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaBattleStateBridge.ts` and `arenaPageStateBridge.ts` as canonical arena bridge ownership paths
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - server entry: `src/routes/arena/+page.svelte` = `165.22 kB`
+  - line counts:
+    - `src/routes/arena/+page.svelte` = `975`
+    - `src/lib/arena/controllers/arenaBattleStateBridge.ts` = `41`
+    - `src/lib/arena/controllers/arenaPageStateBridge.ts` = `55`
+- Residual risks:
+  - `arena/+page.svelte` is smaller again, but the remaining hotspot is still the long controller/runtime bundle assembly block
+  - local validation currently includes unrelated `market-pulse` WIP files in the working tree; those remain a separate slice and should not be mixed back into arena commits by accident
+- Status: DONE
+
+## [2026-03-08 23:32:16 +0900] FINISH chart-market-pulse-lazy-badge-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the ongoing chart/arena refactor, close the current `marketPulse` WIP as a self-contained slice, and keep pushing clean commits without dragging unrelated dirty files into the batch
+- What changed:
+  - Added [marketPulseModel.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/market/marketPulseModel.ts#L1)
+    - made pair normalization and raw transport -> computed UI model projection canonical in one place
+    - normalized compact pair inputs such as `BTCUSDT` into `BTC/USDT` so chart-side pair surfaces and server endpoints stop drifting
+  - Added [MarketPulseBadge.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/MarketPulseBadge.svelte#L1)
+    - isolated Heat Score / Macro Regime badge UI, pair-scoped refresh, compact/expanded detail rendering, and toggle state into an optional chart child
+    - uses request token guards so late responses do not overwrite the latest pair selection
+  - Updated [marketPulse.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/marketPulse.ts#L1)
+    - added browser-side TTL cache and inflight dedupe so expanded indicator strips do not stampede `/api/market/pulse`
+    - switched client projection to the shared `marketPulseModel` path instead of recomputing in the badge
+  - Updated [ChartIndicatorStrip.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartIndicatorStrip.svelte#L1)
+    - kept the strip canonical but lazy-loads `MarketPulseBadge.svelte` only when the advanced indicator strip is actually expanded
+    - reintroduced `pair` as an explicit strip contract because the badge is pair-sensitive
+  - Updated [ChartPanelShell.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartPanelShell.svelte#L1)
+    - passes `pair` through to the lazy indicator strip without re-owning any pulse logic
+  - Added [market/pulse API](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/market/pulse/+server.ts#L1) to the active route surface and refreshed [api-group-map.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/generated/api-group-map.md#L1)
+    - server cache is now keyed by normalized pair instead of a single `any` cache blob
+    - route returns raw market inputs only; UI model calculation stays on the shared client/server model path
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `MarketPulseBadge.svelte`, `marketPulseModel.ts`, and `marketPulse.ts` as canonical chart boundaries so the indicator strip does not regress into direct fetch/compute code
+- Validation:
+  - `npm run check`: PASS (`0 errors / 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - server entries:
+    - `src/routes/api/market/pulse/+server.ts` = `4.85 kB`
+    - `src/routes/arena/+page.svelte` = `165.69 kB`
+    - `src/components/arena/ChartPanel.svelte` chunk = `49.08 kB`
+- Residual risks:
+  - `MarketPulseBadge.svelte` is intentionally poll-based with a shared client cache; if this surface becomes always-on later, it should move to a push or shared-store model rather than adding more badge-local timers
+  - unconnected `PositionSizerPanel.svelte` / `positionSizer.ts` WIP remains outside this slice and should not be folded into the market-pulse contract by accident
+- Status: DONE
+
+## [2026-03-08 23:32:10 +0900] FINISH phase-2-wallet-lifecycle-store-split-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal web/server split, continue pushing slices, and keep `CLAUDE.md` plus push/merge records aligned while removing mixed authority from `walletStore`
+- What changed:
+  - Added [userLifecycleStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userLifecycleStore.ts#L1)
+    - extracted local lifecycle/progression ownership for `phase`, `hasSeenDemo`, `hasCompletedOnboarding`, `matchesPlayed`, and `totalLP`
+    - migrates legacy progression fields from the mixed `wallet` localStorage payload on first load
+    - keeps lifecycle phase normalization pinned to [progressionRules.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/progressionRules.ts#L1)
+  - Updated [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+    - reduced the store to wallet connection transport and wallet modal shell state
+    - removed lifecycle fields from `WalletState`
+    - kept compatibility re-exports for `recordMatch`, `completeDemoView`, `skipWalletConnection`, and `userPhase` so existing callers do not need a broad route sweep yet
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - now reads lifecycle phase from `userLifecycleStore`
+    - explicitly marks wallet-signature completion on the lifecycle store after successful verification
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded that auth identity and lifecycle are both split out of `walletStore`
+    - narrowed the next remaining hotspot to wallet modal step orchestration rather than mixed identity/progression ownership
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - refreshed the home/passport route ownership notes and the selected store authority table to reflect `authSessionStore` and `userLifecycleStore`
+  - Updated [refresh-generated-context.mjs](/Users/ej/Downloads/maxidoge-clones/frontend/scripts/dev/refresh-generated-context.mjs#L1)
+    - route/store generated maps now treat `walletStore` as wallet-modal shell only and add `userLifecycleStore` as the local progression shell
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `walletStore.ts` still owns modal-step routing; only authority mixing was removed in this slice
+  - generated docs may still reflect unrelated local `market/pulse` WIP and should stay out of the staged slice
+- Status: DONE
+
+## [2026-03-09 00:03:00 +0900] FINISH phase-2-wallet-modal-store-split-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal split and remove the remaining wallet modal state ownership from `walletStore`
+- What changed:
+  - Added [walletModalStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletModalStore.ts#L1)
+    - moved wallet modal visibility and `walletModalStep` flow into a dedicated route/session store
+    - keeps `openWalletModal()`, `closeWalletModal()`, and `setWalletModalStep()` separate from wallet connection transport
+  - Updated [walletStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/walletStore.ts#L1)
+    - removed `showWalletModal` and `walletModalStep` from `WalletState`
+    - reduced the store to wallet connection transport plus signed-wallet shell data
+    - stopped wallet connect/sign actions from mutating modal step state directly
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - switched modal visibility and step reads to `walletModalStore`
+    - keeps wallet connect/sign actions explicit by setting modal step in the component after transport mutations
+  - Updated [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1), [Header.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/Header.svelte#L1), and [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - moved `openWalletModal` imports to `walletModalStore`
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded that modal visibility/step flow is now split away from `walletStore`
+    - narrowed the remaining hotspot to `WalletModal.svelte` funnel logic instead of store authority mixing
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1) and [refresh-generated-context.mjs](/Users/ej/Downloads/maxidoge-clones/frontend/scripts/dev/refresh-generated-context.mjs#L1)
+    - documented `walletModalStore` as the canonical modal flow owner
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `WalletModal.svelte` still owns the bulk of wallet auth funnel branching even though store ownership is cleaner
+  - unrelated arena bridge and position-sizer WIP remain dirty and must stay out of this slice
+- Status: DONE
+
+## [2026-03-09 01:18:00 +0900] FINISH arena-game-state-bridge-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the arena split, keep layout/position unchanged, and keep pushing with CLAUDE-aligned records
+- What changed:
+  - Added [arenaGameStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaGameStateBridge.ts#L1)
+    - centralized arena route `gameState` mutations for squad config, lobby entry, arena view, result progression, battle bootstrap/tick/result, analysis projection, and hypothesis submission/timeout
+    - keeps hypothesis and `pos` synchronized so chart-dragged TP/SL/ENTRY changes no longer leave stale battle position state behind
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - removed all remaining inline `gameState.update(...)` closures from controller wiring
+    - rewired match/shell/result/battle/chart/phase controllers to consume the canonical game-state bridge
+    - reduced route-local mutation glue so the page remains a phase/runtime coordinator rather than a direct store mutator
+- Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaGameStateBridge` as the canonical owner for arena route `gameState` mutations
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - arena route still owns controller/runtime assembly and should keep shrinking toward a bundle/controller host
+  - unrelated auth/position-sizer WIP in the worktree must stay out of this slice
+- Status: DONE
+
+## [2026-03-08 23:49:43 +0900] FINISH phase-2-auth-route-helper-extraction-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal web/server split, continue pushing slices, and keep `CLAUDE.md` plus push records aligned while thinning auth routes
+- What changed:
+  - Added [authService.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/authService.ts#L1)
+    - centralizes auth request body parsing for identity and wallet proof fields
+    - centralizes reusable email/nickname validation messages
+    - centralizes EVM wallet proof verification and nonce consumption
+    - centralizes session creation plus cookie issuance for auth routes
+  - Updated [login/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/login/+server.ts#L1)
+    - removed duplicated wallet proof validation and session-cookie creation
+    - narrowed the route to abuse guard, login lookup, and response shaping
+    - added an explicit post-verification null guard for wallet address to preserve repository type safety
+  - Updated [register/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/auth/register/+server.ts#L1)
+    - removed duplicated identity validation, optional wallet proof validation, and session issuance
+    - narrowed the route to abuse guard, uniqueness checks, user creation, and response shaping
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - restored explicit setter parameter types for the current bridge wiring so `svelte-check` stays green while this auth slice lands
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - recorded `authService.ts` as the canonical shared auth-route helper boundary
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented that login/register must use `authService.ts` for wallet proof and session issuance
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `WalletModal.svelte` still owns the broader wallet connect/sign/auth funnel, so auth browser-side flow is cleaner at the route boundary but not fully extracted yet
+  - auth routes still call repository functions directly; this slice only removed duplicated validation/session issuance logic, not repository access
+  - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remains outside this slice
+- Status: DONE
+
+## [2026-03-08 23:56:42 +0900] FINISH phase-2-wallet-modal-flow-helper-extraction-20260308 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal split after auth-route thinning, keep pushing narrow slices, and continue aligning `CLAUDE.md` plus push records
+- What changed:
+  - Added [walletModalFlow.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalFlow.ts#L1)
+    - extracted browser-side auth form parsing for signup/login
+    - extracted wallet-auth start-step resolution from modal-local branching
+    - extracted funnel error-reason normalization for GTM payloads
+  - Updated [contracts/auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/auth.ts#L1)
+    - moved email/nickname validation rules and wallet-signature shape check into a shared contract-safe module
+    - browser and server now share the same validation messages
+  - Updated [authService.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/authService.ts#L1)
+    - now reuses shared auth validation rules and shared signature regex instead of defining local duplicates
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - removed duplicated email/nickname parsing rules
+    - removed duplicated start-step branching logic for wallet-connected vs signed states
+    - switched funnel error tracking to the extracted helper
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - replaced deprecated `<svelte:component>` usage with direct dynamic component syntax so warning budget stays at zero
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1) and [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - recorded `walletModalFlow.ts` and shared auth validation as canonical boundaries
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `WalletModal.svelte` still owns the actual async wallet connect/sign/auth transport calls and profile-step rendering
+  - shared auth validation is now centralized, but wallet auth browser/server response envelopes are still route-wrapper-specific rather than fully lifted into a richer shared flow contract
+  - unrelated untracked arena position-sizer WIP remains outside this slice
+- Status: DONE
+
+## [2026-03-09 00:06:46 +0900] FINISH phase-2-wallet-modal-transport-extraction-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal split, continue pushing slices, and move the remaining async wallet auth transport out of `WalletModal.svelte`
+- What changed:
+  - Added [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1)
+    - extracted provider-specific wallet connect transport
+    - extracted nonce/signature verification transport
+    - extracted signup/login transport wrappers
+    - extracted logout API cleanup into a dedicated helper
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - removed inline provider request branches and auth transport calls
+    - kept only modal-local UI state, store mutation, GTM tracking, and step transitions
+    - kept `walletConnectReady` as a UI-only readiness flag for button state
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1) and [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - recorded `walletModalTransport.ts` as the canonical async transport boundary
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `WalletModal.svelte` still owns the higher-level UI flow state machine and profile-step rendering
+  - wallet auth transport is cleaner, but browser/server auth success payload shaping still lives in `src/lib/api/auth.ts`
+  - unrelated untracked arena position-sizer WIP remains outside this slice
+- Status: DONE
+
+## [2026-03-09 00:24:00 +0900] FINISH arena-game-state-bridge-tracking-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing self-contained refactor slices while preserving the arena performance path and avoid mixing unrelated WIP
+- What changed:
+  - Added [arenaGameStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaGameStateBridge.ts#L1)
+    - centralizes repeated `gameState.update(...)` patches used by arena shell, phase, battle, result, and match wiring
+    - owns shared `squadConfig`, `arenaView`, analysis projection, hypothesis/position sync, battle bootstrap/tick/result, and resolved progression writes
+    - makes the current arena route self-contained again by tracking the bridge file that the controller wiring already expects
+- Validation:
+  - `npm run check`: PASS
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+- Residual risks:
+  - `arena/+page.svelte` still owns controller/runtime assembly even though repeated `gameState` patches are now bridged
+  - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
+- Status: DONE
+
+## [2026-03-09 00:39:00 +0900] FINISH arena-scene-host-lazy-entry-cut-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing self-contained performance refactor slices without mixing the unrelated wallet/auth WIP
+- What changed:
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - removed the eager route-level import of [ArenaMatchScene.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ArenaMatchScene.svelte#L1)
+    - now lazily loads the scene shell only after the app leaves the guaranteed `lobby/draft` bootstrap state
+    - keeps lobby and squad-config phases on the cheap initial route path while preserving the existing scene contract once the match actually starts
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the route-level lazy policy for `ArenaMatchScene.svelte` and the bootstrap assumption it depends on
+- Validation:
+  - `npm run check`: PASS
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+- Performance:
+  - `arena/_page.svelte.js`: `165.22 kB -> 71.32 kB`
+  - heavy scene shell moved behind a lazy server chunk (`server/chunks/_page.js`: `235.41 kB`)
+- Residual risks:
+  - the lazy policy assumes `gameState.loadState()` always resets initial arena render to `inLobby=true` and `phase='DRAFT'`
+  - unrelated dirty `WalletModal/auth` WIP and untracked `PositionSizerPanel.svelte` / `positionSizer.ts` remain outside this slice
+- Status: DONE
+
+## [2026-03-09 01:42:00 +0900] FINISH arena-ui-state-bridge-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep shrinking arena route assembly after the game-state bridge while preserving layout and push each safe slice
+- What changed:
+  - Added [arenaUiStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaUiStateBridge.ts#L1)
+    - centralized route-local UI shell state for `rewardState`, `resultData`, `floatingWords`, `arenaParticles`, and `showMarkers`
+    - gives visual-effects runtime, result controller, and chart controller a shared mutation surface instead of repeated local setter lambdas
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - moved visual-effects wiring, reward reset, result-state wiring, and marker visibility wiring onto the canonical UI-state bridge
+    - kept scene/layout markup untouched while reducing route-local state mutation glue further
+- Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaUiStateBridge` as the canonical owner for arena route local UI shell state
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `arena/+page.svelte` still assembles the full controller/runtime bundle even though local state wiring is thinner
+  - unrelated auth/position-sizer WIP remains outside this slice
+- Status: DONE
+
+## [2026-03-09 01:56:00 +0900] FINISH arena-phase-effects-runtime-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing arena route controller assembly without changing layout/position and continue pushing safe slices
+- What changed:
+  - Added [arenaPhaseEffectsRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaPhaseEffectsRuntime.ts#L1)
+    - moved `draft/analysis/hypothesis/preview/battle` entry choreography into a dedicated runtime
+    - owns live-event start, deploy/review/battle speech loops, draft reset effects, preview confirm feed, and related audio/juice hooks
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - rewired `arenaPhaseController` and `arenaBattleController` to consume the canonical phase-effects runtime instead of route-local lambdas
+    - removed repeated phase-entry `safeTimeout()` choreography from the route while keeping scene/layout markup unchanged
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaPhaseEffectsRuntime` as the canonical owner for arena phase entry effects
+- Validation:
+  - `npm run check`: pending
+  - `npm run build`: pending
+  - `npm run gate`: pending
+- Residual risks:
+  - `arena/+page.svelte` still owns bridge/runtime/controller assembly even though phase-entry side effects are thinner
+  - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
+- Status: IN PROGRESS
+
+## [2026-03-09 02:34:00 +0900] FINISH arena-phase-runtime-bundle-land-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing self-contained arena refactor slices, resolve the remaining runtime-bundle type drift, and avoid mixing the unrelated position-sizer WIP
+- What changed:
+  - Added [arenaPhaseRuntimeBundle.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaPhaseRuntimeBundle.ts#L1)
+    - canonicalized the assembly of `battlePresentationRuntime`, `analysisPresentationRuntime`, `phaseEffectsRuntime`, `phaseController`, and `battleController`
+    - owns `clearBattleSession()` and `destroy()` boundaries for the bundled arena phase stack
+  - Added [arenaPhaseEffectsRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaPhaseEffectsRuntime.ts#L1)
+    - owns `DRAFT/ANALYSIS/HYPOTHESIS/PREVIEW/BATTLE` entry choreography, feed/audio hooks, and preview-confirm/battle-enter effects
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - removed route-local phase/battle runtime construction and rewired the page through the canonical phase runtime bundle
+    - switched shell cleanup to `arenaPhaseRuntimeBundle.clearBattleSession()` and `arenaPhaseRuntimeBundle.destroy()`
+  - Updated [arenaBattleFeedRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/feed/arenaBattleFeedRuntime.ts#L1), [arenaAnalysisPresentationRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaAnalysisPresentationRuntime.ts#L1), and [arenaGameStateBridge.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaGameStateBridge.ts#L1)
+    - widened feed-direction input at the runtime edge but normalized back to canonical `Direction` before store writes
+    - exported the arena game-state bridge contract so `applyAnalysisProjection` no longer degrades to `unknown` across the runtime bundle boundary
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `arena/+page.svelte` still assembles the wider page controller graph around the bundle
+  - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
+- Status: DONE
+
+## [2026-03-09 03:02:00 +0900] FINISH phase-2-profile-projection-direct-imports-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing compatibility-layer usage for the internal web/server split and keep pushing narrow slices
+- What changed:
+  - Updated [signals/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/signals/+page.svelte#L1), [WarRoom.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/WarRoom.svelte#L1), and [terminalCommunityRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/terminal/terminalCommunityRuntime.ts#L1)
+    - moved `incrementTrackedSignals()` imports off the wide compatibility aggregate and onto [userProfileProjectionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileProjectionStore.ts#L1)
+  - Updated [hydration.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/hydration.ts#L1) and [copyTradeStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/copyTradeStore.ts#L1)
+    - moved `hydrateUserProfile()` imports onto the projection authority store directly
+  - Updated [userProfileStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/userProfileStore.ts#L1)
+    - removed projection re-exports so the file is once again just the compatibility aggregate plus `profileStats`
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1) and [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - recorded that projection mutations and hydration must come from `userProfileProjectionStore.ts`, not the aggregate barrel
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1) still uses the aggregate because it needs combined projection + derived stats
+  - unrelated untracked `PositionSizerPanel.svelte` and `positionSizer.ts` WIP remain outside this slice
+- Status: DONE
+
+## [2026-03-09 02:18:00 +0900] FINISH phase-2-auth-api-normalizer-extraction-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the internal split, continue pushing narrow slices, and make the browser auth wrapper thinner after wallet-modal transport extraction
+- What changed:
+  - Added [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1)
+    - extracted legacy auth envelope parsing and timestamp coercion
+    - extracted fallback auth-user shaping for register/login responses
+    - extracted nonce, wallet-verify, session, and logout response normalization into one canonical browser-side boundary
+  - Updated [auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/auth.ts#L1)
+    - removed inline auth-user/session/nonce/verify parsing helpers
+    - reduced the wrapper to fetch transport plus calls into the shared normalizer
+  - Updated [authSessionStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/authSessionStore.ts#L1)
+    - stopped depending on API-local auth type aliases
+    - now reads `AuthUser` directly from [contracts/auth.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/auth.ts#L1)
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1) and [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - recorded `authApiNormalizer.ts` as the canonical browser auth normalization boundary
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - `WalletModal.svelte` still owns the higher-level UI flow state machine and profile-step rendering
+  - legacy auth response normalization still exists for old route envelopes, even though it is now isolated in one helper
+  - unrelated untracked arena position-sizer WIP remains outside this slice
+- Status: DONE
+
+## [2026-03-09 16:58:00 +0900] FINISH arena-route-lifecycle-extraction-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: wrap arena toward a finishable state without changing layout/position and keep narrowing route responsibilities
+- What changed:
+  - Added [arenaRouteLifecycle.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/arena/controllers/arenaRouteLifecycle.ts#L1)
+    - extracted scene lazy import warmup, `setPhaseInitCallback()` mount, and `keydown` listener mount/destroy into one canonical route lifecycle runtime
+  - Updated [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1)
+    - removed route-local `ensureArenaMatchSceneComponent()` and direct phase-init/key listener lifecycle wiring
+    - kept the arena page as a state/props coordinator while preserving layout and scene lazy policy
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `arenaRouteLifecycle.ts` as the canonical owner for arena route lazy/lifecycle wiring
+- Validation:
+  - `npm run check`: 0 errors, 5 warnings from unrelated local WIP in [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) and [CommentSection.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/community/CommentSection.svelte#L1)
+  - `npm run build`: PASS (same unrelated local warnings surfaced by Vite)
+- Residual risks:
+  - [arena/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena/+page.svelte#L1) still owns large state declaration blocks and controller construction, even though route lifecycle is now externalized
+  - unrelated dirty wallet/community WIP remains outside this slice and blocks a clean global warning budget locally
+- Status: DONE
+
+## [2026-03-09 17:01:42 +0900] FINISH signals-community-detail-routes-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep going on the current refactor/design path, finish the active slice correctly, keep pushing narrow slices, and update canonical docs / CLAUDE boundaries
+- What changed:
+  - Added [signals/[postId]/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/signals/[postId]/+page.svelte#L1), [creator/[userId]/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/creator/[userId]/+page.svelte#L1), [CommentSection.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/community/CommentSection.svelte#L1), [creatorApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/creatorApi.ts#L1), [comment.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/comment.ts#L1), [creator.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/contracts/creator.ts#L1), and [0009_community_comments.sql](/Users/ej/Downloads/maxidoge-clones/frontend/db/migrations/0009_community_comments.sql#L1)
+    - landed the server-backed signal detail, comments, and creator drilldown routes
+  - Updated [SignalPostCard.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/community/SignalPostCard.svelte#L1), [signals/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/signals/+page.svelte#L1), [communityApi.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/api/communityApi.ts#L1), [communityStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/communityStore.ts#L1), [communityMapping.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/server/communityMapping.ts#L1), [community/posts/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/community/posts/+server.ts#L1), [community/posts/[id]/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/community/posts/[id]/+server.ts#L1), [community/posts/[id]/comments/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/community/posts/[id]/comments/+server.ts#L1), [community/posts/[id]/comments/[commentId]/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/community/posts/[id]/comments/[commentId]/+server.ts#L1), and [creator/[userId]/+server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/api/creator/[userId]/+server.ts#L1)
+    - centralized post/comment row mapping and exposed canonical detail/comment/creator APIs
+  - Updated [ChartVerdictOverlay.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/ChartVerdictOverlay.svelte#L1), [TerminalChartViewport.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/TerminalChartViewport.svelte#L1), [TerminalMobileLayout.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/TerminalMobileLayout.svelte#L1), [TerminalTabletLayout.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/TerminalTabletLayout.svelte#L1), [TerminalDesktopLayout.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/terminal/TerminalDesktopLayout.svelte#L1), [terminal/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/terminal/+page.svelte#L1), [terminalSessionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/terminal/terminalSessionRuntime.ts#L1), [terminalViewModel.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/terminal/terminalViewModel.ts#L1), and [copyTradeStore.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/stores/copyTradeStore.ts#L1)
+    - added stale-scan UX and a canonical scan-to-copy-trade prefill path from the chart verdict overlay
+  - Updated [docs/page-specs/signals-page.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/page-specs/signals-page.md#L1), [docs/page-specs/signals-detail-page.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/page-specs/signals-detail-page.md#L1), [docs/page-specs/creator-page.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/page-specs/creator-page.md#L1), [docs/product-specs/signals.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/product-specs/signals.md#L1), [docs/README.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/README.md#L1), [ARCHITECTURE.md](/Users/ej/Downloads/maxidoge-clones/frontend/ARCHITECTURE.md#L1), [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1), [check-docs-context.sh](/Users/ej/Downloads/maxidoge-clones/frontend/scripts/dev/check-docs-context.sh#L1), and [refresh-generated-context.mjs](/Users/ej/Downloads/maxidoge-clones/frontend/scripts/dev/refresh-generated-context.mjs#L1)
+    - promoted the new routes into canonical docs, route metadata, and API grouping
+- Validation:
+  - `npm run docs:refresh`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - unrelated auth/header/arena WIP stayed outside this slice and was stashed during validation to keep the commit narrow
+  - the new comments migration must be applied before comments work against real DB state
+- Status: DONE
+
+## [2026-03-09 02:18:00 +0900] FINISH passport-learning-panel-controller-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/passport-learning-panel
+- Request: keep pushing safe refactor slices while the main worktree has unrelated staged wallet/auth WIP
+- What changed:
+  - Added [passportLearningPanelController.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/passport/passportLearningPanelController.ts#L1)
+    - centralizes passport learning-panel hydration, worker execution, retrain queue, and report generation side effects
+    - owns shared loading/action/error message choreography so the route stops repeating the same async flow four times
+    - provides a canonical `createPassportLearningPanelState()` initializer for the route-owned panel state object
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - collapsed multiple learning panel state atoms into one panel state object with derived aliases
+    - moved learning action handlers to the new controller while keeping the existing template and styling intact
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `passportLearningPanelController.ts` as the canonical passport learning side-effect boundary
+- Validation:
+  - `npm run check`: PASS
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+- Residual risks:
+  - `passport/+page.svelte` is still a large shell and continues to own holdings orchestration plus all tab markup/CSS
+  - this slice was validated in an isolated worktree because the main worktree had unrelated staged wallet/auth changes
+- Status: DONE
+
+## [2026-03-09 11:05:00 +0900] FINISH passport-learning-panel-view-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/passport-learning-panel
+- Request: continue the isolated passport refactor by removing learning-panel markup and display glue from the route shell
+- What changed:
+  - Added [PassportLearningPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportLearningPanel.svelte#L1)
+    - moved the entire `AI LEARNING PIPELINE` section into a dedicated presentational boundary
+    - keeps button wiring, report/dataset/job/eval rendering, and responsive layout local to the component instead of the route shell
+  - Added [passportLearningPanelViewModel.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/passport/passportLearningPanelViewModel.ts#L1)
+    - centralizes pure pipeline display calculations (`pipeline state`, `status line`, `ops connected`)
+    - gives the component a canonical pure helper instead of rebuilding those strings in the route
+  - Updated [passportLearningPanelController.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/passport/passportLearningPanelController.ts#L1)
+    - exported a controller interface so the route/component contract is typed and reusable
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - removed learning-panel markup, detail lists, and learning-only derived aliases from the route
+    - kept only panel state ownership, controller construction, and mount hydration in the page shell
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the new passport learning panel view/model boundary as canonical
+- Validation:
+  - `npm run check`: PASS
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+- Residual risks:
+  - `passport/+page.svelte` still owns holdings orchestration, tab state, and large amounts of layout/CSS outside the learning section
+  - this slice is intentionally isolated from the unrelated auth/community/chart WIP present in the main worktree
+- Status: DONE
+
+## [2026-03-09 21:34:47 +0900] FINISH wallet-modal-runtime-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep pushing narrow slices toward the web/server split, close the active wallet modal slice correctly, and keep the canonical redesign record up to date
+- What changed:
+  - Added [walletModalRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalRuntime.ts#L1)
+    - moved wallet modal async handlers for connect, sign, resolve, signup, and disconnect into a dedicated browser runtime boundary
+    - centralized GTM wallet funnel tracking, header-title lookup, progress-step derivation, and legacy-step redirects so the component no longer owns those rules inline
+  - Updated [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1)
+    - reduced the component to modal-local input state, runtime wiring, and presentational markup
+    - removed inline auth funnel handlers and delegated step-state calculations to the runtime helpers
+  - Updated [phase-2-identity-settings-bootstrap-cutover-2026-03-08.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/phase-2-identity-settings-bootstrap-cutover-2026-03-08.md#L1)
+    - marked the wallet modal runtime boundary as landed in Phase 2
+    - narrowed the remaining blocker from “wallet auth UI state machine” to “profile-step rendering and modal-local input atoms”
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - [WalletModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/modals/WalletModal.svelte#L1) still owns the profile-step markup and modal-local input atoms, so the wallet auth browser seam is cleaner but not fully presentational yet
+  - unrelated local `CLAUDE.md`, arena chart, passport, and arena-v2 WIP was stashed out of this slice to keep the push clean
+- Status: DONE
+
+## [2026-03-09 21:39:25 +0900] FINISH passport-header-nav-chrome-20260309 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep closing narrow refactor slices while preserving the larger web/server redesign direction and record the canonical boundary changes
+- What changed:
+  - Added [PassportHeaderSection.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportHeaderSection.svelte#L1)
+    - moved passport profile header, avatar picker, portfolio hero, and verified-stamp markup/CSS out of the route shell
+  - Added [PassportNavChrome.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/passport/PassportNavChrome.svelte#L1)
+    - moved passport tab bar, quick-action rail, and focus-strip markup/CSS out of the route shell
+  - Updated [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1)
+    - reduced the route shell from `2514 -> 1694` lines by delegating header/nav chrome to dedicated components
+    - kept tab state, holdings runtime, learning controller, and tab-body authority in the route
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - promoted `PassportHeaderSection.svelte` and `PassportNavChrome.svelte` to canonical passport chrome boundaries
+    - refreshed the `/passport` route size and structure notes to match the current split
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+- Residual risks:
+  - [passport/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/passport/+page.svelte#L1) still owns holdings orchestration, tab state, and the remaining tab-body content blocks
+  - unrelated arena chart and arena-v2 WIP remains outside this slice and should stay out of the commit
+- Status: DONE
+
+## [2026-03-10 00:32:00 +0900] FINISH usability-foundation-sprint-0-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue from the usability redesign spec and implementation plan by landing Sprint 0 as an additive shared foundation slice without touching unrelated arena/passport WIP
+- What changed:
+  - Added [usability-foundation-sprint-0-2026-03-10.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/usability-foundation-sprint-0-2026-03-10.md#L1)
+    - fixed Sprint 0 as the implementation authority that bridges [usability-redesign-spec-2026-03-09.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/usability-redesign-spec-2026-03-09.md#L1) to actual shared component files
+    - constrained the slice to additive shared primitives only so existing arena chart and passport WIP stayed out of scope
+  - Added [freshness.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/utils/freshness.ts#L1)
+    - introduced the canonical freshness contract (`fresh / aging / stale / unknown`)
+    - centralized timestamp normalization and age labeling so route shells do not have to rebuild data-age heuristics inline
+  - Added shared usability primitives under [src/components/shared](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared#L1)
+    - [SkeletonLoader.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/SkeletonLoader.svelte#L1)
+    - [FreshnessIndicator.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/FreshnessIndicator.svelte#L1)
+    - [InlineBanner.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/InlineBanner.svelte#L1)
+    - [CriticalModal.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/CriticalModal.svelte#L1)
+    - [OnboardingHint.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/OnboardingHint.svelte#L1)
+    - [ZeroState.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/ZeroState.svelte#L1)
+    - [PositionRiskBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/shared/PositionRiskBar.svelte#L1)
+    - established reusable presentation-first boundaries for loading, freshness, important banners, destructive confirmation, progressive hints, page zero states, and position risk display
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - recorded the new Sprint 0 shared usability foundation as canonical
+    - updated the shared component inventory and freshness utility guidance
+  - Updated [docs/exec-plans/active/README.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/README.md#L1) and [docs/exec-plans/index.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/index.md#L1)
+    - registered the new active Sprint 0 plan so later usability sprints can link to it instead of re-describing the same foundation layer
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - the new shared primitives are landed but not yet wired into any route shell; Sprint 1 and Sprint 2 still need to consume them in navigation and home
+  - unrelated local arena chart and `arena-v2` WIP remains outside this slice and should stay out of the commit
+- Status: DONE
+
+## [2026-03-10 03:28:00 +0900] FINISH usability-navigation-sprint-1-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: continue the usability redesign by landing the Sprint 1 navigation slice, keep the commit narrow, and preserve unrelated arena/terminal WIP outside the staged scope
+- What changed:
+  - Added [usability-navigation-sprint-1-2026-03-10.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/usability-navigation-sprint-1-2026-03-10.md#L1)
+    - fixed Sprint 1 as the navigation authority between the usability redesign spec and actual layout/header code
+    - defined the new responsibility split: desktop/tablet header chrome vs mobile bottom navigation
+  - Added [deepLinks.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/utils/deepLinks.ts#L1)
+    - introduced canonical builders for terminal, signals, passport, and arena links
+    - established a shared copy-trade terminal handoff URL builder so later route slices do not rebuild querystrings ad hoc
+  - Added [MobileBottomNav.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/MobileBottomNav.svelte#L1)
+    - moved mobile primary navigation into a fixed 4-tab bottom bar (`Terminal | Arena | Signals | Passport`)
+    - mapped badge counts to tracked signals and open positions without reusing the old status-bar layout
+  - Updated [Header.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/Header.svelte#L1)
+    - reduced the primary nav set to `Terminal | Arena | Signals | Passport`, with home kept at the logo
+    - removed the old mobile tab strip and collapsed the header back to compact top chrome on phones
+    - mapped secondary route highlighting so `/arena-war` and `/arena-v2` resolve to `Arena`, and `/settings` / `/agents` resolve to `Passport`
+  - Updated [routes/+layout.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+layout.svelte#L1)
+    - mounted [MobileBottomNav.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/MobileBottomNav.svelte#L1) for `<768px`
+    - kept [BottomBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/layout/BottomBar.svelte#L1) as the non-mobile status bar
+    - corrected mobile app shell padding so the removed header tab strip no longer reserves dead top space and the new bottom nav gets dedicated bottom space
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1), [docs/exec-plans/active/README.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/active/README.md#L1), and [docs/exec-plans/index.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/exec-plans/index.md#L1)
+    - registered the new navigation sprint authority
+    - recorded `deepLinks.ts` and `MobileBottomNav.svelte` as canonical boundaries
+- Validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - `npm run docs:check`: PASS
+  - `npm run ctx:check -- --strict`: PASS
+  - `npm run gate`: PASS
+- Residual risks:
+  - signals/detail/creator pages still build copy-trade handoff URLs inline and should migrate to [deepLinks.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/utils/deepLinks.ts#L1) in a follow-up slice
+  - unrelated local terminal and arena chart WIP remains outside this sprint and should stay out of the commit
+- Status: DONE
+
+## [2026-03-10 01:47:00 +0900] FINISH chart-position-sizer-contract-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep closing the active chart WIP in narrow slices, preserve the existing market-pulse/header work, and lock the position sizer to a clean engine/panel boundary
+- What changed:
+  - Updated [positionSizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/engine/positionSizer.ts#L1)
+    - added `takeProfit` input so risk-reward is computed in the engine instead of mutating results in the panel
+    - replaced free-form warning strings with structured warning codes plus a single formatter path
+    - normalized final position/risk outputs after caps so the engine owns the complete sizing result
+  - Updated [PositionSizerPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/PositionSizerPanel.svelte#L1)
+    - removed the inline `res.rr` mutation and delegated all sizing math to the engine
+    - kept the panel focused on input controls, quantity handoff, and warning display only
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `positionSizer.ts` as the canonical sizing math/RR/warning-code boundary
+    - documented `PositionSizerPanel.svelte` as the canonical presentation boundary for the chart size panel
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run check:budget`: PASS
+  - `node node_modules/.bin/vite build`: PASS
+- Residual risks:
+  - unrelated dirty chart WIP in [ChartHeaderBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderBar.svelte#L1), [ChartIndicatorStrip.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartIndicatorStrip.svelte#L1), [MarketPulseBadge.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/MarketPulseBadge.svelte#L1), and [chartActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartActionRuntime.ts#L1) remains intentionally outside this slice
+  - unrelated untracked WIP in [docs/usability-redesign-spec-2026-03-09.md](/Users/ej/Downloads/maxidoge-clones/frontend/docs/usability-redesign-spec-2026-03-09.md#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains outside this slice
+- Status: DONE
+
+## [2026-03-10 19:32:38 +0900] FINISH chart-agent-overlay-chrome-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the live chart hotspot, preserve runtime behavior, and split `ChartAgentOverlayChrome.svelte` into smaller presentational boundaries without touching unrelated route WIP
+- What changed:
+  - Added [chartAgentOverlayChromeContracts.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartAgentOverlayChromeContracts.ts#L1)
+    - fixed the shared prop surface for the overlay parent and its new meta/action child boundaries
+    - removed repeated local overlay prop declarations so future chrome slices cannot drift independently
+  - Added [ChartAgentMetaOverlay.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentMetaOverlay.svelte#L1)
+    - moved scale tools, indicator legend, loading overlay, and error badge into a dedicated meta HUD boundary
+    - normalized the legend rendering into a single derived entry list instead of repeating eight inline `#if` blocks
+  - Added [ChartAgentActionOverlay.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentActionOverlay.svelte#L1)
+    - moved first-scan CTA, trade CTA bar, drawing notice, chart notice, position sizer dock, position badge, and drag indicator into a dedicated action HUD boundary
+    - localized position label/risk-reward derivation so nullability does not leak into markup
+  - Updated [ChartAgentOverlayChrome.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentOverlayChrome.svelte#L1)
+    - reduced the component from `592` lines to `90` lines by leaving only composition and callback wiring
+    - preserved the existing overlay stacking order by delegating to the new meta/action children in the same render order
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the new overlay contract, meta HUD boundary, and action HUD boundary as canonical chart paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `49.16 kB`
+    - [ChartAgentSurface.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartAgentSurface.js) `47.99 kB`
+    - [terminal/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/terminal/_page.svelte.js) `185.21 kB`
+- Residual risks:
+  - [ChartAgentActionOverlay.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentActionOverlay.svelte#L1) is now the larger presentational hotspot inside the chart overlay stack
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-10 20:12:59 +0900] FINISH chart-agent-action-overlay-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart overlay hotspot, preserve the current render order, and split `ChartAgentActionOverlay.svelte` into smaller presentational surfaces without touching unrelated route WIP
+- What changed:
+  - Updated [chartAgentOverlayChromeContracts.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartAgentOverlayChromeContracts.ts#L1)
+    - extended the shared overlay contract with dedicated trade-HUD and status-HUD prop surfaces
+    - kept the overlay child prop boundaries centralized instead of letting each new HUD define its own local contract
+  - Added [ChartAgentTradeHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentTradeHud.svelte#L1)
+    - moved the overlay close button, first-scan CTA, and active trade CTA bar into a dedicated trade-action HUD boundary
+    - preserved existing CTA positioning and mobile hiding behavior
+  - Added [ChartAgentStatusHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentStatusHud.svelte#L1)
+    - moved the drawing notice, chart notice, position sizer dock, position badge, and drag indicator into a dedicated status HUD boundary
+    - kept the local position labels and risk-reward derivation next to the markup that consumes them
+  - Updated [ChartAgentActionOverlay.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentActionOverlay.svelte#L1)
+    - reduced the component from `368` lines to `49` lines by leaving only composition and callback wiring
+    - preserved the existing action stack order by rendering trade HUD first and status HUD second
+  - Updated [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1)
+    - restored the local module type aliases for chart controller/support-runtime dynamic imports so `gate` keeps the `ChartPanel` config surface contextually typed
+    - prevented the missing-module-type regression from cascading into dozens of implicit-`any` errors during the gate path
+  - Included [chartClientRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartClientRuntime.ts#L1)
+    - staged the already-referenced client runtime assembly helper into git so clean checkouts match the existing `ChartPanel` import graph and documented canonical path
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ChartAgentActionOverlay.svelte` as an action-stack composition boundary
+    - documented the new trade/status HUD components as canonical chart overlay paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+- Residual risks:
+  - [ChartAgentStatusHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentStatusHud.svelte#L1) now holds most of the remaining action-stack presentation weight
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-10 21:05:00 +0900] FINISH chart-panel-state-context-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing ChartPanel wiring drift, preserve layout/interaction, and extract the repeated series-context payloads without touching unrelated route WIP
+- What changed:
+  - Added [chartPanelStateContext.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartPanelStateContext.ts#L1)
+    - centralized indicator series-ref projection used by the support runtime viewport path
+    - centralized pane-index projection so derivatives pane refs and chart-local pane refs share one contract
+    - centralized data-runtime series context shaping and indicator accumulator snapshot read
+  - Updated [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1)
+    - replaced inline `getSeriesRefs()` and `getPaneIndexes()` object assembly with `chartPanelStateContext` helpers
+    - replaced inline `data.getSeriesContext()` payload shaping with the canonical helper
+    - replaced the local indicator accumulator snapshot object with `readChartIndicatorState()`
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartPanelStateContext.ts` as the canonical ChartPanel series/pane/state projection boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `55.05 kB`
+    - [arena/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/arena/_page.svelte.js) `141.96 kB`
+    - [terminal/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/terminal/_page.svelte.js) `185.21 kB`
+- Residual risks:
+  - [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1) still owns a wide runtime-bundle option assembly and controller wiring path
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-10 22:45:00 +0900] FINISH chart-panel-runtime-options-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing ChartPanel runtime wiring drift, preserve layout/interaction, and move the remaining runtime-bundle option assembly out of the panel
+- What changed:
+  - Added [chartPanelRuntimeOptions.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartPanelRuntimeOptions.ts#L1)
+    - centralized `position`, `tradingView`, `data`, and `bindings` runtime-bundle option shaping
+    - centralized TradingView state-patch apply semantics and drag target mapping so `ChartPanel.svelte` no longer repeats those branchy object shapes inline
+  - Updated [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1)
+    - replaced the inline runtime option assembly with helper builders
+    - kept the runtime ownership in the panel while shrinking direct option-shape duplication
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartPanelRuntimeOptions.ts` as the canonical ChartPanel runtime option boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run build`: PASS
+  - build snapshot:
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `58.29 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `63.76 kB`
+    - [arena/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/arena/_page.svelte.js) `141.96 kB`
+- Residual risks:
+  - [ChartPanel.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/ChartPanel.svelte#L1) still owns controller assembly and client-runtime bootstrap wiring
+  - this slice improved ownership but increased `ChartPanel.js` from `55.05 kB` to `58.29 kB`, so the next slice should bias toward real lazy boundaries or moving orchestration out of the panel rather than adding more helper modules
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-10 23:20:00 +0900] FINISH chart-agent-status-hud-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart overlay hotspot, preserve overlay order, and split `ChartAgentStatusHud.svelte` into smaller presentational HUD boundaries without touching unrelated route WIP
+- What changed:
+  - Added [ChartAgentDrawingStatusHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentDrawingStatusHud.svelte#L1)
+    - moved the drawing notice, chart notice, and drag indicator into a dedicated drawing-status HUD boundary
+    - kept the local derived drawing message next to the markup that consumes it
+  - Added [ChartAgentPositionHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentPositionHud.svelte#L1)
+    - moved the position sizer dock, position badge, and risk-reward label surface into a dedicated position HUD boundary
+    - kept the position-label formatting and `PositionSizerPanel` docking in one child surface
+  - Updated [ChartAgentStatusHud.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentStatusHud.svelte#L1)
+    - reduced the component to a composition boundary that renders drawing HUD first and position HUD second
+    - removed the inline draw/position absolute-position markup so the status HUD only owns child order and shared prop handoff
+  - Updated [chartAgentOverlayChromeContracts.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartAgentOverlayChromeContracts.ts#L1)
+    - extended the shared overlay contract with dedicated drawing-status and position-HUD prop surfaces
+    - kept the overlay child prop boundary centralized instead of letting each new HUD define its own local contract
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ChartAgentStatusHud.svelte` as a composition boundary
+    - documented `ChartAgentDrawingStatusHud.svelte` and `ChartAgentPositionHud.svelte` as canonical overlay HUD paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+- Residual risks:
+  - [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1) still owns the larger chart-surface presentation shell
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-10 23:55:00 +0900] FINISH chart-toolbar-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart presentation hotspot, preserve toolbar behavior, and split `ChartToolbar.svelte` into smaller presentational boundaries without touching unrelated route WIP
+- What changed:
+  - Added [chartToolbarCatalog.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartToolbarCatalog.ts#L1)
+    - centralized drawing tool categories, labels, and icon mappings
+    - removed repeated category metadata from the toolbar render path
+  - Added [ChartToolbarIcon.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartToolbarIcon.svelte#L1)
+    - centralized the shared SVG icon switch used by the toolbar rail and category popover
+    - removed duplicated icon markup between the main toolbar button surface and the popover list surface
+  - Added [ChartToolbarPopover.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartToolbarPopover.svelte#L1)
+    - moved category popover markup, styles, and selection affordance into a dedicated child boundary
+    - kept the toolbar component focused on state ownership and button composition
+  - Updated [ChartToolbar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartToolbar.svelte#L1)
+    - reduced the component from `513` lines to `280` lines by delegating icon rendering and popover markup
+    - kept `openCategory` and `activeModes` in the toolbar so behavior and last-selected tool memory stay unchanged
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ChartToolbar.svelte`, `ChartToolbarPopover.svelte`, `ChartToolbarIcon.svelte`, and `chartToolbarCatalog.ts` as canonical chart toolbar paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartAgentSurface.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartAgentSurface.js) `46.28 kB`
+    - [arena/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/arena/_page.svelte.js) `141.96 kB`
+    - [terminal/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/terminal/_page.svelte.js) `185.21 kB`
+- Residual risks:
+  - [ChartHeaderBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderBar.svelte#L1) is now the larger remaining chart presentation hotspot
+  - [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1) still owns the chart-container shell and overlay child ordering
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-11 00:15:00 +0900] FINISH chart-header-bar-split-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart presentation hotspot, preserve header behavior, and split `ChartHeaderBar.svelte` into smaller presentational boundaries without touching unrelated route WIP
+- What changed:
+  - Added [chartHeaderBarContracts.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartHeaderBarContracts.ts#L1)
+    - centralized the summary/controls/meta child prop surfaces
+    - removed repeated header prop typing from each new child boundary
+  - Added [ChartHeaderSummary.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderSummary.svelte#L1)
+    - moved the pair summary, 24h stats tooltip, token switch, and timeframe controls into a dedicated summary boundary
+    - kept the price/timeframe formatting helpers close to the markup that consumes them
+  - Added [ChartHeaderControls.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderControls.svelte#L1)
+    - moved mode toggle, scan/chat/pattern CTA, publish actions, and indicator-strip restore into a dedicated controls boundary
+    - kept the responsive action hide/show rules with the control markup
+  - Added [ChartHeaderMetaStrip.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderMetaStrip.svelte#L1)
+    - moved the collapsed MA/RSI/VOL strip into a dedicated meta child boundary
+  - Updated [ChartHeaderBar.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartHeaderBar.svelte#L1)
+    - reduced the component from `681` lines to `182` lines by leaving only bar-level composition and shell layout
+    - preserved the external prop/callback contract used by `ChartPanelShell.svelte`
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ChartHeaderBar.svelte` as a composition boundary
+    - documented the new summary/controls/meta/contracts files as canonical header paths
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartHeaderBar.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartHeaderBar.js) `10.94 kB`
+    - [ChartAgentSurface.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartAgentSurface.js) `46.28 kB`
+    - [arena/_page.svelte.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/entries/pages/arena/_page.svelte.js) `141.96 kB`
+- Residual risks:
+  - this slice improved ownership but increased `ChartHeaderBar.js` from roughly `9.29 kB` to `10.94 kB`, so the next slice should bias toward real lazy boundaries or `ChartAgentSurface` shell reduction rather than more helper-only splits
+  - [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1) remains the larger chart presentation shell
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-10 23:47:04 +0900] FINISH chart-agent-surface-optional-overlay-lazy-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart presentation hotspot, prefer real lazy boundaries over helper-only splits, and reduce `ChartAgentSurface` server weight without touching unrelated route WIP
+- What changed:
+  - Updated [ChartAgentSurface.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/ChartAgentSurface.svelte#L1)
+    - removed the static imports for `ChartTradePlanOverlay.svelte` and `ChartDrawingContextMenu.svelte`
+    - added local lazy module state and `\$effect` loaders so the trade-plan overlay only loads when `pendingTradePlan` exists
+    - moved the drawing context menu behind a first-open lazy boundary so the menu module is loaded only when agent mode opens the context menu
+    - kept the chart container DOM, overlay ordering, and parent callback contract unchanged
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `ChartAgentSurface.svelte` as the canonical owner of the optional trade-plan/context-menu lazy boundary
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartAgentSurface.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartAgentSurface.js) `39.72 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `67.93 kB`
+- Residual risks:
+  - this slice reduced the `ChartAgentSurface` server chunk, but `chartPanelSupportRuntime.js` grew, so the next chart slice should watch runtime assembly weight instead of adding more presentational helper layers
+  - Vite still reports the expected dynamic-import note for [chartTradePlanner.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartTradePlanner.ts#L1) because it is dynamically imported by [chartActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartActionRuntime.ts#L1) and also statically imported by other chart runtimes
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-10 23:56:00 +0900] FINISH chart-signal-draft-lazy-split-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep reducing chart runtime weight, preserve behavior, and turn the chart-origin community signal draft path into a real lazy boundary without touching unrelated route WIP
+- What changed:
+  - Added [chartTradePlannerMath.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartTradePlannerMath.ts#L1)
+    - extracted shared reward-ratio and risk-percent math out of the larger planner file
+    - kept the math layer pure so static trade-plan code and lazy signal-draft code can share it without re-coupling the bigger planner module
+  - Added [chartCommunitySignalDraft.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartCommunitySignalDraft.ts#L1)
+    - moved `buildCommunitySignalDraft(...)` into a dedicated chart-origin signal payload module
+    - kept the draft assembly behind the publish action path instead of the base support runtime import chain
+  - Updated [chartTradePlanner.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartTradePlanner.ts#L1)
+    - removed the community signal draft export
+    - narrowed the file to line-entry/trade-plan math and planned-order assembly only
+  - Updated [chartActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartActionRuntime.ts#L1)
+    - rewired the lazy publish path to import `chartCommunitySignalDraft.ts` instead of the larger `chartTradePlanner.ts`
+    - preserved the existing evidence assembly and community signal emit contract
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented the new trade-planner math boundary and the chart signal-draft lazy path as canonical chart rules
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [chartCommunitySignalDraft.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartCommunitySignalDraft.js) `1.94 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `65.95 kB`
+    - [ChartAgentSurface.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartAgentSurface.js) `39.72 kB`
+- Residual risks:
+  - the chart-side dynamic import note for [chartTradePlanner.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/chartTradePlanner.ts#L1) is gone, but auth-side reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
+  - `chartPanelSupportRuntime.js` is lighter, but it is still the larger remaining chart runtime hotspot
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-10 23:58:00 +0900] FINISH chart-interactive-action-lazy-runtime-20260310 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep shaving chart runtime weight, preserve behavior, and move optional interactive chart actions off the base support-runtime path without touching unrelated route WIP
+- What changed:
+  - Added [chartInteractiveActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartInteractiveActionRuntime.ts#L1)
+    - extracted `publishCommunitySignal`, `requestChatAssist`, and `activateTradeDrawing` into a dedicated interactive runtime
+    - kept signal draft/evidence assembly and draw-mode notice logic behind the first chart action that actually needs it
+  - Updated [chartActionRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartActionRuntime.ts#L1)
+    - narrowed the static path to pair/timeframe changes and scan requests
+    - added a lazy runtime loader so interactive actions instantiate on first use instead of during support-runtime construction
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartInteractiveActionRuntime.ts` as the canonical interactive action lazy boundary
+    - clarified that `chartActionRuntime.ts` now owns only immediate chart actions plus the lazy handoff
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [chartInteractiveActionRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartInteractiveActionRuntime.js) `3.92 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `64.05 kB`
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `58.29 kB`
+- Residual risks:
+  - this slice reduced the base support-runtime weight, but drawing persistence/runtime remains the larger chart hotspot
+  - auth-side dynamic-import reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-11 00:45:00 +0900] FINISH chart-drawing-persistence-runtime-split-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep planning the next chart hotspot, preserve drawing behavior, and narrow `chartDrawingRuntime.ts` by extracting persistence/bootstrap ownership without touching unrelated route WIP
+- What changed:
+  - Added [chartDrawingPersistenceRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingPersistenceRuntime.ts#L1)
+    - moved primitive drawing manager lazy module loading, debounced autosave wiring, and pair/timeframe persistence sync into a dedicated helper runtime
+    - kept `drawingManager` and `drawingPersistence` behind the existing chart drawing lazy boundary instead of lifting them into support-runtime imports
+  - Updated [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1)
+    - narrowed the file to drawing-mode transitions, mouse lifecycle, trade-preview finalize side effects, and wrapper commands
+    - removed inline manager module promise state, autosave timer ownership, and pair/timeframe sync bookkeeping
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartDrawingPersistenceRuntime.ts` as the canonical drawing persistence/bootstrap boundary
+    - clarified that the drawing-stack lazy boundary now flows through `chartDrawingRuntime.ts` into `chartDrawingPersistenceRuntime.ts`
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `npm run gate`: PASS
+  - build snapshot:
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `58.29 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `65.25 kB`
+    - [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1) `585` lines
+    - [chartDrawingPersistenceRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingPersistenceRuntime.ts#L1) `153` lines
+- Residual risks:
+  - this slice materially improved ownership, but it did not reduce the support-runtime server chunk; `chartPanelSupportRuntime.js` rose from the previous `64.05 kB` to `65.25 kB`
+  - the remaining chart hotspot is still the drawing stack itself, especially [drawingManager.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/chart/primitives/drawingManager.ts#L1), so the next slice should target real lazy/runtime narrowing instead of more helper-only extraction
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
+- Status: DONE
+
+## [2026-03-11 00:54:00 +0900] FINISH chart-trade-preview-finalize-lazy-path-20260311 (frontend)
+- Workspace: /Users/ej/Downloads/maxidoge-clones/frontend
+- Branch: codex/terminal-uiux-gtm-wip
+- Request: keep narrowing the chart drawing hotspot, prefer real lazy boundaries over helper-only splits, and move trade-preview finalize weight off the base support-runtime path without touching unrelated route WIP
+- What changed:
+  - Added [chartTradePreviewFinalizeRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartTradePreviewFinalizeRuntime.ts#L1)
+    - extracted preview resolve, tradebox drawing creation, pending-plan finalize, quick-trade open, and notice/GTM side effects into a dedicated lazy runtime
+    - kept this runtime loaded only from the trade-preview mouse-up path instead of the base drawing runtime import chain
+  - Updated [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1)
+    - removed the static finalize imports for `chartDrawingEngine`, `chartOverlayRenderer`, `chartDrawingSession`, `chartIndicators`, and `chartCoordinates`
+    - kept immediate draft start/update logic inline and added a module promise so trade-preview finalize code loads only when the user actually completes a line-entry drag
+    - preloads the finalize runtime when trade mode is selected so the first drag path stays responsive
+  - Updated [CLAUDE.md](/Users/ej/Downloads/maxidoge-clones/frontend/CLAUDE.md#L1)
+    - documented `chartTradePreviewFinalizeRuntime.ts` as the canonical trade-preview finalize lazy path
+- Validation:
+  - `npm run check`: PASS (`0 errors, 0 warnings`)
+  - `node node_modules/.bin/vite build`: PASS
+  - build snapshot:
+    - [chartTradePreviewFinalizeRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartTradePreviewFinalizeRuntime.js) `3.06 kB`
+    - [chartPanelSupportRuntime.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/chartPanelSupportRuntime.js) `64.00 kB`
+    - [ChartPanel.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/ChartPanel.js) `58.29 kB`
+    - [chartDrawingRuntime.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/components/arena/chart/chartDrawingRuntime.ts#L1) `582` lines
+- Residual risks:
+  - this slice restored support-runtime weight after the previous persistence split, but the large remaining chart chunk is still [drawingManager.js](/Users/ej/Downloads/maxidoge-clones/frontend/.svelte-kit/output/server/chunks/drawingManager.js) at `100.39 kB`
+  - auth-side dynamic-import reporter notes for [authApiNormalizer.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/authApiNormalizer.ts#L1) and [walletModalTransport.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/lib/auth/walletModalTransport.ts#L1) remain unrelated and expected
+  - unrelated local WIP in [routes/+page.svelte](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/+page.svelte#L1) and [arena-v2/+page.server.ts](/Users/ej/Downloads/maxidoge-clones/frontend/src/routes/arena-v2/+page.server.ts#L1) remains intentionally outside this slice
 - Status: DONE

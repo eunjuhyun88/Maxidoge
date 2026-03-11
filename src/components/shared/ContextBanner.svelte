@@ -6,20 +6,17 @@
   import { openTradeCount, totalQuickPnL } from '$lib/stores/quickTradeStore';
   import { activeSignalCount } from '$lib/stores/trackedSignalStore';
   import { matchHistoryStore, winRate } from '$lib/stores/matchHistoryStore';
-  import { userProfileStore, profileTier, hydrateUserProfile } from '$lib/stores/userProfileStore';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
 
-  // Current page context
-  export let page: 'terminal' | 'arena' | 'passport' | 'oracle' | 'signals' | 'live' | 'home' = 'home';
+  type PageContext = 'terminal' | 'arena' | 'passport' | 'oracle' | 'signals' | 'live' | 'home';
 
-  $: openPos = $openTradeCount;
-  $: trackedSigs = $activeSignalCount;
-  $: pnl = $totalQuickPnL;
-  $: records = $matchHistoryStore.records;
-  $: wr = $winRate;
-  $: profile = $userProfileStore;
-  $: tier = $profileTier;
+  let { page = 'home' as PageContext }: { page?: PageContext } = $props();
+
+  const openPos = $derived($openTradeCount);
+  const trackedSigs = $derived($activeSignalCount);
+  const pnl = $derived($totalQuickPnL);
+  const records = $derived($matchHistoryStore.records);
+  const wr = $derived($winRate);
 
   interface BannerItem {
     icon: string;
@@ -29,7 +26,7 @@
     show: boolean;
   }
 
-  $: items = getBannerItems(page, openPos, trackedSigs, pnl, records, wr, tier);
+  const items = $derived(getBannerItems(page, openPos, trackedSigs, pnl, records, wr));
 
   function getBannerItems(
     p: string,
@@ -37,8 +34,7 @@
     sigs: number,
     pnlVal: number,
     recs: typeof records,
-    winR: number,
-    t: string
+    winR: number
   ): BannerItem[] {
     const all: BannerItem[] = [];
 
@@ -85,16 +81,12 @@
 
     return all.filter(i => i.show).slice(0, 2);
   }
-
-  onMount(() => {
-    hydrateUserProfile();
-  });
 </script>
 
 {#if items.length > 0}
   <div class="ctx-strip">
     {#each items as item}
-      <button class="ctx-item" on:click={() => goto(item.href)}>
+      <button class="ctx-item" onclick={() => goto(item.href)}>
         <span class="ctx-i">{item.icon}</span>
         <span class="ctx-t" style="color:{item.color}">{item.text}</span>
         <span class="ctx-arrow">→</span>
@@ -135,13 +127,13 @@
   .ctx-i { font-size: 10px; }
   .ctx-t {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: .5px;
   }
   .ctx-arrow {
-    font-size: 8px;
-    color: rgba(255,255,255,.25);
+    font-size: 9px;
+    color: rgba(255,255,255,.5);
     transition: color .15s;
   }
   .ctx-item:hover .ctx-arrow { color: rgba(255,255,255,.5); }

@@ -2,6 +2,7 @@
   import '../app.css';
   import Header from '../components/layout/Header.svelte';
   import BottomBar from '../components/layout/BottomBar.svelte';
+  import MobileBottomNav from '../components/layout/MobileBottomNav.svelte';
   import WalletModal from '../components/modals/WalletModal.svelte';
   import NotificationTray from '../components/shared/NotificationTray.svelte';
   import ToastStack from '../components/shared/ToastStack.svelte';
@@ -15,9 +16,16 @@
 
   let { children } = $props();
 
-  // Derive isArena from page store (only actual /arena/* pages, not home /)
-  const isArena = derived(page, $p => $p.url.pathname.startsWith('/arena'));
   const isTerminal = derived(page, $p => $p.url.pathname.startsWith('/terminal'));
+
+  // Hide global BottomBar on mobile (unneeded chrome on small screens)
+  // - Terminal routes ≤1024px: terminal has its own bottom nav
+  // - All routes ≤768px: status bar adds no value on phones
+  let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const showMobileBottomNav = $derived(windowWidth <= 768);
+  const showBottomBar = $derived(
+    windowWidth > 768 && !($isTerminal && windowWidth <= 1024)
+  );
 
   // Sync currentView store from URL via effect
   $effect(() => {
@@ -41,6 +49,11 @@
   let _wsFullFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   onMount(async () => {
+    // Track viewport width for conditional BottomBar
+    const handleResize = () => { windowWidth = window.innerWidth; };
+    window.addEventListener('resize', handleResize);
+    _resizeCleanup = () => window.removeEventListener('resize', handleResize);
+
     // 1) REST bootstrap — 초기 가격 + 24h 통계 세팅
     try {
       const [prices, tickers24] = await Promise.all([
@@ -108,7 +121,7 @@
           }
           if (Object.keys(mapped).length) {
             updatePriceStore(mapped, 'ws');
-            // gameState.prices는 gameState 내부 auto-sync가 처리
+            // gameState에는 live price를 다시 미러링하지 않는다.
           }
         }, 350);
       }, (fullUpdate) => {
@@ -142,10 +155,13 @@
     }
   });
 
+  let _resizeCleanup: (() => void) | null = null;
+
   onDestroy(() => {
     if (_wsFlushTimer) clearTimeout(_wsFlushTimer);
     if (_wsFullFlushTimer) clearTimeout(_wsFullFlushTimer);
     if (globalWsCleanup) globalWsCleanup();
+    if (_resizeCleanup) _resizeCleanup();
   });
 </script>
 
@@ -155,8 +171,10 @@
   <div id="main-content" class:terminal-route={$isTerminal}>
     {@render children()}
   </div>
-  {#if $isArena}
+  {#if showBottomBar}
     <BottomBar />
+  {:else if showMobileBottomNav}
+    <MobileBottomNav />
   {/if}
 </div>
 
@@ -175,7 +193,7 @@
     flex-direction: column;
     height: 100dvh;
     min-height: 100vh;
-    padding-top: 36px;
+    padding-top: var(--sc-header-h, 44px);
     overflow: hidden;
     position: relative;
   }
@@ -185,11 +203,18 @@
     position: relative;
   }
 
-  @media (max-width: 900px) {
+  /* 769-1024px: compact one-line header (44px) */
+  @media (max-width: 1024px) {
     #app {
       height: 100svh;
       min-height: 100svh;
-      padding-top: 72px;
+    }
+  }
+  /* ≤768px: header (40px) + tab strip (34px) = 74px top */
+  @media (max-width: 768px) {
+    #app {
+      padding-top: var(--sc-header-h-mobile, 40px);
+      padding-bottom: calc(var(--sc-mobile-nav-h, 64px) + env(safe-area-inset-bottom, 0px));
     }
     #main-content {
       overflow: auto;
@@ -199,6 +224,11 @@
     #main-content.terminal-route {
       overflow: hidden;
       overscroll-behavior: none;
+    }
+  }
+  @media (max-width: 480px) {
+    #app {
+      padding-top: var(--sc-touch-sm, 36px);
     }
   }
 </style>

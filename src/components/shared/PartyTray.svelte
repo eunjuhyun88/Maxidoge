@@ -134,7 +134,7 @@
     gap: 2px;
   }
   .slot-name {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     color: rgba(224,224,224,0.6);

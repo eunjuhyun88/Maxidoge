@@ -10,6 +10,7 @@ usage() {
 	echo "  CTX_AUTO_MIN_INTERVAL_SEC   # throttle per branch+stage (default: 300)"
 	echo "  CTX_WORK_ID                 # optional explicit work id"
 	echo "  CTX_AGENT_ID                # optional agent id"
+	echo "  CTX_AUTO_SKIP_COMPACT=1     # snapshot only; skip brief/handoff generation"
 }
 
 sanitize() {
@@ -54,7 +55,8 @@ if [ "$BRANCH" = "HEAD" ]; then
 	exit 0
 fi
 
-if [ ! -x scripts/dev/context-save.sh ] || [ ! -x scripts/dev/context-compact.sh ]; then
+# These scripts are invoked through `bash ...`; they do not both need an exec bit.
+if [ ! -f scripts/dev/context-save.sh ] || [ ! -f scripts/dev/context-compact.sh ]; then
 	echo "[ctx:auto] context-save/compact scripts missing; skipping."
 	exit 0
 fi
@@ -94,7 +96,20 @@ run_step bash scripts/dev/context-save.sh \
 	--work-id "$WORK_ID" \
 	--agent "$AGENT_ID" \
 	--notes "$NOTES"
-run_step bash scripts/dev/context-compact.sh
+
+if [ "${CTX_AUTO_SKIP_COMPACT:-0}" = "1" ]; then
+	echo "[ctx:auto] compact skipped by CTX_AUTO_SKIP_COMPACT=1"
+else
+	if [ -n "${CTX_WORK_ID:-}" ]; then
+		run_step bash scripts/dev/context-compact.sh --work-id "$CTX_WORK_ID"
+	else
+		run_step bash scripts/dev/context-compact.sh
+	fi
+fi
+
+if [ -f scripts/dev/context-autopilot.mjs ]; then
+	run_step node scripts/dev/context-autopilot.mjs "$STAGE"
+fi
 
 echo "$NOW_EPOCH" > "$MARKER_FILE"
 echo "[ctx:auto] done"

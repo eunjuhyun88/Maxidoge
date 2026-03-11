@@ -1,14 +1,56 @@
+<!-- ═══════════════════════════════════════════
+  BattlePhase.svelte — v3 배틀: PixiJS + 차트 리딩 챌린지
+  HP 시스템 + 세미 오토 배틀 + 플레이어 개입
+═══════════════════════════════════════════ -->
 <script lang="ts">
-  import { arenaWarStore, arenaWarTimer, addBattleAction } from '$lib/stores/arenaWarStore';
-  import type { Direction } from '$lib/engine/types';
+  import {
+    arenaWarStore,
+    arenaWarTimer,
+    addBattleAction,
+    submitBattleChallengeAnswer,
+    switchBattleLead,
+    activateBattleGuard,
+  } from '$lib/stores/arenaWarStore';
+  import type { AgentId } from '$lib/engine/types';
+  import type { V3BattleState, ChartChallenge } from '$lib/engine/v3BattleTypes';
+  import { getAgentCharacter } from '$lib/engine/agentCharacter';
+  import { getTeamHPPercent } from '$lib/engine/v3BattleEngine';
+  import BattleCanvas from './BattleCanvas.svelte';
+  import ChallengeOverlay from './ChallengeOverlay.svelte';
 
   let ws = $derived($arenaWarStore);
   let timer = $derived($arenaWarTimer);
 
+  // ── v3 State (from store or simulated) ──
+  let v3State = $derived(ws.v3BattleState);
+
+  // ── Current candle data ──
   let currentCandle = $derived(ws.battleKlines[ws.battleCurrentIndex]);
   let prevCandles = $derived(ws.battleKlines.slice(0, ws.battleCurrentIndex + 1));
 
-  let currentPnl = $derived(() => {
+  // ── HP percentages ──
+  let humanHPPct = $derived(v3State ? getTeamHPPercent(v3State.humanAgents) : 100);
+  let aiHPPct = $derived(v3State ? getTeamHPPercent(v3State.aiAgents) : 100);
+
+  // ── Active challenge ──
+  let activeChallenge = $derived(v3State?.activeChallenge ?? null);
+  let challengeScore = $derived(v3State?.challengeScore ?? { correct: 0, wrong: 0, timeout: 0, total: 0 });
+
+  // ── VS Meter ──
+  let vsValue = $derived(v3State?.v2State.vsMeter.value ?? 50);
+  let comboCount = $derived(v3State?.v2State.combo.count ?? 0);
+
+  // ── Screen shake ──
+  let screenShake = $derived(() => {
+    if (!v3State) return { px: 0, ms: 0 };
+    const milestones = v3State.v2State.milestones;
+    if (milestones.length === 0) return { px: 0, ms: 0 };
+    const last = milestones[milestones.length - 1];
+    return { px: last.screenShakeIntensity, ms: last.screenShakeDuration };
+  });
+
+  // ── PnL ──
+  let humanPnl = $derived(() => {
     if (!currentCandle || !ws.humanEntryPrice) return 0;
     const dir = ws.humanDirection;
     if (dir === 'LONG') return (currentCandle.close - ws.humanEntryPrice) / ws.humanEntryPrice;
@@ -16,374 +58,560 @@
     return 0;
   });
 
-  let aiPnl = $derived(() => {
-    if (!currentCandle || !ws.aiDecision) return 0;
-    const dir = ws.aiDecision.direction;
-    const entry = ws.aiDecision.entryPrice;
-    if (dir === 'LONG') return (currentCandle.close - entry) / entry;
-    if (dir === 'SHORT') return (entry - currentCandle.close) / entry;
-    return 0;
+  // ── Battle log (latest 5) ──
+  let battleLog = $derived(() => {
+    if (!v3State) return [];
+    return v3State.v2State.log.slice(-5);
   });
 
-  let pnlPct = $derived(currentPnl() * 100);
-  let aiPnlPct = $derived(aiPnl() * 100);
+  // ── Decision point check ──
+  let isDecisionPoint = $derived(ws.battleCurrentIndex > 0 && ws.battleCurrentIndex % 8 === 0);
 
-  // Simple candle rendering
-  let candleHeight = 200;
-  let candleWidth = $derived(Math.min(20, 480 / Math.max(1, prevCandles.length)));
+  // ── Handlers ──
+  function handleChallengeAnswer(answer: string) {
+    submitBattleChallengeAnswer(answer);
+  }
 
-  let priceRange = $derived(() => {
-    if (prevCandles.length === 0) return { min: 0, max: 1 };
-    const highs = prevCandles.map(c => c.high);
-    const lows = prevCandles.map(c => c.low);
-    const min = Math.min(...lows) * 0.999;
-    const max = Math.max(...highs) * 1.001;
-    return { min, max };
+  function handleSwitchLead(idx: number) {
+    switchBattleLead(idx);
+  }
+
+  function handleGuard() {
+    activateBattleGuard();
+  }
+
+  // Mini chart SVG
+  let chartPath = $derived(() => {
+    if (prevCandles.length < 2) return '';
+    const prices = prevCandles.map(c => c.close);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = max - min || 1;
+    const w = 300;
+    const h = 50;
+
+    return prices.map((p, i) => {
+      const x = (i / (prices.length - 1)) * w;
+      const y = h - ((p - min) / range) * h;
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
   });
-
-  function priceToY(price: number): number {
-    const range = priceRange();
-    const pct = (price - range.min) / (range.max - range.min);
-    return candleHeight - pct * candleHeight;
-  }
-
-  function handleAdjustTp() {
-    if (!currentCandle) return;
-    const offset = ws.humanDirection === 'LONG' ? 50 : -50;
-    addBattleAction('ADJUST_TP', ws.humanTp + offset);
-  }
-
-  function handleAdjustSl() {
-    if (!currentCandle) return;
-    const offset = ws.humanDirection === 'LONG' ? 50 : -50;
-    addBattleAction('ADJUST_SL', ws.humanSl + offset);
-  }
-
-  function handleCut() {
-    addBattleAction('CUT');
-  }
-
-  function handleHold() {
-    addBattleAction('HOLD');
-  }
-
-  // Decision point every 8 candles
-  let isDecisionPoint = $derived(
-    ws.battleCurrentIndex > 0 &&
-    ws.battleCurrentIndex % 8 === 0 &&
-    ws.battleCurrentIndex < 24
-  );
 </script>
 
 <div class="battle-phase">
-  <!-- Header -->
+  <!-- ── Header ── -->
   <div class="battle-header">
-    <div class="battle-title">⚔ BATTLE</div>
-    <div class="battle-progress">
-      {ws.battleCurrentIndex}/{ws.battleKlines.length} candles
+    <div class="header-left">
+      <span class="battle-title">BATTLE</span>
+      <span class="tick-counter">
+        TICK {v3State?.v2State.tickN ?? ws.battleCurrentIndex}/{v3State?.v2State.maxTicks ?? ws.battleKlines.length}
+      </span>
     </div>
-    <div class="battle-timer">{timer}s</div>
-  </div>
-
-  <!-- PnL Display -->
-  <div class="pnl-row">
-    <div class="pnl-card" class:positive={pnlPct > 0} class:negative={pnlPct < 0}>
-      <span class="pnl-label">👤 YOU</span>
-      <span class="pnl-value">{pnlPct > 0 ? '+' : ''}{pnlPct.toFixed(2)}%</span>
-      <span class="pnl-dir">{ws.humanDirection}</span>
-    </div>
-    <div class="pnl-vs">VS</div>
-    <div class="pnl-card" class:positive={aiPnlPct > 0} class:negative={aiPnlPct < 0}>
-      <span class="pnl-label">🤖 AI</span>
-      <span class="pnl-value">{aiPnlPct > 0 ? '+' : ''}{aiPnlPct.toFixed(2)}%</span>
-      <span class="pnl-dir">{ws.aiDecision?.direction}</span>
-    </div>
-  </div>
-
-  <!-- Candle Chart (Simplified) -->
-  <div class="chart-area">
-    <svg width="100%" height={candleHeight} viewBox="0 0 {prevCandles.length * candleWidth} {candleHeight}" preserveAspectRatio="none">
-      <!-- TP/SL lines -->
-      <line
-        x1="0" x2={prevCandles.length * candleWidth}
-        y1={priceToY(ws.humanTp)} y2={priceToY(ws.humanTp)}
-        stroke="var(--arena-good, #00cc88)" stroke-width="1" stroke-dasharray="4,2" opacity="0.5"
-      />
-      <line
-        x1="0" x2={prevCandles.length * candleWidth}
-        y1={priceToY(ws.humanSl)} y2={priceToY(ws.humanSl)}
-        stroke="var(--arena-bad, #ff5e7a)" stroke-width="1" stroke-dasharray="4,2" opacity="0.5"
-      />
-      <!-- Entry line -->
-      <line
-        x1="0" x2={prevCandles.length * candleWidth}
-        y1={priceToY(ws.humanEntryPrice)} y2={priceToY(ws.humanEntryPrice)}
-        stroke="var(--arena-text-2, #5a7d6e)" stroke-width="1" stroke-dasharray="2,2" opacity="0.4"
-      />
-
-      <!-- Candles -->
-      {#each prevCandles as candle, i}
-        {@const isGreen = candle.close >= candle.open}
-        {@const bodyTop = priceToY(Math.max(candle.open, candle.close))}
-        {@const bodyBottom = priceToY(Math.min(candle.open, candle.close))}
-        {@const bodyHeight = Math.max(1, bodyBottom - bodyTop)}
-        {@const wickTop = priceToY(candle.high)}
-        {@const wickBottom = priceToY(candle.low)}
-        {@const x = i * candleWidth + candleWidth / 2}
-
-        <!-- Wick -->
-        <line
-          x1={x} x2={x}
-          y1={wickTop} y2={wickBottom}
-          stroke={isGreen ? 'var(--arena-good, #00cc88)' : 'var(--arena-bad, #ff5e7a)'}
-          stroke-width="1"
-        />
-        <!-- Body -->
-        <rect
-          x={i * candleWidth + 2}
-          y={bodyTop}
-          width={Math.max(1, candleWidth - 4)}
-          height={bodyHeight}
-          fill={isGreen ? 'var(--arena-good, #00cc88)' : 'var(--arena-bad, #ff5e7a)'}
-          opacity={i === ws.battleCurrentIndex ? 1 : 0.7}
-        />
-      {/each}
-    </svg>
-
-    <div class="chart-labels">
-      <span class="label-tp">TP {ws.humanTp.toLocaleString()}</span>
-      <span class="label-entry">Entry {ws.humanEntryPrice.toLocaleString()}</span>
-      <span class="label-sl">SL {ws.humanSl.toLocaleString()}</span>
-    </div>
-  </div>
-
-  <!-- Current Price -->
-  {#if currentCandle}
-    <div class="current-price">
-      현재가: <span class="price">{currentCandle.close.toLocaleString()}</span>
-    </div>
-  {/if}
-
-  <!-- Decision Point -->
-  {#if isDecisionPoint}
-    <div class="decision-point">
-      <div class="dp-header">🔔 DECISION POINT — Checkpoint {ws.battleCurrentIndex}</div>
-      <div class="dp-buttons">
-        <button class="dp-btn hold" onclick={handleHold}>유지</button>
-        <button class="dp-btn adjust" onclick={handleAdjustTp}>TP 조정</button>
-        <button class="dp-btn adjust" onclick={handleAdjustSl}>SL 조정</button>
-        <button class="dp-btn cut" onclick={handleCut}>청산</button>
+    <div class="header-center">
+      <div class="vs-meter-mini">
+        <div class="vs-fill" style="width: {vsValue}%"
+             class:winning={vsValue > 55}
+             class:losing={vsValue < 45}></div>
+        <span class="vs-value">{Math.round(vsValue)}</span>
       </div>
+      {#if comboCount >= 2}
+        <span class="combo-badge">{comboCount}-HIT COMBO!</span>
+      {/if}
+    </div>
+    <div class="header-right">
+      <div class="challenge-score">
+        <span class="score-label">CHALLENGE</span>
+        <span class="score-value">{challengeScore.correct}/{challengeScore.total}</span>
+      </div>
+      <span class="timer">{timer}s</span>
+    </div>
+  </div>
+
+  <!-- ── Battle Canvas (PixiJS or CSS fallback) ── -->
+  <div class="canvas-area">
+    {#if v3State}
+      <BattleCanvas {v3State} screenShake={screenShake()} />
+
+      <!-- Challenge Overlay -->
+      {#if activeChallenge && activeChallenge.result === 'pending'}
+        <ChallengeOverlay
+          challenge={activeChallenge}
+          onAnswer={handleChallengeAnswer}
+        />
+      {/if}
+    {:else}
+      <!-- Fallback: simple battle display when v3 not initialized -->
+      <div class="fallback-display">
+        <p>Battle loading...</p>
+      </div>
+    {/if}
+  </div>
+
+  <!-- ── Team HP Summary ── -->
+  <div class="team-hp-summary">
+    <div class="hp-side human">
+      <span class="hp-label">{ws.selectedMode === 'spectator' ? 'TEAM A' : 'YOUR TEAM'}</span>
+      <div class="hp-bar-bg">
+        <div class="hp-bar-fill human-fill" style="width: {humanHPPct}%"></div>
+      </div>
+      <span class="hp-pct">{Math.round(humanHPPct)}%</span>
+    </div>
+    <div class="hp-side ai">
+      <span class="hp-label">{ws.selectedMode === 'spectator' ? 'TEAM B' : 'AI TEAM'}</span>
+      <div class="hp-bar-bg">
+        <div class="hp-bar-fill ai-fill" style="width: {aiHPPct}%"></div>
+      </div>
+      <span class="hp-pct">{Math.round(aiHPPct)}%</span>
+    </div>
+  </div>
+
+  <!-- ── Agent Switch Buttons ── -->
+  {#if v3State && ws.selectedMode !== 'spectator'}
+    <div class="switch-panel">
+      <span class="switch-label">SWITCH LEAD:</span>
+      {#each v3State.humanAgents as agent, i}
+        {@const char = getAgentCharacter(agent.agentId)}
+        <button
+          class="switch-btn"
+          class:active={i === v3State.humanLeadIdx}
+          class:ko={agent.isKO}
+          disabled={agent.isKO || i === v3State.humanLeadIdx || v3State.switchCooldown > 0}
+          onclick={() => handleSwitchLead(i)}
+          style:--btn-color={char.color}
+        >
+          <span class="switch-initial" style:background={char.gradientCSS}>
+            {agent.agentId.charAt(0)}
+          </span>
+          <span class="switch-hp">{Math.ceil(agent.hp)}</span>
+        </button>
+      {/each}
+      {#if v3State.switchCooldown > 0}
+        <span class="cooldown-text">CD: {v3State.switchCooldown}</span>
+      {/if}
     </div>
   {/if}
 
-  <!-- Battle Actions Log -->
-  {#if ws.battleActions.length > 0}
-    <div class="action-log">
-      {#each ws.battleActions as action}
-        <span class="action-chip">
-          #{action.checkpoint} {action.action}
-          {#if action.newValue} → {action.newValue.toLocaleString()}{/if}
-        </span>
-      {/each}
+  <!-- ── Mini Chart + PnL ── -->
+  <div class="bottom-panel">
+    <div class="mini-chart">
+      <svg viewBox="0 0 300 50" preserveAspectRatio="none">
+        <path d={chartPath()} fill="none" stroke-width="1.5"
+              stroke={humanPnl() >= 0 ? '#48d868' : '#f85858'} />
+        <!-- TP line -->
+        {#if currentCandle && ws.humanTp}
+          {@const prices = prevCandles.map(c => c.close)}
+          {@const min = Math.min(...prices)}
+          {@const max = Math.max(...prices)}
+          {@const range = max - min || 1}
+          {@const tpY = 50 - ((ws.humanTp - min) / range) * 50}
+          <line x1="0" y1={tpY} x2="300" y2={tpY}
+                stroke="#48d868" stroke-width="0.5" stroke-dasharray="4,4" />
+        {/if}
+        <!-- SL line -->
+        {#if currentCandle && ws.humanSl}
+          {@const prices = prevCandles.map(c => c.close)}
+          {@const min = Math.min(...prices)}
+          {@const max = Math.max(...prices)}
+          {@const range = max - min || 1}
+          {@const slY = 50 - ((ws.humanSl - min) / range) * 50}
+          <line x1="0" y1={slY} x2="300" y2={slY}
+                stroke="#f85858" stroke-width="0.5" stroke-dasharray="4,4" />
+        {/if}
+      </svg>
     </div>
-  {/if}
+
+    <div class="pnl-display">
+      <span class="pnl-label">PnL</span>
+      <span class="pnl-value" class:positive={humanPnl() >= 0} class:negative={humanPnl() < 0}>
+        {humanPnl() >= 0 ? '+' : ''}{(humanPnl() * 100).toFixed(3)}%
+      </span>
+    </div>
+
+    <!-- Decision Point Actions -->
+    {#if isDecisionPoint && ws.selectedMode !== 'spectator'}
+      <div class="decision-actions">
+        <button class="action-btn hold" onclick={() => addBattleAction('HOLD')}>HOLD</button>
+        <button class="action-btn" onclick={() => addBattleAction('ADJUST_TP', currentCandle?.close)}>TP</button>
+        <button class="action-btn" onclick={() => addBattleAction('ADJUST_SL', currentCandle?.close)}>SL</button>
+        <button class="action-btn cut" onclick={() => addBattleAction('CUT')}>CUT</button>
+      </div>
+    {/if}
+  </div>
+
+  <!-- ── Battle Log ── -->
+  <div class="battle-log">
+    {#each battleLog() as entry}
+      <div class="log-entry" style:color={entry.color ?? '#8ba59e'}>
+        {#if entry.icon}<span class="log-icon">{entry.icon}</span>{/if}
+        <span class="log-msg">{entry.message}</span>
+      </div>
+    {/each}
+  </div>
 </div>
 
 <style>
   .battle-phase {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    padding: 1rem;
-    max-width: 640px;
+    gap: 8px;
+    padding: 12px;
+    max-width: 800px;
     margin: 0 auto;
   }
 
+  /* ── Header ── */
   .battle-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    border: 1px solid var(--arena-line, #1a3d2e);
+  }
+
+  .header-left, .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .battle-title {
     font-family: 'Bebas Neue', 'Orbitron', sans-serif;
-    font-size: 1.5rem;
+    font-size: 1.2rem;
     color: var(--arena-accent, #e8967d);
     letter-spacing: 3px;
   }
 
-  .battle-progress {
+  .tick-counter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--arena-text-2, #5a7d6e);
+    letter-spacing: 1px;
+  }
+
+  .vs-meter-mini {
+    width: 120px;
+    height: 8px;
+    background: rgba(248, 88, 88, 0.3);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .vs-fill {
+    height: 100%;
+    background: rgba(72, 216, 104, 0.4);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+  .vs-fill.winning { background: rgba(72, 216, 104, 0.6); }
+  .vs-fill.losing { background: rgba(248, 88, 88, 0.2); }
+
+  .vs-value {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 900;
+    color: white;
+  }
+
+  .combo-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    font-weight: 900;
+    color: #f8d030;
+    letter-spacing: 1px;
+    animation: pulseCombo 0.5s ease-in-out infinite;
+  }
+
+  @keyframes pulseCombo {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .challenge-score {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+  }
+
+  .score-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.45rem;
+    font-weight: 900;
+    color: var(--arena-text-2, #5a7d6e);
+    letter-spacing: 1px;
+  }
+
+  .score-value {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.7rem;
+    font-weight: 900;
+    color: #48d868;
+  }
+
+  .timer {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 900;
+    color: var(--arena-accent, #e8967d);
+  }
+
+  /* ── Canvas Area ── */
+  .canvas-area {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .fallback-display {
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: var(--arena-text-2, #5a7d6e);
   }
 
-  .battle-timer {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
-    color: var(--arena-text-0, #e0f0e8);
-    font-weight: 700;
-  }
-
-  .pnl-row {
+  /* ── Team HP Summary ── */
+  .team-hp-summary {
     display: flex;
-    align-items: center;
-    gap: 0.75rem;
+    gap: 12px;
   }
 
-  .pnl-card {
+  .hp-side {
     flex: 1;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    padding: 0.6rem;
-    background: var(--arena-bg-1, #0d2118);
-    border: 2px solid var(--arena-line, #1a3d2e);
+    gap: 6px;
+  }
+
+  .hp-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.5rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: var(--arena-text-2, #5a7d6e);
+    width: 60px;
+    text-align: right;
+  }
+
+  .hp-bar-bg {
+    flex: 1;
+    height: 6px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .hp-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+  .human-fill { background: linear-gradient(90deg, #48d868, #00cc88); }
+  .ai-fill { background: linear-gradient(90deg, #f85858, #ff2d55); }
+
+  .hp-pct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--arena-text-1, #8ba59e);
+    width: 35px;
+  }
+
+  /* ── Switch Panel ── */
+  .switch-panel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.2);
     border-radius: 6px;
   }
 
-  .pnl-card.positive { border-color: rgba(0, 204, 136, 0.4); }
-  .pnl-card.negative { border-color: rgba(255, 94, 122, 0.4); }
+  .switch-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.5rem;
+    font-weight: 900;
+    color: var(--arena-text-2, #5a7d6e);
+    letter-spacing: 1px;
+  }
+
+  .switch-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--arena-text-0, #e0f0e8);
+  }
+
+  .switch-btn.active {
+    border-color: var(--btn-color, #4FC3F7);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .switch-btn.ko {
+    opacity: 0.3;
+    filter: grayscale(1);
+  }
+
+  .switch-btn:hover:not(:disabled) {
+    border-color: var(--btn-color, #4FC3F7);
+    transform: scale(1.05);
+  }
+
+  .switch-btn:disabled {
+    cursor: not-allowed;
+  }
+
+  .switch-initial {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 900;
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .switch-hp {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--arena-text-1, #8ba59e);
+  }
+
+  .cooldown-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    color: #f8d030;
+    margin-left: auto;
+  }
+
+  /* ── Bottom Panel ── */
+  .bottom-panel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+  }
+
+  .mini-chart {
+    flex: 1;
+    height: 50px;
+    border: 1px solid var(--arena-line, #1a3d2e);
+    border-radius: 4px;
+    overflow: hidden;
+    padding: 4px;
+    background: var(--arena-bg-1, #0d2118);
+  }
+
+  .mini-chart svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .pnl-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 70px;
+  }
 
   .pnl-label {
-    font-size: 0.65rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.5rem;
+    font-weight: 900;
     color: var(--arena-text-2, #5a7d6e);
+    letter-spacing: 1px;
   }
 
   .pnl-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 1.3rem;
-    font-weight: 700;
+    font-size: 0.9rem;
+    font-weight: 900;
+  }
+  .pnl-value.positive { color: #48d868; }
+  .pnl-value.negative { color: #f85858; }
+
+  .decision-actions {
+    display: flex;
+    gap: 4px;
   }
 
-  .pnl-card.positive .pnl-value { color: var(--arena-good, #00cc88); }
-  .pnl-card.negative .pnl-value { color: var(--arena-bad, #ff5e7a); }
-
-  .pnl-dir {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.6rem;
-    color: var(--arena-text-2, #5a7d6e);
-  }
-
-  .pnl-vs {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 1rem;
-    color: var(--arena-accent, #e8967d);
-  }
-
-  .chart-area {
-    position: relative;
-    background: var(--arena-bg-1, #0d2118);
+  .action-btn {
+    padding: 6px 10px;
     border: 1px solid var(--arena-line, #1a3d2e);
-    border-radius: 6px;
-    padding: 0.5rem;
-    overflow: hidden;
-  }
-
-  .chart-labels {
-    position: absolute;
-    right: 8px;
-    top: 0;
-    bottom: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    pointer-events: none;
-  }
-
-  .label-tp {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.5rem;
-    color: var(--arena-good, #00cc88);
-  }
-
-  .label-entry {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.5rem;
-    color: var(--arena-text-2, #5a7d6e);
-  }
-
-  .label-sl {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.5rem;
-    color: var(--arena-bad, #ff5e7a);
-  }
-
-  .current-price {
-    text-align: center;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--arena-text-1, #8ba59e);
-  }
-
-  .price {
-    color: var(--arena-text-0, #e0f0e8);
-    font-weight: 700;
-  }
-
-  .decision-point {
-    background: rgba(232, 150, 125, 0.08);
-    border: 2px solid var(--arena-accent, #e8967d);
-    border-radius: 8px;
-    padding: 0.75rem;
-    animation: dpPulse 0.8s ease-in-out infinite;
-  }
-
-  @keyframes dpPulse {
-    0%, 100% { border-color: var(--arena-accent, #e8967d); }
-    50% { border-color: rgba(232, 150, 125, 0.4); }
-  }
-
-  .dp-header {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    color: var(--arena-accent, #e8967d);
-    margin-bottom: 0.5rem;
-    text-align: center;
-    font-weight: 700;
-  }
-
-  .dp-buttons {
-    display: flex;
-    gap: 0.4rem;
-  }
-
-  .dp-btn {
-    flex: 1;
-    padding: 0.5rem;
-    border: 2px solid var(--arena-line, #1a3d2e);
-    background: var(--arena-bg-1, #0d2118);
     border-radius: 4px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    text-align: center;
-  }
-
-  .dp-btn.hold { color: var(--arena-text-1, #8ba59e); }
-  .dp-btn.hold:hover { border-color: var(--arena-text-1, #8ba59e); }
-
-  .dp-btn.adjust { color: #f59e0b; }
-  .dp-btn.adjust:hover { border-color: #f59e0b; }
-
-  .dp-btn.cut { color: var(--arena-bad, #ff5e7a); }
-  .dp-btn.cut:hover { border-color: var(--arena-bad, #ff5e7a); }
-
-  .action-log {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-  }
-
-  .action-chip {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--arena-text-0, #e0f0e8);
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.55rem;
-    padding: 2px 6px;
-    background: var(--arena-bg-1, #0d2118);
-    border: 1px solid var(--arena-line, #1a3d2e);
-    border-radius: 8px;
-    color: var(--arena-text-2, #5a7d6e);
+    font-weight: 900;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .action-btn:hover {
+    border-color: var(--arena-accent, #e8967d);
+    background: rgba(232, 150, 125, 0.1);
+  }
+
+  .action-btn.hold { border-color: #48d868; }
+  .action-btn.cut { border-color: #f85858; color: #f85858; }
+
+  /* ── Battle Log ── */
+  .battle-log {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    max-height: 80px;
+    overflow-y: auto;
+  }
+
+  .log-entry {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+  }
+
+  .log-icon {
+    font-size: 0.7rem;
+  }
+
+  .log-msg {
+    opacity: 0.8;
+  }
+
+  @media (max-width: 768px) {
+    .canvas-area {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .team-hp-summary { gap: 6px; }
+    .hp-label { width: 40px; font-size: 0.45rem; }
+    .log-entry { font-size: 0.5rem; }
   }
 </style>

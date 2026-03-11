@@ -1,47 +1,25 @@
-export interface RegisterAuthPayload {
-  email: string;
-  nickname: string;
-  walletAddress?: string;
-  walletMessage?: string;
-  walletSignature?: string;
-}
-
-export interface LoginAuthPayload {
-  email: string;
-  nickname: string;
-  walletAddress: string;
-  walletMessage: string;
-  walletSignature: string;
-}
-
-export interface AuthUserPayload {
-  id: string;
-  email: string;
-  nickname: string;
-  tier: 'guest' | 'registered' | 'connected' | 'verified' | string;
-  phase: number;
-  walletAddress?: string | null;
-  wallet?: string | null;
-}
-
-export interface AuthSessionResponse {
-  authenticated: boolean;
-  user: AuthUserPayload | null;
-}
-
-export interface WalletNoncePayload {
-  address: string;
-  provider?: string;
-  chain?: string;
-}
-
-export interface VerifyWalletPayload {
-  address: string;
-  message: string;
-  signature: string;
-  provider?: string;
-  chain?: string;
-}
+import type {
+  LoginAuthRequest,
+  RegisterAuthRequest,
+  ResolveWalletData,
+  ResolveWalletRequest,
+  VerifyWalletRequest,
+  WalletNonceRequest,
+} from '$lib/contracts/auth';
+import type { LegacyBooleanEnvelope } from '$lib/contracts/http';
+import {
+  normalizeAuthSessionData,
+  normalizeLoginAuthData,
+  normalizeLogoutData,
+  normalizeRegisterAuthData,
+  normalizeVerifyWalletData,
+  normalizeWalletNonceData,
+  type AuthSessionApiResult,
+  type LoginAuthApiResult,
+  type RegisterAuthApiResult,
+  type VerifyWalletApiResult,
+  type WalletNonceApiResult,
+} from '$lib/auth/authApiNormalizer';
 
 interface ApiErrorPayload {
   error?: string;
@@ -82,44 +60,52 @@ async function getJson<TResponse>(url: string): Promise<TResponse> {
   return (await res.json()) as TResponse;
 }
 
-export function registerAuth(payload: RegisterAuthPayload) {
-  return postJson<{ success: boolean; user: AuthUserPayload }>('/api/auth/register', payload);
+export function registerAuth(payload: RegisterAuthRequest) {
+  return postJson<RegisterAuthApiResult>('/api/auth/register', payload).then((result) =>
+    normalizeRegisterAuthData(payload, result)
+  );
 }
 
-export function loginAuth(payload: LoginAuthPayload) {
-  return postJson<{ success: boolean; user: AuthUserPayload }>('/api/auth/login', payload);
+export function loginAuth(payload: LoginAuthRequest) {
+  return postJson<LoginAuthApiResult>('/api/auth/login', payload).then((result) =>
+    normalizeLoginAuthData(payload, result)
+  );
 }
 
 export function fetchAuthSession() {
-  return getJson<AuthSessionResponse>('/api/auth/session');
+  return getJson<AuthSessionApiResult>('/api/auth/session').then(normalizeAuthSessionData);
 }
 
-export function requestWalletNonce(payload: WalletNoncePayload) {
-  return postJson<{
-    success: boolean;
-    address: string;
-    chain?: string;
-    nonce: string;
-    message: string;
-    expiresAt: string;
-  }>('/api/auth/nonce', payload);
+export function requestWalletNonce(payload: WalletNonceRequest) {
+  return postJson<WalletNonceApiResult>('/api/auth/nonce', payload).then(normalizeWalletNonceData);
 }
 
-export function verifyWalletSignature(payload: VerifyWalletPayload) {
-  return postJson<{
+export function verifyWalletSignature(payload: VerifyWalletRequest) {
+  return postJson<VerifyWalletApiResult>('/api/auth/verify-wallet', payload).then(
+    normalizeVerifyWalletData
+  );
+}
+
+export async function resolveWalletAuth(payload: ResolveWalletRequest): Promise<ResolveWalletData> {
+  const result = await postJson<{
     success: boolean;
-    verified: boolean;
-    linkedToUser: boolean;
-    wallet: {
-      address: string;
-      shortAddr: string;
-      chain: string;
-      provider: string;
-      verified: boolean;
-    };
-  }>('/api/auth/verify-wallet', payload);
+    action: 'logged_in' | 'needs_signup';
+    user?: Record<string, unknown>;
+    walletAddress?: string;
+  }>('/api/auth/resolve', payload);
+
+  if (result.action === 'logged_in' && result.user) {
+    const { normalizeAuthUser } = await import('$lib/auth/authApiNormalizer');
+    const user = normalizeAuthUser(result.user);
+    if (user) return { action: 'logged_in', user };
+  }
+
+  return {
+    action: 'needs_signup',
+    walletAddress: payload.walletAddress,
+  };
 }
 
 export function logoutAuth() {
-  return postJson<{ success: boolean }>('/api/auth/logout', {});
+  return postJson<LegacyBooleanEnvelope>('/api/auth/logout', {}).then(normalizeLogoutData);
 }

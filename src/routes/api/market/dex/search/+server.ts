@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { searchDexPairs } from '$lib/server/dexscreener';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 export const GET: RequestHandler = async ({ url }) => {
   try {
@@ -21,9 +22,9 @@ export const GET: RequestHandler = async ({ url }) => {
         },
       }
     );
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('query is required')) {
-      return json({ error: error.message }, { status: 400 });
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('query is required')) {
+      return json({ error: getErrorMessage(error) }, { status: 400 });
     }
     console.error('[market/dex/search/get] unexpected error:', error);
     return json({ error: 'Failed to search dex pairs' }, { status: 500 });

@@ -1,251 +1,185 @@
 <script lang="ts">
   import { gameState } from '$lib/stores/gameState';
-  import { AGDEFS } from '$lib/data/agents';
-  import { latestFeed } from '$lib/stores/battleFeedStore';
-  import { PHASE_LABELS } from '$lib/engine/phases';
   import { openTradeCount } from '$lib/stores/quickTradeStore';
   import { activeSignalCount } from '$lib/stores/trackedSignalStore';
+  import { livePrices } from '$lib/stores/priceStore';
   import { goto } from '$app/navigation';
 
-  let state = $gameState;
-  $: state = $gameState;
+  const state = $derived($gameState);
+  const openPos = $derived($openTradeCount);
+  const trackedSigs = $derived($activeSignalCount);
+  const liveP = $derived($livePrices);
 
-  $: feed = $latestFeed;
-  $: phaseLabel = PHASE_LABELS[state.phase] || PHASE_LABELS.DRAFT;
-  $: openPos = $openTradeCount;
-  $: trackedSigs = $activeSignalCount;
-  $: finalDir = state.score >= 60 ? 'LONG' : 'SHORT';
+  const selectedToken = $derived(state.pair.split('/')[0] || 'BTC');
+  const selectedPrice = $derived(liveP[selectedToken] || 0);
+  const priceText = $derived(
+    selectedPrice > 0
+      ? '$' + Number(selectedPrice).toLocaleString('en-US', {
+          minimumFractionDigits: selectedPrice >= 1000 ? 0 : 2,
+          maximumFractionDigits: selectedPrice >= 1000 ? 0 : 2
+        })
+      : ''
+  );
 </script>
 
-<div id="bot">
-  <!-- Quick context badges -->
-  <div class="ctx-badges">
-    <button class="ctx-badge" on:click={() => goto('/')}>
-      <span class="ctx-icon">🏠</span>
-    </button>
+<div id="status-bar">
+  <div class="sb-section">
     {#if openPos > 0}
-      <button class="ctx-badge ctx-pos" on:click={() => goto('/passport')}>
-        <span class="ctx-icon">📊</span>
-        <span class="ctx-count">{openPos}</span>
+      <button class="sb-badge sb-pos" onclick={() => goto('/passport')}>
+        <span class="sb-dot dot-good"></span>
+        {openPos} POS
       </button>
     {/if}
     {#if trackedSigs > 0}
-      <button class="ctx-badge ctx-tracked" on:click={() => goto('/signals')}>
-        <span class="ctx-icon">📌</span>
-        <span class="ctx-count">{trackedSigs}</span>
+      <button class="sb-badge sb-sig" onclick={() => goto('/signals')}>
+        <span class="sb-dot dot-warn"></span>
+        {trackedSigs} SIG
       </button>
     {/if}
   </div>
 
-  <div class="chain">
-    {#each AGDEFS.slice(0, 5) as ag, i}
-      <div class="cslot" class:vis={state.running}>
-        <span class="ci">{ag.icon}</span>
-        <span class="cn">{ag.name}</span>
-        <span class="cd" class:long={ag.dir === 'LONG'} class:short={ag.dir === 'SHORT'}>{ag.dir}</span>
-        <span class="cc">{ag.conf}%</span>
-      </div>
-      {#if i < 4}
-        <span class="carrow" class:vis={state.running}>→</span>
-      {/if}
-    {/each}
-    <span class="carrow" class:vis={state.running}>→</span>
-    <div class="cscore" class:vis={state.running}>{state.score}</div>
-    <div class="cdir" class:vis={state.running} class:long={finalDir === 'LONG'} class:short={finalDir === 'SHORT'}>{finalDir}</div>
+  <div class="sb-center">
+    <span class="sb-pair">{state.pair}</span>
+    {#if priceText}
+      <span class="sb-price">{priceText}</span>
+    {/if}
   </div>
 
-  <!-- Phase Badge + Feed -->
-  {#if state.running}
-    <div class="phase-badge" style="background:{phaseLabel.color}">
-      {phaseLabel.name}
-    </div>
-    {#if feed.length > 0}
-      <div class="feed-scroll">
-        {#each feed.slice(0, 3) as item (item.id)}
-          <span class="feed-item" style="color:{item.agentColor}">
-            {item.agentIcon} {item.text}
-          </span>
-        {/each}
-      </div>
+  <div class="sb-section sb-right">
+    <span class="sb-stat"><span class="sb-lbl">M:</span>{state.matchN}</span>
+    <span class="sb-stat"><span class="sb-lbl">W:</span>{state.wins}</span>
+    {#if state.streak > 0}
+      <span class="sb-stat sb-streak">{state.streak}</span>
     {/if}
-  {/if}
-
-  <div class="bstats">
-    <span>M:{state.matchN}</span>
-    <span>W:{state.wins}</span>
-    <span>🔥{state.streak}</span>
-    <div class="lpm">
-      <div class="lpt">
-        <div class="lpf" style="width:{Math.min(state.lp / 50, 100)}%"></div>
+    <div class="sb-lp">
+      <div class="sb-lp-track">
+        <div class="sb-lp-fill" style="width:{Math.min(state.lp / 50, 100)}%"></div>
       </div>
-      <span class="lpv">{state.lp.toLocaleString()}</span>
+      <span class="sb-lp-val">{state.lp.toLocaleString()} LP</span>
     </div>
   </div>
 </div>
 
 <style>
-  #bot {
+  #status-bar {
     display: flex;
     align-items: center;
-    padding: 0 12px;
-    gap: 6px;
-    border-top: 1px solid rgba(232, 150, 125, 0.34);
-    background:
-      radial-gradient(circle at 14% 120%, rgba(232, 150, 125, 0.12), transparent 38%),
-      radial-gradient(circle at 86% -20%, rgba(102, 204, 230, 0.08), transparent 36%),
-      linear-gradient(90deg, #0b1b13, #0a1711 48%, #09150f);
-    z-index: 20;
-    overflow: hidden;
-    color: #f0ede4;
-    box-shadow: 0 -8px 26px rgba(0, 0, 0, .35);
-    height: 52px;
+    padding: 0 var(--sc-sp-3);
+    gap: var(--sc-sp-3);
+    border-top: 1px solid var(--sc-line-soft);
+    background: var(--sc-bg-1);
+    z-index: var(--sc-z-sticky);
+    height: var(--sc-bottom-bar-h);
+    flex-shrink: 0;
+    color: var(--sc-text-2);
+    font-family: var(--sc-font-mono);
+    font-size: var(--sc-fs-2xs);
+  }
+
+  .sb-section {
+    display: flex;
+    align-items: center;
+    gap: var(--sc-sp-2);
     flex-shrink: 0;
   }
-  /* Context badges */
-  .ctx-badges {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    flex-shrink: 0;
-    margin-right: 4px;
+  .sb-right {
+    margin-left: auto;
   }
-  .ctx-badge {
+
+  .sb-center {
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 3px 5px;
-    border-radius: 6px;
-    border: 1px solid rgba(232, 150, 125, 0.34);
-    background: rgba(10, 22, 16, 0.86);
-    font-family: var(--fm);
-    font-size: 7px;
-    font-weight: 900;
+    gap: var(--sc-sp-1_5);
+  }
+  .sb-pair {
+    color: var(--sc-text-3);
+    font-size: var(--sc-fs-2xs);
+    letter-spacing: 0.5px;
+  }
+  .sb-price {
+    color: var(--sc-text-0);
+    font-weight: 600;
+  }
+
+  .sb-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--sc-sp-1);
+    padding: var(--sc-sp-1) var(--sc-sp-2);
+    min-height: 24px;
+    border-radius: var(--sc-radius-sm);
+    border: 1px solid var(--sc-line-soft);
+    background: transparent;
+    font-family: var(--sc-font-mono);
+    font-size: var(--sc-fs-2xs);
+    font-weight: 600;
     cursor: pointer;
-    transition: all .12s;
-    box-shadow: none;
-    color: #f0ede4;
+    transition: all var(--sc-duration-fast);
+    color: var(--sc-text-1);
   }
-  .ctx-badge:hover {
-    background: rgba(232, 150, 125, 0.16);
-    border-color: rgba(232, 150, 125, 0.52);
+  .sb-badge:hover {
+    background: var(--sc-accent-bg-subtle);
+    border-color: var(--sc-line);
   }
-  .ctx-icon { font-size: 10px; opacity: .88; }
-  .ctx-count {
-    min-width: 12px;
-    height: 12px;
+  .sb-badge:active {
+    background: var(--sc-accent-bg);
+    transform: scale(0.96);
+  }
+
+  .sb-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+  }
+  .dot-good { background: var(--sc-good); box-shadow: 0 0 4px var(--sc-good); }
+  .dot-warn { background: var(--sc-warn); box-shadow: 0 0 4px var(--sc-warn); }
+
+  .sb-stat {
+    color: var(--sc-text-1);
+    font-weight: 600;
+  }
+  .sb-lbl {
+    color: var(--sc-text-3);
+    font-weight: 400;
+  }
+  .sb-streak {
+    color: var(--sc-accent);
+  }
+
+  .sb-lp {
     display: flex;
     align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    font-size: 7px;
-    font-weight: 900;
-    color: #07130d;
-    padding: 0 2px;
+    gap: var(--sc-sp-1);
   }
-  .ctx-pos .ctx-count { background: #00cc88; }
-  .ctx-tracked .ctx-count { background: #dcb970; }
-
-  .chain { display: flex; align-items: center; gap: 3px; flex: 1; overflow: hidden; }
-  .cslot {
-    display: flex; align-items: center; gap: 3px; padding: 3px 6px; border-radius: 8px;
-    background: rgba(9, 20, 14, .86); border: 1px solid rgba(232, 150, 125, .22);
-    font-size: 7px; font-family: var(--fm);
-    opacity: .5; transition: all .2s; white-space: nowrap; flex-shrink: 0;
-  }
-  .cslot.vis { opacity: 1; border-color: rgba(232, 150, 125, .44); background: rgba(11, 24, 17, .94); box-shadow: none; }
-  .cslot .ci { font-size: 9px; }
-  .cslot .cn { font-weight: 900; letter-spacing: .5px; color: #f0ede4; }
-  .cslot .cd { font-weight: 900; letter-spacing: .5px; margin-left: 2px; }
-  .cd.long { color: #00cc88; } .cd.short { color: #ff5e7a; }
-  .cslot .cc { font-size: 6px; color: rgba(240, 237, 228, .74); font-weight: 700; }
-  .carrow { color: rgba(240, 237, 228, .45); font-size: 9px; flex-shrink: 0; opacity: .3; transition: all .2s; }
-  .carrow.vis { opacity: 1; color: rgba(240, 237, 228, .82); font-weight: 900; }
-  .cscore {
-    padding: 4px 8px; border-radius: 10px;
-    font-family: var(--fd); font-size: 11px; font-weight: 900; letter-spacing: 1px;
-    opacity: .3; transition: all .2s; flex-shrink: 0;
-  }
-  .cscore.vis {
-    opacity: 1;
-    color: #f0ede4;
-    border: 1px solid rgba(232, 150, 125, .42);
-    background: rgba(12, 27, 19, .92);
-    box-shadow: none;
-  }
-  .cdir {
-    padding: 3px 8px; border-radius: 10px;
-    font-family: var(--fd); font-size: 9px; font-weight: 900; letter-spacing: 2px;
-    opacity: .3; transition: all .2s; flex-shrink: 0;
-  }
-  .cdir.vis {
-    opacity: 1;
-    border: 1px solid rgba(232, 150, 125, .42);
-    box-shadow: none;
-  }
-  .cdir.long.vis { color: #00cc88; background: rgba(0, 204, 136, .12); border-color: rgba(0, 204, 136, .36); }
-  .cdir.short.vis { color: #ff5e7a; background: rgba(255, 94, 122, .14); border-color: rgba(255, 94, 122, .34); }
-  .bstats {
-    display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 8px;
-    font-family: var(--fm); color: rgba(240, 237, 228, .72); flex-shrink: 0; font-weight: 700;
-  }
-  .bstats span { color: #f0ede4; font-weight: 900; }
-  .lpm { display: flex; align-items: center; gap: 4px; }
-  .lpt {
-    width: 60px; height: 4px; border-radius: 3px;
-    background: rgba(7, 15, 11, .9);
-    border: 1px solid rgba(232, 150, 125, .3);
-  }
-  .lpf {
-    height: 100%;
+  .sb-lp-track {
+    width: 48px;
+    height: 3px;
     border-radius: 2px;
-    background: linear-gradient(90deg, #00cc88, #66cce6);
-    transition: width .5s;
+    background: rgba(7, 15, 11, 0.9);
+    border: 1px solid var(--sc-line-soft);
   }
-  .lpv { font-size: 8px; color: #e8967d; font-family: var(--fm); font-weight: 900; }
+  .sb-lp-fill {
+    height: 100%;
+    border-radius: 1px;
+    background: linear-gradient(90deg, var(--sc-good), var(--sc-accent-2));
+    transition: width 0.5s var(--sc-ease);
+  }
+  .sb-lp-val {
+    color: var(--sc-accent);
+    font-weight: 700;
+    font-size: var(--sc-fs-2xs);
+  }
 
-  /* Phase Badge */
-  .phase-badge {
-    padding: 3px 8px; border-radius: 6px;
-    font-family: var(--fd); font-size: 7px; font-weight: 900;
-    letter-spacing: 1.5px; color: #07130d;
-    border: 1px solid rgba(240, 237, 228, .32); box-shadow: none;
-    white-space: nowrap; flex-shrink: 0;
-    animation: phasePulse 3s ease infinite;
-    will-change: opacity;
+  @media (max-width: 768px) {
+    .sb-center { display: none; }
+    .sb-lp-track { width: 36px; }
   }
-  @keyframes phasePulse { 0%,100% { opacity: 1; } 50% { opacity: .8; } }
 
-  /* Feed Scroll */
-  .feed-scroll {
-    display: flex; gap: 8px; overflow: hidden;
-    flex: 0 1 auto; min-width: 0;
-    mask-image: linear-gradient(90deg, transparent, black 10%, black 90%, transparent);
-    -webkit-mask-image: linear-gradient(90deg, transparent, black 10%, black 90%, transparent);
-  }
-  .feed-item {
-    font-family: var(--fm); font-size: 7px; font-weight: 700;
-    white-space: nowrap; flex-shrink: 0;
-    animation: feedFadeIn .3s ease;
-  }
-  @keyframes feedFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-
-  @media (max-width: 980px) {
-    #bot {
-      height: 50px;
-      padding: 0 10px;
-      gap: 5px;
+  @media (max-width: 480px) {
+    #status-bar {
+      gap: var(--sc-sp-2);
+      padding: 0 var(--sc-sp-2);
     }
-    .chain { display: none; }
-    .feed-scroll { max-width: 42vw; }
-  }
-
-  @media (max-width: 700px) {
-    .ctx-badges { gap: 2px; margin-right: 2px; }
-    .ctx-badge { padding: 2px 4px; }
-    .ctx-icon { font-size: 9px; }
-    .bstats { gap: 4px; font-size: 7px; }
-    .lpt { width: 46px; }
-    .phase-badge { font-size: 6px; letter-spacing: 1px; padding: 2px 6px; }
-    .feed-scroll { display: none; }
+    .sb-lp { display: none; }
   }
 </style>

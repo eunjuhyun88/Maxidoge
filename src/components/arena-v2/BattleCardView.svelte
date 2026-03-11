@@ -7,25 +7,31 @@
   import type { V2BattleState, TickResult } from '$lib/engine/v2BattleTypes';
   import { AGDEFS } from '$lib/data/agents';
 
-  export let battleState: V2BattleState | null = null;
+  interface Props {
+    battleState?: V2BattleState | null;
+  }
 
-  $: bs = battleState;
-  $: tickN = bs?.tickN ?? 0;
-  $: maxTicks = bs?.maxTicks ?? 24;
-  $: vs = bs?.vsMeter.value ?? 50;
-  $: combo = bs?.combo.count ?? 0;
-  $: agentStates = bs ? Object.values(bs.agentStates) : [];
-  $: currentPrice = bs?.currentPrice ?? 0;
-  $: entryPrice = bs?.config.entryPrice ?? 0;
-  $: direction = bs?.config.direction ?? 'LONG';
-  $: pnl = entryPrice > 0
+  let {
+    battleState = null,
+  }: Props = $props();
+
+  const bs = $derived(battleState);
+  const tickN = $derived(bs?.tickN ?? 0);
+  const maxTicks = $derived(bs?.maxTicks ?? 24);
+  const vs = $derived(bs?.vsMeter.value ?? 50);
+  const combo = $derived(bs?.combo.count ?? 0);
+  const agentStates = $derived(bs ? Object.values(bs.agentStates) : []);
+  const currentPrice = $derived(bs?.currentPrice ?? 0);
+  const entryPrice = $derived(bs?.config.entryPrice ?? 0);
+  const direction = $derived(bs?.config.direction ?? 'LONG');
+  const pnl = $derived(entryPrice > 0
     ? (direction === 'LONG'
       ? ((currentPrice - entryPrice) / entryPrice) * 100
       : ((entryPrice - currentPrice) / entryPrice) * 100)
-    : 0;
+    : 0);
 
   // Card history (last 8 ticks as "played cards")
-  $: cards = (bs?.tickResults ?? []).slice(-8).map(tr => {
+  const cards = $derived((bs?.tickResults ?? []).slice(-8).map(tr => {
     const isFav = tr.classifiedTick.isFavorable;
     const isNeutral = tr.classifiedTick.tickClass === 'NEUTRAL';
     const delta = tr.classifiedTick.deltaPct;
@@ -40,16 +46,16 @@
       isCrit: mainAction?.isCritical ?? false,
       vsChange: tr.vsChange,
     };
-  });
+  }));
 
   // Score: count favorable vs unfavorable ticks
-  $: favCount = (bs?.tickResults ?? []).filter(t => t.classifiedTick.isFavorable).length;
-  $: unfavCount = (bs?.tickResults ?? []).filter(t =>
+  const favCount = $derived((bs?.tickResults ?? []).filter(t => t.classifiedTick.isFavorable).length);
+  const unfavCount = $derived((bs?.tickResults ?? []).filter(t =>
     t.classifiedTick.tickClass === 'UNFAVORABLE' || t.classifiedTick.tickClass === 'STRONG_UNFAVORABLE'
-  ).length;
+  ).length);
 
   // Latest card for flip animation
-  $: latestCard = cards.length > 0 ? cards[cards.length - 1] : null;
+  const latestCard = $derived(cards.length > 0 ? cards[cards.length - 1] : null);
 
   function getAgentImg(agentId: string): string {
     const def = AGDEFS.find(a => a.id === agentId.toLowerCase());
@@ -162,7 +168,7 @@
           <img src={getAgentImg(agent.agentId)} alt={agent.agentId} class="hand-img" />
           <span class="hand-name">{agent.agentId}</span>
           <div class="hand-energy">
-            <div class="hand-energy-fill" style:width="{(agent.energy / agent.maxEnergy) * 100}%" />
+            <div class="hand-energy-fill" style:width="{(agent.energy / agent.maxEnergy) * 100}%"></div>
           </div>
         </div>
       {/each}
@@ -208,10 +214,10 @@
     gap: 8px;
   }
   .score-label {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 3px;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
   }
   .score-num {
     font-size: 28px;
@@ -230,11 +236,11 @@
     font-size: 10px;
     font-weight: 900;
     letter-spacing: 4px;
-    color: rgba(240,237,228,0.2);
+    color: rgba(240,237,228,0.5);
   }
   .score-tick {
-    font-size: 8px;
-    color: rgba(240,237,228,0.15);
+    font-size: 9px;
+    color: rgba(240,237,228,0.5);
   }
 
   /* Card table */
@@ -299,7 +305,7 @@
   .card-tick {
     font-size: 9px;
     font-weight: 700;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
   }
   .card-delta {
     font-size: 10px;
@@ -319,7 +325,7 @@
     gap: 2px;
   }
   .card-agent {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240,237,228,0.4);
     letter-spacing: 1px;
@@ -377,7 +383,7 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    font-size: 8px;
+    font-size: 9px;
     transition: all 200ms;
   }
   .mini-card.mini-fav {
@@ -389,8 +395,8 @@
     background: rgba(255,45,85,0.03);
   }
   .mini-tick {
-    font-size: 6px;
-    color: rgba(240,237,228,0.2);
+    font-size: 9px;
+    color: rgba(240,237,228,0.5);
   }
   .mini-icon {
     font-size: 12px;
@@ -398,9 +404,9 @@
   }
   .mini-fav .mini-icon { color: #00ff88; }
   .mini-unfav .mini-icon { color: #ff2d55; }
-  .mini-neutral .mini-icon { color: rgba(240,237,228,0.3); }
+  .mini-neutral .mini-icon { color: rgba(240,237,228,0.5); }
   .mini-vs {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(240,237,228,0.4);
   }
@@ -444,7 +450,7 @@
     border: 1px solid rgba(240,237,228,0.1);
   }
   .hand-name {
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     color: rgba(240,237,228,0.4);
@@ -472,9 +478,9 @@
     gap: 6px;
   }
   .chip-label {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
-    color: rgba(240,237,228,0.3);
+    color: rgba(240,237,228,0.5);
     letter-spacing: 1px;
   }
   .chip-val {

@@ -9,7 +9,12 @@
   import { onMount } from 'svelte';
   import EmptyState from '../shared/EmptyState.svelte';
 
-  export let embedded = false;
+  interface Props {
+    embedded?: boolean;
+  }
+  let {
+    embedded = false,
+  }: Props = $props();
 
   type SortBy = 'wilson' | 'accuracy' | 'sample' | 'calibration';
   type Period = '7d' | '30d' | 'all';
@@ -46,12 +51,12 @@
     recentVotes: VoteSnapshot[];
   };
 
-  $: stats = $agentStats;
-  $: records = $matchHistoryStore.records;
+  const stats = $derived($agentStats);
+  const records = $derived($matchHistoryStore.records);
 
-  let sortBy: SortBy = 'wilson';
-  let period: Period = 'all';
-  let selectedAgent: OracleRow | null = null;
+  let sortBy: SortBy = $state('wilson');
+  let period: Period = $state('all');
+  let selectedAgent: OracleRow | null = $state(null);
 
   function inferMarketDirection(record: (typeof records)[number]): 'LONG' | 'SHORT' | null {
     const userDir = String(record.hypothesis?.dir || '').toUpperCase();
@@ -73,14 +78,14 @@
     };
   }
 
-  $: filteredRecords = (() => {
+  const filteredRecords = $derived.by(() => {
     const now = Date.now();
     if (period === '7d') return records.filter((r) => now - r.timestamp < 7 * 86400000);
     if (period === '30d') return records.filter((r) => now - r.timestamp < 30 * 86400000);
     return records;
-  })();
+  });
 
-  $: oracleData = (Object.values(AGENT_POOL) as Array<(typeof AGENT_POOL)[AgentId]>).map((agent) => {
+  const oracleData = $derived((Object.values(AGENT_POOL) as Array<(typeof AGENT_POOL)[AgentId]>).map((agent) => {
     const statKey = agent.id.toLowerCase();
     const s = stats[statKey] || { level: 1, xp: 0 };
     let wins = 0;
@@ -157,9 +162,9 @@
     if (sortBy === 'sample') return b.sample - a.sample;
     if (sortBy === 'calibration') return b.calibration - a.calibration;
     return b.wilson - a.wilson;
-  });
+  }));
 
-  $: consistentRows = oracleData.filter((row) => row.sample >= 5 && row.wilson >= 55);
+  const consistentRows = $derived(oracleData.filter((row: OracleRow) => row.sample >= 5 && row.wilson >= 55));
 
   function selectAgent(ag: OracleRow) {
     selectedAgent = ag;
@@ -204,13 +209,13 @@
     <div class="control-group">
       <span class="ctrl-label">PERIOD:</span>
       {#each [['7d', '7D'], ['30d', '30D'], ['all', 'ALL']] as [key, label]}
-        <button class="ctrl-btn" class:active={period === key} on:click={() => period = key as typeof period}>{label}</button>
+        <button class="ctrl-btn" class:active={period === key} onclick={() => period = key as typeof period}>{label}</button>
       {/each}
     </div>
     <div class="control-group">
       <span class="ctrl-label">SORT:</span>
       {#each [['wilson', 'WILSON'], ['accuracy', 'ACCURACY'], ['sample', 'SAMPLE'], ['calibration', 'CALIBRATION']] as [key, label]}
-        <button class="ctrl-btn" class:active={sortBy === key} on:click={() => sortBy = key as SortBy}>{label}</button>
+        <button class="ctrl-btn" class:active={sortBy === key} onclick={() => sortBy = key as SortBy}>{label}</button>
       {/each}
     </div>
   </div>
@@ -239,7 +244,7 @@
         <span class="ot-col">CALIBRATION</span>
       </div>
       {#each oracleData as ag, i}
-        <button class="ot-row" on:click={() => selectAgent(ag)}>
+        <button class="ot-row" onclick={() => selectAgent(ag)}>
           <span class="ot-rank rank-{i+1}">{i+1}</span>
           <div class="ot-agent">
             <span class="ot-icon">{ag.icon}</span>
@@ -268,11 +273,11 @@
   {/if}
 
   {#if selectedAgent}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="agent-detail-overlay" on:click={() => selectedAgent = null}>
-      <div class="agent-detail" on:click|stopPropagation>
-        <button class="close-btn" on:click={() => selectedAgent = null}>✕</button>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="agent-detail-overlay" onclick={() => selectedAgent = null}>
+      <div class="agent-detail" onclick={(e: MouseEvent) => e.stopPropagation()}>
+        <button class="close-btn" onclick={() => selectedAgent = null}>✕</button>
         <div class="ad-header" style="border-color:{selectedAgent.color}">
           <div class="ot-icon" style="font-size:32px">{selectedAgent.icon}</div>
           <div class="ad-info">
@@ -327,7 +332,7 @@
           </div>
         </div>
 
-        <button class="ad-arena-btn" on:click={triggerArena}>
+        <button class="ad-arena-btn" onclick={triggerArena}>
           DEPLOY TO ARENA
         </button>
       </div>
@@ -387,7 +392,7 @@
   .oh-stats { display: flex; gap: 8px; margin-top: 6px; }
   .oh-stat {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1.5px;
     background: rgba(0,0,0,.4);
@@ -413,7 +418,7 @@
   }
   .oe-sub {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: rgba(255,255,255,.62);
     margin-top: 3px;
     letter-spacing: .8px;
@@ -426,7 +431,7 @@
   }
   .oe-pill {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: .9px;
     padding: 2px 6px;
@@ -446,14 +451,14 @@
   .control-group { display: flex; align-items: center; gap: 4px; }
   .ctrl-label {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
     color: rgba(255,255,255,.3);
   }
   .ctrl-btn {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
     padding: 3px 8px;
@@ -479,7 +484,7 @@
     padding: 8px 10px;
     border-bottom: 2px solid rgba(139,92,246,.3);
     font-family: var(--fd);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
     color: rgba(255,255,255,.3);
@@ -508,16 +513,16 @@
   .ot-agent { display: flex; align-items: center; gap: 6px; }
   .ot-icon { font-size: 18px; }
   .ot-name { font-family: var(--fm); font-size: 9px; font-weight: 900; letter-spacing: 1px; }
-  .ot-role { font-family: var(--fm); font-size: 6px; color: rgba(255,255,255,.3); }
+  .ot-role { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); }
   .ot-col { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.6); }
   .ot-accuracy { font-weight: 900; font-family: var(--fd); }
   .ot-wl { font-family: var(--fd); font-size: 10px; font-weight: 900; }
   .ot-level { color: var(--pk); font-weight: 700; }
-  .ot-spec { font-size: 7px; color: rgba(255,255,255,.3); }
+  .ot-spec { font-size: 9px; color: rgba(255,255,255,.3); }
   .ot-cal-wrap { display: flex; align-items: center; gap: 4px; }
   .cal-bar { flex: 1; height: 4px; background: rgba(255,255,255,.06); border-radius: 2px; }
   .cal-fill { height: 100%; background: var(--pur); border-radius: 2px; transition: width .5s; }
-  .cal-num { font-size: 8px; font-weight: 700; color: var(--pur); min-width: 28px; }
+  .cal-num { font-size: 9px; font-weight: 700; color: var(--pur); min-width: 28px; }
 
   .agent-detail-overlay {
     position: fixed;
@@ -556,7 +561,7 @@
   .ad-header { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 3px solid; margin-bottom: 12px; }
   .ad-info { flex: 1; }
   .ad-name { font-family: var(--fc); font-size: 18px; letter-spacing: 2px; }
-  .ad-role { font-family: var(--fm); font-size: 8px; color: rgba(255,255,255,.4); }
+  .ad-role { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.4); }
   .ad-accuracy { font-family: var(--fd); font-size: 10px; font-weight: 900; margin-top: 2px; }
 
   .ad-section { margin-bottom: 12px; }
@@ -568,36 +573,36 @@
     border-radius: 4px;
     border-bottom: 1px solid rgba(255,255,255,.04);
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
   }
   .vote-row.win { border-left: 2px solid var(--grn); }
   .vote-row.loss { border-left: 2px solid var(--red); }
   .vr-match { color: rgba(255,255,255,.4); font-weight: 700; }
-  .vr-dir { font-weight: 900; padding: 1px 4px; border: 1px solid; border-radius: 3px; font-size: 7px; }
+  .vr-dir { font-weight: 900; padding: 1px 4px; border: 1px solid; border-radius: 3px; font-size: 9px; }
   .vr-dir.long { color: var(--grn); border-color: rgba(0,255,136,.3); }
   .vr-dir.short { color: var(--red); border-color: rgba(255,45,85,.3); }
   .vr-conf { color: var(--yel); font-weight: 700; }
   .vr-result { font-weight: 900; }
   .vr-result.win { color: var(--grn); }
   .vr-result:not(.win) { color: var(--red); }
-  .vr-time { color: rgba(255,255,255,.2); margin-left: auto; font-size: 7px; }
+  .vr-time { color: rgba(255,255,255,.5); margin-left: auto; font-size: 9px; }
 
-  .ab-title { font-family: var(--fd); font-size: 8px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.4); margin-bottom: 4px; }
+  .ab-title { font-family: var(--fd); font-size: 9px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.4); margin-bottom: 4px; }
   .ad-abilities { margin-bottom: 12px; }
   .ab-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
-  .ab-label { font-family: var(--fm); font-size: 7px; font-weight: 700; color: rgba(255,255,255,.3); width: 55px; letter-spacing: 1px; }
+  .ab-label { font-family: var(--fm); font-size: 9px; font-weight: 700; color: rgba(255,255,255,.3); width: 55px; letter-spacing: 1px; }
   .ab-bar { flex: 1; height: 4px; background: rgba(255,255,255,.06); border-radius: 2px; }
   .ab-fill { height: 100%; border-radius: 2px; transition: width .5s; }
-  .ab-val { font-family: var(--fm); font-size: 8px; font-weight: 900; color: rgba(255,255,255,.5); width: 22px; text-align: right; }
+  .ab-val { font-family: var(--fm); font-size: 9px; font-weight: 900; color: rgba(255,255,255,.5); width: 22px; text-align: right; }
 
   .ad-finding { margin-bottom: 12px; }
   .finding-card { border: 2px solid; border-radius: 8px; padding: 8px; background: rgba(255,255,255,.03); }
   .fc-title { font-family: var(--fm); font-size: 9px; font-weight: 900; color: #fff; margin-bottom: 2px; }
-  .fc-detail { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.5); line-height: 1.4; }
+  .fc-detail { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.5); line-height: 1.4; }
 
   .ad-specialties { margin-bottom: 14px; }
   .spec-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-  .spec-tag { font-family: var(--fm); font-size: 7px; font-weight: 700; padding: 2px 6px; border: 1.5px solid; border-radius: 6px; background: rgba(255,255,255,.03); }
+  .spec-tag { font-family: var(--fm); font-size: 9px; font-weight: 700; padding: 2px 6px; border: 1.5px solid; border-radius: 6px; background: rgba(255,255,255,.03); }
 
   .ad-arena-btn {
     width: 100%;
@@ -647,6 +652,29 @@
     }
     .agent-detail {
       width: min(100%, 390px);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .oracle-board.embedded {
+      margin: 4px 6px 10px;
+      border-radius: 10px;
+    }
+    .control-bar {
+      padding: 6px 8px;
+      gap: 6px;
+    }
+    .ctrl-btn {
+      padding: 2px 6px;
+      font-size: 8px;
+    }
+    .oracle-table {
+      padding: 0 6px 8px;
+    }
+    .agent-detail {
+      width: 100%;
+      right: 0;
+      border-radius: 10px;
     }
   }
 </style>

@@ -6,11 +6,12 @@ import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { marketSnapshotLimiter } from '$lib/server/rateLimit';
 import { runIpRateLimitGuard } from '$lib/server/authSecurity';
 import { isRequestBodyTooLargeError, readJsonBody } from '$lib/server/requestGuards';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 type MarketSnapshotResult = Awaited<ReturnType<typeof collectMarketSnapshot>>;
 
 function toValidationMessage(error: any): string | null {
-  const message = typeof error?.message === 'string' ? error.message : '';
+  const message = getErrorMessage(error);
   if (message.includes('pair must be like')) return message;
   if (message.includes('timeframe must be one of')) return message;
   return null;
@@ -98,7 +99,7 @@ export const GET: RequestHandler = async ({ fetch, url, cookies, getClientAddres
 
     const snapshot = await collectMarketSnapshot(fetch, { pair, timeframe, persist });
     return successResponse(snapshot);
-  } catch (error: any) {
+  } catch (error: unknown) {
     return errorResponse(error, 'get');
   }
 };
@@ -124,7 +125,7 @@ export const POST: RequestHandler = async ({ fetch, request, cookies, getClientA
 
     const snapshot = await collectMarketSnapshot(fetch, { pair, timeframe, persist });
     return successResponse(snapshot);
-  } catch (error: any) {
+  } catch (error: unknown) {
     return errorResponse(error, 'post');
   }
 };

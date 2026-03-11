@@ -12,6 +12,7 @@ import type {
   CQOnchainMetrics,
 } from './cryptoquant';
 import { fetchGeckoWhaleData } from './geckoWhale';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 const CM_BASE = 'https://community-api.coinmetrics.io/v4';
 const CACHE_TTL = 300_000; // 5 min (same as CryptoQuant)
@@ -45,7 +46,7 @@ async function cmFetch<T>(path: string): Promise<T | null> {
     setCache(cacheKey, json as T, CACHE_TTL);
     return json as T;
   } catch (err) {
-    console.error(`[CoinMetrics] ${path} error:`, err instanceof Error ? err.message : err);
+    console.error(`[CoinMetrics] ${path} error:`, err instanceof Error ? getErrorMessage(err) : err);
     return null;
   }
 }

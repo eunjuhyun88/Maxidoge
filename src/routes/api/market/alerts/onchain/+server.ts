@@ -21,8 +21,8 @@ export const GET: RequestHandler = async () => {
       { ok: true, data: snapshot },
       { headers: { 'Cache-Control': 'public, max-age=60' } },
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[api/market/alerts/onchain]', err);
-    return json({ ok: false, error: err?.message ?? 'Internal error' }, { status: 500 });
+    return json({ ok: false, error: (err instanceof Error ? err.message : 'Internal error') }, { status: 500 });
   }
 };

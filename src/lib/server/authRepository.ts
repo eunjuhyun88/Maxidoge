@@ -1,5 +1,6 @@
 import { query } from './db';
 import { isIP } from 'node:net';
+import { getErrorCode } from '$lib/utils/errorUtils';
 
 export interface AuthUserRow {
   id: string;
@@ -89,8 +90,8 @@ export async function createAuthSession(args: {
       `,
       [args.token, args.userId, args.expiresAtIso, ua, ip]
     );
-  } catch (error: any) {
-    if (error?.code === '42703') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === '42703') {
       await query(
         `
           INSERT INTO sessions (token, user_id, expires_at)
@@ -98,7 +99,7 @@ export async function createAuthSession(args: {
         `,
         [args.token, args.userId, args.expiresAtIso]
       );
-    } else if (error?.code === '22P02') {
+    } else if (getErrorCode(error) === '22P02') {
       // Invalid IP literal: retry without IP metadata.
       await query(
         `
@@ -151,9 +152,9 @@ export async function getAuthenticatedUser(token: string, userId: string): Promi
     );
 
     return result.rows[0] || null;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Backward compatibility for environments where revoked_at is not migrated yet.
-    if (error?.code !== '42703') {
+    if (getErrorCode(error) !== '42703') {
       throw error;
     }
 
@@ -177,6 +178,19 @@ export async function getAuthenticatedUser(token: string, userId: string): Promi
     );
     return fallback.rows[0] || null;
   }
+}
+
+export async function findAuthUserByWallet(walletAddress: string): Promise<AuthUserRow | null> {
+  const result = await query<AuthUserRow>(
+    `
+      SELECT id, email, nickname, tier, phase, wallet_address
+      FROM users
+      WHERE lower(wallet_address) = lower($1)
+      LIMIT 1
+    `,
+    [walletAddress]
+  );
+  return result.rows[0] || null;
 }
 
 export async function findAuthUserForLogin(

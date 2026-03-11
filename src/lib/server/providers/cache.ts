@@ -50,17 +50,22 @@ function evictLRU(): void {
   for (const [k, v] of store.entries()) {
     if (now > v.expiresAt) store.delete(k);
   }
+  if (store.size <= MAX_ENTRIES) return;
 
-  // Still over limit? Evict least-recently-accessed
-  if (store.size > MAX_ENTRIES) {
-    const entries = [...store.entries()]
-      .sort((a, b) => a[1].lastAccess - b[1].lastAccess);
-
-    const toEvict = Math.min(entries.length, EVICT_BATCH);
-    for (let i = 0; i < toEvict && store.size > MAX_ENTRIES - EVICT_BATCH; i++) {
-      store.delete(entries[i][0]);
+  // O(n) partial selection: find EVICT_BATCH oldest entries without full sort
+  const oldest: Array<[string, number]> = [];
+  for (const [k, v] of store.entries()) {
+    if (oldest.length < EVICT_BATCH) {
+      oldest.push([k, v.lastAccess]);
+      if (oldest.length === EVICT_BATCH) {
+        oldest.sort((a, b) => b[1] - a[1]); // descending — newest first
+      }
+    } else if (v.lastAccess < oldest[0][1]) {
+      oldest[0] = [k, v.lastAccess];
+      oldest.sort((a, b) => b[1] - a[1]);
     }
   }
+  for (const [k] of oldest) store.delete(k);
 }
 
 // ── Public API ───────────────────────────────────────────────

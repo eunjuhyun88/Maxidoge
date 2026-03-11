@@ -18,7 +18,7 @@ export const GET: RequestHandler = async ({ getClientAddress }) => {
   try {
     const markets = getMarkets();
     return json({ ok: true, markets });
-  } catch (err: any) {
-    return json({ error: err?.message ?? 'Failed to fetch markets' }, { status: 500 });
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : 'Failed to fetch markets') }, { status: 500 });
   }
 };

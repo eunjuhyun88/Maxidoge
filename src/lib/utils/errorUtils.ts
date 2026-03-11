@@ -16,6 +16,22 @@ export function getErrorMessage(error: unknown): string {
   return 'Unknown error';
 }
 
+export function getErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object' || !('code' in error)) return null;
+  const code = (error as { code: unknown }).code;
+  return typeof code === 'string' ? code : null;
+}
+
+export function hasErrorCode(error: unknown, code: string): boolean {
+  return getErrorCode(error) === code;
+}
+
+export function createErrorWithCode(message: string, code: string): Error & { code: string } {
+  const error = new Error(message) as Error & { code: string };
+  error.code = code;
+  return error;
+}
+
 /**
  * Type guard: check if error has a specific message substring.
  */

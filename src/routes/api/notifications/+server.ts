@@ -1,24 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { NOTIFICATION_TYPES } from '$lib/contracts/notifications';
 import { query } from '$lib/server/db';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import { toBoundedInt } from '$lib/server/apiValidation';
+import { mapNotificationRow } from '$lib/server/notificationRecord';
 import { errorContains } from '$lib/utils/errorUtils';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRow(row: Record<string, any>) {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    type: row.type,
-    title: row.title,
-    body: row.body,
-    isRead: Boolean(row.is_read),
-    dismissable: Boolean(row.dismissable),
-    createdAt: new Date(row.created_at).getTime(),
-    readAt: row.read_at ? new Date(row.read_at).getTime() : null,
-  };
-}
 
 export const GET: RequestHandler = async ({ cookies, url }) => {
   try {
@@ -53,7 +40,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
     return json({
       success: true,
       total: Number(total.rows[0]?.total ?? '0'),
-      records: rows.rows.map(mapRow),
+      records: rows.rows.map(mapNotificationRow),
       pagination: { limit, offset },
     });
   } catch (error: unknown) {
@@ -75,7 +62,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     const title = typeof body?.title === 'string' ? body.title.trim() : '';
     const message = typeof body?.body === 'string' ? body.body.trim() : '';
     const dismissable = typeof body?.dismissable === 'boolean' ? body.dismissable : true;
-    const allowedType = new Set(['alert', 'critical', 'info', 'success']);
+    const allowedType = new Set(NOTIFICATION_TYPES);
 
     if (!allowedType.has(type)) {
       return json({ error: 'type must be alert|critical|info|success' }, { status: 400 });
@@ -102,7 +89,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
 
     return json({
       success: true,
-      notification: mapRow(result.rows[0]),
+      notification: mapNotificationRow(result.rows[0]),
     });
   } catch (error: unknown) {
     if (errorContains(error, 'DATABASE_URL is not set')) {

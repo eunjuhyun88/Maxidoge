@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import type { BinanceKline } from './types';
+import { clamp } from '$lib/utils/math';
 
 export type ChartPatternKind = 'head_and_shoulders' | 'falling_wedge';
 export type ChartPatternDirection = 'BULLISH' | 'BEARISH';
@@ -65,9 +66,6 @@ const WEDGE_MIN_BAND_COVERAGE = 0.64;
 const WEDGE_MIN_APEX_AHEAD = 0;
 const WEDGE_MAX_APEX_AHEAD = 1.35;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 function isFiniteNum(value: number): boolean {
   return Number.isFinite(value);

@@ -1,6 +1,7 @@
 // @ts-expect-error — pg ships without built-in types; install @types/pg to remove this
 import pg from 'pg';
 import { env } from '$env/dynamic/private';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 const { Pool } = pg;
 
@@ -58,14 +59,17 @@ export function getPool(): pg.Pool {
     console.warn('[DB Pool] PGSSL_INSECURE_SKIP_VERIFY=true (TLS certificate validation disabled)');
   }
 
-  // Set statement_timeout on every new connection to prevent runaway queries
+  // Set statement_timeout on every new connection to prevent runaway queries.
+  // statementTimeoutMs is already validated by envInt() (clamped integer 1000–120000),
+  // but we enforce integer casting explicitly to prevent any injection vector.
+  const safeTimeout = Math.trunc(statementTimeoutMs);
   _pool.on('connect', (client: pg.PoolClient) => {
-    client.query(`SET statement_timeout = ${statementTimeoutMs}`).catch(() => {});
+    client.query('SET statement_timeout = $1', [safeTimeout]).catch(() => {});
   });
 
   // Log pool errors (connection drops, etc.) instead of crashing
   _pool.on('error', (err: Error) => {
-    console.error('[DB Pool] Unexpected error on idle client:', err.message);
+    console.error('[DB Pool] Unexpected error on idle client:', getErrorMessage(err));
   });
 
   return _pool;

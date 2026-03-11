@@ -1,9 +1,9 @@
 import { hydrateQuickTrades } from './quickTradeStore';
 import { hydrateTrackedSignals } from './trackedSignalStore';
 import { hydrateMatchHistory } from './matchHistoryStore';
-import { hydrateUserProfile } from './userProfileStore';
+import { hydrateUserProfile } from './userProfileProjectionStore';
 import { hydrateCommunityPosts } from './communityStore';
-import { notifications } from './notificationStore';
+import { notifications } from './notificationsStore';
 import { ensureLivePriceSyncStarted } from '$lib/services/livePriceSyncService';
 import { hydrateAgentStats } from './agentData';
 

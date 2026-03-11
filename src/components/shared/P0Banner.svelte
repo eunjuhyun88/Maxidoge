@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { p0Override } from '$lib/stores/notificationStore';
+  import { p0Override } from '$lib/stores/p0OverrideStore';
 
-  let p0 = $p0Override;
-  $: p0 = $p0Override;
+  const p0 = $derived($p0Override);
 
   function dismiss() {
     p0Override.clear();
@@ -25,7 +24,7 @@
       {#if p0.triggeredAt}
         <span class="p0-time">{formatTime(p0.triggeredAt)}</span>
       {/if}
-      <button class="p0-dismiss" on:click={dismiss}>CLEAR OVERRIDE</button>
+      <button class="p0-dismiss" onclick={dismiss}>CLEAR OVERRIDE</button>
     </div>
   </div>
 {/if}
@@ -36,7 +35,7 @@
     background: linear-gradient(90deg, #cc0022, #ff2d55, #cc0022);
     border-bottom: 3px solid #000;
     padding: 0;
-    z-index: 105;
+    z-index: 99; /* Below Header (z-index: 100) to prevent overlap */
     animation: p0ShakeIn .5s ease;
     flex-shrink: 0;
     overflow: hidden;
@@ -86,7 +85,7 @@
 
   .p0-recommendation {
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
     color: #000;
@@ -100,7 +99,7 @@
 
   .p0-time {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     color: rgba(255,255,255,0.6);
     flex-shrink: 0;
   }
@@ -108,7 +107,7 @@
   .p0-dismiss {
     margin-left: auto;
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 1px;
     color: #fff;

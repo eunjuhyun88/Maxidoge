@@ -167,7 +167,7 @@ Phase 5: 경쟁모드 확장 (Arena v3)
 | 32 Spec | engine/specs.ts (SPEC_REGISTRY) | ✅ |
 | LP/Tier 상수 | engine/constants.ts | ✅ |
 | DB Migration | 004_agent_engine_v3.sql | ✅ |
-| Oracle v3 | oracle/+page.svelte (AGENT_POOL, Wilson score) | ✅ |
+| Oracle leaderboard v3 | `OracleLeaderboard.svelte` on `/signals?view=ai`; `/oracle` route is legacy redirect shim | ✅ |
 | WarRoom 스캔 1차 분리 | engine/warroomScan.ts | ✅ |
 | 진행 규칙 공통 함수 | stores/progressionRules.ts | ✅ |
 | Arena guardian→macro | arena/+page.svelte | ✅ |

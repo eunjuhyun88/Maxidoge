@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { query } from '$lib/server/db';
+import { syncUserProfileProjection } from '$lib/server/profileProjection';
 import { getTier, tierToDisplay, resolveProgression } from '$lib/stores/progressionRules';
 import type { ProgressionState } from '$lib/stores/progressionRules';
 import {
@@ -131,6 +132,8 @@ export async function updateProgressionAfterMatch(
   } catch (logErr) {
     console.warn('[progressionUpdater] LP transaction log failed:', logErr);
   }
+
+  await syncUserProfileProjection(userId).catch(() => undefined);
 
   const progression = resolveProgression({
     lp: lpAfter,

@@ -208,10 +208,14 @@
   }
 
   // Kill feed stagger
+  let killFeedTimers: ReturnType<typeof setTimeout>[] = [];
   function staggerKillFeed() {
+    killFeedTimers.forEach(t => clearTimeout(t));
+    killFeedTimers = [];
     killFeedVisible = recent.map(() => false);
     recent.forEach((_, i) => {
-      setTimeout(() => { killFeedVisible[i] = true; killFeedVisible = [...killFeedVisible]; }, 300 + i * 180);
+      const t = setTimeout(() => { killFeedVisible[i] = true; killFeedVisible = [...killFeedVisible]; }, 300 + i * 180);
+      killFeedTimers.push(t);
     });
   }
 
@@ -230,7 +234,7 @@
     animateScanner();
     setTimeout(triggerGlitch, 600);
     const glitchIv = setInterval(triggerGlitch, 8000);
-    return () => { clearInterval(glitchIv); cancelAnimationFrame(scannerRaf); };
+    return () => { clearInterval(glitchIv); cancelAnimationFrame(scannerRaf); killFeedTimers.forEach(t => clearTimeout(t)); };
   });
 </script>
 
@@ -1378,14 +1382,14 @@
   .status-pair { color: var(--coral); font-weight: 700; }
 
   /* ═══ RESPONSIVE ═══ */
-  @media (max-width: 900px) {
+  @media (max-width: 1024px) {
     .portals { grid-template-columns: 1fr; }
     .portal { min-height: 160px; }
     .hero-stats { gap: 10px; }
     .tour-layout { grid-template-columns: 1fr; }
   }
 
-  @media (max-width: 600px) {
+  @media (max-width: 768px) {
     .lobby-core { padding: 10px 10px 80px; }
     .player-name { font-size: 22px !important; }
     .portal-title { font-size: 16px; }
@@ -1449,7 +1453,7 @@
     font-size: 9px;
     opacity: 0.55;
   }
-  @media (max-width: 700px) {
+  @media (max-width: 768px) {
     .view-cards { grid-template-columns: repeat(2, 1fr); }
   }
 </style>

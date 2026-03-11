@@ -19,7 +19,7 @@
 ### 문제
 - `src/lib/data/agents.ts` → 구형 7 Agent (AGDEFS: AgentDef[])
 - `src/lib/engine/agents.ts` → 신형 8 Agent (AGENT_POOL: Record<AgentId, AgentDefinition>)
-- UI 3곳이 AGDEFS 직접 참조: arena, terminal, oracle
+- UI 3곳이 AGDEFS 직접 참조: arena, terminal, AI leaderboard surface (`/signals?view=ai`, historical `/oracle`)
 
 ### 액션
 
@@ -58,13 +58,14 @@ function toAgentDef(a: AgentDefinition): AgentDef {
 
 **1-3. 점진적 직접 참조 전환** (후속)
 - arena/+page.svelte → `AGENT_POOL` 직접 사용
-- oracle/+page.svelte → `AGENT_POOL` 직접 사용
+- `OracleLeaderboard.svelte` / signals AI leaderboard surface → `AGENT_POOL` 직접 사용
 - WarRoom.svelte → `AGENT_POOL` 직접 사용
 
 ### 영향 파일
 - `src/lib/data/agents.ts` — 재작성
 - `src/routes/arena/+page.svelte` — import 유지, 후속 전환
-- `src/routes/oracle/+page.svelte` — import 유지, 후속 전환
+- `src/components/community/OracleLeaderboard.svelte` — leaderboard owner, 후속 전환
+- `src/routes/signals/+page.svelte` — embedded owner shell, 후속 전환
 - `src/components/terminal/WarRoom.svelte` — import 유지, 후속 전환
 - `src/components/arena/Lobby.svelte` — import 유지, 후속 전환
 

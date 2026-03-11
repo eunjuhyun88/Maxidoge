@@ -11,39 +11,41 @@
   import { ensurePolygonChain } from '$lib/wallet/chainSwitch';
 
   // ── Props ──────────────────────────────────────────
-  export let market: {
-    id: string;
-    question: string;
-    slug: string;
-    outcomes: string[];
-    outcomePrices: string[];
-    volume: number;
-    liquidity: number;
-  } | null = null;
-
-  export let onClose: () => void = () => {};
+  interface Props {
+    market?: {
+      id: string;
+      question: string;
+      slug: string;
+      outcomes: string[];
+      outcomePrices: string[];
+      volume: number;
+      liquidity: number;
+    } | null;
+    onClose?: () => void;
+  }
+  let { market = null, onClose = () => {} }: Props = $props();
 
   // ── State ──────────────────────────────────────────
-  let direction: 'YES' | 'NO' = 'YES';
-  let amount = '';
-  let customPrice = '';
-  let step: 'input' | 'signing' | 'submitting' | 'done' | 'error' = 'input';
-  let errorMsg = '';
-  let resultOrderId = '';
+  let direction = $state<'YES' | 'NO'>('YES');
+  let amount = $state('');
+  let customPrice = $state('');
+  let step = $state<'input' | 'signing' | 'submitting' | 'done' | 'error'>('input');
+  let errorMsg = $state('');
+  let resultOrderId = $state('');
   const amountInputId = 'poly-amount-input';
   const priceInputId = 'poly-price-input';
 
   // ── Derived ────────────────────────────────────────
-  $: yesPrice = market?.outcomePrices?.[0] ? parseFloat(market.outcomePrices[0]) : 0.5;
-  $: noPrice = market?.outcomePrices?.[1] ? parseFloat(market.outcomePrices[1]) : 0.5;
-  $: selectedPrice = direction === 'YES' ? yesPrice : noPrice;
-  $: effectivePrice = customPrice ? parseFloat(customPrice) : selectedPrice;
-  $: amountNum = parseFloat(amount) || 0;
-  $: estimatedShares = effectivePrice > 0 ? amountNum / effectivePrice : 0;
-  $: estimatedPayout = estimatedShares; // Each share pays $1 if outcome is correct
-  $: estimatedProfit = estimatedPayout - amountNum;
-  $: isValid = amountNum >= 1 && amountNum <= 10000 && effectivePrice > 0 && effectivePrice < 1;
-  $: walletConnected = $walletStore.connected;
+  const yesPrice = $derived(market?.outcomePrices?.[0] ? parseFloat(market.outcomePrices[0]) : 0.5);
+  const noPrice = $derived(market?.outcomePrices?.[1] ? parseFloat(market.outcomePrices[1]) : 0.5);
+  const selectedPrice = $derived(direction === 'YES' ? yesPrice : noPrice);
+  const effectivePrice = $derived(customPrice ? parseFloat(customPrice) : selectedPrice);
+  const amountNum = $derived(parseFloat(amount) || 0);
+  const estimatedShares = $derived(effectivePrice > 0 ? amountNum / effectivePrice : 0);
+  const estimatedPayout = $derived(estimatedShares); // Each share pays $1 if outcome is correct
+  const estimatedProfit = $derived(estimatedPayout - amountNum);
+  const isValid = $derived(amountNum >= 1 && amountNum <= 10000 && effectivePrice > 0 && effectivePrice < 1);
+  const walletConnected = $derived($walletStore.connected);
 
   // ── Handlers ───────────────────────────────────────
   function toggleDirection() {
@@ -155,8 +157,8 @@
       });
 
       step = 'done';
-    } catch (err: any) {
-      errorMsg = err?.message ?? '알 수 없는 오류';
+    } catch (err: unknown) {
+      errorMsg = err instanceof Error ? err.message : '알 수 없는 오류';
       step = 'error';
     }
   }
@@ -194,12 +196,12 @@
 </script>
 
 {#if market}
-<div class="bet-overlay" on:click|self={handleClose} role="presentation">
+<div class="bet-overlay" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) handleClose(); }} role="presentation">
   <div class="bet-panel">
     <!-- Header -->
     <div class="bet-header">
       <span class="bet-title">PLACE BET</span>
-      <button class="bet-close" on:click={handleClose}>✕</button>
+      <button class="bet-close" onclick={handleClose}>✕</button>
     </div>
 
     <!-- Market Question -->
@@ -214,10 +216,10 @@
     {#if step === 'input'}
       <!-- Direction Toggle -->
       <div class="bet-direction">
-        <button class="dir-btn" class:active={direction === 'YES'} on:click={() => { direction = 'YES'; customPrice = ''; }}>
+        <button class="dir-btn" class:active={direction === 'YES'} onclick={() => { direction = 'YES'; customPrice = ''; }}>
           ↑ YES
         </button>
-        <button class="dir-btn no" class:active={direction === 'NO'} on:click={() => { direction = 'NO'; customPrice = ''; }}>
+        <button class="dir-btn no" class:active={direction === 'NO'} onclick={() => { direction = 'NO'; customPrice = ''; }}>
           ↓ NO
         </button>
       </div>
@@ -228,7 +230,7 @@
         <input id={amountInputId} type="number" bind:value={amount} min="1" max="10000" step="1" placeholder="10" />
         <div class="quick-amounts">
           {#each [5, 10, 25, 50, 100] as v}
-            <button class="qa-btn" on:click={() => setQuickAmount(v)}>${v}</button>
+            <button class="qa-btn" onclick={() => setQuickAmount(v)}>${v}</button>
           {/each}
         </div>
       </div>
@@ -261,7 +263,7 @@
       {/if}
 
       <!-- Place Bet Button -->
-      <button class="bet-submit" disabled={!isValid || !walletConnected} on:click={handlePlaceBet}>
+      <button class="bet-submit" disabled={!isValid || !walletConnected} onclick={handlePlaceBet}>
         {#if !walletConnected}
           Connect Wallet First
         {:else if !isValid}
@@ -290,14 +292,14 @@
         <span class="status-icon">✓</span>
         <p>주문 제출 완료!</p>
         <p class="status-sub">{direction} ${amountNum} USDC @ {effectivePrice.toFixed(2)}</p>
-        <button class="bet-submit" on:click={handleClose}>닫기</button>
+        <button class="bet-submit" onclick={handleClose}>닫기</button>
       </div>
 
     {:else if step === 'error'}
       <div class="bet-status error">
         <span class="status-icon">✕</span>
         <p>{errorMsg}</p>
-        <button class="bet-submit" on:click={() => { step = 'input'; }}>다시 시도</button>
+        <button class="bet-submit" onclick={() => { step = 'input'; }}>다시 시도</button>
       </div>
     {/if}
   </div>
@@ -312,7 +314,7 @@
   }
   .bet-panel {
     width: 100%; max-width: 420px;
-    background: #111; border-top: 2px solid var(--yel, #E8967D);
+    background: #111; border-top: 2px solid var(--yel, var(--term-accent, #e8967d));
     border-radius: 16px 16px 0 0;
     padding: 16px; display: flex; flex-direction: column; gap: 12px;
     animation: slideUp .25s ease-out;
@@ -355,19 +357,19 @@
   .bet-field { display: flex; flex-direction: column; gap: 4px; }
   .bet-field label { font: 400 10px/1 var(--fm); color: rgba(255,255,255,.4); text-transform: uppercase; letter-spacing: 1px; }
   .bet-field input {
-    background: rgba(255,255,255,.06); border: 1px solid rgba(232,150,125,.15); border-radius: 6px;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(var(--t-accent-rgb),.15); border-radius: 6px;
     padding: 10px 12px; color: #fff; font: 400 14px/1 var(--fm); outline: none;
   }
   .bet-field input:focus { border-color: var(--yel); }
-  .bet-field input::placeholder { color: rgba(255,255,255,.25); }
+  .bet-field input::placeholder { color: rgba(255,255,255,.5); }
 
   .quick-amounts { display: flex; gap: 4px; margin-top: 4px; }
   .qa-btn {
-    flex: 1; padding: 5px; border: 1px solid rgba(232,150,125,.12); border-radius: 4px;
-    background: rgba(232,150,125,.04); color: rgba(232,150,125,.6);
+    flex: 1; padding: 5px; border: 1px solid rgba(var(--t-accent-rgb),.12); border-radius: 4px;
+    background: rgba(var(--t-accent-rgb),.04); color: rgba(var(--t-accent-rgb),.6);
     font: 400 10px/1 var(--fm); cursor: pointer; transition: all .15s;
   }
-  .qa-btn:hover { background: rgba(232,150,125,.1); color: var(--yel); }
+  .qa-btn:hover { background: rgba(var(--t-accent-rgb),.1); color: var(--yel); }
 
   .bet-estimate {
     display: flex; flex-direction: column; gap: 6px;
@@ -398,7 +400,7 @@
   .bet-status.error .status-icon { color: #FF5E7A; }
 
   .status-spinner {
-    width: 28px; height: 28px; border: 2px solid rgba(232,150,125,.2);
+    width: 28px; height: 28px; border: 2px solid rgba(var(--t-accent-rgb),.2);
     border-top-color: var(--yel); border-radius: 50%;
     animation: spin .7s linear infinite;
   }

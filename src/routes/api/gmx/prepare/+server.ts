@@ -126,8 +126,8 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
         executionFee: result.orderParams.executionFee.toString(),
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[GMX prepare] Error:', err);
-    return json({ error: err?.message ?? 'Failed to prepare order' }, { status: 500 });
+    return json({ error: (err instanceof Error ? err.message : 'Failed to prepare order') }, { status: 500 });
   }
 };

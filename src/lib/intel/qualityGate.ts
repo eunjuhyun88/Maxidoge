@@ -1,4 +1,5 @@
 import { recordGateLog } from './gateLogs';
+import { clampSafe as clamp } from '$lib/utils/math';
 import { getIntelThresholds } from './thresholds';
 import type {
   ManipulationRiskLevel,
@@ -6,10 +7,6 @@ import type {
   QualityGateScores,
 } from './types';
 
-function clamp(value: number, min = 0, max = 100): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, value));
-}
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;

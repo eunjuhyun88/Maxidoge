@@ -329,41 +329,37 @@ UI 변경:
 UI 변경:
 1. WalletModal 오버레이 표시
 
-## 8. Oracle 화면 클릭 맵
+## 8. Oracle redirect route 클릭 맵
 
-## 8.1 기간/정렬 버튼
-
-트리거:
-1. `7D/30D/ALL`
-2. `WILSON/ACCURACY/SAMPLE/CALIBRATION`
-
-호출 체인:
-1. `period = key`
-2. `sortBy = key`
-3. reactive `filteredRecords`, `oracleData` 재계산
-
-상태 변경:
-1. local `period`
-2. local `sortBy`
-
-UI 변경:
-1. 랭킹 테이블 값/순서 변경
-
-## 8.2 에이전트 행 상세 오버레이
+## 8.1 `/oracle` 진입 시 즉시 redirect
 
 트리거:
-1. Oracle 테이블 row 클릭
+1. `/oracle` route 진입
 
 호출 체인:
-1. `selectAgent(ag)` -> `selectedAgent = ag`
-2. 상세 오버레이 내 `DEPLOY TO ARENA` -> `goto('/arena')`
+1. `onMount(...)`
+2. `goto('/signals?view=ai', { replaceState: true, noScroll: true, keepFocus: true, invalidateAll: false })`
 
 상태 변경:
-1. local `selectedAgent`
+1. 없음 (`/oracle` route-local persistent state 없음)
 
 UI 변경:
-1. 상세 오버레이 열림/닫힘
-2. Arena 페이지 이동
+1. redirect 메시지 잠시 노출
+2. `/signals?view=ai`로 이동
+
+## 8.2 fallback 링크
+
+트리거:
+1. redirect 중 `Open now` 링크 클릭
+
+호출 체인:
+1. anchor `href="/signals?view=ai"`
+
+상태 변경:
+1. 없음
+
+UI 변경:
+1. `/signals?view=ai` leaderboard 진입
 
 ## 9. Signals/Community 화면 클릭 맵
 
@@ -403,6 +399,31 @@ UI 변경:
 UI 변경:
 1. tracked 카운트 반영
 2. Terminal 이동 + copy-trade 진입
+
+## 9.3 AI Leaderboard 상호작용
+
+트리거:
+1. `7D/30D/ALL`
+2. `WILSON/ACCURACY/SAMPLE/CALIBRATION`
+3. leaderboard row 클릭
+4. 상세 오버레이 내 `DEPLOY TO ARENA`
+
+호출 체인:
+1. `period = key`
+2. `sortBy = key`
+3. reactive `filteredRecords`, `oracleData` 재계산
+4. `selectAgent(ag)` -> `selectedAgent = ag`
+5. `triggerArena()` -> `goto('/arena')`
+
+상태 변경:
+1. local `period`
+2. local `sortBy`
+3. local `selectedAgent`
+
+UI 변경:
+1. 랭킹 테이블 값/순서 변경
+2. 상세 오버레이 열림/닫힘
+3. Arena 페이지 이동
 
 ## 10. WalletModal 단계 전이 맵
 

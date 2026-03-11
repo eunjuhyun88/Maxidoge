@@ -184,7 +184,7 @@
     }
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1024px) {
     .reward-shell {
       padding-top: 64px;
     }
@@ -198,7 +198,7 @@
     }
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 768px) {
     .reward-shell {
       justify-content: center;
       align-items: flex-end;

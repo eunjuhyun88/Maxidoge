@@ -1,4 +1,5 @@
 import { timeSince } from '$lib/utils/time';
+import { getBaseSymbolFromPair, getPairPrice, type PriceLikeMap } from '$lib/utils/price';
 
 export { timeSince };
 
@@ -54,12 +55,9 @@ export interface TrackedSignalInput {
   trackedAt: number;
 }
 
-export interface PriceStateInput {
-  prices?: {
-    BTC?: number;
-    ETH?: number;
-    SOL?: number;
-  };
+export interface SignalPriceInput {
+  livePrices?: PriceLikeMap;
+  bases?: Partial<Record<'BTC' | 'ETH' | 'SOL', number>>;
 }
 
 export interface Signal {
@@ -90,13 +88,27 @@ export interface CommunityIdea {
 
 const TF_ROTATION: CommunityIdea['timeframe'][] = ['4H', '1D', '1H', '15m', '30m', '5m'];
 
+const DEFAULT_BASES: Record<'BTC' | 'ETH' | 'SOL', number> = {
+  BTC: 97000,
+  ETH: 3400,
+  SOL: 190
+};
 
-export function buildArenaSignals(recs: MatchRecordInput[], agents: SignalAgent[], state: PriceStateInput): Signal[] {
+function resolvePairBasePrice(input: SignalPriceInput, pair: string): number {
+  const baseSymbol = getBaseSymbolFromPair(pair) || 'BTC';
+  const fallbackPrice = input.bases?.[baseSymbol as keyof typeof DEFAULT_BASES]
+    || DEFAULT_BASES[baseSymbol as keyof typeof DEFAULT_BASES]
+    || DEFAULT_BASES.BTC;
+  return getPairPrice(input.livePrices || {}, pair, baseSymbol, fallbackPrice);
+}
+
+
+export function buildArenaSignals(recs: MatchRecordInput[], agents: SignalAgent[], priceInput: SignalPriceInput): Signal[] {
   return recs.slice(0, 10).flatMap((r) => {
     if (!r.agentVotes) return [];
     return r.agentVotes.map((vote) => {
       const ag = agents.find((a) => a.id === vote.agentId) ?? agents[0] ?? null;
-      const base = state.prices?.BTC || 97000;
+      const base = resolvePairBasePrice(priceInput, 'BTC/USDT');
       const dir: Signal['dir'] = vote.dir === 'SHORT' ? 'SHORT' : 'LONG';
       return {
         id: `arena-${r.id}-${vote.agentId}`,
@@ -156,14 +168,12 @@ export function buildTrackedSignals(signals: TrackedSignalInput[], agents: Signa
   }));
 }
 
-export function buildAgentSignals(agents: SignalAgent[], state: PriceStateInput): Signal[] {
+export function buildAgentSignals(agents: SignalAgent[], priceInput: SignalPriceInput): Signal[] {
   if (agents.length === 0) return [];
   const pairs = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'];
   return agents.slice(0, 5).map((ag, i) => {
     const pair = pairs[i % pairs.length];
-    const base = pair.startsWith('BTC') ? (state.prices?.BTC || 97000)
-      : pair.startsWith('ETH') ? (state.prices?.ETH || 3400)
-      : (state.prices?.SOL || 190);
+    const base = resolvePairBasePrice(priceInput, pair);
     const dir: Signal['dir'] = ag.dir === 'SHORT' ? 'SHORT' : 'LONG';
     const spread = base * 0.02;
     return {

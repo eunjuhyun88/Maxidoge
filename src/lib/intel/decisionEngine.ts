@@ -1,4 +1,5 @@
 import { getIntelThresholds } from './thresholds';
+import { clampSafe as clamp } from '$lib/utils/math';
 import type {
   DecisionBias,
   DecisionContext,
@@ -12,10 +13,6 @@ export interface EngineEvidence extends DecisionEvidence {
   gate?: QualityGateResult;
 }
 
-function clamp(value: number, min = 0, max = 100): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, value));
-}
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;

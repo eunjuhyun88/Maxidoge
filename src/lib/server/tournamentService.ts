@@ -1,4 +1,5 @@
 import { withTransaction, query } from '$lib/server/db';
+import { getErrorCode, getErrorMessage } from '$lib/utils/errorUtils';
 
 export type TournamentType = 'DAILY_SPRINT' | 'WEEKLY_CUP' | 'SEASON_CHAMPIONSHIP';
 export type TournamentStatus = 'REG_OPEN' | 'REG_CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
@@ -70,9 +71,8 @@ type TournamentRegistrationRow = {
 
 const TABLE_UNAVAILABLE = new Set(['42P01', '42703', '23503']);
 function isTableError(err: unknown): boolean {
-  const errObj = err as Record<string, unknown> | null | undefined;
-  const code = typeof errObj?.code === 'string' ? errObj.code : '';
-  return TABLE_UNAVAILABLE.has(code) || (typeof errObj?.message === 'string' && (errObj.message as string).includes('DATABASE_URL is not set'));
+  const code = getErrorCode(err) ?? '';
+  return TABLE_UNAVAILABLE.has(code) || getErrorMessage(err).includes('DATABASE_URL is not set');
 }
 
 export class TournamentError extends Error {

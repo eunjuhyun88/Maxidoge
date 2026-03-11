@@ -1,28 +1,31 @@
 <script lang="ts">
   import { timeSince } from '$lib/utils/time';
-
-  export let embedded = false;
-  export let variant: 'full' | 'stream' = 'full';
-
   import { AGDEFS, CHARACTER_ART } from '$lib/data/agents';
   import { gameState } from '$lib/stores/gameState';
   import { matchHistoryStore } from '$lib/stores/matchHistoryStore';
   import { openTrades } from '$lib/stores/quickTradeStore';
   import { activeSignals } from '$lib/stores/trackedSignalStore';
-  import { userProfileStore } from '$lib/stores/userProfileStore';
   import { livePrices, priceChanges } from '$lib/stores/priceStore';
   import { goto } from '$app/navigation';
   import EmptyState from '../shared/EmptyState.svelte';
   import ContextBanner from '../shared/ContextBanner.svelte';
 
-  $: state = $gameState;
-  $: records = $matchHistoryStore.records;
-  $: trades = $openTrades;
-  $: tracked = $activeSignals;
-  $: profile = $userProfileStore;
-  $: isStream = embedded && variant === 'stream';
-  $: liveP = $livePrices;
-  $: changes = $priceChanges;
+  interface Props {
+    embedded?: boolean;
+    variant?: 'full' | 'stream';
+  }
+  let {
+    embedded = false,
+    variant = 'full',
+  }: Props = $props();
+
+  const storeState = $derived($gameState);
+  const records = $derived($matchHistoryStore.records);
+  const trades = $derived($openTrades);
+  const tracked = $derived($activeSignals);
+  const isStream = $derived(embedded && variant === 'stream');
+  const liveP = $derived($livePrices);
+  const changes = $derived($priceChanges);
 
   function fmtChange(pct: number): string {
     if (!Number.isFinite(pct) || pct === 0) return '+0.00%';
@@ -30,11 +33,11 @@
   }
 
   // S-03: priceStore에서 실시간 가격 + 24h% 구독
-  $: prices = [
+  const prices = $derived([
     { symbol: 'BTC', price: `$${Math.round(liveP.BTC || 97420).toLocaleString()}`, change: fmtChange(changes.BTC), up: (changes.BTC || 0) >= 0 },
     { symbol: 'ETH', price: `$${Math.round(liveP.ETH || 3481).toLocaleString()}`, change: fmtChange(changes.ETH), up: (changes.ETH || 0) >= 0 },
     { symbol: 'SOL', price: `$${(liveP.SOL || 198).toFixed(2)}`, change: fmtChange(changes.SOL), up: (changes.SOL || 0) >= 0 },
-  ];
+  ]);
 
   // Build activity timeline from all sources
   interface ActivityItem {
@@ -47,7 +50,7 @@
     type: 'match' | 'trade' | 'signal' | 'agent';
   }
 
-  $: activityFeed = buildActivityFeed();
+  const activityFeed = $derived(buildActivityFeed());
 
   function buildActivityFeed(): ActivityItem[] {
     const items: ActivityItem[] = [];
@@ -108,7 +111,7 @@
   }
 
   // Reaction system
-  let reactions: Array<{ emoji: string; x: number; y: number; id: number }> = [];
+  let reactions: Array<{ emoji: string; x: number; y: number; id: number }> = $state([]);
   let nextReaction = 0;
 
   function sendReaction(emoji: string) {
@@ -246,9 +249,9 @@
   {#if !isStream}
     <div class="reaction-bar">
       {#each ['🔥', '🐕', '💎', '🚀', '😂', '👑', '⚡', '💀'] as emoji}
-        <button class="reaction-btn" on:click={() => sendReaction(emoji)}>{emoji}</button>
+        <button class="reaction-btn" onclick={() => sendReaction(emoji)}>{emoji}</button>
       {/each}
-      <button class="join-arena-btn" on:click={() => goto('/arena')}>⚔️ JOIN ARENA</button>
+      <button class="join-arena-btn" onclick={() => goto('/arena')}>⚔️ JOIN ARENA</button>
     </div>
 
     {#each reactions as r (r.id)}
@@ -296,7 +299,7 @@
   }
   .lh-sub { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.7); letter-spacing: 2px; margin-top: 2px; }
   .lh-stats { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
-  .lh-stat { font-family: var(--fm); font-size: 8px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 4px; }
+  .lh-stat { font-family: var(--fm); font-size: 9px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 4px; }
   .lh-dot { width: 6px; height: 6px; border-radius: 50%; background: #ff2d55; animation: blink 1s infinite; }
   @keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
 
@@ -314,7 +317,7 @@
   .pt-item:last-child { border-right: none; }
   .pt-symbol { font-family: var(--fd); font-size: 10px; font-weight: 900; color: var(--yel); letter-spacing: 1px; }
   .pt-price { font-family: var(--fm); font-size: 10px; font-weight: 700; color: #fff; }
-  .pt-change { font-family: var(--fm); font-size: 8px; font-weight: 700; }
+  .pt-change { font-family: var(--fm); font-size: 9px; font-weight: 700; }
   .pt-change.up { color: var(--grn); }
   .pt-change.down { color: var(--red); }
   .stream-price-row {
@@ -335,20 +338,20 @@
   }
   .spr-symbol {
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: .8px;
     color: var(--yel);
   }
   .spr-price {
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     color: #fff;
     font-weight: 700;
   }
   .spr-change {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
   }
   .spr-change.up { color: var(--grn); }
@@ -369,7 +372,7 @@
     letter-spacing: 2px; color: rgba(255,255,255,.5);
   }
   .ls-link {
-    font-family: var(--fm); font-size: 7px; font-weight: 700;
+    font-family: var(--fm); font-size: 9px; font-weight: 700;
     color: var(--blu); text-decoration: none; letter-spacing: 1px;
   }
   .ls-link:hover { text-decoration: underline; }
@@ -394,10 +397,10 @@
   .sc-result.win { color: var(--grn); }
   .sc-result:not(.win) { color: var(--red); }
   .sc-match { font-family: var(--fd); font-size: 10px; color: rgba(255,255,255,.4); }
-  .sc-time { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.2); margin-left: auto; }
+  .sc-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.5); margin-left: auto; }
   .sc-lp { font-family: var(--fd); font-size: 16px; font-weight: 900; color: var(--yel); }
   .sc-lp.plus { color: var(--grn); }
-  .sc-hyp { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.35); margin-top: 2px; }
+  .sc-hyp { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.35); margin-top: 2px; }
   .sc-hyp .long { color: var(--grn); font-weight: 900; }
   .sc-hyp .short { color: var(--red); font-weight: 900; }
   .sc-agents { display: flex; gap: 3px; margin-top: 6px; }
@@ -417,9 +420,9 @@
   .af-icon { font-size: 14px; flex-shrink: 0; }
   .af-content { flex: 1; min-width: 0; }
   .af-text { font-family: var(--fm); font-size: 9px; font-weight: 700; }
-  .af-detail { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.3); }
-  .af-time { font-family: var(--fm); font-size: 7px; color: rgba(255,255,255,.15); flex-shrink: 0; }
-  .live-page.stream .af-time { font-size: 6px; }
+  .af-detail { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.3); }
+  .af-time { font-family: var(--fm); font-size: 9px; color: rgba(255,255,255,.15); flex-shrink: 0; }
+  .live-page.stream .af-time { font-size: 9px; }
 
   /* Empty states handled by EmptyState component */
 
@@ -455,7 +458,7 @@
   }
   @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-100px) scale(1.5); } }
 
-  @media (max-width: 980px) {
+  @media (max-width: 1024px) {
     .stream-price-row {
       grid-template-columns: 1fr;
       padding-bottom: 6px;

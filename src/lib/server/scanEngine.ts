@@ -1,13 +1,14 @@
 // ═══════════════════════════════════════════════════════════════
 // Stockclaw — Server-side Scan Engine (B-02)
 // ═══════════════════════════════════════════════════════════════
-// Replaces client-side warroomScan for server context.
+// Server-side market scan engine.
 // 15 data sources (13 기존 + Santiment + CoinMetrics) → scoring → WarRoomScanResult
 // All fetch calls use server modules with LRU caching.
 
 import type { BinanceKline } from '$lib/server/binance';
 import type { AgentSignal } from '$lib/data/warroom';
 import { AGENT_POOL } from '$lib/engine/agents';
+import { clamp } from '$lib/utils/math';
 
 // ── Server-side data fetchers ──
 import { fetchKlinesServer, fetch24hrServer, pairToSymbol } from '$lib/server/binance';
@@ -21,8 +22,6 @@ import {
 } from '$lib/server/coinalyze';
 import { fetchFearGreed as fetchFearGreedServer } from '$lib/server/feargreed';
 import { fetchCoinGeckoGlobal } from '$lib/server/coingecko';
-import { fetchGasOracle, estimateExchangeNetflow } from '$lib/server/etherscan';
-import { fetchYahooSeries } from '$lib/server/yahooFinance';
 import { fetchTopicSocial } from '$lib/server/lunarcrush';
 import { fetchSantimentSocial } from '$lib/server/santiment';
 import { fetchCoinMetricsData } from '$lib/server/coinmetrics';
@@ -39,54 +38,23 @@ import {
   exchangeReserveToScore,
   minerFlowToScore,
 } from '$lib/server/cryptoquant';
-import { getCached, setCache } from './providers/cache';
 import { toBinanceInterval } from '$lib/utils/timeframe';
-
-// ── Performance: 개별 API 타임아웃 + 소스별 캐시 ──────────
-const API_TIMEOUT_MS = 5_000;
-
-/** 개별 API 호출에 5초 타임아웃 적용 */
-function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = API_TIMEOUT_MS): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`[scanEngine] ${label} timed out (${timeoutMs}ms)`)), timeoutMs)
-    ),
-  ]);
-}
-
-// 소스별 캐시 TTL (API rate limit 고려)
-const CACHE_TTL = {
-  coinalyze: 300_000,   // 5분 (50 req/day 제한 → 보존)
-  feargreed: 120_000,   // 2분 (변동 느림)
-  coingecko: 60_000,    // 1분
-  etherscan: 120_000,   // 2분
-  yahoo: 300_000,       // 5분 (매크로 지표 변동 느림)
-  lunarcrush: 120_000,  // 2분
-  fred: 600_000,        // 10분 (일일 데이터)
-  cryptoquant: 300_000, // 5분
-  santiment: 120_000,   // 2분 (LunarCrush 대체)
-  coinmetrics: 300_000, // 5분 (CryptoQuant 대체, 무료 API)
-};
-
-/** 캐시 우선 fetch — 캐시 히트면 API 호출 생략 */
-async function cachedFetch<T>(
-  key: string,
-  fetcher: () => Promise<T>,
-  ttlMs: number,
-  label: string,
-): Promise<T> {
-  const cached = getCached<T>(key);
-  if (cached !== null) return cached;
-  const result = await withTimeout(fetcher(), label, API_TIMEOUT_MS);
-  if (result !== null && result !== undefined) {
-    setCache(key, result, ttlMs);
-  }
-  return result;
-}
+import { smaLast } from '$lib/chart/chartIndicators';
+import { calcRSI } from '$lib/engine/indicators';
+import {
+  SOURCE_CACHE_TTL as CACHE_TTL,
+  cachedFetch,
+} from '$lib/server/dataFetchInfra';
+import { getCached, setCache } from '$lib/server/providers/cache';
+import {
+  fetchEthOnchainServer,
+  fetchMacroIndicatorsServer,
+  type EthOnchainData,
+  type MacroIndicators,
+} from '$lib/server/compositeDataFetchers';
 
 // ═══════════════════════════════════════════════════════════════
-// Types (mirrored from warroomScan — avoids importing client code)
+// Types (scan result + internal scoring)
 // ═══════════════════════════════════════════════════════════════
 
 type Vote = AgentSignal['vote'];
@@ -210,9 +178,6 @@ function yieldToScore(changePct: number): number {
 // Computation Helpers
 // ═══════════════════════════════════════════════════════════════
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 function roundPrice(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -253,32 +218,7 @@ function formatFunding(value: number): string {
   return `${(value * 100).toFixed(4)}%`;
 }
 
-function computeSMA(values: number[], period: number): number | null {
-  if (values.length < period) return null;
-  const slice = values.slice(-period);
-  return slice.reduce((sum, v) => sum + v, 0) / period;
-}
-
-function computeRSI(values: number[], period = 14): number | null {
-  if (values.length < period + 1) return null;
-  let avgGain = 0;
-  let avgLoss = 0;
-  for (let i = 1; i <= period; i++) {
-    const delta = values[i] - values[i - 1];
-    if (delta > 0) avgGain += delta;
-    else avgLoss -= delta;
-  }
-  avgGain /= period;
-  avgLoss /= period;
-  for (let i = period + 1; i < values.length; i++) {
-    const delta = values[i] - values[i - 1];
-    avgGain = (avgGain * (period - 1) + Math.max(delta, 0)) / period;
-    avgLoss = (avgLoss * (period - 1) + Math.max(-delta, 0)) / period;
-  }
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return 100 - 100 / (1 + rs);
-}
+// smaLast → $lib/chart/chartIndicators, calcRSI → $lib/engine/indicators
 
 function computeAtrPct(klines: BinanceKline[], period = 14): number | null {
   if (klines.length < period + 1) return null;
@@ -336,94 +276,7 @@ const AGENT_META = {
   valuation: { icon: 'VAL', name: AGENT_POOL.VALUATION.name, color: AGENT_POOL.VALUATION.color }
 } as const;
 
-// ═══════════════════════════════════════════════════════════════
-// Server-side Composite Data Helpers
-// ═══════════════════════════════════════════════════════════════
-
-interface EthOnchainLike {
-  gas: { safe: number; standard: number; fast: number; baseFee: number } | null;
-  exchangeNetflowEth: number | null;
-  whaleActivity: number | null;
-  activeAddresses: number | null;
-  exchangeBalance: number | null;
-}
-
-async function fetchEthOnchainServer(): Promise<EthOnchainLike | null> {
-  const [gasRes, netflowRes] = await Promise.allSettled([
-    fetchGasOracle(),
-    estimateExchangeNetflow(),
-  ]);
-
-  const gasOracle = gasRes.status === 'fulfilled' ? gasRes.value : null;
-  const netflow = netflowRes.status === 'fulfilled' ? netflowRes.value : null;
-
-  if (!gasOracle && netflow == null) return null;
-
-  return {
-    gas: gasOracle ? {
-      safe: Number(gasOracle.SafeGasPrice),
-      standard: Number(gasOracle.ProposeGasPrice),
-      fast: Number(gasOracle.FastGasPrice),
-      baseFee: Number(gasOracle.suggestBaseFee),
-    } : null,
-    exchangeNetflowEth: netflow,
-    // Dune-based data not yet available server-side — B-05 will add
-    whaleActivity: null,
-    activeAddresses: null,
-    exchangeBalance: null,
-  };
-}
-
-interface MacroIndicatorLike {
-  price: number;
-  prevClose: number | null;
-  changePct: number | null;
-  trend1m: number | null;
-}
-
-interface MacroIndicatorsLike {
-  dxy: MacroIndicatorLike | null;
-  spx: MacroIndicatorLike | null;
-  us10y: MacroIndicatorLike | null;
-}
-
-async function fetchMacroIndicatorsServer(): Promise<MacroIndicatorsLike | null> {
-  const [dxyRes, spxRes, us10yRes] = await Promise.allSettled([
-    fetchYahooSeries('DX-Y.NYB', '1mo', '1d'),
-    fetchYahooSeries('^GSPC', '1mo', '1d'),
-    fetchYahooSeries('^TNX', '1mo', '1d'),
-  ]);
-
-  function toMacroIndicator(series: typeof dxyRes): MacroIndicatorLike | null {
-    if (series.status !== 'fulfilled' || !series.value) return null;
-    const s = series.value;
-    const pts = s.points;
-    const price = s.regularMarketPrice ?? (pts.length > 0 ? pts[pts.length - 1].close : 0);
-    const changePct = s.regularMarketChangePercent ?? null;
-
-    // Compute 1-month trend: % change from first to last point
-    let trend1m: number | null = null;
-    if (pts.length >= 2) {
-      const first = pts[0].close;
-      const last = pts[pts.length - 1].close;
-      if (first > 0) trend1m = ((last - first) / first) * 100;
-    }
-
-    return {
-      price,
-      prevClose: s.previousClose,
-      changePct,
-      trend1m,
-    };
-  }
-
-  const dxy = toMacroIndicator(dxyRes);
-  const spx = toMacroIndicator(spxRes);
-  const us10y = toMacroIndicator(us10yRes);
-
-  if (!dxy && !spx && !us10y) return null;
-  return { dxy, spx, us10y };
-}
+// ── Composite data fetchers → compositeDataFetchers.ts ──
 
 // ═══════════════════════════════════════════════════════════════
 // Concurrency Control
@@ -435,29 +288,11 @@ const SCAN_CACHE_TTL_MS = 30_000;
 let _activeScanCount = 0;
 const _inflightScans = new Map<string, Promise<WarRoomScanResult>>();
 
-interface CachedScanResult {
-  result: WarRoomScanResult;
-  expiresAt: number;
-}
-const _scanCache = new Map<string, CachedScanResult>();
-
-let _scanCacheCleanupTimer: ReturnType<typeof setInterval> | null = null;
-function ensureScanCacheCleanup() {
-  if (_scanCacheCleanupTimer) return;
-  _scanCacheCleanupTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [k, v] of _scanCache.entries()) {
-      if (now > v.expiresAt) _scanCache.delete(k);
-    }
-    if (_scanCache.size > 100) {
-      const entries = [..._scanCache.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt);
-      const toRemove = _scanCache.size - 80;
-      for (let i = 0; i < toRemove; i++) _scanCache.delete(entries[i][0]);
-    }
-  }, 60_000);
-  if (_scanCacheCleanupTimer && typeof _scanCacheCleanupTimer === 'object' && 'unref' in _scanCacheCleanupTimer) {
-    (_scanCacheCleanupTimer as NodeJS.Timeout).unref();
-  }
+/** Atomic check-and-increment to prevent race condition on concurrent requests */
+function acquireScanSlot(): boolean {
+  if (_activeScanCount >= MAX_CONCURRENT_SCANS) return false;
+  _activeScanCount++;
+  return true;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -465,38 +300,32 @@ function ensureScanCacheCleanup() {
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Server-side scan entry point — equivalent to warroomScan.runWarRoomScan()
- * but fetches all data using server modules (with caching).
+ * Server-side scan entry point.
+ * Fetches all data using server modules (with caching).
  */
 export async function runServerScan(pair: string, timeframe: string): Promise<WarRoomScanResult> {
-  ensureScanCacheCleanup();
-
   const marketPair = (pair || 'BTC/USDT').toUpperCase();
   const tf = String(timeframe || '4h');
   const cacheKey = `scanEngine:${marketPair}:${tf}`;
 
-  // 1. Cache hit
-  const cached = _scanCache.get(cacheKey);
-  if (cached && Date.now() < cached.expiresAt) {
-    return cached.result;
-  }
+  // 1. Cache hit (unified cache — auto TTL/LRU managed)
+  const cached = getCached<WarRoomScanResult>(cacheKey);
+  if (cached) return cached;
 
   // 2. Coalesce duplicate requests
   const inflight = _inflightScans.get(cacheKey);
   if (inflight) return inflight;
 
-  // 3. Concurrency gate
-  if (_activeScanCount >= MAX_CONCURRENT_SCANS) {
-    if (cached) return cached.result;
+  // 3. Concurrency gate (atomic check-and-increment)
+  if (!acquireScanSlot()) {
     throw new Error('Server scan capacity reached. Please try again shortly.');
   }
 
   // 4. Run scan
   const scanPromise = (async () => {
-    _activeScanCount++;
     try {
       const result = await _runServerScanInternal(marketPair, tf);
-      _scanCache.set(cacheKey, { result, expiresAt: Date.now() + SCAN_CACHE_TTL_MS });
+      setCache(cacheKey, result, SCAN_CACHE_TTL_MS);
       return result;
     } finally {
       _activeScanCount--;
@@ -575,10 +404,12 @@ async function _runServerScanInternal(pair: string, timeframe: string): Promise<
   const latestVolume = latest.volume;
   const avgVolume20 = klines.slice(-20).reduce((sum, k) => sum + k.volume, 0) / Math.max(1, Math.min(20, klines.length));
   const volumeRatio = avgVolume20 > 0 ? latestVolume / avgVolume20 : 1;
-  const rsi14 = computeRSI(closes, 14);
-  const sma20 = computeSMA(closes, 20);
-  const sma60 = computeSMA(closes, 60);
-  const sma120 = computeSMA(closes, 120);
+  const rsiArr = calcRSI(closes, 14);
+  const rsiLast = rsiArr.length > 0 ? rsiArr[rsiArr.length - 1] : Number.NaN;
+  const rsi14 = Number.isFinite(rsiLast) ? rsiLast : null;
+  const sma20 = smaLast(closes, 20);
+  const sma60 = smaLast(closes, 60);
+  const sma120 = smaLast(closes, 120);
   const atrPct = computeAtrPct(klines, 14);
 
   const change24 = Number(ticker.priceChangePercent || 0);

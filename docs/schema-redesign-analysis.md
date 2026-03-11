@@ -10,6 +10,7 @@ Primary code references:
 - `src/routes/signals/+page.svelte`
 - `src/routes/live/+page.svelte`
 - `src/routes/oracle/+page.svelte`
+- `src/components/community/OracleLeaderboard.svelte`
 - `src/routes/passport/+page.svelte`
 - `src/components/terminal/WarRoom.svelte`
 - `src/components/terminal/IntelPanel.svelte`
@@ -99,18 +100,20 @@ Required persistence:
 - NEW `activity_events` (unified feed source)
 - optional `activity_events` records for reaction clicks
 
-### Oracle (`/oracle`)
+### Legacy Oracle redirect (`/oracle`) + AI leaderboard (`/signals?view=ai`)
 
 User reactions/events:
-- period/sort changes
-- agent detail open
+- redirect into the AI leaderboard tab
+- leaderboard period/sort changes
+- agent detail open and Arena deep-link
 
 Current state:
-- fully computed from local match history + agent stats
+- `/oracle` owns no durable state and immediately redirects
+- the leaderboard is computed from local match history + agent stats inside `OracleLeaderboard`
 
 Required persistence:
 - `agent_stats` + `matches` remain source of truth
-- optional `user_ui_state.oracle_period`, `user_ui_state.oracle_sort`
+- optional `user_ui_state.oracle_period`, `user_ui_state.oracle_sort` as compatibility preference fields for the AI leaderboard
 
 ### Passport (`/passport`)
 

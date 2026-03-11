@@ -14,6 +14,7 @@ import type {
   GuardianViolation,
   OrpoOutput,
 } from './types';
+import { clamp } from '$lib/utils/math';
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -30,10 +31,6 @@ const LP_STREAK_BONUS_PER = 2;      // per streak level (3+)
 const LP_STREAK_MAX_BONUS = 10;
 
 // ─── Helpers ────────────────────────────────────────────────
-
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
 
 function directionMatch(a: Direction, b: Direction): boolean {
   return a === b && a !== 'NEUTRAL';

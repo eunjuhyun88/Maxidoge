@@ -63,8 +63,8 @@ export const POST: RequestHandler = async ({ cookies, request, getClientAddress 
     );
 
     return json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[GMX confirm] Error:', err);
-    return json({ error: err?.message ?? 'Failed to confirm order' }, { status: 500 });
+    return json({ error: (err instanceof Error ? err.message : 'Failed to confirm order') }, { status: 500 });
   }
 };

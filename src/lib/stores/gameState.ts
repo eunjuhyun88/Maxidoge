@@ -8,7 +8,7 @@ import type { OrpoOutput, CtxBelief, CommanderVerdict, GuardianCheck, FBScore } 
 import type { BattleTickState, BattlePriceTick } from '$lib/engine/battleResolver';
 import { normalizeTimeframe } from '$lib/utils/timeframe';
 import { STORAGE_KEYS } from './storageKeys';
-import { btcPrice, ethPrice, solPrice } from './priceStore';
+import { loadFromStorage, autoSave } from '$lib/utils/storage';
 
 export type Phase = 'DRAFT' | 'ANALYSIS' | 'HYPOTHESIS' | 'BATTLE' | 'RESULT';
 export type ViewMode = 'arena' | 'terminal' | 'passport';
@@ -105,7 +105,8 @@ export interface GameState {
   // Pending action (from War Room → Arena)
   pendingAction: { dir: Direction; pair: string } | null;
 
-  // Prices (shared between arena + terminal)
+  // Legacy fallback prices.
+  // Live prices come from priceStore; this stays only for boot/default state.
   prices: { BTC: number; ETH: number; SOL: number };
   bases: { BTC: number; ETH: number; SOL: number };
   pair: string;
@@ -171,92 +172,54 @@ const defaultState: GameState = {
 
 // Load from localStorage
 function loadState(): GameState {
-  if (typeof window === 'undefined') return defaultState;
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.gameState);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const squadConfig = parsed?.squadConfig
-        ? { ...defaultState.squadConfig, ...parsed.squadConfig, timeframe: normalizeTimeframe(parsed.squadConfig.timeframe) }
-        : defaultState.squadConfig;
+  const parsed = loadFromStorage<Partial<GameState> | null>(STORAGE_KEYS.gameState, null);
+  if (!parsed) return defaultState;
 
-      return {
-        ...defaultState,
-        ...parsed,
-        arenaMode: parsed?.arenaMode === 'PVP' || parsed?.arenaMode === 'TOURNAMENT' ? parsed.arenaMode : 'PVE',
-        tournament: {
-          ...defaultState.tournament,
-          ...(parsed?.tournament ?? {}),
-        },
-        squadConfig,
-        timeframe: normalizeTimeframe(parsed?.timeframe),
-        running: false,
-        phase: 'DRAFT',
-        inLobby: true
-      };
-    }
-  } catch {}
-  return defaultState;
+  const squadConfig = parsed?.squadConfig
+    ? { ...defaultState.squadConfig, ...parsed.squadConfig, timeframe: normalizeTimeframe(parsed.squadConfig.timeframe) }
+    : defaultState.squadConfig;
+
+  return {
+    ...defaultState,
+    ...parsed,
+    arenaMode: parsed?.arenaMode === 'PVP' || parsed?.arenaMode === 'TOURNAMENT' ? parsed.arenaMode : 'PVE',
+    tournament: {
+      ...defaultState.tournament,
+      ...(parsed?.tournament ?? {}),
+    },
+    squadConfig,
+    timeframe: normalizeTimeframe(parsed?.timeframe),
+    running: false,
+    phase: 'DRAFT',
+    inLobby: true
+  };
 }
 
 export const gameState = writable<GameState>(loadState());
 
-// S-03: priceStore → gameState.prices 자동 동기화 (단일 소스)
-// +layout.svelte의 이중 쓰기를 제거하고 여기서 중앙 관리한다.
-if (typeof window !== 'undefined') {
-  derived(
-    [btcPrice, ethPrice, solPrice],
-    ([$btc, $eth, $sol]) => ({ BTC: $btc, ETH: $eth, SOL: $sol })
-  ).subscribe(p => {
-    gameState.update(s => {
-      const nextBtc = p.BTC || s.prices.BTC;
-      const nextEth = p.ETH || s.prices.ETH;
-      const nextSol = p.SOL || s.prices.SOL;
-      if (s.prices.BTC === nextBtc && s.prices.ETH === nextEth && s.prices.SOL === nextSol) return s;
-      return { ...s, prices: { BTC: nextBtc, ETH: nextEth, SOL: nextSol } };
-    });
-  });
-}
-
-// Auto-save persistent fields to localStorage (debounced — prices excluded intentionally)
-let _saveTimer: ReturnType<typeof setTimeout> | null = null;
-let _lastPersist = '';
-gameState.subscribe(s => {
-  if (typeof window === 'undefined') return;
-  // Build persist object (excludes prices, phase, running, pos — transient fields)
-  const persist = {
-    arenaMode: s.arenaMode,
-    tournament: s.tournament,
-    matchN: s.matchN,
-    wins: s.wins,
-    losses: s.losses,
-    streak: s.streak,
-    lp: s.lp,
-    speed: s.speed,
-    selectedAgents: s.selectedAgents,
-    pair: s.pair,
-    timeframe: s.timeframe,
-    squadConfig: s.squadConfig,
-    arenaView: s.arenaView
-  };
-  const json = JSON.stringify(persist);
-  // Skip if nothing changed
-  if (json === _lastPersist) return;
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    _lastPersist = json;
-    localStorage.setItem(STORAGE_KEYS.gameState, json);
-  }, 1000);
-});
+// Auto-save persistent fields (excludes prices, phase, running, pos — transient fields)
+autoSave(gameState, STORAGE_KEYS.gameState, (s) => ({
+  arenaMode: s.arenaMode,
+  tournament: s.tournament,
+  matchN: s.matchN,
+  wins: s.wins,
+  losses: s.losses,
+  streak: s.streak,
+  lp: s.lp,
+  speed: s.speed,
+  selectedAgents: s.selectedAgents,
+  pair: s.pair,
+  timeframe: s.timeframe,
+  squadConfig: s.squadConfig,
+  arenaView: s.arenaView
+}), 1000);
 
 // Derived stores for convenience
 export const currentView = derived(gameState, $s => $s.currentView);
 export const isRunning = derived(gameState, $s => $s.running);
 export const currentPhase = derived(gameState, $s => $s.phase);
-export const prices = derived(gameState, $s => $s.prices);
 
 // Helpers
 export function setView(view: ViewMode) {
   gameState.update(s => ({ ...s, currentView: view }));
 }
-

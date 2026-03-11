@@ -1,3 +1,5 @@
+import { json } from '@sveltejs/kit';
+
 export function isBodyTooLarge(request: Request, maxBytes: number): boolean {
   const raw = request.headers.get('content-length');
   if (!raw) return false;
@@ -54,6 +56,40 @@ export async function readJsonBody<T = Record<string, unknown>>(request: Request
     return JSON.parse(raw) as T;
   } catch {
     throw new SyntaxError('Invalid request body');
+  }
+}
+
+type ReadJsonBodyOk<T> = {
+  ok: true;
+  body: T;
+};
+
+type ReadJsonBodyBlocked = {
+  ok: false;
+  response: Response;
+};
+
+export async function readJsonBodySafely<T = Record<string, unknown>>(
+  request: Request,
+  maxBytes: number,
+): Promise<ReadJsonBodyOk<T> | ReadJsonBodyBlocked> {
+  try {
+    const body = await readJsonBody<T>(request, maxBytes);
+    return { ok: true, body };
+  } catch (error: unknown) {
+    if (isRequestBodyTooLargeError(error)) {
+      return {
+        ok: false,
+        response: json({ error: 'Request body too large' }, { status: 413 }),
+      };
+    }
+    if (error instanceof SyntaxError) {
+      return {
+        ok: false,
+        response: json({ error: 'Invalid request body' }, { status: 400 }),
+      };
+    }
+    throw error;
   }
 }
 

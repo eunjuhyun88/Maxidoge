@@ -1,4 +1,5 @@
 import { calcATR, calcEMA, calcMACD, calcRSI, calcSMA } from '$lib/engine/indicators';
+import { clamp } from '$lib/utils/math';
 import type { BinanceKline } from '$lib/engine/types';
 import { fetchKlinesServer, pairToSymbol } from '$lib/server/binance';
 import { getCached, setCache } from '$lib/server/providers/cache';
@@ -53,9 +54,6 @@ export interface MultiTimeframeIndicatorContext {
   summaryLine: string;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 function lastFinite(values: number[]): number {
   for (let i = values.length - 1; i >= 0; i -= 1) {

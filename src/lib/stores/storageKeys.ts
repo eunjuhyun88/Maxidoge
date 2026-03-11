@@ -16,6 +16,8 @@ export const STORAGE_KEYS = {
   warRoomScan: 'stockclaw.warroom.scanstate.v1',
   notificationsSeeded: 'stockclaw_notifications_seeded_v1',
   activeGames: 'stockclaw_active_games',
+  drawings: 'stockclaw.drawings.v1',
+  userLifecycle: 'stockclaw_user_lifecycle',
 } as const;
 
 /** Keys safe to clear on user-initiated data reset (excludes session-only flags) */

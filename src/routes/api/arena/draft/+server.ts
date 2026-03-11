@@ -23,7 +23,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     if (!result.valid) return json({ error: 'Invalid draft', errors: result.errors }, { status: 400 });
 
     return json({ success: true, phase: 'ANALYSIS' });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof SyntaxError) return json({ error: 'Invalid request body' }, { status: 400 });
     console.error('[arena/draft/post]', err);
     return json({ error: 'Failed to submit draft' }, { status: 500 });

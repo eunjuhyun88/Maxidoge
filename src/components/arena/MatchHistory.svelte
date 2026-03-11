@@ -220,10 +220,10 @@
   }
   .sum-label {
     font-family: var(--fm);
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1.5px;
-    color: rgba(240,237,228,.4);
+    color: rgba(240,237,228,.55);
     display: block;
     margin-top: 2px;
   }
@@ -239,7 +239,7 @@
   .mh-empty {
     text-align: center;
     padding: 30px;
-    color: rgba(240,237,228,.35);
+    color: rgba(240,237,228,.5);
     font-family: var(--fm);
     font-size: 10px;
   }
@@ -252,7 +252,7 @@
     border-radius: 8px;
     margin-bottom: 2px;
     font-family: var(--fm);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 600;
     transition: background .15s;
     cursor: pointer;
@@ -266,9 +266,9 @@
   .mh-row.win { border-left: 2px solid #00cc88; }
   .mh-row.loss { border-left: 2px solid #ff5e7a; }
 
-  .mh-id { color: rgba(240,237,228,.35); font-size: 7px; width: 28px; font-weight: 700; }
+  .mh-id { color: rgba(240,237,228,.5); font-size: 9px; width: 28px; font-weight: 700; }
   .mh-result-badge {
-    font-size: 6px; font-weight: 900; padding: 1px 6px;
+    font-size: 9px; font-weight: 900; padding: 1px 6px;
     border-radius: 4px; letter-spacing: 1px;
   }
   .mh-result-badge.w { background: rgba(0,204,136,.2); color: #00cc88; }
@@ -276,9 +276,9 @@
   .mh-lp { font-weight: 800; }
   .mh-lp.pos { color: #00cc88; }
   .mh-lp.neg { color: #ff5e7a; }
-  .mh-streak { font-size: 7px; }
-  .mh-time { color: rgba(240,237,228,.35); font-size: 7px; margin-left: auto; }
-  .mh-arrow { color: rgba(240,237,228,.35); font-size: 7px; }
+  .mh-streak { font-size: 9px; }
+  .mh-time { color: rgba(240,237,228,.5); font-size: 9px; margin-left: auto; }
+  .mh-arrow { color: rgba(240,237,228,.5); font-size: 9px; }
 
   /* Expanded Detail */
   .mh-detail {
@@ -297,10 +297,10 @@
   .mhd-section { margin-bottom: 6px; }
   .mhd-label {
     font-family: var(--fd);
-    font-size: 6px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 2px;
-    color: rgba(240,237,228,.4);
+    color: rgba(240,237,228,.55);
     display: block;
     margin-bottom: 3px;
   }
@@ -323,12 +323,12 @@
   .mhd-dir.neutral { background: rgba(232,150,125,.15); color: #e8967d; }
   .mhd-levels {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     color: rgba(240,237,228,.5);
   }
   .mhd-rr {
     font-family: var(--fd);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     color: #e8967d;
     background: rgba(232,150,125,.1);
@@ -349,20 +349,20 @@
     background: rgba(240,237,228,.04);
     border-radius: 4px;
     padding: 2px 5px;
-    font-size: 7px;
+    font-size: 9px;
     font-family: var(--fm);
   }
-  .mhd-vote-icon { font-size: 8px; }
+  .mhd-vote-icon { font-size: 9px; }
   .mhd-vote-name { font-weight: 700; color: rgba(240,237,228,.6); }
   .mhd-vote-dir {
     font-weight: 900;
-    font-size: 6px;
+    font-size: 9px;
     padding: 0 3px;
     border-radius: 3px;
   }
   .mhd-vote-dir.long { background: rgba(0,204,136,.15); color: #00cc88; }
   .mhd-vote-dir.short { background: rgba(255,94,122,.15); color: #ff5e7a; }
-  .mhd-vote-conf { color: rgba(240,237,228,.35); font-size: 6px; }
+  .mhd-vote-conf { color: rgba(240,237,228,.5); font-size: 9px; }
 
   .mhd-consensus {
     display: flex;
@@ -372,7 +372,7 @@
   }
   .mhd-cons-badge {
     font-family: var(--fd);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 900;
     padding: 2px 8px;
     border-radius: 4px;
@@ -384,16 +384,16 @@
   .mhd-cons-badge.override { background: rgba(168,64,255,.2); color: #c880ff; }
   .mhd-cons-mult {
     font-family: var(--fd);
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 900;
     color: #e8967d;
   }
 
   .mhd-result-tag {
     font-family: var(--fm);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
-    color: rgba(240,237,228,.4);
+    color: rgba(240,237,228,.55);
     text-align: center;
     letter-spacing: 1px;
   }

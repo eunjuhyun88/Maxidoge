@@ -8,6 +8,7 @@
 import type {
   BinanceKline,
   FactorResult,
+  AgentId,
   AgentOutput,
   Direction,
   C02Result,
@@ -172,7 +173,7 @@ export function generateMock48Factors(biasDirection: Direction = 'NEUTRAL'): Fac
 // ─── Mock Agent Outputs ─────────────────────────────────────
 
 function generateAgentOutput(
-  agentId: string,
+  agentId: AgentId,
   factors: FactorResult[],
   specId: string
 ): AgentOutput {
@@ -202,7 +203,7 @@ function generateAgentOutput(
   else direction = 'NEUTRAL';
 
   return {
-    agentId: agentId as any,
+    agentId,
     specId,
     direction,
     confidence: Math.min(95, Math.max(30, confidence)),

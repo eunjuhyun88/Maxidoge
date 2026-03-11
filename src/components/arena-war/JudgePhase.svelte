@@ -1,8 +1,15 @@
 <script lang="ts">
   import { arenaWarStore } from '$lib/stores/arenaWarStore';
+  import { getTeamHPPercent } from '$lib/engine/v3BattleEngine';
+  import { getAgentCharacter } from '$lib/engine/agentCharacter';
 
   let ws = $derived($arenaWarStore);
   let progress = $derived(ws.judgeAnimProgress / 100);
+  let v3 = $derived(ws.v3BattleState);
+
+  // v3 HP summary for judge display
+  let humanHPPct = $derived(v3 ? Math.round(getTeamHPPercent(v3.humanAgents)) : 100);
+  let aiHPPct = $derived(v3 ? Math.round(getTeamHPPercent(v3.aiAgents)) : 100);
 
   // Animated score values
   let humanDS = $derived(Math.round((ws.humanFBS?.ds ?? 0) * progress));
@@ -96,6 +103,26 @@
       </div>
     </div>
   </div>
+
+  <!-- v3 HP Comparison -->
+  {#if v3}
+    <div class="hp-comparison">
+      <div class="hp-side">
+        <span class="hp-label-j">YOUR TEAM</span>
+        <div class="hp-bar-j">
+          <div class="hp-fill-j human" style="width: {humanHPPct * progress}%"></div>
+        </div>
+        <span class="hp-pct-j">{Math.round(humanHPPct * progress)}%</span>
+      </div>
+      <div class="hp-side">
+        <span class="hp-label-j">AI TEAM</span>
+        <div class="hp-bar-j">
+          <div class="hp-fill-j ai" style="width: {aiHPPct * progress}%"></div>
+        </div>
+        <span class="hp-pct-j">{Math.round(aiHPPct * progress)}%</span>
+      </div>
+    </div>
+  {/if}
 
   <div class="judge-hint">
     FBS = 0.5·DS + 0.3·RE + 0.2·CI
@@ -243,5 +270,55 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.6rem;
     color: var(--arena-text-2, #5a7d6e);
+  }
+
+  .hp-comparison {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .hp-side {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .hp-label-j {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.45rem;
+    font-weight: 900;
+    color: var(--arena-text-2, #5a7d6e);
+    letter-spacing: 0.5px;
+    width: 55px;
+    text-align: right;
+  }
+
+  .hp-bar-j {
+    flex: 1;
+    height: 8px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .hp-fill-j {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  .hp-fill-j.human { background: linear-gradient(90deg, #48d868, #00cc88); }
+  .hp-fill-j.ai { background: linear-gradient(90deg, #f85858, #ff2d55); }
+
+  .hp-pct-j {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--arena-text-1, #8ba59e);
+    width: 30px;
+    text-align: right;
   }
 </style>

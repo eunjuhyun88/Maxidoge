@@ -6,6 +6,7 @@ import { toPositiveNumber } from '$lib/server/apiValidation';
 import { getAuthUserFromCookies } from '$lib/server/authGuard';
 import type { ShadowAgentDecision } from '$lib/server/intelShadowAgent';
 import type { IntelPolicyOutput } from '$lib/server/intelPolicyRuntime';
+import { getErrorMessage } from '$lib/utils/errorUtils';
 
 type ShadowPayload = {
   ok?: boolean;
@@ -164,12 +165,12 @@ export const POST: RequestHandler = async ({ cookies, request, fetch }) => {
         trade: openJson.trade,
       },
     });
-  } catch (error: any) {
-    if (typeof error?.message === 'string' && error.message.includes('pair must be like')) {
-      return json({ ok: false, error: error.message }, { status: 400 });
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('pair must be like')) {
+      return json({ ok: false, error: getErrorMessage(error) }, { status: 400 });
     }
-    if (typeof error?.message === 'string' && error.message.includes('timeframe must be one of')) {
-      return json({ ok: false, error: error.message }, { status: 400 });
+    if (getErrorMessage(error).includes('timeframe must be one of')) {
+      return json({ ok: false, error: getErrorMessage(error) }, { status: 400 });
     }
 
     console.error('[api/terminal/intel-agent-shadow/execute] error:', error);
